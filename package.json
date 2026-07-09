@@ -1,0 +1,16 @@
+{
+  "name": "jarvis-cloud",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Jarvis - assistente de anuncios (Meta Ads) e conversa, hospedado na nuvem com interface web de chat e voz",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  }
+}

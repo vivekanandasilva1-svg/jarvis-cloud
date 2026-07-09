@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: jarvis-cloud
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/server.js
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: META_ADS_TOKENS
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
