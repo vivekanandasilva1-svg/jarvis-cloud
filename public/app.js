@@ -30,8 +30,13 @@ async function tentarEntrar(senha) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password: senha }),
   });
-  const data = await res.json();
-  return data.ok === true;
+  const raw = await res.text();
+  try {
+    const data = JSON.parse(raw);
+    return data.ok === true;
+  } catch {
+    return false;
+  }
 }
 
 function mostrarApp() {
@@ -102,7 +107,13 @@ async function enviarMensagem(texto) {
       headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
       body: JSON.stringify({ message: texto, sessionId }),
     });
-    const data = await res.json();
+    const raw = await res.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error(`Servidor respondeu algo inesperado (status ${res.status}). Tenta de novo em alguns segundos.`);
+    }
     if (!res.ok) throw new Error(data.erro || 'Erro desconhecido');
 
     addBubble(data.reply, 'assistant');
