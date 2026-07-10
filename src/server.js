@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chat } from './cloudAgent.js';
+import { synthesizeSpeech } from './elevenlabs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -47,6 +48,20 @@ app.post('/api/chat', async (req, res) => {
     res.json({ reply });
   } catch (err) {
     console.error('Erro no chat:', err);
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/tts', async (req, res) => {
+  const { text } = req.body || {};
+  if (!text) return res.status(400).json({ erro: 'text obrigatorio' });
+
+  try {
+    const audioBuffer = await synthesizeSpeech(text);
+    res.set('Content-Type', 'audio/mpeg');
+    res.send(audioBuffer);
+  } catch (err) {
+    console.error('Erro no TTS:', err);
     res.status(500).json({ erro: err.message });
   }
 });

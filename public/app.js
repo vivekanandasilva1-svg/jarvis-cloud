@@ -29,7 +29,7 @@ let appPassword = sessionStorage.getItem('jarvis_password') || '';
 let vozAtivada = true;
 let reconhecendo = false;
 let modoConversa = false;
-let mouthTimer = null;
+let bufferConversa = '';
 
 // ---------- Relogio ----------
 
@@ -41,6 +41,22 @@ function atualizarRelogio() {
 }
 atualizarRelogio();
 setInterval(atualizarRelogio, 1000 * 30);
+
+// ---------- Audio (desbloqueio para autoplay em celular) ----------
+
+let audioCtx = null;
+function ensureAudioContext() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+function desbloquearAudio() {
+  const ctx = ensureAudioContext();
+  if (ctx.state === 'suspended') ctx.resume();
+  document.removeEventListener('pointerdown', desbloquearAudio);
+  document.removeEventListener('keydown', desbloquearAudio);
+}
+document.addEventListener('pointerdown', desbloquearAudio);
+document.addEventListener('keydown', desbloquearAudio);
 
 // ---------- Login / Logout ----------
 
@@ -63,7 +79,7 @@ function mostrarApp() {
   loginScreen.hidden = true;
   appWindow.hidden = false;
   if (!chatLog.childElementCount) {
-    addBubble('Jarvis pronto. Digite, aperte o microfone ou ative o modo conversa.', 'system');
+    addBubble('Klaus pronto. Digite, aperte o microfone ou ative o modo conversa.', 'system');
   }
   setStatus('pronto', null);
 }
@@ -118,42 +134,100 @@ function addBubble(text, kind) {
   return div;
 }
 
-// anima a "boca" (barras) de forma aleatoria enquanto fala, parada quando nao fala
-function moverBoca(ativo) {
-  clearInterval(mouthTimer);
-  if (!ativo) {
-    mouthBars.forEach((bar) => { bar.style.transform = 'scaleY(1)'; });
-    return;
-  }
-  mouthTimer = setInterval(() => {
+function bocaParada() {
+  mouthBars.forEach((bar) => { bar.style.transform = 'scaleY(1)'; });
+}
+
+// fallback (sem ElevenLabs): boca com pulso aleatorio enquanto fala
+let mouthFallbackTimer = null;
+function bocaAleatoria(ativo) {
+  clearInterval(mouthFallbackTimer);
+  if (!ativo) { bocaParada(); return; }
+  mouthFallbackTimer = setInterval(() => {
     mouthBars.forEach((bar) => {
-      const escala = 0.4 + Math.random() * 1.6;
-      bar.style.transform = `scaleY(${escala.toFixed(2)})`;
+      bar.style.transform = `scaleY(${(0.4 + Math.random() * 1.6).toFixed(2)})`;
     });
   }, 90);
 }
 
-function falar(texto) {
+// boca sincronizada com o audio de verdade (analisando o volume em tempo real)
+let mouthRAF = null;
+function falarComAnalise(audio, analyserNode) {
+  const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+  function animar() {
+    analyserNode.getByteFrequencyData(dataArray);
+    const media = dataArray.reduce((s, v) => s + v, 0) / dataArray.length;
+    const escala = 0.35 + (media / 255) * 2.3;
+    mouthBars.forEach((bar) => {
+      const jitter = 0.85 + Math.random() * 0.3;
+      bar.style.transform = `scaleY(${(escala * jitter).toFixed(2)})`;
+    });
+    mouthRAF = requestAnimationFrame(animar);
+  }
+  animar();
+}
+
+function pararAnaliseBoca() {
+  if (mouthRAF) cancelAnimationFrame(mouthRAF);
+  mouthRAF = null;
+  bocaParada();
+}
+
+async function falarElevenLabs(texto) {
+  const res = await fetch('/api/tts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+    body: JSON.stringify({ text: texto }),
+  });
+  if (!res.ok) throw new Error('tts indisponivel');
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+
+  const ctx = ensureAudioContext();
+  if (ctx.state === 'suspended') await ctx.resume();
+  const source = ctx.createMediaElementSource(audio);
+  const analyserNode = ctx.createAnalyser();
+  analyserNode.fftSize = 256;
+  source.connect(analyserNode);
+  analyserNode.connect(ctx.destination);
+
+  await new Promise((resolve) => {
+    audio.onplay = () => { setStatus('falando', 'speaking'); falarComAnalise(audio, analyserNode); };
+    const finalizar = () => { pararAnaliseBoca(); URL.revokeObjectURL(url); resolve(); };
+    audio.onended = finalizar;
+    audio.onerror = finalizar;
+    audio.play().catch(finalizar);
+  });
+}
+
+function falarNavegador(texto) {
+  return new Promise((resolve) => {
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(texto);
+    utter.lang = 'pt-BR';
+    utter.rate = 1.02;
+    utter.onstart = () => { setStatus('falando', 'speaking'); bocaAleatoria(true); };
+    const finalizar = () => { bocaAleatoria(false); resolve(); };
+    utter.onend = finalizar;
+    utter.onerror = finalizar;
+    window.speechSynthesis.speak(utter);
+  });
+}
+
+async function falar(texto) {
   if (!vozAtivada || !texto) {
     if (modoConversa) setTimeout(ouvirUmaVez, 300);
     return;
   }
-  window.speechSynthesis.cancel();
-  const utter = new SpeechSynthesisUtterance(texto);
-  utter.lang = 'pt-BR';
-  utter.rate = 1.02;
-  utter.onstart = () => { setStatus('falando', 'speaking'); moverBoca(true); };
-  utter.onend = () => {
-    moverBoca(false);
-    setStatus('pronto', null);
-    if (modoConversa) setTimeout(ouvirUmaVez, 400);
-  };
-  utter.onerror = () => {
-    moverBoca(false);
-    setStatus('pronto', null);
-    if (modoConversa) setTimeout(ouvirUmaVez, 400);
-  };
-  window.speechSynthesis.speak(utter);
+  try {
+    await falarElevenLabs(texto);
+  } catch {
+    await falarNavegador(texto);
+  }
+  setStatus('pronto', null);
+  if (modoConversa) setTimeout(ouvirUmaVez, 400);
 }
 
 async function enviarMensagem(texto) {
@@ -178,7 +252,7 @@ async function enviarMensagem(texto) {
     if (!res.ok) throw new Error(data.erro || 'Erro desconhecido');
 
     addBubble(data.reply, 'assistant');
-    falar(data.reply);
+    await falar(data.reply);
     if (!vozAtivada) {
       setStatus('pronto', null);
       if (modoConversa) setTimeout(ouvirUmaVez, 400);
@@ -202,14 +276,14 @@ clearBtn.addEventListener('click', () => {
 
 extractBtn.addEventListener('click', () => {
   const linhas = Array.from(chatLog.querySelectorAll('.bubble')).map((b) => {
-    const quem = b.classList.contains('user') ? 'Voce' : b.classList.contains('assistant') ? 'Jarvis' : 'Sistema';
+    const quem = b.classList.contains('user') ? 'Voce' : b.classList.contains('assistant') ? 'Klaus' : 'Sistema';
     return `${quem}: ${b.textContent}`;
   });
   const blob = new Blob([linhas.join('\n\n')], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `jarvis-conversa-${Date.now()}.txt`;
+  a.download = `klaus-conversa-${Date.now()}.txt`;
   a.click();
   URL.revokeObjectURL(url);
 });
@@ -230,7 +304,6 @@ const ERRO_RECONHECIMENTO = {
 if (SpeechRecognition) {
   recognizer = new SpeechRecognition();
   recognizer.lang = 'pt-BR';
-  recognizer.interimResults = false;
   recognizer.maxAlternatives = 1;
 
   recognizer.onstart = () => {
@@ -240,8 +313,17 @@ if (SpeechRecognition) {
   };
 
   recognizer.onresult = (event) => {
-    const texto = event.results[0][0].transcript;
-    enviarMensagem(texto);
+    if (!modoConversa) {
+      const texto = event.results[event.results.length - 1][0].transcript;
+      enviarMensagem(texto);
+      return;
+    }
+    // modo conversa: so acumula os trechos finais, nao envia a cada palavra
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      if (event.results[i].isFinal) {
+        bufferConversa += (bufferConversa ? ' ' : '') + event.results[i][0].transcript;
+      }
+    }
   };
 
   recognizer.onerror = (event) => {
@@ -254,6 +336,16 @@ if (SpeechRecognition) {
   recognizer.onend = () => {
     reconhecendo = false;
     micBtn.classList.remove('active');
+
+    if (modoConversa) {
+      const texto = bufferConversa.trim();
+      bufferConversa = '';
+      if (texto) {
+        enviarMensagem(texto);
+      } else {
+        setTimeout(ouvirUmaVez, 300);
+      }
+    }
   };
 } else {
   micBtn.title = 'Reconhecimento de voz nao suportado neste navegador (use o Chrome)';
@@ -263,6 +355,8 @@ if (SpeechRecognition) {
 
 function ouvirUmaVez() {
   if (!recognizer || reconhecendo) return;
+  recognizer.continuous = modoConversa;
+  recognizer.interimResults = modoConversa;
   try {
     recognizer.start();
   } catch {
@@ -272,6 +366,7 @@ function ouvirUmaVez() {
 
 micBtn.addEventListener('click', () => {
   if (!recognizer) return;
+  if (modoConversa) { pararModoConversa(); return; }
   if (reconhecendo) {
     recognizer.stop();
     return;
@@ -283,6 +378,7 @@ micBtn.addEventListener('click', () => {
 function iniciarModoConversa() {
   if (!recognizer) return;
   modoConversa = true;
+  bufferConversa = '';
   convBtn.classList.add('active');
   hintEl.textContent = 'Modo conversa ativo - pode falar quando quiser';
   ouvirUmaVez();
@@ -290,6 +386,7 @@ function iniciarModoConversa() {
 
 function pararModoConversa() {
   modoConversa = false;
+  bufferConversa = '';
   convBtn.classList.remove('active');
   hintEl.textContent = 'Aperte o microfone ou digite abaixo';
   if (reconhecendo) recognizer.stop();
@@ -303,5 +400,5 @@ convBtn.addEventListener('click', () => {
 muteBtn.addEventListener('click', () => {
   vozAtivada = !vozAtivada;
   muteBtn.textContent = vozAtivada ? '🔊' : '🔇';
-  if (!vozAtivada) { window.speechSynthesis.cancel(); moverBoca(false); }
+  if (!vozAtivada) { window.speechSynthesis.cancel(); pararAnaliseBoca(); }
 });
