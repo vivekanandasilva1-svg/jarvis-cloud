@@ -10,5 +10,15 @@ services:
         sync: false
       - key: META_ADS_TOKENS
         sync: false
+      - key: CLINICORP_API_USER
+        sync: false
+      - key: CLINICORP_API_TOKEN
+        sync: false
+      - key: CLINICORP_SUBSCRIBER_ID
+        sync: false
+      - key: CLINICORP_DEFAULT_BUSINESS_ID
+        sync: false
+      - key: CLINICORP_CODE_LINK
+        sync: false
       - key: APP_PASSWORD
         sync: false

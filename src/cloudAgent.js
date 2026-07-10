@@ -1,24 +1,32 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as metaAds from './metaads.js';
+import * as clinicorp from './clinicorp.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM_PROMPT = `Voce e o Jarvis, assistente de anuncios (Meta Ads) do usuario, conversando por
-uma interface de chat (texto e voz) num app web publico.
+const SYSTEM_PROMPT = `Voce e o Jarvis, assistente pessoal do usuario (dono de uma clinica
+odontologica e da Lumia, agencia de trafego pago), conversando por uma interface de chat
+(texto e voz) num app web publico.
 Responda de forma curta e direta - isto vai ser lido e tambem falado em voz alta, entao evite
 listas longas ou markdown pesado, prefira frases corridas.
 Sempre use as ferramentas disponiveis para agir de verdade - nunca finja ter feito algo.
 
 Voce tem acesso ao Gerenciador de Anuncios da Meta (contas de clinicas odontologicas e outros
-clientes da Lumia, empresa de trafego pago do usuario). Pode consultar contas, campanhas,
-conjuntos de anuncios, anuncios/criativos e metricas livremente. Quando pedirem analise ou
-diagnostico de campanha, use ads_diagnostico_campanha e de uma leitura profissional dos
-resultados (o que pausar, ajustar ou testar), nao so liste numeros.
+clientes da Lumia). Pode consultar contas, campanhas, conjuntos de anuncios, anuncios/criativos
+e metricas livremente. Quando pedirem analise ou diagnostico de campanha, use
+ads_diagnostico_campanha e de uma leitura profissional dos resultados (o que pausar, ajustar ou
+testar), nao so liste numeros.
 
-Ferramentas que envolvem gastar dinheiro real (ativar campanha, mudar orcamento, criar
-campanha) NAO executam na hora - elas ficam pendentes de confirmacao e o proprio sistema vai
-perguntar "sim ou nao" pro usuario. So chame essas ferramentas quando o pedido do usuario ja
-estiver claro o suficiente para perguntar a confirmacao (valor, campanha exatos).`;
+Ferramentas de anuncio que envolvem gastar dinheiro real (ativar campanha, mudar orcamento,
+criar campanha) NAO executam na hora - elas ficam pendentes de confirmacao e o proprio sistema
+vai perguntar "sim ou nao" pro usuario. So chame essas ferramentas quando o pedido do usuario ja
+estiver claro o suficiente para perguntar a confirmacao (valor, campanha exatos).
+
+Voce tambem tem acesso ao sistema Clinicorp da clinica (agenda, pacientes, financeiro,
+orcamentos). O usuario ja autorizou usar essas ferramentas livremente, incluindo criar/cancelar
+agendamentos e cadastrar pacientes, sem precisar confirmar cada chamada - execute direto quando
+o pedido for claro. So avise (sem bloquear) se for algo de volume/impacto incomum, como cancelar
+varios agendamentos de uma vez.`;
 
 const tools = [
   {
@@ -122,6 +130,92 @@ const tools = [
       required: ['adSetId', 'dailyBudgetReais'],
     },
   },
+  {
+    name: 'clinicorp_listar_profissionais',
+    description: 'Lista os profissionais/dentistas cadastrados na clinica.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'clinicorp_listar_agendamentos',
+    description: 'Lista os agendamentos da clinica num periodo (agenda geral, ou de um paciente/profissional especifico).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'Data inicial YYYY-MM-DD' },
+        to: { type: 'string', description: 'Data final YYYY-MM-DD' },
+        patientId: { type: 'integer', description: 'Filtrar por id de paciente (opcional)' },
+        includeCanceled: { type: 'boolean', description: 'Incluir agendamentos cancelados (default false)' },
+      },
+      required: ['from', 'to'],
+    },
+  },
+  {
+    name: 'clinicorp_buscar_paciente',
+    description: 'Busca um paciente existente pelo telefone, nome, CPF ou email.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        phone: { type: 'string', description: 'Telefone ou celular do paciente' },
+        name: { type: 'string', description: 'Nome do paciente' },
+        document: { type: 'string', description: 'CPF do paciente' },
+        email: { type: 'string', description: 'Email do paciente' },
+      },
+    },
+  },
+  {
+    name: 'clinicorp_criar_paciente',
+    description: 'Cria um novo paciente no sistema da clinica.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Nome completo do paciente' },
+        mobilePhone: { type: 'string', description: 'Celular do paciente' },
+        email: { type: 'string', description: 'Email do paciente' },
+        birthDate: { type: 'string', description: 'Data de nascimento YYYY-MM-DD' },
+        document: { type: 'string', description: 'CPF do paciente' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'clinicorp_criar_agendamento',
+    description: 'Cria um novo agendamento na agenda da clinica.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        patientId: { type: 'integer', description: 'Id do paciente, se ja conhecido' },
+        patientName: { type: 'string', description: 'Nome do paciente' },
+        mobilePhone: { type: 'string', description: 'Telefone de contato' },
+        email: { type: 'string', description: 'Email de contato' },
+        date: { type: 'string', description: 'Data YYYY-MM-DD' },
+        fromTime: { type: 'string', description: 'Horario de inicio HH:mm' },
+        toTime: { type: 'string', description: 'Horario de termino HH:mm' },
+        procedures: { type: 'string', description: 'Procedimentos, ex: Limpeza, Consulta' },
+      },
+      required: ['patientName', 'date', 'fromTime', 'toTime'],
+    },
+  },
+  {
+    name: 'clinicorp_cancelar_agendamento',
+    description: 'Cancela um agendamento existente pelo id.',
+    input_schema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'Id do agendamento a cancelar' } },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'clinicorp_faturamento',
+    description: 'Consulta o resumo financeiro da clinica (vendas, recebido, despesas) num periodo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'Data inicial YYYY-MM-DD' },
+        to: { type: 'string', description: 'Data final YYYY-MM-DD' },
+      },
+      required: ['from', 'to'],
+    },
+  },
 ];
 
 const CONFIRM_TOOLS = new Set(['ads_criar_campanha', 'ads_alterar_status_campanha', 'ads_alterar_orcamento_adset']);
@@ -159,6 +253,15 @@ const toolHandlers = {
   ads_consultar_metricas: ({ objectId, objectType, since, until, datePreset }) => metaAds.getInsights({ objectId, objectType, since, until, datePreset }),
   ads_listar_anuncios: ({ adSetId }) => metaAds.listAds({ adSetId }),
   ads_diagnostico_campanha: ({ campaignId, since, until, datePreset }) => metaAds.analyzeCampaignAds({ campaignId, since, until, datePreset }),
+  clinicorp_listar_profissionais: () => clinicorp.listProfessionals(),
+  clinicorp_listar_agendamentos: ({ from, to, patientId, includeCanceled }) =>
+    clinicorp.listAppointments({ from, to, patientId, includeCanceled: includeCanceled ? 'X' : undefined }),
+  clinicorp_buscar_paciente: ({ phone, name, document, email }) => clinicorp.findPatient({ phone, name, document, email }),
+  clinicorp_criar_paciente: ({ name, mobilePhone, email, birthDate, document }) =>
+    clinicorp.createPatient({ name, mobilePhone, email, birthDate, otherDocumentId: document }),
+  clinicorp_criar_agendamento: (input) => clinicorp.createAppointment(input),
+  clinicorp_cancelar_agendamento: ({ id }) => clinicorp.cancelAppointment({ id }),
+  clinicorp_faturamento: ({ from, to }) => clinicorp.getFinancialSummary({ from, to }),
 };
 
 async function runTool(name, input, session) {
