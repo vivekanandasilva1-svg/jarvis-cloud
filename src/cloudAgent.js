@@ -338,7 +338,7 @@ function getSession(sessionId) {
   return sessions.get(sessionId);
 }
 
-const MAX_TOOL_ROUNDS = 6;
+const MAX_TOOL_ROUNDS = 10;
 const MAX_HISTORY = 40;
 
 export async function chat(sessionId, userMessage) {
@@ -400,7 +400,7 @@ export async function chat(sessionId, userMessage) {
     if (session.pendingAction) break;
   }
 
-  const replyText = extractText(response);
+  const replyText = extractText(response) || 'Consegui os dados mas nao terminei de formular a resposta - pode perguntar de novo, talvez de forma mais especifica (ex: um periodo menor)?';
   session.history.push({ role: 'assistant', content: replyText });
 
   if (session.history.length > MAX_HISTORY) {

@@ -8,9 +8,16 @@ const chatLog = document.getElementById('chatLog');
 const composer = document.getElementById('composer');
 const textInput = document.getElementById('textInput');
 const micBtn = document.getElementById('micBtn');
+const convBtn = document.getElementById('convBtn');
 const muteBtn = document.getElementById('muteBtn');
-const orb = document.getElementById('orb');
+const logoutBtn = document.getElementById('logoutBtn');
+const clearBtn = document.getElementById('clearBtn');
+const extractBtn = document.getElementById('extractBtn');
+const bot = document.getElementById('bot');
+const mouthBars = bot.querySelectorAll('.mouth .bar');
 const statusEl = document.getElementById('status');
+const clockEl = document.getElementById('clock');
+const hintEl = document.getElementById('hint');
 
 let sessionId = localStorage.getItem('jarvis_session_id');
 if (!sessionId) {
@@ -21,8 +28,21 @@ if (!sessionId) {
 let appPassword = sessionStorage.getItem('jarvis_password') || '';
 let vozAtivada = true;
 let reconhecendo = false;
+let modoConversa = false;
+let mouthTimer = null;
 
-// ---------- Login ----------
+// ---------- Relogio ----------
+
+function atualizarRelogio() {
+  const agora = new Date();
+  clockEl.textContent = agora.toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+}
+atualizarRelogio();
+setInterval(atualizarRelogio, 1000 * 30);
+
+// ---------- Login / Logout ----------
 
 async function tentarEntrar(senha) {
   const res = await fetch('/api/login', {
@@ -42,9 +62,23 @@ async function tentarEntrar(senha) {
 function mostrarApp() {
   loginScreen.hidden = true;
   appWindow.hidden = false;
-  addBubble('Jarvis pronto. Digite ou aperte o microfone pra falar comigo.', 'system');
+  if (!chatLog.childElementCount) {
+    addBubble('Jarvis pronto. Digite, aperte o microfone ou ative o modo conversa.', 'system');
+  }
   setStatus('pronto', null);
 }
+
+function sair() {
+  pararModoConversa();
+  window.speechSynthesis.cancel();
+  appPassword = '';
+  sessionStorage.removeItem('jarvis_password');
+  passwordInput.value = '';
+  appWindow.hidden = true;
+  loginScreen.hidden = false;
+}
+
+logoutBtn.addEventListener('click', sair);
 
 if (appPassword) {
   tentarEntrar(appPassword).then((ok) => {
@@ -69,10 +103,10 @@ loginForm.addEventListener('submit', async (e) => {
 
 // ---------- Chat ----------
 
-function setStatus(text, orbState) {
+function setStatus(text, botState) {
   statusEl.textContent = text;
-  orb.classList.remove('listening', 'thinking', 'speaking');
-  if (orbState) orb.classList.add(orbState);
+  bot.classList.remove('listening', 'thinking', 'speaking');
+  if (botState) bot.classList.add(botState);
 }
 
 function addBubble(text, kind) {
@@ -84,14 +118,41 @@ function addBubble(text, kind) {
   return div;
 }
 
+// anima a "boca" (barras) de forma aleatoria enquanto fala, parada quando nao fala
+function moverBoca(ativo) {
+  clearInterval(mouthTimer);
+  if (!ativo) {
+    mouthBars.forEach((bar) => { bar.style.transform = 'scaleY(1)'; });
+    return;
+  }
+  mouthTimer = setInterval(() => {
+    mouthBars.forEach((bar) => {
+      const escala = 0.4 + Math.random() * 1.6;
+      bar.style.transform = `scaleY(${escala.toFixed(2)})`;
+    });
+  }, 90);
+}
+
 function falar(texto) {
-  if (!vozAtivada || !texto) return;
+  if (!vozAtivada || !texto) {
+    if (modoConversa) setTimeout(ouvirUmaVez, 300);
+    return;
+  }
   window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(texto);
   utter.lang = 'pt-BR';
   utter.rate = 1.02;
-  utter.onstart = () => setStatus('falando', 'speaking');
-  utter.onend = () => setStatus('pronto', null);
+  utter.onstart = () => { setStatus('falando', 'speaking'); moverBoca(true); };
+  utter.onend = () => {
+    moverBoca(false);
+    setStatus('pronto', null);
+    if (modoConversa) setTimeout(ouvirUmaVez, 400);
+  };
+  utter.onerror = () => {
+    moverBoca(false);
+    setStatus('pronto', null);
+    if (modoConversa) setTimeout(ouvirUmaVez, 400);
+  };
   window.speechSynthesis.speak(utter);
 }
 
@@ -118,10 +179,14 @@ async function enviarMensagem(texto) {
 
     addBubble(data.reply, 'assistant');
     falar(data.reply);
-    if (!vozAtivada) setStatus('pronto', null);
+    if (!vozAtivada) {
+      setStatus('pronto', null);
+      if (modoConversa) setTimeout(ouvirUmaVez, 400);
+    }
   } catch (err) {
     addBubble(`Erro: ${err.message}`, 'system');
     setStatus('erro', null);
+    if (modoConversa) setTimeout(ouvirUmaVez, 800);
   }
 }
 
@@ -130,10 +195,37 @@ composer.addEventListener('submit', (e) => {
   enviarMensagem(textInput.value);
 });
 
+clearBtn.addEventListener('click', () => {
+  chatLog.innerHTML = '';
+  addBubble('Conversa limpa. Pode continuar de onde quiser.', 'system');
+});
+
+extractBtn.addEventListener('click', () => {
+  const linhas = Array.from(chatLog.querySelectorAll('.bubble')).map((b) => {
+    const quem = b.classList.contains('user') ? 'Voce' : b.classList.contains('assistant') ? 'Jarvis' : 'Sistema';
+    return `${quem}: ${b.textContent}`;
+  });
+  const blob = new Blob([linhas.join('\n\n')], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `jarvis-conversa-${Date.now()}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
 // ---------- Voz: reconhecimento (Web Speech API) ----------
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognizer = null;
+
+const ERRO_RECONHECIMENTO = {
+  'not-allowed': 'Permissao de microfone negada - libera o microfone nas configuracoes do navegador.',
+  'no-speech': 'Nao ouvi nada, tenta falar de novo.',
+  'audio-capture': 'Nao encontrei um microfone disponivel.',
+  network: 'Erro de rede no reconhecimento de voz.',
+  aborted: null,
+};
 
 if (SpeechRecognition) {
   recognizer = new SpeechRecognition();
@@ -144,7 +236,7 @@ if (SpeechRecognition) {
   recognizer.onstart = () => {
     reconhecendo = true;
     micBtn.classList.add('active');
-    setStatus('ouvindo...', 'listening');
+    setStatus(modoConversa ? 'ouvindo (modo conversa)' : 'ouvindo...', 'listening');
   };
 
   recognizer.onresult = (event) => {
@@ -152,8 +244,11 @@ if (SpeechRecognition) {
     enviarMensagem(texto);
   };
 
-  recognizer.onerror = () => {
-    setStatus('nao entendi, tenta de novo', null);
+  recognizer.onerror = (event) => {
+    const msg = ERRO_RECONHECIMENTO[event.error];
+    if (msg) addBubble(`Erro no microfone: ${msg}`, 'system');
+    setStatus('pronto', null);
+    if (event.error === 'not-allowed' && modoConversa) pararModoConversa();
   };
 
   recognizer.onend = () => {
@@ -163,6 +258,16 @@ if (SpeechRecognition) {
 } else {
   micBtn.title = 'Reconhecimento de voz nao suportado neste navegador (use o Chrome)';
   micBtn.style.opacity = '0.35';
+  convBtn.style.opacity = '0.35';
+}
+
+function ouvirUmaVez() {
+  if (!recognizer || reconhecendo) return;
+  try {
+    recognizer.start();
+  } catch {
+    /* ja estava rodando, ignora */
+  }
 }
 
 micBtn.addEventListener('click', () => {
@@ -172,11 +277,31 @@ micBtn.addEventListener('click', () => {
     return;
   }
   window.speechSynthesis.cancel();
-  recognizer.start();
+  ouvirUmaVez();
+});
+
+function iniciarModoConversa() {
+  if (!recognizer) return;
+  modoConversa = true;
+  convBtn.classList.add('active');
+  hintEl.textContent = 'Modo conversa ativo - pode falar quando quiser';
+  ouvirUmaVez();
+}
+
+function pararModoConversa() {
+  modoConversa = false;
+  convBtn.classList.remove('active');
+  hintEl.textContent = 'Aperte o microfone ou digite abaixo';
+  if (reconhecendo) recognizer.stop();
+}
+
+convBtn.addEventListener('click', () => {
+  if (modoConversa) pararModoConversa();
+  else iniciarModoConversa();
 });
 
 muteBtn.addEventListener('click', () => {
   vozAtivada = !vozAtivada;
   muteBtn.textContent = vozAtivada ? '🔊' : '🔇';
-  if (!vozAtivada) window.speechSynthesis.cancel();
+  if (!vozAtivada) { window.speechSynthesis.cancel(); moverBoca(false); }
 });

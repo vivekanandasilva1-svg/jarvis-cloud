@@ -26,32 +26,78 @@
 
   <div class="app-window" id="appWindow" hidden>
     <div class="window-titlebar">
-      <span class="dot"></span>
-      <span class="window-title">Jarvis</span>
+      <span class="brand">J.A.R.V.I.S</span>
+      <span class="online-pill"><span class="dot"></span>Online</span>
+      <span class="clock" id="clock"></span>
       <span class="window-status" id="status">pronto</span>
+      <button type="button" class="logout-btn" id="logoutBtn" title="Sair">Sair</button>
     </div>
 
     <div class="window-body">
-      <div class="orb-stage">
-        <div class="orb" id="orb">
-          <div class="orb-core"></div>
-          <div class="orb-ring ring-1"></div>
-          <div class="orb-ring ring-2"></div>
-          <div class="orb-ring ring-3"></div>
-        </div>
-        <div class="hint">Aperte o microfone ou digite abaixo</div>
+      <div class="avatar-stage">
+        <svg class="bot" id="bot" viewBox="0 0 220 240" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="faceGrad" cx="40%" cy="30%" r="75%">
+              <stop offset="0%" stop-color="#bfeaff"/>
+              <stop offset="45%" stop-color="#4ce0ff"/>
+              <stop offset="100%" stop-color="#173a66"/>
+            </radialGradient>
+            <linearGradient id="eyeGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#eafcff"/>
+              <stop offset="100%" stop-color="#4ce0ff"/>
+            </linearGradient>
+          </defs>
+
+          <ellipse class="halo" cx="110" cy="115" rx="95" ry="100"/>
+
+          <path class="antenna" d="M70 40 Q60 10 45 8"/>
+          <path class="antenna" d="M150 40 Q160 10 175 8"/>
+          <circle class="antenna-tip" cx="45" cy="8" r="4"/>
+          <circle class="antenna-tip" cx="175" cy="8" r="4"/>
+
+          <path class="head" d="M110 30
+            C165 30 190 70 190 120
+            C190 175 155 210 110 210
+            C65 210 30 175 30 120
+            C30 70 55 30 110 30 Z" fill="url(#faceGrad)"/>
+
+          <path class="visor" d="M55 105 C55 85 80 78 110 78 C140 78 165 85 165 105
+            C165 120 140 128 110 128 C80 128 55 120 55 105 Z"/>
+
+          <rect class="eye" id="eyeL" x="72" y="96" width="26" height="10" rx="5"/>
+          <rect class="eye" id="eyeR" x="122" y="96" width="26" height="10" rx="5"/>
+
+          <g class="mouth" id="mouth">
+            <rect class="bar" x="80" y="160" width="8" height="10" rx="2"/>
+            <rect class="bar" x="93" y="160" width="8" height="10" rx="2"/>
+            <rect class="bar" x="106" y="160" width="8" height="10" rx="2"/>
+            <rect class="bar" x="119" y="160" width="8" height="10" rx="2"/>
+            <rect class="bar" x="132" y="160" width="8" height="10" rx="2"/>
+          </g>
+        </svg>
+        <div class="hint" id="hint">Aperte o microfone ou digite abaixo</div>
       </div>
 
       <div class="chat-panel">
+        <div class="chat-log-header">
+          <span>Conversa</span>
+          <div class="chat-log-actions">
+            <button type="button" id="clearBtn">Limpar</button>
+            <button type="button" id="extractBtn">Exportar</button>
+          </div>
+        </div>
         <div class="chat-log" id="chatLog"></div>
 
         <form class="composer" id="composer">
-          <button type="button" class="mic-btn" id="micBtn" title="Falar">
+          <button type="button" class="icon-btn mic-btn" id="micBtn" title="Falar um comando">
             <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
+          </button>
+          <button type="button" class="icon-btn conv-btn" id="convBtn" title="Ativar modo conversa continua">
+            <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 3a2 2 0 0 0-2 2v10a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2zM6 11a1 1 0 0 1 2 0v2a1 1 0 0 1-2 0v-2zm10 0a1 1 0 0 1 2 0v2a1 1 0 0 1-2 0v-2z"/></svg>
           </button>
           <input type="text" id="textInput" placeholder="Fale com o Jarvis..." autocomplete="off" />
           <button type="submit" class="send-btn" id="sendBtn">Enviar</button>
-          <button type="button" class="mute-btn" id="muteBtn" title="Silenciar voz">🔊</button>
+          <button type="button" class="icon-btn mute-btn" id="muteBtn" title="Silenciar voz">🔊</button>
         </form>
       </div>
     </div>
