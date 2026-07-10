@@ -3,7 +3,7 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chat } from './cloudAgent.js';
-import { synthesizeSpeech } from './elevenlabs.js';
+import { synthesizeSpeechWithTimestamps } from './elevenlabs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -52,14 +52,15 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+// devolve o audio (base64) + o alinhamento de tempo de cada caractere, pra sincronizar a
+// legenda na tela com a fala de verdade
 app.post('/api/tts', async (req, res) => {
   const { text } = req.body || {};
   if (!text) return res.status(400).json({ erro: 'text obrigatorio' });
 
   try {
-    const audioBuffer = await synthesizeSpeech(text);
-    res.set('Content-Type', 'audio/mpeg');
-    res.send(audioBuffer);
+    const { audioBase64, alignment } = await synthesizeSpeechWithTimestamps(text);
+    res.json({ audio: audioBase64, alignment });
   } catch (err) {
     console.error('Erro no TTS:', err);
     res.status(500).json({ erro: err.message });

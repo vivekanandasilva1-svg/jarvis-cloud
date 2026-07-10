@@ -180,17 +180,48 @@ function pararAnaliseBoca() {
 // so um audio por vez - qualquer fala nova cancela a anterior, pra nao atropelar
 let audioAtual = null;
 
-async function falarElevenLabs(texto) {
+function base64ParaBlob(base64, tipo) {
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: tipo });
+}
+
+// revela o texto na bolha em sincronia real com o audio, usando o alinhamento de
+// caracteres que o ElevenLabs devolve (tempo exato de cada letra)
+let legendaRAF = null;
+function legendarProgressivo(audio, bubbleEl, characters, starts) {
+  cancelAnimationFrame(legendaRAF);
+  function atualizar() {
+    const t = audio.currentTime;
+    let idx = 0;
+    while (idx < starts.length && starts[idx] <= t) idx++;
+    bubbleEl.textContent = characters.slice(0, idx).join('');
+    chatLog.scrollTop = chatLog.scrollHeight;
+    if (!audio.paused && !audio.ended) legendaRAF = requestAnimationFrame(atualizar);
+  }
+  atualizar();
+}
+
+function pararLegenda(bubbleEl, textoCompleto) {
+  if (legendaRAF) cancelAnimationFrame(legendaRAF);
+  legendaRAF = null;
+  if (bubbleEl) bubbleEl.textContent = textoCompleto;
+}
+
+async function falarElevenLabs(texto, bubbleEl) {
   const res = await fetch('/api/tts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
     body: JSON.stringify({ text: texto }),
   });
   if (!res.ok) throw new Error('tts indisponivel');
+  const data = await res.json();
+  if (!data.audio || !data.alignment) throw new Error('tts sem alinhamento');
 
   if (audioAtual) { audioAtual.pause(); audioAtual = null; }
 
-  const blob = await res.blob();
+  const blob = base64ParaBlob(data.audio, 'audio/mpeg');
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
   audioAtual = audio;
@@ -203,10 +234,18 @@ async function falarElevenLabs(texto) {
   source.connect(analyserNode);
   analyserNode.connect(ctx.destination);
 
+  const characters = data.alignment.characters || [];
+  const starts = data.alignment.character_start_times_seconds || [];
+
   await new Promise((resolve) => {
-    audio.onplay = () => { setStatus('falando', 'speaking'); falarComAnalise(audio, analyserNode); };
+    audio.onplay = () => {
+      setStatus('falando', 'speaking');
+      falarComAnalise(audio, analyserNode);
+      if (bubbleEl) legendarProgressivo(audio, bubbleEl, characters, starts);
+    };
     const finalizar = () => {
       pararAnaliseBoca();
+      pararLegenda(bubbleEl, texto);
       URL.revokeObjectURL(url);
       if (audioAtual === audio) audioAtual = null;
       resolve();
@@ -217,28 +256,39 @@ async function falarElevenLabs(texto) {
   });
 }
 
-function falarNavegador(texto) {
+function falarNavegador(texto, bubbleEl) {
   return new Promise((resolve) => {
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(texto);
     utter.lang = 'pt-BR';
     utter.rate = 1.02;
     utter.onstart = () => { setStatus('falando', 'speaking'); bocaAleatoria(true); };
-    const finalizar = () => { bocaAleatoria(false); resolve(); };
+    // a Web Speech API so da o indice do caractere onde comeca cada palavra (nao o tempo
+    // exato como o ElevenLabs) - ainda assim da pra revelar palavra por palavra
+    utter.onboundary = (event) => {
+      if (bubbleEl && event.name === 'word') {
+        bubbleEl.textContent = texto.slice(0, event.charIndex + event.charLength || event.charIndex);
+        chatLog.scrollTop = chatLog.scrollHeight;
+      }
+    };
+    const finalizar = () => { bocaAleatoria(false); if (bubbleEl) bubbleEl.textContent = texto; resolve(); };
     utter.onend = finalizar;
     utter.onerror = finalizar;
     window.speechSynthesis.speak(utter);
   });
 }
 
-// fala a resposta e, se o modo conversa estiver ativo, so volta a ouvir depois de terminar
-async function falar(texto) {
+// fala a resposta revelando o texto em sincronia; se o modo conversa estiver ativo, so
+// volta a ouvir depois de terminar
+async function falar(texto, bubbleEl) {
   if (vozAtivada && texto) {
     try {
-      await falarElevenLabs(texto);
+      await falarElevenLabs(texto, bubbleEl);
     } catch {
-      await falarNavegador(texto);
+      await falarNavegador(texto, bubbleEl);
     }
+  } else if (bubbleEl) {
+    bubbleEl.textContent = texto;
   }
   setStatus('pronto', null);
   aguardandoResposta = false;
@@ -270,8 +320,8 @@ async function enviarMensagem(texto) {
     }
     if (!res.ok) throw new Error(data.erro || 'Erro desconhecido');
 
-    addBubble(data.reply, 'assistant');
-    await falar(data.reply);
+    const bubble = addBubble('', 'assistant');
+    await falar(data.reply, bubble);
   } catch (err) {
     addBubble(`Erro: ${err.message}`, 'system');
     setStatus('erro', null);
