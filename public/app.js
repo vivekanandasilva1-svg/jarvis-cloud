@@ -29,7 +29,11 @@ let appPassword = sessionStorage.getItem('jarvis_password') || '';
 let vozAtivada = true;
 let reconhecendo = false;
 let modoConversa = false;
+let aguardandoResposta = false;
+let processandoEnvio = false;
 let bufferConversa = '';
+let silenceTimer = null;
+const PAUSA_TOLERANCIA_MS = 1800; // quanto tempo de pausa aceitar antes de considerar que a pessoa terminou de falar
 
 // ---------- Relogio ----------
 
@@ -173,6 +177,9 @@ function pararAnaliseBoca() {
   bocaParada();
 }
 
+// so um audio por vez - qualquer fala nova cancela a anterior, pra nao atropelar
+let audioAtual = null;
+
 async function falarElevenLabs(texto) {
   const res = await fetch('/api/tts', {
     method: 'POST',
@@ -181,9 +188,12 @@ async function falarElevenLabs(texto) {
   });
   if (!res.ok) throw new Error('tts indisponivel');
 
+  if (audioAtual) { audioAtual.pause(); audioAtual = null; }
+
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
+  audioAtual = audio;
 
   const ctx = ensureAudioContext();
   if (ctx.state === 'suspended') await ctx.resume();
@@ -195,7 +205,12 @@ async function falarElevenLabs(texto) {
 
   await new Promise((resolve) => {
     audio.onplay = () => { setStatus('falando', 'speaking'); falarComAnalise(audio, analyserNode); };
-    const finalizar = () => { pararAnaliseBoca(); URL.revokeObjectURL(url); resolve(); };
+    const finalizar = () => {
+      pararAnaliseBoca();
+      URL.revokeObjectURL(url);
+      if (audioAtual === audio) audioAtual = null;
+      resolve();
+    };
     audio.onended = finalizar;
     audio.onerror = finalizar;
     audio.play().catch(finalizar);
@@ -216,23 +231,27 @@ function falarNavegador(texto) {
   });
 }
 
+// fala a resposta e, se o modo conversa estiver ativo, so volta a ouvir depois de terminar
 async function falar(texto) {
-  if (!vozAtivada || !texto) {
-    if (modoConversa) setTimeout(ouvirUmaVez, 300);
-    return;
-  }
-  try {
-    await falarElevenLabs(texto);
-  } catch {
-    await falarNavegador(texto);
+  if (vozAtivada && texto) {
+    try {
+      await falarElevenLabs(texto);
+    } catch {
+      await falarNavegador(texto);
+    }
   }
   setStatus('pronto', null);
-  if (modoConversa) setTimeout(ouvirUmaVez, 400);
+  aguardandoResposta = false;
+  if (modoConversa) setTimeout(ouvirSegmento, 350);
 }
 
 async function enviarMensagem(texto) {
-  if (!texto || !texto.trim()) return;
-  addBubble(texto, 'user');
+  if (!texto || !texto.trim() || processandoEnvio) return;
+  processandoEnvio = true;
+  aguardandoResposta = true;
+  clearTimeout(silenceTimer);
+
+  addBubble(texto.trim(), 'user');
   textInput.value = '';
   setStatus('pensando', 'thinking');
 
@@ -240,7 +259,7 @@ async function enviarMensagem(texto) {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-      body: JSON.stringify({ message: texto, sessionId }),
+      body: JSON.stringify({ message: texto.trim(), sessionId }),
     });
     const raw = await res.text();
     let data;
@@ -253,14 +272,13 @@ async function enviarMensagem(texto) {
 
     addBubble(data.reply, 'assistant');
     await falar(data.reply);
-    if (!vozAtivada) {
-      setStatus('pronto', null);
-      if (modoConversa) setTimeout(ouvirUmaVez, 400);
-    }
   } catch (err) {
     addBubble(`Erro: ${err.message}`, 'system');
     setStatus('erro', null);
-    if (modoConversa) setTimeout(ouvirUmaVez, 800);
+    aguardandoResposta = false;
+    if (modoConversa) setTimeout(ouvirSegmento, 800);
+  } finally {
+    processandoEnvio = false;
   }
 }
 
@@ -301,6 +319,12 @@ const ERRO_RECONHECIMENTO = {
   aborted: null,
 };
 
+// Estrategia: em vez de usar o modo "continuous" nativo do navegador (instavel, gera
+// resultados duplicados em varios browsers), cada "segmento" de fala e uma sessao curta
+// (continuous=false). Quando o navegador encerra por uma pausa, a gente reinicia sozinho na
+// hora - e um timer proprio (PAUSA_TOLERANCIA_MS) decide quando a pessoa realmente terminou
+// de falar (nao so fez uma pausa curta pra respirar), juntando tudo num texto so.
+
 if (SpeechRecognition) {
   recognizer = new SpeechRecognition();
   recognizer.lang = 'pt-BR';
@@ -314,22 +338,26 @@ if (SpeechRecognition) {
 
   recognizer.onresult = (event) => {
     if (!modoConversa) {
-      const texto = event.results[event.results.length - 1][0].transcript;
-      enviarMensagem(texto);
+      const ultimo = event.results[event.results.length - 1];
+      if (ultimo.isFinal) enviarMensagem(ultimo[0].transcript);
       return;
     }
-    // modo conversa: so acumula os trechos finais, nao envia a cada palavra
+
+    // modo conversa: acumula so os trechos finais; qualquer resultado (mesmo interino)
+    // reseta o relogio de silencio, entao pausas curtas no meio da fala nao cortam nada
+    clearTimeout(silenceTimer);
     for (let i = event.resultIndex; i < event.results.length; i++) {
       if (event.results[i].isFinal) {
-        bufferConversa += (bufferConversa ? ' ' : '') + event.results[i][0].transcript;
+        const trecho = event.results[i][0].transcript.trim();
+        if (trecho) bufferConversa += (bufferConversa ? ' ' : '') + trecho;
       }
     }
+    silenceTimer = setTimeout(finalizarFalaConversa, PAUSA_TOLERANCIA_MS);
   };
 
   recognizer.onerror = (event) => {
     const msg = ERRO_RECONHECIMENTO[event.error];
     if (msg) addBubble(`Erro no microfone: ${msg}`, 'system');
-    setStatus('pronto', null);
     if (event.error === 'not-allowed' && modoConversa) pararModoConversa();
   };
 
@@ -337,14 +365,12 @@ if (SpeechRecognition) {
     reconhecendo = false;
     micBtn.classList.remove('active');
 
-    if (modoConversa) {
-      const texto = bufferConversa.trim();
-      bufferConversa = '';
-      if (texto) {
-        enviarMensagem(texto);
-      } else {
-        setTimeout(ouvirUmaVez, 300);
-      }
+    // so reinicia sozinho se ainda estivermos no modo conversa esperando a pessoa falar
+    // (nao reinicia se ja estamos processando/falando a resposta)
+    if (modoConversa && !aguardandoResposta) {
+      setTimeout(ouvirSegmento, 120);
+    } else if (!modoConversa) {
+      setStatus('pronto', null);
     }
   };
 } else {
@@ -353,9 +379,19 @@ if (SpeechRecognition) {
   convBtn.style.opacity = '0.35';
 }
 
-function ouvirUmaVez() {
-  if (!recognizer || reconhecendo) return;
-  recognizer.continuous = modoConversa;
+function finalizarFalaConversa() {
+  clearTimeout(silenceTimer);
+  const texto = bufferConversa.trim();
+  bufferConversa = '';
+  if (!texto) return;
+  aguardandoResposta = true;
+  if (reconhecendo) recognizer.stop();
+  enviarMensagem(texto);
+}
+
+function ouvirSegmento() {
+  if (!recognizer || reconhecendo || aguardandoResposta) return;
+  recognizer.continuous = false;
   recognizer.interimResults = modoConversa;
   try {
     recognizer.start();
@@ -371,25 +407,30 @@ micBtn.addEventListener('click', () => {
     recognizer.stop();
     return;
   }
+  if (audioAtual) audioAtual.pause();
   window.speechSynthesis.cancel();
-  ouvirUmaVez();
+  ouvirSegmento();
 });
 
 function iniciarModoConversa() {
   if (!recognizer) return;
   modoConversa = true;
+  aguardandoResposta = false;
   bufferConversa = '';
   convBtn.classList.add('active');
   hintEl.textContent = 'Modo conversa ativo - pode falar quando quiser';
-  ouvirUmaVez();
+  ouvirSegmento();
 }
 
 function pararModoConversa() {
   modoConversa = false;
+  aguardandoResposta = false;
   bufferConversa = '';
+  clearTimeout(silenceTimer);
   convBtn.classList.remove('active');
   hintEl.textContent = 'Aperte o microfone ou digite abaixo';
   if (reconhecendo) recognizer.stop();
+  setStatus('pronto', null);
 }
 
 convBtn.addEventListener('click', () => {
