@@ -28,6 +28,11 @@ agendamentos e cadastrar pacientes, sem precisar confirmar cada chamada - execut
 o pedido for claro. So avise (sem bloquear) se for algo de volume/impacto incomum, como cancelar
 varios agendamentos de uma vez.`;
 
+function systemPromptComHoje() {
+  const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' });
+  return `${SYSTEM_PROMPT}\n\nA data de hoje e ${hoje} (fuso horario de Maceio/Brasil). Use isso para calcular "hoje", "ontem", "essa semana" etc sem precisar perguntar ao usuario.`;
+}
+
 const tools = [
   {
     name: 'ads_listar_contas',
@@ -254,14 +259,44 @@ const toolHandlers = {
   ads_listar_anuncios: ({ adSetId }) => metaAds.listAds({ adSetId }),
   ads_diagnostico_campanha: ({ campaignId, since, until, datePreset }) => metaAds.analyzeCampaignAds({ campaignId, since, until, datePreset }),
   clinicorp_listar_profissionais: () => clinicorp.listProfessionals(),
-  clinicorp_listar_agendamentos: ({ from, to, patientId, includeCanceled }) =>
-    clinicorp.listAppointments({ from, to, patientId, includeCanceled: includeCanceled ? 'X' : undefined }),
+  clinicorp_listar_agendamentos: async ({ from, to, patientId, includeCanceled }) => {
+    const appointments = await clinicorp.listAppointments({
+      from, to, patientId, includeCanceled: includeCanceled ? 'X' : undefined,
+    });
+    // a API devolve registros enormes (notas longas, dezenas de campos internos) - resume
+    // antes de mandar pro modelo, senao estoura o limite de tokens da resposta
+    return {
+      total: appointments.length,
+      agendamentos: appointments.map((a) => ({
+        id: a.id,
+        paciente: a.PatientName,
+        telefone: a.MobilePhone,
+        de: a.fromTime,
+        ate: a.toTime,
+        dentistaId: a.Dentist_PersonId,
+        statusId: a.StatusId,
+        categoria: a.CategoryDescription,
+        cancelado: a.Canceled === 'X',
+        motivoCancelamento: a.Canceled === 'X' ? a.CancelReason : undefined,
+      })),
+    };
+  },
   clinicorp_buscar_paciente: ({ phone, name, document, email }) => clinicorp.findPatient({ phone, name, document, email }),
   clinicorp_criar_paciente: ({ name, mobilePhone, email, birthDate, document }) =>
     clinicorp.createPatient({ name, mobilePhone, email, birthDate, otherDocumentId: document }),
   clinicorp_criar_agendamento: (input) => clinicorp.createAppointment(input),
   clinicorp_cancelar_agendamento: ({ id }) => clinicorp.cancelAppointment({ id }),
-  clinicorp_faturamento: ({ from, to }) => clinicorp.getFinancialSummary({ from, to }),
+  clinicorp_faturamento: async ({ from, to }) => {
+    const resumo = await clinicorp.getFinancialSummary({ from, to });
+    // so os totais - o detalhamento linha a linha e enorme e nao cabe no limite de tokens
+    return {
+      de: resumo.From,
+      ate: resumo.To,
+      totalVendas: resumo.TotalSales,
+      totalRecebido: resumo.TotalIncome,
+      totalDespesas: resumo.TotalExpenses,
+    };
+  },
 };
 
 async function runTool(name, input, session) {
@@ -289,8 +324,8 @@ function extractText(response) {
 async function callClaude(history) {
   return anthropic.messages.create({
     model: 'claude-sonnet-5',
-    max_tokens: 800,
-    system: SYSTEM_PROMPT,
+    max_tokens: 1500,
+    system: systemPromptComHoje(),
     tools,
     messages: history,
   });
