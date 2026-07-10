@@ -76,3 +76,28 @@ export async function synthesizeSpeechWithTimestamps(text) {
   const data = await res.json();
   return { audioBase64: data.audio_base64, alignment: data.alignment };
 }
+
+// Transcreve audio (fala -> texto) usando o Scribe da ElevenLabs, pra o Klaus conseguir
+// "ouvir" arquivos de audio que o usuario envia (mesma chave de API do TTS).
+export async function transcribeAudio(buffer, mimeType = 'audio/mpeg') {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) throw new Error('ELEVENLABS_API_KEY nao configurado');
+
+  const form = new FormData();
+  form.append('model_id', 'scribe_v1');
+  form.append('file', new Blob([buffer], { type: mimeType }), 'audio');
+
+  const res = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+    method: 'POST',
+    headers: { 'xi-api-key': apiKey },
+    body: form,
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`ElevenLabs erro ${res.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const data = await res.json();
+  return data.text || '';
+}

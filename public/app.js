@@ -13,6 +13,9 @@ const muteBtn = document.getElementById('muteBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const clearBtn = document.getElementById('clearBtn');
 const extractBtn = document.getElementById('extractBtn');
+const attachBtn = document.getElementById('attachBtn');
+const fileInput = document.getElementById('fileInput');
+const attachPreview = document.getElementById('attachPreview');
 const bot = document.getElementById('bot');
 const mouthBars = bot.querySelectorAll('.mouth .bar');
 const statusEl = document.getElementById('status');
@@ -119,6 +122,174 @@ loginForm.addEventListener('submit', async (e) => {
   appPassword = senha;
   sessionStorage.setItem('jarvis_password', senha);
   mostrarApp();
+});
+
+// ---------- Anexos (imagem, audio, video) ----------
+
+let anexosPendentes = []; // [{ kind, mediaType, base64, label, thumb }]
+
+function arquivoParaBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// reduz fotos grandes (celular tira facil 10-12MB) pra um tamanho razoavel antes de mandar
+async function redimensionarImagem(file, maxDim = 1568, qualidade = 0.85) {
+  const base64Original = await arquivoParaBase64(file);
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  try {
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = url;
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+
+  let { width, height } = img;
+  if (width <= maxDim && height <= maxDim && file.size < 4 * 1024 * 1024) {
+    return { base64: base64Original, mediaType: file.type || 'image/jpeg' };
+  }
+  const escala = Math.min(1, maxDim / Math.max(width, height));
+  width = Math.round(width * escala);
+  height = Math.round(height * escala);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+  const dataUrl = canvas.toDataURL('image/jpeg', qualidade);
+  return { base64: dataUrl.split(',')[1], mediaType: 'image/jpeg' };
+}
+
+// extrai alguns quadros do video (o Klaus nao ouve o audio do video, so ve cenas dele)
+function extrairQuadrosDeVideo(file, numQuadros = 3) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.muted = true;
+    video.preload = 'auto';
+    video.src = URL.createObjectURL(file);
+
+    const quadros = [];
+    let indice = 0;
+    let pontos = [];
+
+    function capturarAtual() {
+      const canvas = document.createElement('canvas');
+      const escala = Math.min(1, 1024 / Math.max(video.videoWidth, video.videoHeight));
+      canvas.width = Math.round(video.videoWidth * escala);
+      canvas.height = Math.round(video.videoHeight * escala);
+      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      quadros.push(canvas.toDataURL('image/jpeg', 0.8).split(',')[1]);
+      indice += 1;
+      if (indice < pontos.length) {
+        video.currentTime = pontos[indice];
+      } else {
+        URL.revokeObjectURL(video.src);
+        resolve(quadros);
+      }
+    }
+
+    video.onloadedmetadata = () => {
+      const duracao = video.duration || 0;
+      pontos = Array.from({ length: numQuadros }, (_, i) => (duracao * (i + 1)) / (numQuadros + 1));
+      video.currentTime = pontos[0] || 0;
+    };
+    video.onseeked = capturarAtual;
+    video.onerror = () => { URL.revokeObjectURL(video.src); reject(new Error('nao consegui ler o video')); };
+  });
+}
+
+function renderizarPreviewAnexos() {
+  attachPreview.innerHTML = '';
+  attachPreview.hidden = anexosPendentes.length === 0;
+  anexosPendentes.forEach((anexo, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'attach-chip';
+    if (anexo.thumb) {
+      const img = document.createElement('img');
+      img.src = anexo.thumb;
+      chip.appendChild(img);
+    }
+    const label = document.createElement('span');
+    label.textContent = anexo.label;
+    chip.appendChild(label);
+    const removerBtn = document.createElement('button');
+    removerBtn.type = 'button';
+    removerBtn.textContent = '✕';
+    removerBtn.title = 'Remover';
+    removerBtn.addEventListener('click', () => {
+      anexosPendentes.splice(i, 1);
+      renderizarPreviewAnexos();
+    });
+    chip.appendChild(removerBtn);
+    attachPreview.appendChild(chip);
+  });
+}
+
+async function adicionarArquivo(file) {
+  try {
+    if (file.type.startsWith('image/')) {
+      const { base64, mediaType } = await redimensionarImagem(file);
+      anexosPendentes.push({ kind: 'image', mediaType, base64, label: file.name, thumb: `data:${mediaType};base64,${base64}` });
+    } else if (file.type.startsWith('audio/')) {
+      const base64 = await arquivoParaBase64(file);
+      anexosPendentes.push({ kind: 'audio', mediaType: file.type || 'audio/mpeg', base64, label: `🎵 ${file.name}` });
+    } else if (file.type.startsWith('video/')) {
+      setStatus('processando video...', 'thinking');
+      const quadros = await extrairQuadrosDeVideo(file);
+      quadros.forEach((base64, idx) => {
+        anexosPendentes.push({
+          kind: 'video_frame',
+          mediaType: 'image/jpeg',
+          base64,
+          label: `🎬 ${file.name} (quadro ${idx + 1})`,
+          thumb: `data:image/jpeg;base64,${base64}`,
+        });
+      });
+      setStatus('pronto', null);
+    } else {
+      addBubble(`Tipo de arquivo nao suportado: ${file.name}`, 'system');
+      return;
+    }
+    renderizarPreviewAnexos();
+  } catch (err) {
+    addBubble(`Erro ao processar arquivo ${file.name}: ${err.message}`, 'system');
+    setStatus('pronto', null);
+  }
+}
+
+function resumirAnexosParaBolha(anexos) {
+  const partes = [];
+  const contagemVideo = {};
+  for (const a of anexos) {
+    if (a.kind === 'image') partes.push(`📷 ${a.label}`);
+    else if (a.kind === 'audio') partes.push(a.label);
+    else if (a.kind === 'video_frame') {
+      const nomeArquivo = a.label.replace(/^🎬 /, '').replace(/ \(quadro \d+\)$/, '');
+      contagemVideo[nomeArquivo] = (contagemVideo[nomeArquivo] || 0) + 1;
+    }
+  }
+  for (const [nome, qtd] of Object.entries(contagemVideo)) {
+    partes.push(`🎬 ${nome} (${qtd} quadro${qtd > 1 ? 's' : ''})`);
+  }
+  return partes.join('\n');
+}
+
+attachBtn.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', async () => {
+  const arquivos = Array.from(fileInput.files || []);
+  fileInput.value = '';
+  for (const file of arquivos) {
+    await adicionarArquivo(file);
+  }
 });
 
 // ---------- Chat ----------
@@ -296,12 +467,19 @@ async function falar(texto, bubbleEl) {
 }
 
 async function enviarMensagem(texto) {
-  if (!texto || !texto.trim() || processandoEnvio) return;
+  const textoLimpo = (texto || '').trim();
+  const anexos = anexosPendentes;
+  if ((!textoLimpo && anexos.length === 0) || processandoEnvio) return;
   processandoEnvio = true;
   aguardandoResposta = true;
   clearTimeout(silenceTimer);
 
-  addBubble(texto.trim(), 'user');
+  anexosPendentes = [];
+  renderizarPreviewAnexos();
+
+  const resumoAnexos = anexos.length ? resumirAnexosParaBolha(anexos) : '';
+  const textoBolha = textoLimpo && resumoAnexos ? `${textoLimpo}\n${resumoAnexos}` : (textoLimpo || resumoAnexos);
+  addBubble(textoBolha, 'user');
   textInput.value = '';
   setStatus('pensando', 'thinking');
 
@@ -309,7 +487,11 @@ async function enviarMensagem(texto) {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-      body: JSON.stringify({ message: texto.trim(), sessionId }),
+      body: JSON.stringify({
+        message: textoLimpo,
+        sessionId,
+        attachments: anexos.map(({ kind, mediaType, base64 }) => ({ kind, mediaType, base64 })),
+      }),
     });
     const raw = await res.text();
     let data;

@@ -9,7 +9,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
 const app = express();
-app.use(express.json());
+// limite maior que o padrao (100kb) pra caber fotos e audios em base64 anexados no chat
+app.use(express.json({ limit: '20mb' }));
 
 const APP_PASSWORD = process.env.APP_PASSWORD;
 
@@ -38,13 +39,14 @@ app.post('/api/login', (req, res) => {
 app.use(express.static(PUBLIC_DIR));
 
 app.post('/api/chat', async (req, res) => {
-  const { message, sessionId } = req.body || {};
-  if (!message || !sessionId) {
-    return res.status(400).json({ erro: 'message e sessionId sao obrigatorios' });
+  const { message, sessionId, attachments } = req.body || {};
+  const temAnexo = Array.isArray(attachments) && attachments.length > 0;
+  if ((!message && !temAnexo) || !sessionId) {
+    return res.status(400).json({ erro: 'message (ou attachments) e sessionId sao obrigatorios' });
   }
 
   try {
-    const reply = await chat(sessionId, message);
+    const reply = await chat(sessionId, message, attachments);
     res.json({ reply });
   } catch (err) {
     console.error('Erro no chat:', err);

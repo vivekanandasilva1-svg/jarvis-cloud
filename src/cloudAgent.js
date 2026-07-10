@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as metaAds from './metaads.js';
 import * as clinicorp from './clinicorp.js';
+import { transcribeAudio } from './elevenlabs.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -36,7 +37,14 @@ IMPORTANTE - limitacao real do Clinicorp: a API NAO da acesso a prontuario clini
 odontograma, evolucao clinica) nem a fotos/imagens ja salvas dos pacientes - so existe um
 endpoint de upload (mandar arquivo novo), nao de consulta. Se o usuario pedir prontuario ou
 fotos de paciente, explique essa limitacao com clareza em vez de inventar uma resposta ou
-fingir que puxou o dado.`;
+fingir que puxou o dado.
+
+O usuario tambem pode anexar arquivos na conversa (imagem, audio ou video) para voce analisar.
+Imagens chegam para voce de verdade (analise visual direta). Audio chega como uma transcricao
+de fala para texto (voce nao ouve tom de voz, so o conteudo falado). Video chega como alguns
+quadros/imagens extraidos dele (voce ve cenas do video, mas nao ouve o audio do video nem ve
+ele por completo). Se a analise depender de algo que essas limitacoes deixam de fora, avise o
+usuario em vez de supor.`;
 
 function systemPromptComHoje() {
   const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -535,6 +543,55 @@ async function runTool(name, input, session) {
   }
 }
 
+const IMAGE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
+// Monta o content da mensagem do usuario misturando texto com anexos: imagens e quadros de
+// video viram blocos de imagem de verdade pro Claude "ver"; audio e transcrito (fala -> texto)
+// e entra como texto na propria mensagem.
+async function buildUserContent(userMessage, attachments) {
+  const images = [];
+  let transcricoes = '';
+
+  for (const att of attachments || []) {
+    if (!att || !att.base64) continue;
+
+    if (att.kind === 'image' || att.kind === 'video_frame') {
+      const mediaType = IMAGE_MEDIA_TYPES.has(att.mediaType) ? att.mediaType : 'image/jpeg';
+      images.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data: att.base64 } });
+    } else if (att.kind === 'audio') {
+      try {
+        const buffer = Buffer.from(att.base64, 'base64');
+        const texto = await transcribeAudio(buffer, att.mediaType || 'audio/mpeg');
+        transcricoes += `\n\n[Audio enviado pelo usuario - transcricao]: "${texto || '(sem fala reconhecida)'}"`;
+      } catch (err) {
+        transcricoes += `\n\n[Audio enviado pelo usuario - falha ao transcrever: ${err.message}]`;
+      }
+    }
+  }
+
+  let texto = (userMessage || '').trim();
+  if (transcricoes) texto = (texto ? `${texto}\n` : '') + transcricoes.trim();
+  if (!texto && images.length) texto = 'O usuario enviou arquivo(s) para voce analisar - veja as imagens anexadas.';
+
+  if (!images.length) return texto;
+  const content = [];
+  if (texto) content.push({ type: 'text', text: texto });
+  content.push(...images);
+  return content;
+}
+
+// Depois que o Klaus ja respondeu usando uma imagem, troca o bloco de imagem no historico por
+// um marcador leve - senao o binario da imagem seria reenviado (e recobrado) em todo turno
+// seguinte da mesma sessao. A analise em texto que o Klaus deu ja fica registrada na resposta.
+function apagarImagensAntigas(history) {
+  for (const turn of history) {
+    if (Array.isArray(turn.content)) {
+      turn.content = turn.content.map((b) =>
+        b.type === 'image' ? { type: 'text', text: '[imagem enviada anteriormente pelo usuario, ja analisada]' } : b);
+    }
+  }
+}
+
 function extractText(response) {
   return response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
 }
@@ -559,7 +616,7 @@ function getSession(sessionId) {
 const MAX_TOOL_ROUNDS = 10;
 const MAX_HISTORY = 40;
 
-export async function chat(sessionId, userMessage) {
+export async function chat(sessionId, userMessage, attachments = []) {
   const session = getSession(sessionId);
 
   if (session.pendingAction) {
@@ -597,7 +654,21 @@ export async function chat(sessionId, userMessage) {
     session.pendingAction = null;
   }
 
-  session.history.push({ role: 'user', content: userMessage });
+  // se algo falhar daqui pra frente (ex: imagem invalida rejeitada pela Claude), desfaz tudo
+  // que foi empurrado nesta chamada - senao a sessao fica com um turno quebrado no historico
+  // e toda mensagem seguinte volta a falhar do mesmo jeito, pra sempre.
+  const tamanhoAntes = session.history.length;
+  try {
+    return await processarTurno(session, userMessage, attachments);
+  } catch (err) {
+    session.history.splice(tamanhoAntes);
+    throw err;
+  }
+}
+
+async function processarTurno(session, userMessage, attachments) {
+  const content = await buildUserContent(userMessage, attachments);
+  session.history.push({ role: 'user', content });
   let response = await callClaude(session.history);
 
   let rounds = 0;
@@ -624,6 +695,8 @@ export async function chat(sessionId, userMessage) {
   if (session.history.length > MAX_HISTORY) {
     session.history.splice(0, session.history.length - MAX_HISTORY);
   }
+
+  apagarImagensAntigas(session.history);
 
   return replyText;
 }
