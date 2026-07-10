@@ -22,11 +22,21 @@ criar campanha) NAO executam na hora - elas ficam pendentes de confirmacao e o p
 vai perguntar "sim ou nao" pro usuario. So chame essas ferramentas quando o pedido do usuario ja
 estiver claro o suficiente para perguntar a confirmacao (valor, campanha exatos).
 
-Voce tambem tem acesso ao sistema Clinicorp da clinica (agenda, pacientes, financeiro,
-orcamentos). O usuario ja autorizou usar essas ferramentas livremente, incluindo criar/cancelar
-agendamentos e cadastrar pacientes, sem precisar confirmar cada chamada - execute direto quando
-o pedido for claro. So avise (sem bloquear) se for algo de volume/impacto incomum, como cancelar
-varios agendamentos de uma vez.`;
+Voce tambem tem acesso amplo ao sistema Clinicorp da clinica: agenda, pacientes, financeiro
+detalhado (notas fiscais, recibos, fluxo de caixa, pagamentos, parcelamento medio, glosas de
+convenio), relatorios comerciais (conversao de orcamentos, receita por especialidade, metas de
+vendas/faltas, analitico geral), estatisticas de agenda (ocupacao, info geral), catalogo de
+procedimentos e especialidades, dados organizacionais (clinicas, unidades, usuarios, cadeiras)
+e extras de paciente (aniversariantes, resumo de orcamentos). O usuario ja autorizou usar tudo
+isso livremente, incluindo criar/cancelar agendamentos e cadastrar pacientes, sem precisar
+confirmar cada chamada - execute direto quando o pedido for claro. So avise (sem bloquear) se
+for algo de volume/impacto incomum, como cancelar varios agendamentos de uma vez.
+
+IMPORTANTE - limitacao real do Clinicorp: a API NAO da acesso a prontuario clinico (fichas,
+odontograma, evolucao clinica) nem a fotos/imagens ja salvas dos pacientes - so existe um
+endpoint de upload (mandar arquivo novo), nao de consulta. Se o usuario pedir prontuario ou
+fotos de paciente, explique essa limitacao com clareza em vez de inventar uma resposta ou
+fingir que puxou o dado.`;
 
 function systemPromptComHoje() {
   const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -221,6 +231,101 @@ const tools = [
       required: ['from', 'to'],
     },
   },
+  {
+    name: 'clinicorp_procedimentos',
+    description: 'Consulta o catalogo de procedimentos (tabela de precos) ou a lista de especialidades da clinica. Use "busca" para filtrar procedimentos por nome.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string', description: '"lista" (procedimentos) ou "especialidades"' },
+        busca: { type: 'string', description: 'Filtro por nome do procedimento (opcional, so vale para tipo=lista)' },
+      },
+      required: ['tipo'],
+    },
+  },
+  {
+    name: 'clinicorp_relatorio_financeiro',
+    description: 'Relatorios financeiros detalhados da clinica: notas fiscais, recibos, fluxo de caixa, pagamentos, parcelamento medio ou glosas de convenio.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo: {
+          type: 'string',
+          description: 'Um de: notas_fiscais, recibos, fluxo_caixa, pagamentos_financeiro, parcelamento_medio, pagamentos, glosas_convenio',
+        },
+        from: { type: 'string', description: 'Data inicial YYYY-MM-DD' },
+        to: { type: 'string', description: 'Data final YYYY-MM-DD' },
+        groupByMonth: { type: 'boolean', description: 'Agrupar por mes (so vale para parcelamento_medio)' },
+        statusGlosa: { type: 'string', description: 'Para tipo=glosas_convenio: ALL, OPEN, DISPUTE, REJECT, PARTIAL_PAID ou PAID' },
+      },
+      required: ['tipo', 'from', 'to'],
+    },
+  },
+  {
+    name: 'clinicorp_relatorio_comercial',
+    description: 'Relatorios comerciais/de metas: conversao de orcamentos, receita por especialidade, metas de vendas, metas de faltas ou analitico geral.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo: {
+          type: 'string',
+          description: 'Um de: conversao_orcamentos, receita_especialidade, metas_vendas, metas_faltas, analitico_geral',
+        },
+        from: { type: 'string', description: 'Data inicial YYYY-MM-DD' },
+        to: { type: 'string', description: 'Data final YYYY-MM-DD' },
+        groupByMonth: { type: 'boolean', description: 'Agrupar por mes (conversao_orcamentos)' },
+      },
+      required: ['tipo', 'from', 'to'],
+    },
+  },
+  {
+    name: 'clinicorp_agenda_estatisticas',
+    description: 'Estatisticas da agenda: informacoes gerais (total de agendamentos, faltas) ou ocupacao da agenda (%) num periodo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string', description: '"info_geral" ou "ocupacao"' },
+        from: { type: 'string', description: 'Data inicial YYYY-MM-DD' },
+        to: { type: 'string', description: 'Data final YYYY-MM-DD' },
+        groupByMonth: { type: 'boolean', description: 'Agrupar por mes' },
+      },
+      required: ['tipo', 'from', 'to'],
+    },
+  },
+  {
+    name: 'clinicorp_organizacao',
+    description: 'Informacoes organizacionais: clinicas do assinante, unidades da franquia, usuarios do sistema ou cadeiras da clinica.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string', description: 'Um de: clinicas_assinante, unidades_franquia, usuarios, cadeiras' },
+      },
+      required: ['tipo'],
+    },
+  },
+  {
+    name: 'clinicorp_paciente_extra',
+    description: 'Aniversariantes do dia ou resumo/soma de orcamentos dos pacientes num periodo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string', description: '"aniversariantes" ou "resumo_orcamentos"' },
+        date: { type: 'string', description: 'Data YYYY-MM-DD (para aniversariantes, default hoje)' },
+        from: { type: 'string', description: 'Data inicial YYYY-MM-DD (para resumo_orcamentos)' },
+        to: { type: 'string', description: 'Data final YYYY-MM-DD (para resumo_orcamentos)' },
+      },
+      required: ['tipo'],
+    },
+  },
+  {
+    name: 'clinicorp_orcamento_detalhe',
+    description: 'Detalhe completo de um orcamento especifico pelo id do tratamento.',
+    input_schema: {
+      type: 'object',
+      properties: { treatmentId: { type: 'integer', description: 'Id do tratamento/orcamento' } },
+      required: ['treatmentId'],
+    },
+  },
 ];
 
 const CONFIRM_TOOLS = new Set(['ads_criar_campanha', 'ads_alterar_status_campanha', 'ads_alterar_orcamento_adset']);
@@ -249,6 +354,112 @@ async function executeConfirmedAction(name, input) {
     default:
       throw new Error(`Acao desconhecida: ${name}`);
   }
+}
+
+// corta listas grandes antes de mandar pro modelo (payload cru do Clinicorp pode ter
+// dezenas de campos internos por item e passar facil de 100-300KB, o que estoura o limite
+// de tokens da resposta e trava o Klaus)
+function resumirLista(arr, campos, limite = 40) {
+  if (!Array.isArray(arr)) return arr;
+  const total = arr.length;
+  const amostra = arr.slice(0, limite).map((item) => {
+    const obj = {};
+    for (const c of campos) obj[c] = item[c];
+    return obj;
+  });
+  const resultado = { total, itens: amostra };
+  if (total > limite) resultado.obs = `mostrando os primeiros ${limite} de ${total} - peca um periodo menor para ver tudo`;
+  return resultado;
+}
+
+function resumirProcedimentos(dadosPorTabela, busca) {
+  const todos = [];
+  for (const tabela of Object.keys(dadosPorTabela || {})) {
+    for (const p of dadosPorTabela[tabela] || []) {
+      todos.push({ nome: p.ProcedureName, especialidade: p.ProcedureExpertiseName, tabela: p.PriceListName || tabela, id: p.id });
+    }
+  }
+  let filtrados = todos;
+  if (busca) {
+    const termo = busca.toLowerCase();
+    filtrados = todos.filter((p) => p.nome && p.nome.toLowerCase().includes(termo));
+  }
+  return { totalGeral: todos.length, totalEncontrado: filtrados.length, itens: filtrados.slice(0, 40) };
+}
+
+async function handleClinicorpProcedimentos({ tipo, busca }) {
+  if (tipo === 'especialidades') return clinicorp.listSpecialties();
+  const dados = await clinicorp.listProcedures();
+  return resumirProcedimentos(dados, busca);
+}
+
+async function handleClinicorpFinanceiro({ tipo, from, to, groupByMonth, statusGlosa }) {
+  switch (tipo) {
+    case 'notas_fiscais':
+      return resumirLista(await clinicorp.listInvoices({ from, to }), ['PatientName', 'Amount', 'Status', 'Date']);
+    case 'recibos':
+      return resumirLista(await clinicorp.listReceipts({ from, to }), ['PatientName', 'Amount', 'Description', 'Date']);
+    case 'fluxo_caixa':
+      return clinicorp.listCashFlow({ from, to });
+    case 'pagamentos_financeiro':
+      return resumirLista(await clinicorp.listFinancialPayments({ from, to }), ['PatientName', 'Amount', 'Type', 'Date']);
+    case 'parcelamento_medio':
+      return clinicorp.getAverageInstallments({ from, to, groupByMonth });
+    case 'pagamentos':
+      return resumirLista(
+        await clinicorp.listPayments({ from, to }),
+        ['PatientId', 'Amount', 'Type', 'PaymentDate', 'CheckOutDate', 'InstallmentNumber', 'InstallmentsCount', 'Canceled'],
+      );
+    case 'glosas_convenio':
+      return resumirLista(
+        await clinicorp.listPaymentReconcileClaim({ from, to, type: statusGlosa || 'ALL' }),
+        ['PatientName', 'Amount', 'Status', 'Date'],
+      );
+    default:
+      return { erro: `tipo desconhecido: ${tipo}` };
+  }
+}
+
+async function handleClinicorpComercial({ tipo, from, to, groupByMonth }) {
+  switch (tipo) {
+    case 'conversao_orcamentos':
+      return clinicorp.getSalesConversion({ from, to, groupByMonth });
+    case 'receita_especialidade':
+      return clinicorp.getExpertiseRevenue({ from, to });
+    case 'metas_vendas':
+      return clinicorp.listSalesGoals({ from, to });
+    case 'metas_faltas':
+      return clinicorp.listMissesGoals({ from, to });
+    case 'analitico_geral':
+      return clinicorp.getAnalyticsResults({ from, to });
+    default:
+      return { erro: `tipo desconhecido: ${tipo}` };
+  }
+}
+
+async function handleClinicorpAgenda({ tipo, from, to, groupByMonth }) {
+  if (tipo === 'ocupacao') return clinicorp.getScheduleOccupation({ from, to, groupByMonth });
+  return clinicorp.getAppointmentInfo({ from, to, groupByMonth });
+}
+
+async function handleClinicorpOrganizacao({ tipo }) {
+  switch (tipo) {
+    case 'clinicas_assinante':
+      return clinicorp.listSubscribersClinics();
+    case 'unidades_franquia':
+      return clinicorp.listSubscribers();
+    case 'usuarios':
+      return clinicorp.listUsers();
+    case 'cadeiras':
+      return clinicorp.listChairs();
+    default:
+      return { erro: `tipo desconhecido: ${tipo}` };
+  }
+}
+
+async function handleClinicorpPacienteExtra({ tipo, date, from, to }) {
+  if (tipo === 'aniversariantes') return clinicorp.getPatientBirthdays({ date });
+  return clinicorp.getPatientEstimatesSum({ from, to });
 }
 
 const toolHandlers = {
@@ -297,6 +508,13 @@ const toolHandlers = {
       totalDespesas: resumo.TotalExpenses,
     };
   },
+  clinicorp_procedimentos: handleClinicorpProcedimentos,
+  clinicorp_relatorio_financeiro: handleClinicorpFinanceiro,
+  clinicorp_relatorio_comercial: handleClinicorpComercial,
+  clinicorp_agenda_estatisticas: handleClinicorpAgenda,
+  clinicorp_organizacao: handleClinicorpOrganizacao,
+  clinicorp_paciente_extra: handleClinicorpPacienteExtra,
+  clinicorp_orcamento_detalhe: ({ treatmentId }) => clinicorp.getEstimateDetail({ treatmentId }),
 };
 
 async function runTool(name, input, session) {
