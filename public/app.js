@@ -30,13 +30,12 @@ if (!sessionId) {
 
 let appPassword = sessionStorage.getItem('jarvis_password') || '';
 let vozAtivada = true;
-let reconhecendo = false;
+let gravando = false;
 let modoConversa = false;
 let aguardandoResposta = false;
 let processandoEnvio = false;
-let bufferConversa = '';
 let silenceTimer = null;
-const PAUSA_TOLERANCIA_MS = 1800; // quanto tempo de pausa aceitar antes de considerar que a pessoa terminou de falar
+const PAUSA_TOLERANCIA_MS = 1800; // quanto tempo de silencio aceitar (modo conversa) antes de considerar que a pessoa terminou de falar
 
 // ---------- Relogio ----------
 
@@ -455,7 +454,10 @@ async function falar(texto, bubbleEl) {
   if (vozAtivada && texto) {
     try {
       await falarElevenLabs(texto, bubbleEl);
-    } catch {
+    } catch (err) {
+      // cai pra voz robotica do navegador so como ultimo recurso - loga o motivo real (rate
+      // limit da ElevenLabs, erro de rede, autoplay bloqueado etc) pra dar pra diagnosticar
+      console.warn('ElevenLabs falhou, usando voz do navegador como fallback:', err);
       await falarNavegador(texto, bubbleEl);
     }
   } else if (bubbleEl) {
@@ -538,117 +540,175 @@ extractBtn.addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 
-// ---------- Voz: reconhecimento (Web Speech API) ----------
+// ---------- Voz: gravacao + transcricao no servidor ----------
+// A Web Speech API (webkitSpeechRecognition) nao existe no Safari/iPhone (nem no Chrome de
+// iOS, que por exigencia da Apple usa o motor do Safari por baixo) - o microfone simplesmente
+// nao funcionava em celular Apple. Em vez de depender do reconhecimento de voz do navegador,
+// gravamos o audio de verdade (MediaRecorder, suportado em qualquer navegador/dispositivo
+// moderno) e mandamos pro nosso servidor transcrever (ElevenLabs) - funciona igual em todo lugar.
 
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognizer = null;
+const gravacaoSuportada = !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
 
-const ERRO_RECONHECIMENTO = {
-  'not-allowed': 'Permissao de microfone negada - libera o microfone nas configuracoes do navegador.',
-  'no-speech': 'Nao ouvi nada, tenta falar de novo.',
-  'audio-capture': 'Nao encontrei um microfone disponivel.',
-  network: 'Erro de rede no reconhecimento de voz.',
-  aborted: null,
-};
+let micStream = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let vadCtx = null;
+let vadRAF = null;
+const VOLUME_MINIMO_FALA = 12; // 0-255 (media de frequencia) - abaixo disso conta como silencio
 
-// Estrategia: em vez de usar o modo "continuous" nativo do navegador (instavel, gera
-// resultados duplicados em varios browsers), cada "segmento" de fala e uma sessao curta
-// (continuous=false). Quando o navegador encerra por uma pausa, a gente reinicia sozinho na
-// hora - e um timer proprio (PAUSA_TOLERANCIA_MS) decide quando a pessoa realmente terminou
-// de falar (nao so fez uma pausa curta pra respirar), juntando tudo num texto so.
+async function pedirMicrofone() {
+  if (micStream && micStream.active) return micStream;
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  return micStream;
+}
 
-if (SpeechRecognition) {
-  recognizer = new SpeechRecognition();
-  recognizer.lang = 'pt-BR';
-  recognizer.maxAlternatives = 1;
+function escolherMimeTypeGravacao() {
+  const candidatos = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+  return candidatos.find((tipo) => window.MediaRecorder && MediaRecorder.isTypeSupported(tipo)) || '';
+}
 
-  recognizer.onstart = () => {
-    reconhecendo = true;
-    micBtn.classList.add('active');
-    setStatus(modoConversa ? 'ouvindo (modo conversa)' : 'ouvindo...', 'listening');
-  };
+function blobParaBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
-  recognizer.onresult = (event) => {
-    if (!modoConversa) {
-      const ultimo = event.results[event.results.length - 1];
-      if (ultimo.isFinal) enviarMensagem(ultimo[0].transcript);
-      return;
+async function transcreverAudio(blob, mimeType) {
+  const base64 = await blobParaBase64(blob);
+  const res = await fetch('/api/transcribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+    body: JSON.stringify({ audioBase64: base64, mediaType: mimeType }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.erro || 'erro na transcricao');
+  return (data.text || '').trim();
+}
+
+// so usado no modo conversa: monitora o volume do microfone pra saber sozinho quando a
+// pessoa parou de falar (no modo de toque unico, quem decide e o proprio usuario clicando de novo)
+function monitorarSilencio(stream, aoParar) {
+  const ctx = ensureAudioContext();
+  vadCtx = ctx;
+  const source = ctx.createMediaStreamSource(stream);
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
+  source.connect(analyser);
+
+  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  let falouAlgumaVez = false;
+
+  function checar() {
+    analyser.getByteFrequencyData(dataArray);
+    const media = dataArray.reduce((s, v) => s + v, 0) / dataArray.length;
+    if (media > VOLUME_MINIMO_FALA) {
+      falouAlgumaVez = true;
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => aoParar(falouAlgumaVez), PAUSA_TOLERANCIA_MS);
     }
+    vadRAF = requestAnimationFrame(checar);
+  }
+  checar();
+}
 
-    // modo conversa: acumula so os trechos finais; qualquer resultado (mesmo interino)
-    // reseta o relogio de silencio, entao pausas curtas no meio da fala nao cortam nada
-    clearTimeout(silenceTimer);
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      if (event.results[i].isFinal) {
-        const trecho = event.results[i][0].transcript.trim();
-        if (trecho) bufferConversa += (bufferConversa ? ' ' : '') + trecho;
-      }
-    }
-    silenceTimer = setTimeout(finalizarFalaConversa, PAUSA_TOLERANCIA_MS);
-  };
+function pararMonitorSilencio() {
+  if (vadRAF) cancelAnimationFrame(vadRAF);
+  vadRAF = null;
+  clearTimeout(silenceTimer);
+}
 
-  recognizer.onerror = (event) => {
-    const msg = ERRO_RECONHECIMENTO[event.error];
-    if (msg) addBubble(`Erro no microfone: ${msg}`, 'system');
-    if (event.error === 'not-allowed' && modoConversa) pararModoConversa();
-  };
+async function iniciarGravacao(comDeteccaoSilencio) {
+  const stream = await pedirMicrofone();
+  const mimeType = escolherMimeTypeGravacao();
+  audioChunks = [];
+  mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
 
-  recognizer.onend = () => {
-    reconhecendo = false;
+  gravando = true;
+  micBtn.classList.add('active');
+  setStatus(modoConversa ? 'ouvindo (modo conversa)' : 'ouvindo...', 'listening');
+  mediaRecorder.start();
+
+  if (comDeteccaoSilencio) {
+    monitorarSilencio(stream, (falouAlgumaVez) => {
+      if (falouAlgumaVez) pararGravacaoEEnviar();
+      else { pararGravacaoSemEnviar(); if (modoConversa) setTimeout(ouvirSegmento, 120); }
+    });
+  }
+}
+
+function pararGravacaoSemEnviar() {
+  pararMonitorSilencio();
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.onstop = () => { gravando = false; micBtn.classList.remove('active'); };
+    mediaRecorder.stop();
+  } else {
+    gravando = false;
     micBtn.classList.remove('active');
+  }
+}
 
-    // so reinicia sozinho se ainda estivermos no modo conversa esperando a pessoa falar
-    // (nao reinicia se ja estamos processando/falando a resposta)
-    if (modoConversa && !aguardandoResposta) {
-      setTimeout(ouvirSegmento, 120);
-    } else if (!modoConversa) {
-      setStatus('pronto', null);
-    }
-  };
-} else {
-  micBtn.title = 'Reconhecimento de voz nao suportado neste navegador (use o Chrome)';
+async function pararGravacaoEEnviar() {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+  pararMonitorSilencio();
+  const mimeTypeGravado = mediaRecorder.mimeType || 'audio/webm';
+
+  const texto = await new Promise((resolve) => {
+    mediaRecorder.onstop = async () => {
+      gravando = false;
+      micBtn.classList.remove('active');
+      if (audioChunks.length === 0) return resolve('');
+      const blob = new Blob(audioChunks, { type: mimeTypeGravado });
+      setStatus('transcrevendo...', 'thinking');
+      try {
+        resolve(await transcreverAudio(blob, mimeTypeGravado));
+      } catch (err) {
+        addBubble(`Nao consegui transcrever o audio: ${err.message}`, 'system');
+        resolve('');
+      }
+    };
+    mediaRecorder.stop();
+  });
+
+  if (texto) {
+    enviarMensagem(texto);
+  } else {
+    setStatus('pronto', null);
+    if (modoConversa) setTimeout(ouvirSegmento, 300);
+  }
+}
+
+function ouvirSegmento() {
+  if (!gravacaoSuportada || gravando || aguardandoResposta) return;
+  iniciarGravacao(modoConversa).catch((err) => {
+    addBubble(`Nao consegui acessar o microfone: ${err.message}`, 'system');
+    if (modoConversa) pararModoConversa();
+    else setStatus('pronto', null);
+  });
+}
+
+if (!gravacaoSuportada) {
+  micBtn.title = 'Microfone nao suportado neste navegador';
   micBtn.style.opacity = '0.35';
   convBtn.style.opacity = '0.35';
 }
 
-function finalizarFalaConversa() {
-  clearTimeout(silenceTimer);
-  const texto = bufferConversa.trim();
-  bufferConversa = '';
-  if (!texto) return;
-  aguardandoResposta = true;
-  if (reconhecendo) recognizer.stop();
-  enviarMensagem(texto);
-}
-
-function ouvirSegmento() {
-  if (!recognizer || reconhecendo || aguardandoResposta) return;
-  recognizer.continuous = false;
-  recognizer.interimResults = modoConversa;
-  try {
-    recognizer.start();
-  } catch {
-    /* ja estava rodando, ignora */
-  }
-}
-
 micBtn.addEventListener('click', () => {
-  if (!recognizer) return;
+  if (!gravacaoSuportada) return;
   if (modoConversa) { pararModoConversa(); return; }
-  if (reconhecendo) {
-    recognizer.stop();
-    return;
-  }
+  if (gravando) { pararGravacaoEEnviar(); return; }
   if (audioAtual) audioAtual.pause();
   window.speechSynthesis.cancel();
   ouvirSegmento();
 });
 
 function iniciarModoConversa() {
-  if (!recognizer) return;
+  if (!gravacaoSuportada) return;
   modoConversa = true;
   aguardandoResposta = false;
-  bufferConversa = '';
   convBtn.classList.add('active');
   hintEl.textContent = 'Modo conversa ativo - pode falar quando quiser';
   ouvirSegmento();
@@ -657,11 +717,9 @@ function iniciarModoConversa() {
 function pararModoConversa() {
   modoConversa = false;
   aguardandoResposta = false;
-  bufferConversa = '';
-  clearTimeout(silenceTimer);
+  pararGravacaoSemEnviar();
   convBtn.classList.remove('active');
   hintEl.textContent = 'Aperte o microfone ou digite abaixo';
-  if (reconhecendo) recognizer.stop();
   setStatus('pronto', null);
 }
 

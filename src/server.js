@@ -4,7 +4,7 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chat } from './cloudAgent.js';
-import { synthesizeSpeechWithTimestamps } from './elevenlabs.js';
+import { synthesizeSpeechWithTimestamps, transcribeAudio } from './elevenlabs.js';
 import { sendTextMessage, downloadMedia } from './whatsapp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -74,6 +74,24 @@ app.post('/api/tts', async (req, res) => {
     res.json({ audio: audioBase64, alignment });
   } catch (err) {
     console.error('Erro no TTS:', err);
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// transcreve um audio gravado no navegador (fala -> texto) - usado pelo microfone do app web.
+// Existe separado do /api/chat porque queremos mostrar pro usuario o texto que ele "falou"
+// antes de mandar pro Klaus (mesma UX de digitar), em vez de mandar o audio direto sem o
+// usuario ver o que foi entendido.
+app.post('/api/transcribe', async (req, res) => {
+  const { audioBase64, mediaType } = req.body || {};
+  if (!audioBase64) return res.status(400).json({ erro: 'audioBase64 obrigatorio' });
+
+  try {
+    const buffer = Buffer.from(audioBase64, 'base64');
+    const texto = await transcribeAudio(buffer, mediaType || 'audio/webm');
+    res.json({ text: texto });
+  } catch (err) {
+    console.error('Erro na transcricao:', err);
     res.status(500).json({ erro: err.message });
   }
 });
