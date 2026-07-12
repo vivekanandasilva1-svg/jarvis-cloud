@@ -308,8 +308,9 @@ function addBubble(text, kind) {
   return div;
 }
 
+// boca fechada em repouso (labios quase juntos) - so abre de verdade quando ha audio real
 function bocaParada() {
-  mouthBars.forEach((bar) => { bar.style.transform = 'scaleY(1)'; });
+  mouthBars.forEach((bar) => { bar.style.transform = 'scaleY(0.12)'; });
 }
 
 // fallback (sem ElevenLabs): boca com pulso aleatorio enquanto fala
@@ -319,7 +320,7 @@ function bocaAleatoria(ativo) {
   if (!ativo) { bocaParada(); return; }
   mouthFallbackTimer = setInterval(() => {
     mouthBars.forEach((bar) => {
-      bar.style.transform = `scaleY(${(0.4 + Math.random() * 1.6).toFixed(2)})`;
+      bar.style.transform = `scaleY(${(0.15 + Math.random() * 0.95).toFixed(2)})`;
     });
   }, 90);
 }
@@ -331,7 +332,7 @@ function falarComAnalise(audio, analyserNode) {
   function animar() {
     analyserNode.getByteFrequencyData(dataArray);
     const media = dataArray.reduce((s, v) => s + v, 0) / dataArray.length;
-    const escala = 0.35 + (media / 255) * 2.3;
+    const escala = 0.12 + (media / 255) * 1.1;
     mouthBars.forEach((bar) => {
       const jitter = 0.85 + Math.random() * 0.3;
       bar.style.transform = `scaleY(${(escala * jitter).toFixed(2)})`;

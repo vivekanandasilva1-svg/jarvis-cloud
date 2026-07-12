@@ -47,109 +47,135 @@
 
     <div class="window-body">
       <div class="avatar-stage">
-        <svg class="bot" id="bot" viewBox="0 0 220 300" xmlns="http://www.w3.org/2000/svg">
+        <svg class="bot" id="bot" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <radialGradient id="faceGrad" cx="40%" cy="26%" r="80%">
-              <stop offset="0%" stop-color="#fffaf0"/>
-              <stop offset="30%" stop-color="#f5d576"/>
-              <stop offset="62%" stop-color="#d4af37"/>
-              <stop offset="100%" stop-color="#241c0d"/>
+            <radialGradient id="faceGrad" cx="42%" cy="24%" r="85%">
+              <stop offset="0%" stop-color="#fdfaf2"/>
+              <stop offset="35%" stop-color="#e9e6de"/>
+              <stop offset="68%" stop-color="#c9ccd1"/>
+              <stop offset="100%" stop-color="#4a4c50"/>
             </radialGradient>
+            <linearGradient id="templeGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#3a3b3e"/>
+              <stop offset="100%" stop-color="#0d0d0e"/>
+            </linearGradient>
             <linearGradient id="eyeGrad" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stop-color="#fff8e6"/>
               <stop offset="100%" stop-color="#d4af37"/>
             </linearGradient>
-            <radialGradient id="visorGrad" cx="50%" cy="12%" r="95%">
-              <stop offset="0%" stop-color="#2c2c2e"/>
-              <stop offset="45%" stop-color="#131311"/>
-              <stop offset="100%" stop-color="#040403"/>
-            </radialGradient>
-            <linearGradient id="neckGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#c9ccd1"/>
-              <stop offset="100%" stop-color="#161617"/>
-            </linearGradient>
-            <linearGradient id="shoulderGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#232323"/>
+            <radialGradient id="collarGrad" cx="50%" cy="0%" r="100%">
+              <stop offset="0%" stop-color="#2a2a2a"/>
               <stop offset="100%" stop-color="#050505"/>
-            </linearGradient>
-            <filter id="glowSoft" x="-60%" y="-60%" width="220%" height="220%">
-              <feGaussianBlur stdDeviation="2.2"/>
+            </radialGradient>
+            <filter id="glowSoft" x="-80%" y="-80%" width="260%" height="260%">
+              <feGaussianBlur stdDeviation="2.4"/>
+            </filter>
+            <filter id="glowStrong" x="-120%" y="-120%" width="340%" height="340%">
+              <feGaussianBlur stdDeviation="5"/>
             </filter>
           </defs>
 
-          <ellipse class="halo" cx="110" cy="115" rx="95" ry="100"/>
+          <!-- circuitos irradiando pro fundo, como um androide "aberto" pro mundo -->
+          <g class="circuits-outer">
+            <path class="circuit-trace gold" d="M112 186 L58 186 L58 132 L16 132"/>
+            <path class="circuit-trace silver" d="M116 202 L76 228 L76 276 L34 298"/>
+            <path class="circuit-trace gold" d="M128 148 L96 106 L96 62 L54 40"/>
+            <path class="circuit-trace silver" d="M288 186 L342 186 L342 132 L384 132"/>
+            <path class="circuit-trace gold" d="M284 202 L324 228 L324 276 L366 298"/>
+            <path class="circuit-trace silver" d="M272 148 L304 106 L304 62 L346 40"/>
+            <path class="circuit-trace gold" d="M150 302 L108 330 L108 368"/>
+            <path class="circuit-trace silver" d="M250 302 L292 330 L292 368"/>
 
-          <!-- busto: ombros e pescoco, pra dar contexto de "meio-corpo" em vez de cabeca flutuando -->
-          <path class="shoulders" d="M28 300 C28 258 54 230 92 224 L128 224 C166 230 192 258 192 300 Z"/>
-          <path class="shoulders-trim" d="M30 258 C40 240 62 228 92 224 L128 224 C158 228 180 240 190 258" fill="none"/>
-          <circle class="joint" cx="45" cy="252" r="6"/>
-          <circle class="joint" cx="175" cy="252" r="6"/>
+            <circle class="circuit-node gold" cx="58" cy="186" r="3.4"/>
+            <circle class="circuit-node gold" cx="58" cy="132" r="3.4"/>
+            <circle class="circuit-node gold" cx="16" cy="132" r="3.8"/>
+            <circle class="circuit-node silver" cx="76" cy="228" r="3.4"/>
+            <circle class="circuit-node silver" cx="76" cy="276" r="3.4"/>
+            <circle class="circuit-node silver" cx="34" cy="298" r="3.8"/>
+            <circle class="circuit-node gold" cx="96" cy="106" r="3.4"/>
+            <circle class="circuit-node gold" cx="96" cy="62" r="3.4"/>
+            <circle class="circuit-node gold" cx="54" cy="40" r="3.8"/>
+            <circle class="circuit-node silver" cx="342" cy="186" r="3.4"/>
+            <circle class="circuit-node silver" cx="342" cy="132" r="3.4"/>
+            <circle class="circuit-node silver" cx="384" cy="132" r="3.8"/>
+            <circle class="circuit-node gold" cx="324" cy="228" r="3.4"/>
+            <circle class="circuit-node gold" cx="324" cy="276" r="3.4"/>
+            <circle class="circuit-node gold" cx="366" cy="298" r="3.8"/>
+            <circle class="circuit-node silver" cx="304" cy="106" r="3.4"/>
+            <circle class="circuit-node silver" cx="304" cy="62" r="3.4"/>
+            <circle class="circuit-node silver" cx="346" cy="40" r="3.8"/>
+            <circle class="circuit-node gold" cx="108" cy="330" r="3.4"/>
+            <circle class="circuit-node gold" cx="108" cy="368" r="3.8"/>
+            <circle class="circuit-node silver" cx="292" cy="330" r="3.4"/>
+            <circle class="circuit-node silver" cx="292" cy="368" r="3.8"/>
+          </g>
 
-          <path class="neck" d="M91 196 L129 196 L134 232 L86 232 Z"/>
-          <path class="neck-groove" d="M89 208 L131 208" />
-          <path class="neck-groove" d="M87 220 L133 220" />
+          <!-- colar/ombros levemente cortados pela borda, so pra dar contexto de "meio-corpo" -->
+          <path class="collar" d="M150 350 Q160 385 158 400 L242 400 Q240 385 250 350
+            Q200 368 150 350 Z"/>
+          <path class="collar-seam" d="M150 350 Q200 368 250 350"/>
 
-          <path class="antenna" d="M70 40 Q60 10 45 8"/>
-          <path class="antenna" d="M150 40 Q160 10 175 8"/>
-          <circle class="antenna-tip" cx="45" cy="8" r="4"/>
-          <circle class="antenna-tip" cx="175" cy="8" r="4"/>
+          <!-- rosto: mascara simetrica em painel metalico -->
+          <path class="face" d="M200,66
+            C266,66 300,112 300,168
+            C300,214 284,252 262,282
+            C244,308 224,326 200,344
+            C176,326 156,308 138,282
+            C116,252 100,214 100,168
+            C100,112 134,66 200,66 Z"/>
 
-          <path class="head" d="M110 30
-            C165 30 190 70 190 120
-            C190 175 155 210 110 210
-            C65 210 30 175 30 120
-            C30 70 55 30 110 30 Z" fill="url(#faceGrad)"/>
+          <!-- placas de temporal (mais escuras), atras dos modulos de "ouvido" -->
+          <path class="temple-panel" d="M100,150 C90,170 90,200 104,224 L118,214 C106,196 106,170 116,152 Z"/>
+          <path class="temple-panel" d="M300,150 C310,170 310,200 296,224 L282,214 C294,196 294,170 284,152 Z"/>
 
-          <!-- sombreado escultural: sombra de queixo e brilho de bochecha, pra dar volume ao rosto -->
-          <ellipse class="jaw-shade" cx="110" cy="188" rx="58" ry="26" filter="url(#glowSoft)"/>
-          <ellipse class="cheek-highlight" cx="76" cy="92" rx="24" ry="32" filter="url(#glowSoft)"/>
+          <!-- modulos auriculares, ponto de onde os circuitos "saem" do rosto -->
+          <circle class="ear-module" cx="106" cy="188" r="15"/>
+          <circle class="ear-ring" cx="106" cy="188" r="9.5"/>
+          <circle class="ear-module" cx="294" cy="188" r="15"/>
+          <circle class="ear-ring" cx="294" cy="188" r="9.5"/>
 
-          <!-- costuras do painel facial, como placas de uma viseira -->
-          <path class="seam" d="M110 34 L110 76"/>
-          <path class="seam" d="M58 90 Q110 80 162 90"/>
-          <path class="seam" d="M60 176 Q110 198 160 176"/>
+          <!-- costuras do painel facial -->
+          <path class="seam" d="M200,70 L200,128"/>
+          <rect class="seam-slot" x="192" y="68" width="16" height="9" rx="4"/>
+          <path class="seam" d="M138,150 Q168,134 198,146"/>
+          <path class="seam" d="M202,146 Q232,134 262,150"/>
+          <path class="seam" d="M122,236 Q160,272 196,304"/>
+          <path class="seam" d="M278,236 Q240,272 204,304"/>
+          <path class="seam" d="M172,322 Q200,336 228,322"/>
 
-          <!-- trilhas de circuito com nos que pulsam, sugerindo eletronica sob a "pele" -->
-          <path class="circuit-line" d="M46 100 L38 118 L50 138 L42 158"/>
-          <path class="circuit-line" d="M174 100 L182 118 L170 138 L178 158"/>
-          <path class="circuit-line" d="M90 46 L100 40 L120 40 L130 46"/>
-          <circle class="circuit-node" cx="46" cy="100" r="2.1"/>
-          <circle class="circuit-node" cx="38" cy="118" r="2.1"/>
-          <circle class="circuit-node" cx="50" cy="138" r="2.1"/>
-          <circle class="circuit-node" cx="42" cy="158" r="2.1"/>
-          <circle class="circuit-node" cx="174" cy="100" r="2.1"/>
-          <circle class="circuit-node" cx="182" cy="118" r="2.1"/>
-          <circle class="circuit-node" cx="170" cy="138" r="2.1"/>
-          <circle class="circuit-node" cx="178" cy="158" r="2.1"/>
-          <circle class="circuit-node" cx="100" cy="40" r="1.8"/>
-          <circle class="circuit-node" cx="120" cy="40" r="1.8"/>
+          <!-- sombreado escultural: da volume ao painel plano -->
+          <ellipse class="jaw-shade" cx="200" cy="292" rx="70" ry="30" filter="url(#glowSoft)"/>
+          <ellipse class="cheek-highlight" cx="150" cy="140" rx="30" ry="42" filter="url(#glowSoft)"/>
+          <ellipse class="cheek-highlight" cx="252" cy="140" rx="20" ry="30" filter="url(#glowSoft)"/>
 
-          <path class="visor" d="M55 105 C55 85 80 78 110 78 C140 78 165 85 165 105
-            C165 120 140 128 110 128 C80 128 55 120 55 105 Z" fill="url(#visorGrad)"/>
-          <path class="visor-rim" d="M60 92 C78 83 142 83 160 92"/>
-
+          <!-- olhos: formato amendoado, brilho forte -->
           <g class="eye" id="eyeL">
-            <rect x="72" y="95" width="26" height="12" rx="6"/>
-            <ellipse class="eye-core" cx="81" cy="99" rx="3" ry="2"/>
+            <path d="M140,190 C147,173 179,171 190,190 C179,207 147,207 140,190 Z"/>
+            <path class="eye-glow" d="M140,190 C147,173 179,171 190,190 C179,207 147,207 140,190 Z" filter="url(#glowStrong)"/>
+            <path class="eyelid" d="M142,182 Q166,170 189,182"/>
           </g>
           <g class="eye" id="eyeR">
-            <rect x="122" y="95" width="26" height="12" rx="6"/>
-            <ellipse class="eye-core" cx="131" cy="99" rx="3" ry="2"/>
+            <path d="M210,190 C221,171 253,173 260,190 C253,207 221,207 210,190 Z"/>
+            <path class="eye-glow" d="M210,190 C221,171 253,173 260,190 C253,207 221,207 210,190 Z" filter="url(#glowStrong)"/>
+            <path class="eyelid" d="M211,182 Q234,170 258,182"/>
           </g>
 
-          <path class="nose" d="M108 116 L105 138 L112 141"/>
+          <!-- ponte do nariz, sutil -->
+          <path class="nose" d="M200,208 L198,240 Q200,244 202,240 Z"/>
+          <circle class="nose-light" cx="200" cy="241" r="1.8"/>
 
-          <circle class="status-led" cx="53" cy="172" r="2.1"/>
-          <circle class="status-led" cx="167" cy="172" r="2.1"/>
+          <circle class="status-led gold" cx="118" cy="248" r="3"/>
+          <circle class="status-led silver" cx="282" cy="248" r="3"/>
 
-          <rect class="mouth-cavity" x="72" y="152" width="76" height="26" rx="11"/>
-          <path class="lip-line" d="M70 158 Q110 180 150 158"/>
+          <!-- boca: labios fechados em repouso, abrem de verdade com o audio -->
+          <rect class="mouth-cavity" x="176" y="270" width="48" height="20" rx="9"/>
+          <path class="lip-line lip-top" d="M172,278 Q200,270 228,278"/>
+          <path class="lip-line lip-bottom" d="M172,282 Q200,292 228,282"/>
           <g class="mouth" id="mouth">
-            <rect class="bar" x="80" y="160" width="8" height="10" rx="2"/>
-            <rect class="bar" x="93" y="160" width="8" height="10" rx="2"/>
-            <rect class="bar" x="106" y="160" width="8" height="10" rx="2"/>
-            <rect class="bar" x="119" y="160" width="8" height="10" rx="2"/>
-            <rect class="bar" x="132" y="160" width="8" height="10" rx="2"/>
+            <rect class="bar" x="180" y="272" width="8" height="16" rx="3"/>
+            <rect class="bar" x="192" y="272" width="8" height="16" rx="3"/>
+            <rect class="bar" x="204" y="272" width="8" height="16" rx="3"/>
+            <rect class="bar" x="216" y="272" width="8" height="16" rx="3"/>
           </g>
         </svg>
         <div class="hint" id="hint">Aperte o microfone ou digite abaixo</div>
