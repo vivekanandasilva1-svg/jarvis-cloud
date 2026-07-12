@@ -426,18 +426,27 @@ function renderizarQuadro() {
 }
 requestAnimationFrame(renderizarQuadro);
 
-// enquanto ela nao esta falando, revezar entre os videos de "parada" de vez em quando (com
-// intervalo aleatorio) pra parecer que esta se mexendo/reagindo naturalmente, nao travada
+// enquanto ela nao esta falando, segue uma sequencia com tempos proprios (nao troca toda hora
+// de forma aleatoria) - fica mais tempo neutra, um tempo menor sorrindo bem sutil, depois um
+// gesto de reacao/curiosidade olhando de lado, e volta pro neutro. Cada fase dura um tempo
+// especifico (com uma pequena variacao aleatoria pra nao ficar mecanico/previsivel demais).
+const SEQUENCIA_IDLE = [
+  { video: videosIdle[0], duracaoMs: 30000 }, // neutra, parada, pouco gesticulando
+  { video: videosIdle[1], duracaoMs: 20000 }, // sorriso sutil, olhando de lado
+  { video: videosIdle[2], duracaoMs: 24000 }, // reagindo/impressionada, gesto com as maos
+];
+let indiceSequenciaIdle = 0;
+
 function agendarProximoRevezamentoIdle() {
   clearTimeout(timerRevezamentoIdle);
-  const espera = 7000 + Math.random() * 6000;
+  const fase = SEQUENCIA_IDLE[indiceSequenciaIdle];
+  const variacao = 0.9 + Math.random() * 0.2; // +-10%, pra nao ficar cronometrado igual robo
   timerRevezamentoIdle = setTimeout(() => {
     if (videoAtivo === videoTalk) { agendarProximoRevezamentoIdle(); return; } // esta falando, tenta de novo depois
-    const opcoes = videosIdle.filter((v) => v !== videoAtivo);
-    const escolhido = opcoes[Math.floor(Math.random() * opcoes.length)];
-    trocarAvatarComTransicao(escolhido);
+    indiceSequenciaIdle = (indiceSequenciaIdle + 1) % SEQUENCIA_IDLE.length;
+    trocarAvatarComTransicao(SEQUENCIA_IDLE[indiceSequenciaIdle].video);
     agendarProximoRevezamentoIdle();
-  }, espera);
+  }, fase.duracaoMs * variacao);
 }
 agendarProximoRevezamentoIdle();
 
@@ -447,8 +456,8 @@ function iniciarFalaVisual() {
 }
 
 function pararFalaVisual() {
-  const proximoIdle = videosIdle[Math.floor(Math.random() * videosIdle.length)];
-  trocarAvatarComTransicao(proximoIdle);
+  // volta pra fase atual da sequencia (nao pula aleatoriamente) - mantem o ritmo previsivel
+  trocarAvatarComTransicao(SEQUENCIA_IDLE[indiceSequenciaIdle].video);
   videoTalk.pause();
   agendarProximoRevezamentoIdle();
 }
