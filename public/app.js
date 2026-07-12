@@ -87,6 +87,10 @@ function mostrarApp() {
     addBubble('Lumia pronta. Digite, aperte o microfone ou ative o modo conversa.', 'system');
   }
   setStatus('pronto', null);
+  // o canvas do avatar fica em 0x0 enquanto a tela de login esta visivel (elemento pai
+  // hidden) - o ResizeObserver nem sempre pega essa transicao de "escondido -> visivel",
+  // entao forca a medicao de novo agora que o app realmente apareceu
+  ajustarTamanhoCanvas();
 }
 
 function sair() {
@@ -307,27 +311,81 @@ function addBubble(text, kind) {
   return div;
 }
 
-// o avatar e um video real (com a boca falando de verdade nele) - em repouso fica parado no
-// primeiro quadro (boca fechada, definido pelo poster/currentTime 0); enquanto fala, toca em
-// loop. Nao e lip-sync fonema a fonema, mas a boca se move de verdade em vez de ser estatica.
-// Quando quieto, toca um segundo video em loop continuo (ela olhando de lado, sorrindo etc)
-// em vez de ficar parada numa imagem fixa - troca a fonte do video conforme o estado.
-const AVATAR_IDLE = 'klaus-avatar-idle.mp4';
-const AVATAR_TALK = 'klaus-avatar.mp4';
+// O avatar e um video real (com movimento e boca falando de verdade), gravado em fundo verde
+// de estudio de verdade - entao a gente desenha cada quadro num canvas e faz chroma-key: apaga
+// (ou suaviza, nas bordas) os pixels onde o verde domina claramente sobre vermelho/azul.
+// #bot agora e um <canvas>; os <video> reais ficam escondidos (.bot-source) so fornecendo quadros.
+const videoIdle = document.getElementById('botSrcIdle');
+const videoTalk = document.getElementById('botSrcTalk');
+const botCtx = bot.getContext('2d', { willReadFrequently: true });
+let videoAtivo = videoIdle;
 
-function trocarVideoAvatar(src) {
-  if (bot.getAttribute('src') === src) return;
-  bot.src = src;
-  bot.loop = true;
-  bot.play().catch(() => {});
+// quanto o verde precisa dominar (g - max(r,b)) pra contar como fundo. Entre 0 e esse valor
+// e zona de transicao (borda) - fica parcialmente transparente e com o verde residual suprimido,
+// pra nao sobrar uma auréola verde ao redor do cabelo/ombros (green spill classico de chroma key)
+const DOMINANCIA_VERDE_MAX = 24;
+
+function removerFundo(imageData) {
+  const d = imageData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    const dominancia = g - Math.max(r, b);
+    if (dominancia <= 0) continue; // verde nao domina - e ela mesma, deixa intacto
+    const fator = Math.min(1, dominancia / DOMINANCIA_VERDE_MAX);
+    d[i + 3] = Math.round(d[i + 3] * (1 - fator));
+    const neutro = (r + b) / 2;
+    d[i + 1] = Math.round(g - (g - neutro) * fator);
+  }
 }
 
+function ajustarTamanhoCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = bot.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return; // ainda escondido (tela de login)
+  bot.width = Math.max(1, Math.round(rect.width * dpr));
+  bot.height = Math.max(1, Math.round(rect.height * dpr));
+}
+// ResizeObserver pega tanto o resize da janela quanto o momento em que o app deixa de
+// estar escondido (tela de login -> app), quando o canvas passa de 0x0 pro tamanho real
+new ResizeObserver(ajustarTamanhoCanvas).observe(bot);
+ajustarTamanhoCanvas();
+
+// desenha o video "cobrindo" o canvas inteiro (igual object-fit: cover), cortando o excesso
+function desenharComCover(video, destW, destH) {
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return false;
+  const escala = Math.max(destW / vw, destH / vh);
+  const sw = destW / escala, sh = destH / escala;
+  const sx = (vw - sw) / 2;
+  // quando o box e baixo/largo (celular deitado com pouca altura), cortar bem no meio corta
+  // o rosto - inclina o corte pra cima (mantem mais cabeca, corta mais do corpo debaixo)
+  const sy = (vh - sh) * 0.18;
+  botCtx.drawImage(video, sx, sy, sw, sh, 0, 0, destW, destH);
+  return true;
+}
+
+function renderizarQuadro() {
+  const w = bot.width, h = bot.height;
+  if (w > 0 && h > 0 && videoAtivo.readyState >= 2) {
+    if (desenharComCover(videoAtivo, w, h)) {
+      const frame = botCtx.getImageData(0, 0, w, h);
+      removerFundo(frame);
+      botCtx.putImageData(frame, 0, 0);
+    }
+  }
+  requestAnimationFrame(renderizarQuadro);
+}
+requestAnimationFrame(renderizarQuadro);
+
 function iniciarFalaVisual() {
-  trocarVideoAvatar(AVATAR_TALK);
+  videoAtivo = videoTalk;
+  videoTalk.currentTime = 0;
+  videoTalk.play().catch(() => {});
 }
 
 function pararFalaVisual() {
-  trocarVideoAvatar(AVATAR_IDLE);
+  videoAtivo = videoIdle;
+  videoTalk.pause();
 }
 
 // so um audio por vez - qualquer fala nova cancela a anterior, pra nao atropelar
