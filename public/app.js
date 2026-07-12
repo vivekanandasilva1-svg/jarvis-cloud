@@ -17,7 +17,6 @@ const attachBtn = document.getElementById('attachBtn');
 const fileInput = document.getElementById('fileInput');
 const attachPreview = document.getElementById('attachPreview');
 const bot = document.getElementById('bot');
-const mouthBars = bot.querySelectorAll('.mouth .bar');
 const statusEl = document.getElementById('status');
 const clockEl = document.getElementById('clock');
 const hintEl = document.getElementById('hint');
@@ -308,44 +307,19 @@ function addBubble(text, kind) {
   return div;
 }
 
-// boca fechada em repouso (labios quase juntos) - so abre de verdade quando ha audio real
-function bocaParada() {
-  mouthBars.forEach((bar) => { bar.style.transform = 'scaleY(0.12)'; });
+// o avatar e um video real (com a boca falando de verdade nele) - em repouso fica parado no
+// primeiro quadro (boca fechada, definido pelo poster/currentTime 0); enquanto fala, toca em
+// loop. Nao e lip-sync fonema a fonema, mas a boca se move de verdade em vez de ser estatica.
+function iniciarFalaVisual() {
+  try {
+    bot.currentTime = 0;
+    bot.play().catch(() => {});
+  } catch { /* ignora - video pode nao estar pronto ainda */ }
 }
 
-// fallback (sem ElevenLabs): boca com pulso aleatorio enquanto fala
-let mouthFallbackTimer = null;
-function bocaAleatoria(ativo) {
-  clearInterval(mouthFallbackTimer);
-  if (!ativo) { bocaParada(); return; }
-  mouthFallbackTimer = setInterval(() => {
-    mouthBars.forEach((bar) => {
-      bar.style.transform = `scaleY(${(0.15 + Math.random() * 0.95).toFixed(2)})`;
-    });
-  }, 90);
-}
-
-// boca sincronizada com o audio de verdade (analisando o volume em tempo real)
-let mouthRAF = null;
-function falarComAnalise(audio, analyserNode) {
-  const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
-  function animar() {
-    analyserNode.getByteFrequencyData(dataArray);
-    const media = dataArray.reduce((s, v) => s + v, 0) / dataArray.length;
-    const escala = 0.12 + (media / 255) * 1.1;
-    mouthBars.forEach((bar) => {
-      const jitter = 0.85 + Math.random() * 0.3;
-      bar.style.transform = `scaleY(${(escala * jitter).toFixed(2)})`;
-    });
-    mouthRAF = requestAnimationFrame(animar);
-  }
-  animar();
-}
-
-function pararAnaliseBoca() {
-  if (mouthRAF) cancelAnimationFrame(mouthRAF);
-  mouthRAF = null;
-  bocaParada();
+function pararFalaVisual() {
+  bot.pause();
+  try { bot.currentTime = 0; } catch { /* ignora */ }
 }
 
 // so um audio por vez - qualquer fala nova cancela a anterior, pra nao atropelar
@@ -400,10 +374,7 @@ async function falarElevenLabs(texto, bubbleEl) {
   const ctx = ensureAudioContext();
   if (ctx.state === 'suspended') await ctx.resume();
   const source = ctx.createMediaElementSource(audio);
-  const analyserNode = ctx.createAnalyser();
-  analyserNode.fftSize = 256;
-  source.connect(analyserNode);
-  analyserNode.connect(ctx.destination);
+  source.connect(ctx.destination);
 
   const characters = data.alignment.characters || [];
   const starts = data.alignment.character_start_times_seconds || [];
@@ -411,11 +382,11 @@ async function falarElevenLabs(texto, bubbleEl) {
   await new Promise((resolve) => {
     audio.onplay = () => {
       setStatus('falando', 'speaking');
-      falarComAnalise(audio, analyserNode);
+      iniciarFalaVisual();
       if (bubbleEl) legendarProgressivo(audio, bubbleEl, characters, starts);
     };
     const finalizar = () => {
-      pararAnaliseBoca();
+      pararFalaVisual();
       pararLegenda(bubbleEl, texto);
       URL.revokeObjectURL(url);
       if (audioAtual === audio) audioAtual = null;
@@ -433,7 +404,7 @@ function falarNavegador(texto, bubbleEl) {
     const utter = new SpeechSynthesisUtterance(texto);
     utter.lang = 'pt-BR';
     utter.rate = 1.02;
-    utter.onstart = () => { setStatus('falando', 'speaking'); bocaAleatoria(true); };
+    utter.onstart = () => { setStatus('falando', 'speaking'); iniciarFalaVisual(); };
     // a Web Speech API so da o indice do caractere onde comeca cada palavra (nao o tempo
     // exato como o ElevenLabs) - ainda assim da pra revelar palavra por palavra
     utter.onboundary = (event) => {
@@ -442,7 +413,7 @@ function falarNavegador(texto, bubbleEl) {
         chatLog.scrollTop = chatLog.scrollHeight;
       }
     };
-    const finalizar = () => { bocaAleatoria(false); if (bubbleEl) bubbleEl.textContent = texto; resolve(); };
+    const finalizar = () => { pararFalaVisual(); if (bubbleEl) bubbleEl.textContent = texto; resolve(); };
     utter.onend = finalizar;
     utter.onerror = finalizar;
     window.speechSynthesis.speak(utter);
@@ -732,5 +703,5 @@ convBtn.addEventListener('click', () => {
 muteBtn.addEventListener('click', () => {
   vozAtivada = !vozAtivada;
   muteBtn.textContent = vozAtivada ? '🔊' : '🔇';
-  if (!vozAtivada) { window.speechSynthesis.cancel(); pararAnaliseBoca(); }
+  if (!vozAtivada) { window.speechSynthesis.cancel(); pararFalaVisual(); }
 });

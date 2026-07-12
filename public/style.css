@@ -209,180 +209,32 @@ html, body {
 }
 
 .bot {
-  width: 220px;
-  height: auto;
-  filter: drop-shadow(0 0 30px rgba(212, 175, 55, 0.35));
-  animation: bob 5s ease-in-out infinite;
+  width: min(260px, 70%);
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  object-position: 50% 22%;
+  border-radius: 16px;
+  background: #050608;
+  box-shadow:
+    0 0 0 1px rgba(111, 227, 255, 0.25),
+    0 0 40px rgba(63, 216, 255, 0.35);
+  transition: box-shadow 0.3s ease;
 }
 
 @media (max-width: 720px) {
-  .bot { width: 175px; }
+  .bot { width: min(200px, 60vw); }
 }
 
-@keyframes bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
+#bot.speaking {
+  box-shadow:
+    0 0 0 1px rgba(111, 227, 255, 0.45),
+    0 0 55px rgba(63, 216, 255, 0.55);
 }
 
-/* trilhas de circuito irradiando do rosto pro fundo, com nos que pulsam */
-.bot .circuit-trace {
-  fill: none;
-  stroke-width: 1.4;
-  opacity: 0.55;
-}
-.bot .circuit-trace.gold { stroke: var(--gold-bright); }
-.bot .circuit-trace.silver { stroke: var(--silver); }
-
-.bot .circuit-node {
-  animation: circuitPulse 3.4s ease-in-out infinite;
-}
-.bot .circuit-node.gold { fill: var(--gold-bright); }
-.bot .circuit-node.silver { fill: var(--silver); }
-.bot .circuit-node:nth-of-type(3n+1) { animation-delay: 0s; }
-.bot .circuit-node:nth-of-type(3n+2) { animation-delay: 0.9s; }
-.bot .circuit-node:nth-of-type(3n) { animation-delay: 1.8s; }
-
-@keyframes circuitPulse {
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 1; }
-}
-
-/* colar/ombros cortados pela borda, so pra sugerir "meio corpo" */
-.bot .collar {
-  fill: url(#collarGrad);
-  stroke: rgba(212, 175, 55, 0.25);
-  stroke-width: 1.4;
-}
-.bot .collar-seam {
-  fill: none;
-  stroke: rgba(245, 213, 118, 0.3);
-  stroke-width: 1.1;
-}
-
-.bot .face {
-  fill: url(#faceGrad);
-  stroke: rgba(74, 76, 80, 0.6);
-  stroke-width: 1.5;
-}
-
-.bot .temple-panel {
-  fill: url(#templeGrad);
-  opacity: 0.92;
-}
-
-.bot .ear-module {
-  fill: #101012;
-  stroke: var(--silver-dim);
-  stroke-width: 1.5;
-}
-
-.bot .ear-ring {
-  fill: none;
-  stroke: var(--gold-bright);
-  stroke-width: 1.6;
-  opacity: 0.85;
-  animation: ledPulseSmall 3s ease-in-out infinite;
-}
-
-.bot .seam {
-  fill: none;
-  stroke: rgba(74, 76, 80, 0.55);
-  stroke-width: 1.1;
-}
-
-.bot .seam-slot {
-  fill: #16171a;
-  stroke: rgba(212, 175, 55, 0.35);
-  stroke-width: 1;
-}
-
-/* sombreado escultural sobreposto ao rosto, pra dar volume sem mudar o contorno */
-.bot .jaw-shade {
-  fill: #000000;
-  opacity: 0.14;
-}
-
-.bot .cheek-highlight {
-  fill: #ffffff;
-  opacity: 0.22;
-}
-
-.bot .eye {
-  animation: blink 5.2s ease-in-out infinite;
-  transform-origin: center;
-}
-
-.bot .eye path:not(.eye-glow):not(.eyelid) {
-  fill: url(#eyeGrad);
-}
-
-.bot .eye-glow {
-  fill: var(--gold-bright);
-  opacity: 0.55;
-}
-
-.bot .eyelid {
-  fill: none;
-  stroke: rgba(74, 76, 80, 0.7);
-  stroke-width: 1.6;
-  stroke-linecap: round;
-}
-
-@keyframes blink {
-  0%, 94%, 100% { transform: scaleY(1); }
-  97% { transform: scaleY(0.15); }
-}
-
-.bot .nose {
-  fill: rgba(180, 183, 188, 0.22);
-  stroke: rgba(74, 76, 80, 0.22);
-  stroke-width: 0.7;
-}
-
-.bot .nose-light {
-  fill: var(--gold-bright);
-  opacity: 0.55;
-  animation: ledPulseSmall 2.6s ease-in-out infinite;
-}
-
-.bot .status-led {
-  animation: ledPulseSmall 2.6s ease-in-out infinite;
-}
-.bot .status-led.gold { fill: var(--gold-bright); }
-.bot .status-led.silver { fill: var(--silver); }
-.bot .status-led.silver { animation-delay: 1.2s; }
-
-@keyframes ledPulseSmall {
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 1; }
-}
-
-.bot .mouth-cavity {
-  fill: #0a0906;
-  opacity: 0.9;
-}
-
-.bot .lip-line {
-  fill: none;
-  stroke: rgba(180, 183, 188, 0.55);
-  stroke-width: 1.4;
-}
-
-.bot .bar {
-  fill: #d9dce0;
-  transform-origin: center;
-  transform: scaleY(0.12);
-  transition: transform 0.09s ease-out;
-}
-
-/* estados */
-#bot.thinking .eye { animation: blink 0.9s ease-in-out infinite; }
-#bot.listening .ear-ring { animation: pulse 0.7s ease-in-out infinite; }
-#bot.speaking .eye-glow { opacity: 0.8; }
-
-@keyframes pulse {
-  0%, 100% { transform: scale(1); opacity: 0.85; }
-  50% { transform: scale(1.25); opacity: 1; }
+#bot.listening {
+  box-shadow:
+    0 0 0 1px rgba(212, 175, 55, 0.45),
+    0 0 45px rgba(212, 175, 55, 0.45);
 }
 
 .hint {
