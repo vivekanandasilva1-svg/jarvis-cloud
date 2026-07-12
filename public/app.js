@@ -310,16 +310,24 @@ function addBubble(text, kind) {
 // o avatar e um video real (com a boca falando de verdade nele) - em repouso fica parado no
 // primeiro quadro (boca fechada, definido pelo poster/currentTime 0); enquanto fala, toca em
 // loop. Nao e lip-sync fonema a fonema, mas a boca se move de verdade em vez de ser estatica.
+// Quando quieto, toca um segundo video em loop continuo (ela olhando de lado, sorrindo etc)
+// em vez de ficar parada numa imagem fixa - troca a fonte do video conforme o estado.
+const AVATAR_IDLE = 'klaus-avatar-idle.mp4';
+const AVATAR_TALK = 'klaus-avatar.mp4';
+
+function trocarVideoAvatar(src) {
+  if (bot.getAttribute('src') === src) return;
+  bot.src = src;
+  bot.loop = true;
+  bot.play().catch(() => {});
+}
+
 function iniciarFalaVisual() {
-  try {
-    bot.currentTime = 0;
-    bot.play().catch(() => {});
-  } catch { /* ignora - video pode nao estar pronto ainda */ }
+  trocarVideoAvatar(AVATAR_TALK);
 }
 
 function pararFalaVisual() {
-  bot.pause();
-  try { bot.currentTime = 0; } catch { /* ignora */ }
+  trocarVideoAvatar(AVATAR_IDLE);
 }
 
 // so um audio por vez - qualquer fala nova cancela a anterior, pra nao atropelar
