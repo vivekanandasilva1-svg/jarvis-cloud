@@ -399,17 +399,26 @@ function misturarQuadros(a, b, t) {
 // fica com uma cadencia mais organica (menos "computador fazendo fade")
 function suavizar(t) { return t * t * (3 - 2 * t); }
 
-const DURACAO_CROSSFADE_MS = 650;
+// dissolve lento (pose parada trocando de outra pose parada) - aqui nao tem pressa, o
+// importante e disfarcar a troca de pose, entao um fade mais longo fica mais natural
+const DURACAO_CROSSFADE_IDLE_MS = 650;
+// dissolve bem rapido ao COMECAR a falar - a boca precisa aparecer se mexendo junto com o
+// audio, nao 650ms depois. Um fade lento aqui faria o audio comecar antes da boca "acordar".
+const DURACAO_CROSSFADE_INICIO_FALA_MS = 120;
+// dissolve curto no meio de uma resposta longa (troca de um video de fala pro outro, antes
+// do loop nativo) - precisa ser rapido pra nao borrar a boca em movimento por muito tempo
+const DURACAO_CROSSFADE_LOOP_FALA_MS = 220;
 
 function estaFalando() {
   return videosTalk.includes(videoAtivo);
 }
 
 // troca pra outro video (parado ou falando) com um dissolve suave em vez de corte seco -
-// disfarca a mudanca de pose entre clipes diferentes
-function trocarAvatarComTransicao(novoVideo) {
+// disfarca a mudanca de pose entre clipes diferentes. A duracao e ajustavel: rapida quando
+// precisa sincronizar com audio (comeco da fala), mais lenta quando e so troca de pose parada.
+function trocarAvatarComTransicao(novoVideo, duracaoMs = DURACAO_CROSSFADE_IDLE_MS) {
   if (novoVideo === videoAtivo) return;
-  transicao = { de: videoAtivo, inicio: performance.now() };
+  transicao = { de: videoAtivo, inicio: performance.now(), duracaoMs };
   novoVideo.currentTime = 0;
   novoVideo.play().catch(() => {});
   videoAtivo = novoVideo;
@@ -433,7 +442,7 @@ function renderizarQuadro() {
   const w = bot.width, h = bot.height;
   if (w > 0 && h > 0) {
     if (transicao) {
-      const t = suavizar(Math.min(1, (performance.now() - transicao.inicio) / DURACAO_CROSSFADE_MS));
+      const t = suavizar(Math.min(1, (performance.now() - transicao.inicio) / transicao.duracaoMs));
       const quadroDe = obterQuadroTratado(offCtx, transicao.de, w, h);
       const quadroPara = obterQuadroTratado(botCtx, videoAtivo, w, h);
       if (quadroDe && quadroPara) {
@@ -444,7 +453,7 @@ function renderizarQuadro() {
       if (t >= 1) transicao = null;
     } else {
       if (estaFalando() && videoAtivo.duration && (videoAtivo.duration - videoAtivo.currentTime) < ANTECEDENCIA_LOOP_S) {
-        trocarAvatarComTransicao(escolherVideoTalk());
+        trocarAvatarComTransicao(escolherVideoTalk(), DURACAO_CROSSFADE_LOOP_FALA_MS);
       }
       if (videoAtivo.readyState >= 2) {
         const quadro = obterQuadroTratado(botCtx, videoAtivo, w, h);
@@ -457,13 +466,13 @@ function renderizarQuadro() {
 requestAnimationFrame(renderizarQuadro);
 
 // enquanto ela nao esta falando, segue uma sequencia com tempos proprios (nao troca toda hora
-// de forma aleatoria) - fica mais tempo neutra, um tempo menor sorrindo bem sutil, depois um
-// gesto de reacao/curiosidade olhando de lado, e volta pro neutro. Cada fase dura um tempo
-// especifico (com uma pequena variacao aleatoria pra nao ficar mecanico/previsivel demais).
+// de forma aleatoria) - fica mais tempo neutra, um tempo menor sorrindo bem sutil, e volta pro
+// neutro. Cada fase dura um tempo especifico (com uma pequena variacao aleatoria pra nao ficar
+// mecanico/previsivel demais). O video de gesto "apontando" (videosIdle[2]) foi removido da
+// rotacao a pedido do usuario - fica so em videosIdle caso volte a ser usado no futuro.
 const SEQUENCIA_IDLE = [
   { video: videosIdle[0], duracaoMs: 30000 }, // neutra, parada, pouco gesticulando
   { video: videosIdle[1], duracaoMs: 20000 }, // sorriso sutil, olhando de lado
-  { video: videosIdle[2], duracaoMs: 24000 }, // reagindo/impressionada, gesto com as maos
 ];
 let indiceSequenciaIdle = 0;
 
@@ -482,7 +491,8 @@ agendarProximoRevezamentoIdle();
 
 function iniciarFalaVisual() {
   clearTimeout(timerRevezamentoIdle);
-  trocarAvatarComTransicao(escolherVideoTalk());
+  // transicao rapida aqui - a boca precisa comecar a se mexer junto com o audio, nao depois
+  trocarAvatarComTransicao(escolherVideoTalk(), DURACAO_CROSSFADE_INICIO_FALA_MS);
 }
 
 function pararFalaVisual() {
@@ -567,12 +577,37 @@ async function falarElevenLabs(texto, bubbleEl) {
   });
 }
 
+// a Web Speech API do navegador (usada so quando o ElevenLabs falha) escolhe uma voz
+// qualquer por padrao - as vezes vem masculina ou robotica generica. Fixamos uma voz
+// feminina em pt-BR, testando nomes conhecidos de cada plataforma antes de cair num
+// fallback generico (qualquer voz pt- que nao tenha nome tipicamente masculino).
+let vozFemininaCache = null;
+function obterVozFeminina() {
+  if (vozFemininaCache) return vozFemininaCache;
+  const vozes = window.speechSynthesis.getVoices();
+  if (!vozes.length) return null;
+  const preferidas = ['Microsoft Maria', 'Microsoft Francisca', 'Luciana', 'Google português do Brasil', 'Google Brasil', 'Joana', 'Fernanda'];
+  for (const nome of preferidas) {
+    const achada = vozes.find((v) => v.name.includes(nome));
+    if (achada) { vozFemininaCache = achada; return achada; }
+  }
+  const candidatasPt = vozes.filter((v) => v.lang && v.lang.toLowerCase().startsWith('pt'));
+  const semNomeMasculino = candidatasPt.find((v) => !/daniel|felipe|ricardo|diego|joão|jorge/i.test(v.name));
+  vozFemininaCache = semNomeMasculino || candidatasPt[0] || vozes[0] || null;
+  return vozFemininaCache;
+}
+if (window.speechSynthesis) {
+  window.speechSynthesis.onvoiceschanged = () => { vozFemininaCache = null; obterVozFeminina(); };
+}
+
 function falarNavegador(texto, bubbleEl) {
   return new Promise((resolve) => {
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(texto);
     utter.lang = 'pt-BR';
     utter.rate = 1.02;
+    const voz = obterVozFeminina();
+    if (voz) utter.voice = voz;
     utter.onstart = () => { setStatus('falando', 'speaking'); iniciarFalaVisual(); };
     // a Web Speech API so da o indice do caractere onde comeca cada palavra (nao o tempo
     // exato como o ElevenLabs) - ainda assim da pra revelar palavra por palavra
