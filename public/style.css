@@ -209,10 +209,9 @@ html, body {
 }
 
 .bot {
-  width: min(260px, 70%);
-  aspect-ratio: 4 / 5;
-  object-fit: cover;
-  object-position: 50% 22%;
+  width: min(320px, 90%);
+  height: auto;
+  display: block;
   border-radius: 16px;
   background: #050608;
   box-shadow:
@@ -222,7 +221,7 @@ html, body {
 }
 
 @media (max-width: 720px) {
-  .bot { width: min(200px, 60vw); }
+  .bot { width: min(260px, 80vw); }
 }
 
 #bot.speaking {
