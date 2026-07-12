@@ -80,7 +80,7 @@ app.post('/api/tts', async (req, res) => {
 
 // transcreve um audio gravado no navegador (fala -> texto) - usado pelo microfone do app web.
 // Existe separado do /api/chat porque queremos mostrar pro usuario o texto que ele "falou"
-// antes de mandar pro Klaus (mesma UX de digitar), em vez de mandar o audio direto sem o
+// antes de mandar pra Lumia (mesma UX de digitar), em vez de mandar o audio direto sem o
 // usuario ver o que foi entendido.
 app.post('/api/transcribe', async (req, res) => {
   const { audioBase64, mediaType } = req.body || {};
@@ -112,7 +112,7 @@ app.get('/webhook/whatsapp', (req, res) => {
 
 // confere que a requisicao realmente veio da Meta (assinatura HMAC do corpo cru com o
 // App Secret) - esse endpoint nao tem a senha do app, entao essa e a unica defesa contra
-// alguem forjar uma mensagem falsa pra fazer o Klaus executar acoes.
+// alguem forjar uma mensagem falsa pra fazer a Lumia executar acoes.
 function assinaturaWhatsappValida(req) {
   const secret = process.env.WHATSAPP_APP_SECRET;
   if (!secret) return true; // sem app secret configurado, pula a checagem (nao recomendado)
@@ -125,7 +125,7 @@ function assinaturaWhatsappValida(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// so numeros na lista permitida podem conversar com o Klaus por aqui - ele age de verdade
+// so numeros na lista permitida podem conversar com a Lumia por aqui - ela age de verdade
 // (cancela agendamento, consulta financeiro, etc), entao nao pode responder qualquer numero
 // que mandar mensagem pro numero de WhatsApp do consultorio.
 function numeroWhatsappPermitido(numero) {

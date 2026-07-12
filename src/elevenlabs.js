@@ -77,7 +77,7 @@ export async function synthesizeSpeechWithTimestamps(text) {
   return { audioBase64: data.audio_base64, alignment: data.alignment };
 }
 
-// Transcreve audio (fala -> texto) usando o Scribe da ElevenLabs, pra o Klaus conseguir
+// Transcreve audio (fala -> texto) usando o Scribe da ElevenLabs, pra a Lumia conseguir
 // "ouvir" arquivos de audio que o usuario envia (mesma chave de API do TTS).
 export async function transcribeAudio(buffer, mimeType = 'audio/mpeg') {
   const apiKey = process.env.ELEVENLABS_API_KEY;

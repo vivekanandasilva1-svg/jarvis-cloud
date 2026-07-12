@@ -84,7 +84,7 @@ function mostrarApp() {
   loginScreen.hidden = true;
   appWindow.hidden = false;
   if (!chatLog.childElementCount) {
-    addBubble('Klaus pronto. Digite, aperte o microfone ou ative o modo conversa.', 'system');
+    addBubble('Lumia pronta. Digite, aperte o microfone ou ative o modo conversa.', 'system');
   }
   setStatus('pronto', null);
 }
@@ -166,7 +166,7 @@ async function redimensionarImagem(file, maxDim = 1568, qualidade = 0.85) {
   return { base64: dataUrl.split(',')[1], mediaType: 'image/jpeg' };
 }
 
-// extrai alguns quadros do video (o Klaus nao ouve o audio do video, so ve cenas dele)
+// extrai alguns quadros do video (a Lumia nao ouve o audio do video, so ve cenas dele)
 function extrairQuadrosDeVideo(file, numQuadros = 3) {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
@@ -508,14 +508,14 @@ clearBtn.addEventListener('click', () => {
 
 extractBtn.addEventListener('click', () => {
   const linhas = Array.from(chatLog.querySelectorAll('.bubble')).map((b) => {
-    const quem = b.classList.contains('user') ? 'Voce' : b.classList.contains('assistant') ? 'Klaus' : 'Sistema';
+    const quem = b.classList.contains('user') ? 'Voce' : b.classList.contains('assistant') ? 'Lumia' : 'Sistema';
     return `${quem}: ${b.textContent}`;
   });
   const blob = new Blob([linhas.join('\n\n')], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `klaus-conversa-${Date.now()}.txt`;
+  a.download = `lumia-conversa-${Date.now()}.txt`;
   a.click();
   URL.revokeObjectURL(url);
 });

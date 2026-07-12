@@ -5,9 +5,9 @@ import { transcribeAudio } from './elevenlabs.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM_PROMPT = `Voce e o Klaus, assistente pessoal do usuario (dono de uma clinica
-odontologica e da Lumia, agencia de trafego pago), conversando por uma interface de chat
-(texto e voz) num app web publico.
+const SYSTEM_PROMPT = `Voce e a Lumia, assistente pessoal do usuario (dono de uma clinica
+odontologica e de uma agencia de trafego pago que tambem se chama Lumia - voce leva o mesmo
+nome da agencia), conversando por uma interface de chat (texto e voz) num app web publico.
 Responda de forma curta e direta - isto vai ser lido e tambem falado em voz alta, entao evite
 listas longas ou markdown pesado, prefira frases corridas.
 Sempre use as ferramentas disponiveis para agir de verdade - nunca finja ter feito algo.
@@ -366,7 +366,7 @@ async function executeConfirmedAction(name, input) {
 
 // corta listas grandes antes de mandar pro modelo (payload cru do Clinicorp pode ter
 // dezenas de campos internos por item e passar facil de 100-300KB, o que estoura o limite
-// de tokens da resposta e trava o Klaus)
+// de tokens da resposta e trava a Lumia)
 function resumirLista(arr, campos, limite = 40) {
   if (!Array.isArray(arr)) return arr;
   const total = arr.length;
@@ -580,9 +580,9 @@ async function buildUserContent(userMessage, attachments) {
   return content;
 }
 
-// Depois que o Klaus ja respondeu usando uma imagem, troca o bloco de imagem no historico por
+// Depois que a Lumia ja respondeu usando uma imagem, troca o bloco de imagem no historico por
 // um marcador leve - senao o binario da imagem seria reenviado (e recobrado) em todo turno
-// seguinte da mesma sessao. A analise em texto que o Klaus deu ja fica registrada na resposta.
+// seguinte da mesma sessao. A analise em texto que a Lumia deu ja fica registrada na resposta.
 function apagarImagensAntigas(history) {
   for (const turn of history) {
     if (Array.isArray(turn.content)) {
