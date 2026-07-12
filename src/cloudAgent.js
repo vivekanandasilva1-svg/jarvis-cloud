@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as metaAds from './metaads.js';
 import * as clinicorp from './clinicorp.js';
-import { transcribeAudio } from './elevenlabs.js';
+import { transcribeAudio } from './gemini.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 

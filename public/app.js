@@ -511,8 +511,8 @@ function base64ParaBlob(base64, tipo) {
   return new Blob([bytes], { type: tipo });
 }
 
-// revela o texto na bolha em sincronia real com o audio, usando o alinhamento de
-// caracteres que o ElevenLabs devolve (tempo exato de cada letra)
+// revela o texto na bolha em sincronia com o audio, usando o alinhamento de caracteres
+// que o servidor devolve (estimado a partir da duracao real do audio gerado)
 let legendaRAF = null;
 function legendarProgressivo(audio, bubbleEl, characters, starts) {
   cancelAnimationFrame(legendaRAF);
@@ -533,7 +533,7 @@ function pararLegenda(bubbleEl, textoCompleto) {
   if (bubbleEl) bubbleEl.textContent = textoCompleto;
 }
 
-async function falarElevenLabs(texto, bubbleEl) {
+async function falarComVozNatural(texto, bubbleEl) {
   const res = await fetch('/api/tts', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
@@ -577,7 +577,7 @@ async function falarElevenLabs(texto, bubbleEl) {
   });
 }
 
-// a Web Speech API do navegador (usada so quando o ElevenLabs falha) escolhe uma voz
+// a Web Speech API do navegador (usada so quando a voz do Gemini falha) escolhe uma voz
 // qualquer por padrao - as vezes vem masculina ou robotica generica. Fixamos uma voz
 // feminina em pt-BR, testando nomes conhecidos de cada plataforma antes de cair num
 // fallback generico (qualquer voz pt- que nao tenha nome tipicamente masculino).
@@ -609,8 +609,8 @@ function falarNavegador(texto, bubbleEl) {
     const voz = obterVozFeminina();
     if (voz) utter.voice = voz;
     utter.onstart = () => { setStatus('falando', 'speaking'); iniciarFalaVisual(); };
-    // a Web Speech API so da o indice do caractere onde comeca cada palavra (nao o tempo
-    // exato como o ElevenLabs) - ainda assim da pra revelar palavra por palavra
+    // a Web Speech API so da o indice do caractere onde comeca cada palavra (nao um
+    // alinhamento exato) - ainda assim da pra revelar palavra por palavra
     utter.onboundary = (event) => {
       if (bubbleEl && event.name === 'word') {
         bubbleEl.textContent = texto.slice(0, event.charIndex + event.charLength || event.charIndex);
@@ -629,11 +629,11 @@ function falarNavegador(texto, bubbleEl) {
 async function falar(texto, bubbleEl) {
   if (vozAtivada && texto) {
     try {
-      await falarElevenLabs(texto, bubbleEl);
+      await falarComVozNatural(texto, bubbleEl);
     } catch (err) {
-      // cai pra voz robotica do navegador so como ultimo recurso - loga o motivo real (rate
-      // limit da ElevenLabs, erro de rede, autoplay bloqueado etc) pra dar pra diagnosticar
-      console.warn('ElevenLabs falhou, usando voz do navegador como fallback:', err);
+      // cai pra voz robotica do navegador so como ultimo recurso - loga o motivo real (erro
+      // de rede, autoplay bloqueado etc) pra dar pra diagnosticar
+      console.warn('Voz do Gemini falhou, usando voz do navegador como fallback:', err);
       await falarNavegador(texto, bubbleEl);
     }
   } else if (bubbleEl) {
@@ -721,7 +721,7 @@ extractBtn.addEventListener('click', () => {
 // iOS, que por exigencia da Apple usa o motor do Safari por baixo) - o microfone simplesmente
 // nao funcionava em celular Apple. Em vez de depender do reconhecimento de voz do navegador,
 // gravamos o audio de verdade (MediaRecorder, suportado em qualquer navegador/dispositivo
-// moderno) e mandamos pro nosso servidor transcrever (ElevenLabs) - funciona igual em todo lugar.
+// moderno) e mandamos pro nosso servidor transcrever (Gemini) - funciona igual em todo lugar.
 
 const gravacaoSuportada = !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
 

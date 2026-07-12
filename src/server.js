@@ -4,7 +4,7 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chat } from './cloudAgent.js';
-import { synthesizeSpeechWithTimestamps, transcribeAudio } from './elevenlabs.js';
+import { synthesizeSpeechWithTimestamps, transcribeAudio } from './gemini.js';
 import { sendTextMessage, downloadMedia } from './whatsapp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

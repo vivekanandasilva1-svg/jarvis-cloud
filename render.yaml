@@ -20,9 +20,7 @@ services:
         sync: false
       - key: CLINICORP_CODE_LINK
         sync: false
-      - key: ELEVENLABS_API_KEY
-        sync: false
-      - key: ELEVENLABS_VOICE_ID
+      - key: GEMINI_API_KEY
         sync: false
       - key: APP_PASSWORD
         sync: false
