@@ -315,10 +315,22 @@ function addBubble(text, kind) {
 // de estudio de verdade - entao a gente desenha cada quadro num canvas e faz chroma-key: apaga
 // (ou suaviza, nas bordas) os pixels onde o verde domina claramente sobre vermelho/azul.
 // #bot agora e um <canvas>; os <video> reais ficam escondidos (.bot-source) so fornecendo quadros.
-const videoIdle = document.getElementById('botSrcIdle');
+// Tem varios videos de "parada" (poses/movimentos diferentes) que revezam sozinhos de vez em
+// quando, e um video de fala. A troca entre qualquer um deles usa um crossfade (dissolve) em
+// vez de corte seco, pra disfarcar a mudanca de pose e parecer um movimento continuo.
+const videosIdle = [
+  document.getElementById('botSrcIdle1'),
+  document.getElementById('botSrcIdle2'),
+  document.getElementById('botSrcIdle3'),
+];
 const videoTalk = document.getElementById('botSrcTalk');
 const botCtx = bot.getContext('2d', { willReadFrequently: true });
-let videoAtivo = videoIdle;
+const offCanvas = document.createElement('canvas');
+const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
+
+let videoAtivo = videosIdle[0];
+let transicao = null; // { de, inicio, duracao }
+let timerRevezamentoIdle = null;
 
 // quanto o verde precisa dominar (g - max(r,b)) pra contar como fundo. Entre 0 e esse valor
 // e zona de transicao (borda) - fica parcialmente transparente e com o verde residual suprimido,
@@ -344,6 +356,8 @@ function ajustarTamanhoCanvas() {
   if (rect.width === 0 || rect.height === 0) return; // ainda escondido (tela de login)
   bot.width = Math.max(1, Math.round(rect.width * dpr));
   bot.height = Math.max(1, Math.round(rect.height * dpr));
+  offCanvas.width = bot.width;
+  offCanvas.height = bot.height;
 }
 // ResizeObserver pega tanto o resize da janela quanto o momento em que o app deixa de
 // estar escondido (tela de login -> app), quando o canvas passa de 0x0 pro tamanho real
@@ -351,7 +365,7 @@ new ResizeObserver(ajustarTamanhoCanvas).observe(bot);
 ajustarTamanhoCanvas();
 
 // desenha o video "cobrindo" o canvas inteiro (igual object-fit: cover), cortando o excesso
-function desenharComCover(video, destW, destH) {
+function desenharComCover(ctx, video, destW, destH) {
   const vw = video.videoWidth, vh = video.videoHeight;
   if (!vw || !vh) return false;
   const escala = Math.max(destW / vw, destH / vh);
@@ -360,32 +374,83 @@ function desenharComCover(video, destW, destH) {
   // quando o box e baixo/largo (celular deitado com pouca altura), cortar bem no meio corta
   // o rosto - inclina o corte pra cima (mantem mais cabeca, corta mais do corpo debaixo)
   const sy = (vh - sh) * 0.18;
-  botCtx.drawImage(video, sx, sy, sw, sh, 0, 0, destW, destH);
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, destW, destH);
   return true;
+}
+
+function obterQuadroTratado(ctx, video, w, h) {
+  if (!desenharComCover(ctx, video, w, h)) return null;
+  const frame = ctx.getImageData(0, 0, w, h);
+  removerFundo(frame);
+  return frame;
+}
+
+function misturarQuadros(a, b, t) {
+  const out = new ImageData(a.width, a.height);
+  const ad = a.data, bd = b.data, od = out.data;
+  for (let i = 0; i < od.length; i++) od[i] = Math.round(ad[i] * (1 - t) + bd[i] * t);
+  return out;
+}
+
+const DURACAO_CROSSFADE_MS = 650;
+
+// troca pra outro video (parado ou falando) com um dissolve suave em vez de corte seco -
+// disfarca a mudanca de pose entre clipes diferentes
+function trocarAvatarComTransicao(novoVideo) {
+  if (novoVideo === videoAtivo) return;
+  transicao = { de: videoAtivo, inicio: performance.now() };
+  novoVideo.currentTime = 0;
+  novoVideo.play().catch(() => {});
+  videoAtivo = novoVideo;
 }
 
 function renderizarQuadro() {
   const w = bot.width, h = bot.height;
-  if (w > 0 && h > 0 && videoAtivo.readyState >= 2) {
-    if (desenharComCover(videoAtivo, w, h)) {
-      const frame = botCtx.getImageData(0, 0, w, h);
-      removerFundo(frame);
-      botCtx.putImageData(frame, 0, 0);
+  if (w > 0 && h > 0) {
+    if (transicao) {
+      const t = Math.min(1, (performance.now() - transicao.inicio) / DURACAO_CROSSFADE_MS);
+      const quadroDe = obterQuadroTratado(offCtx, transicao.de, w, h);
+      const quadroPara = obterQuadroTratado(botCtx, videoAtivo, w, h);
+      if (quadroDe && quadroPara) {
+        botCtx.putImageData(misturarQuadros(quadroDe, quadroPara, t), 0, 0);
+      } else if (quadroPara) {
+        botCtx.putImageData(quadroPara, 0, 0);
+      }
+      if (t >= 1) transicao = null;
+    } else if (videoAtivo.readyState >= 2) {
+      const quadro = obterQuadroTratado(botCtx, videoAtivo, w, h);
+      if (quadro) botCtx.putImageData(quadro, 0, 0);
     }
   }
   requestAnimationFrame(renderizarQuadro);
 }
 requestAnimationFrame(renderizarQuadro);
 
+// enquanto ela nao esta falando, revezar entre os videos de "parada" de vez em quando (com
+// intervalo aleatorio) pra parecer que esta se mexendo/reagindo naturalmente, nao travada
+function agendarProximoRevezamentoIdle() {
+  clearTimeout(timerRevezamentoIdle);
+  const espera = 7000 + Math.random() * 6000;
+  timerRevezamentoIdle = setTimeout(() => {
+    if (videoAtivo === videoTalk) { agendarProximoRevezamentoIdle(); return; } // esta falando, tenta de novo depois
+    const opcoes = videosIdle.filter((v) => v !== videoAtivo);
+    const escolhido = opcoes[Math.floor(Math.random() * opcoes.length)];
+    trocarAvatarComTransicao(escolhido);
+    agendarProximoRevezamentoIdle();
+  }, espera);
+}
+agendarProximoRevezamentoIdle();
+
 function iniciarFalaVisual() {
-  videoAtivo = videoTalk;
-  videoTalk.currentTime = 0;
-  videoTalk.play().catch(() => {});
+  clearTimeout(timerRevezamentoIdle);
+  trocarAvatarComTransicao(videoTalk);
 }
 
 function pararFalaVisual() {
-  videoAtivo = videoIdle;
+  const proximoIdle = videosIdle[Math.floor(Math.random() * videosIdle.length)];
+  trocarAvatarComTransicao(proximoIdle);
   videoTalk.pause();
+  agendarProximoRevezamentoIdle();
 }
 
 // so um audio por vez - qualquer fala nova cancela a anterior, pra nao atropelar
