@@ -323,7 +323,10 @@ const videosIdle = [
   document.getElementById('botSrcIdle2'),
   document.getElementById('botSrcIdle3'),
 ];
-const videoTalk = document.getElementById('botSrcTalk');
+const videosTalk = [
+  document.getElementById('botSrcTalk1'),
+  document.getElementById('botSrcTalk2'),
+];
 const botCtx = bot.getContext('2d', { willReadFrequently: true });
 const offCanvas = document.createElement('canvas');
 const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
@@ -392,7 +395,15 @@ function misturarQuadros(a, b, t) {
   return out;
 }
 
+// smoothstep - acelera e desacelera a transicao em vez de andar em velocidade constante,
+// fica com uma cadencia mais organica (menos "computador fazendo fade")
+function suavizar(t) { return t * t * (3 - 2 * t); }
+
 const DURACAO_CROSSFADE_MS = 650;
+
+function estaFalando() {
+  return videosTalk.includes(videoAtivo);
+}
 
 // troca pra outro video (parado ou falando) com um dissolve suave em vez de corte seco -
 // disfarca a mudanca de pose entre clipes diferentes
@@ -404,11 +415,25 @@ function trocarAvatarComTransicao(novoVideo) {
   videoAtivo = novoVideo;
 }
 
+let ultimoTalkEscolhido = null;
+function escolherVideoTalk() {
+  const opcoes = videosTalk.filter((v) => v !== ultimoTalkEscolhido);
+  const lista = opcoes.length ? opcoes : videosTalk;
+  const escolhido = lista[Math.floor(Math.random() * lista.length)];
+  ultimoTalkEscolhido = escolhido;
+  return escolhido;
+}
+
+// antecedencia com que troca pro outro video de fala ANTES do atual chegar no fim do loop -
+// sem isso, numa resposta longa (>10s de audio) o proprio <video> reiniciaria sozinho de
+// corte seco a cada volta. Trocando um pouco antes (com dissolve) some esse "salto" periodico.
+const ANTECEDENCIA_LOOP_S = 0.5;
+
 function renderizarQuadro() {
   const w = bot.width, h = bot.height;
   if (w > 0 && h > 0) {
     if (transicao) {
-      const t = Math.min(1, (performance.now() - transicao.inicio) / DURACAO_CROSSFADE_MS);
+      const t = suavizar(Math.min(1, (performance.now() - transicao.inicio) / DURACAO_CROSSFADE_MS));
       const quadroDe = obterQuadroTratado(offCtx, transicao.de, w, h);
       const quadroPara = obterQuadroTratado(botCtx, videoAtivo, w, h);
       if (quadroDe && quadroPara) {
@@ -417,9 +442,14 @@ function renderizarQuadro() {
         botCtx.putImageData(quadroPara, 0, 0);
       }
       if (t >= 1) transicao = null;
-    } else if (videoAtivo.readyState >= 2) {
-      const quadro = obterQuadroTratado(botCtx, videoAtivo, w, h);
-      if (quadro) botCtx.putImageData(quadro, 0, 0);
+    } else {
+      if (estaFalando() && videoAtivo.duration && (videoAtivo.duration - videoAtivo.currentTime) < ANTECEDENCIA_LOOP_S) {
+        trocarAvatarComTransicao(escolherVideoTalk());
+      }
+      if (videoAtivo.readyState >= 2) {
+        const quadro = obterQuadroTratado(botCtx, videoAtivo, w, h);
+        if (quadro) botCtx.putImageData(quadro, 0, 0);
+      }
     }
   }
   requestAnimationFrame(renderizarQuadro);
@@ -442,7 +472,7 @@ function agendarProximoRevezamentoIdle() {
   const fase = SEQUENCIA_IDLE[indiceSequenciaIdle];
   const variacao = 0.9 + Math.random() * 0.2; // +-10%, pra nao ficar cronometrado igual robo
   timerRevezamentoIdle = setTimeout(() => {
-    if (videoAtivo === videoTalk) { agendarProximoRevezamentoIdle(); return; } // esta falando, tenta de novo depois
+    if (estaFalando()) { agendarProximoRevezamentoIdle(); return; } // esta falando, tenta de novo depois
     indiceSequenciaIdle = (indiceSequenciaIdle + 1) % SEQUENCIA_IDLE.length;
     trocarAvatarComTransicao(SEQUENCIA_IDLE[indiceSequenciaIdle].video);
     agendarProximoRevezamentoIdle();
@@ -452,13 +482,12 @@ agendarProximoRevezamentoIdle();
 
 function iniciarFalaVisual() {
   clearTimeout(timerRevezamentoIdle);
-  trocarAvatarComTransicao(videoTalk);
+  trocarAvatarComTransicao(escolherVideoTalk());
 }
 
 function pararFalaVisual() {
   // volta pra fase atual da sequencia (nao pula aleatoriamente) - mantem o ritmo previsivel
   trocarAvatarComTransicao(SEQUENCIA_IDLE[indiceSequenciaIdle].video);
-  videoTalk.pause();
   agendarProximoRevezamentoIdle();
 }
 
