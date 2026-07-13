@@ -27,7 +27,18 @@ if (!sessionId) {
   localStorage.setItem('jarvis_session_id', sessionId);
 }
 
+// o header HTTP x-app-password so aceita ByteString (caracteres de 0-255) - se a senha
+// guardada tiver algum caractere especial (ex: colada de um lugar com bullet point "•" ou
+// outra formatacao), TODO pedido autenticado quebra com um erro criptico de "ByteString" que
+// nao diz nada pro usuario. Detecta e limpa isso aqui, na largada, pra sessao se autocurar
+// em vez de ficar travada pra sempre nesse estado.
+function senhaValida(s) { return /^[\x00-\xFF]*$/.test(s); }
+
 let appPassword = sessionStorage.getItem('jarvis_password') || '';
+if (!senhaValida(appPassword)) {
+  appPassword = '';
+  sessionStorage.removeItem('jarvis_password');
+}
 let vozAtivada = true;
 let gravando = false;
 let modoConversa = false;
@@ -116,6 +127,10 @@ loginForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const senha = passwordInput.value;
   loginError.textContent = '';
+  if (!senhaValida(senha)) {
+    loginError.textContent = 'Essa senha tem um caractere invalido (parece colada de algum lugar com formatacao) - tenta digitar direto.';
+    return;
+  }
   const ok = await tentarEntrar(senha);
   if (!ok) {
     loginError.textContent = 'Senha incorreta.';
