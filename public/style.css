@@ -95,24 +95,27 @@ html, body {
 @keyframes girarBorda { to { --borda-ang: 360deg; } }
 @property --borda-ang { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
 
-.login-logo {
-  width: 76px;
-  height: auto;
+/* logo real (arquivo do designer, fundo removido) - o giro fica no wrapper e o brilho
+   pulsante na propria imagem, assim a rotacao nao "estica" o filtro de sombra junto */
+.login-logo-wrap {
+  width: 92px;
+  height: 92px;
   margin: 0 auto 10px;
+  animation: girarLogo 26s linear infinite;
 }
+@keyframes girarLogo { to { transform: rotate(360deg); } }
 
-.pinwheel-spin { animation: girarPinwheel 22s linear infinite; transform-origin: 0 0; }
-@keyframes girarPinwheel { to { transform: rotate(360deg); } }
-
-.pinwheel-blade path { animation: pulsarBlade 2.8s ease-in-out infinite; transform-origin: 0 0; }
-@keyframes pulsarBlade { 0%, 100% { opacity: 0.72; } 50% { opacity: 1; } }
-.pinwheel-blade:nth-child(1) path { animation-delay: 0s; }
-.pinwheel-blade:nth-child(2) path { animation-delay: 0.4s; }
-.pinwheel-blade:nth-child(3) path { animation-delay: 0.8s; }
-.pinwheel-blade:nth-child(4) path { animation-delay: 1.2s; }
-.pinwheel-blade:nth-child(5) path { animation-delay: 1.6s; }
-.pinwheel-blade:nth-child(6) path { animation-delay: 2s; }
-.pinwheel-blade:nth-child(7) path { animation-delay: 2.4s; }
+.login-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  animation: brilharLogo 2.8s ease-in-out infinite;
+}
+@keyframes brilharLogo {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(212, 175, 55, 0.45)); }
+  50% { filter: drop-shadow(0 0 16px rgba(245, 213, 118, 0.8)); }
+}
 
 .login-card h1 {
   margin: 0 0 4px;
@@ -161,7 +164,7 @@ html, body {
 .login-error { min-height: 16px; color: var(--silver); font-size: 12px; margin-top: 10px !important; }
 
 @media (prefers-reduced-motion: reduce) {
-  .circuit-lines path, .circuit-nodes circle, .login-card::before, .pinwheel-spin, .pinwheel-blade path {
+  .circuit-lines path, .circuit-nodes circle, .login-card::before, .login-logo-wrap, .login-logo {
     animation: none !important;
   }
 }

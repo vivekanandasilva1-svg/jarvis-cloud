@@ -34,32 +34,9 @@
     </div>
 
     <div class="login-card">
-      <svg class="login-logo" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="pinwheelGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#f5d576"/>
-            <stop offset="100%" stop-color="#b3872a"/>
-          </linearGradient>
-          <filter id="pinwheelGlow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="4" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        <g transform="translate(110,110)" filter="url(#pinwheelGlow)">
-          <g class="pinwheel-spin">
-            <g class="pinwheel-blade"><path d="M0,0 C-8,-38 -2,-62 18,-92 C34,-70 40,-46 30,-14 C22,6 8,10 0,0 Z" fill="url(#pinwheelGrad)"/></g>
-            <g class="pinwheel-blade" transform="rotate(51.43)"><path d="M0,0 C-8,-38 -2,-62 18,-92 C34,-70 40,-46 30,-14 C22,6 8,10 0,0 Z" fill="url(#pinwheelGrad)"/></g>
-            <g class="pinwheel-blade" transform="rotate(102.86)"><path d="M0,0 C-8,-38 -2,-62 18,-92 C34,-70 40,-46 30,-14 C22,6 8,10 0,0 Z" fill="url(#pinwheelGrad)"/></g>
-            <g class="pinwheel-blade" transform="rotate(154.29)"><path d="M0,0 C-8,-38 -2,-62 18,-92 C34,-70 40,-46 30,-14 C22,6 8,10 0,0 Z" fill="url(#pinwheelGrad)"/></g>
-            <g class="pinwheel-blade" transform="rotate(205.71)"><path d="M0,0 C-8,-38 -2,-62 18,-92 C34,-70 40,-46 30,-14 C22,6 8,10 0,0 Z" fill="url(#pinwheelGrad)"/></g>
-            <g class="pinwheel-blade" transform="rotate(257.14)"><path d="M0,0 C-8,-38 -2,-62 18,-92 C34,-70 40,-46 30,-14 C22,6 8,10 0,0 Z" fill="url(#pinwheelGrad)"/></g>
-            <g class="pinwheel-blade" transform="rotate(308.57)"><path d="M0,0 C-8,-38 -2,-62 18,-92 C34,-70 40,-46 30,-14 C22,6 8,10 0,0 Z" fill="url(#pinwheelGrad)"/></g>
-          </g>
-        </g>
-      </svg>
+      <div class="login-logo-wrap">
+        <img class="login-logo" src="login-logo.png" alt="Lumia" />
+      </div>
       <h1>Lumia</h1>
       <p>Acesso restrito - entre com suas credenciais</p>
       <form id="loginForm">
