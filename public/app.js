@@ -807,11 +807,26 @@ function blobParaBase64(blob) {
 
 async function transcreverAudio(blob, mimeType) {
   const base64 = await blobParaBase64(blob);
-  const res = await fetch('/api/transcribe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-    body: JSON.stringify({ audioBase64: base64, mediaType: mimeType }),
-  });
+  // sem limite de tempo aqui, uma trava no servidor (cold start do Render, rede ruim etc)
+  // deixava o modo conversa parado pra sempre em "transcrevendo..." sem nunca dar erro nem
+  // voltar a ouvir - o servidor ja tem seu proprio limite mais curto, isso aqui e so uma
+  // rede de seguranca com folga a mais pro tempo de rede/deploy gratuito acordando
+  const controlador = new AbortController();
+  const timer = setTimeout(() => controlador.abort(), 25000);
+  let res;
+  try {
+    res = await fetch('/api/transcribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ audioBase64: base64, mediaType: mimeType }),
+      signal: controlador.signal,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('demorou demais pra transcrever, tenta de novo');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(data?.erro || 'erro na transcricao');
   return (data.text || '').trim();

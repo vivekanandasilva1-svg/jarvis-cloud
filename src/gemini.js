@@ -13,20 +13,43 @@ function chaveApi() {
 
 const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// sem limite de tempo por tentativa, uma unica chamada travada (comum quando o Gemini esta
+// respondendo devagar, nao so quando devolve erro) podia prender o pedido inteiro por dezenas
+// de segundos - e com retry em cima disso, MULTIPLICAVA essa espera por tentativa. No modo
+// conversa isso e o pior caso possivel: parece que "nao funciona" quando na verdade so esta
+// preso esperando. Cortando cada tentativa individualmente, o total fica previsivel.
+async function fetchComLimite(chamarFetch, timeoutMs) {
+  const controlador = new AbortController();
+  const timer = setTimeout(() => controlador.abort(), timeoutMs);
+  try {
+    return await chamarFetch(controlador.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // o Gemini (principalmente no tier gratis) devolve 503 "high demand" com frequencia mesmo
 // em uso normal - isso e transitorio e quase sempre passa numa segunda tentativa. Sem retry,
 // qualquer pico momentaneo derrubava a transcricao/voz inteira (o usuario via "nao consegui
 // transcrever o audio" ou ficava sem ouvir a Lumia) mesmo quando o problema durava so 1-2s.
 // 429 NAO entra no retry: quando e cota diaria estourada (o caso mais comum no tier gratis),
-// as 3 tentativas vao falhar do mesmo jeito e so gastam tempo/mais chamadas a toa - so vale
+// as tentativas vao falhar do mesmo jeito e so gastam tempo/mais chamadas a toa - so vale
 // retry pra estouro momentaneo de taxa, que o proprio 503 ja cobre na pratica.
-async function comRetry(chamarFetch, tentativas = 3) {
+async function comRetry(chamarFetch, { tentativas = 3, timeoutMs = 20000 } = {}) {
   let ultimoErro;
   for (let i = 0; i < tentativas; i++) {
-    const res = await chamarFetch();
+    let res;
+    try {
+      res = await fetchComLimite(chamarFetch, timeoutMs);
+    } catch (err) {
+      // AbortError (timeout) ou falha de rede - trata como transitorio, mesma logica do 503
+      if (i === tentativas - 1) throw new Error(`Gemini demorou demais pra responder (mais de ${timeoutMs / 1000}s)`);
+      await esperar(400 * (i + 1));
+      continue;
+    }
     if (res.ok || res.status !== 503 || i === tentativas - 1) return res;
     ultimoErro = res;
-    await esperar(500 * (i + 1)); // 500ms, depois 1000ms
+    await esperar(400 * (i + 1));
   }
   return ultimoErro;
 }
@@ -143,9 +166,10 @@ function alinharTextoComAudio(text, pcmBuffer, sampleRate) {
 }
 
 export async function synthesizeSpeechWithTimestamps(text) {
-  const res = await comRetry(() => fetch(`${API_URL}/${MODELO_TTS}:generateContent?key=${chaveApi()}`, {
+  const res = await comRetry((signal) => fetch(`${API_URL}/${MODELO_TTS}:generateContent?key=${chaveApi()}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal,
     body: JSON.stringify({
       contents: [{ parts: [{ text: `Fale de forma natural, calma e humana, com voz jovem: ${text}` }] }],
       generationConfig: {
@@ -153,7 +177,7 @@ export async function synthesizeSpeechWithTimestamps(text) {
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: VOZ } } },
       },
     }),
-  }));
+  }), { tentativas: 3, timeoutMs: 20000 });
 
   if (!res.ok) throw await erroGemini(res, 'Gemini TTS erro');
 
@@ -174,10 +198,14 @@ export async function synthesizeSpeechWithTimestamps(text) {
 
 // transcreve audio (fala -> texto) mandando o arquivo direto pro Gemini com um pedido de
 // transcricao - funciona com qualquer formato de audio comum (webm, ogg, mp3, wav etc).
+// timeout mais curto e so 1 retry (nao 3): isso e o passo do modo conversa que o usuario
+// literalmente fica esperando em tempo real - preferimos falhar rapido e deixar ouvir de novo
+// a "acertar" depois de meio minuto de espera acumulada em tentativas.
 export async function transcribeAudio(buffer, mimeType = 'audio/webm') {
-  const res = await comRetry(() => fetch(`${API_URL}/${MODELO_TRANSCRICAO}:generateContent?key=${chaveApi()}`, {
+  const res = await comRetry((signal) => fetch(`${API_URL}/${MODELO_TRANSCRICAO}:generateContent?key=${chaveApi()}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal,
     body: JSON.stringify({
       contents: [{
         parts: [
@@ -186,7 +214,7 @@ export async function transcribeAudio(buffer, mimeType = 'audio/webm') {
         ],
       }],
     }),
-  }));
+  }), { tentativas: 2, timeoutMs: 10000 });
 
   if (!res.ok) throw await erroGemini(res, 'Gemini erro');
 
