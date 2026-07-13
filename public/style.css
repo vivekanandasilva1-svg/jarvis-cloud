@@ -165,6 +165,19 @@ html, body {
   color: var(--text-dim);
 }
 
+.weather-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--silver);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 9px;
+  flex: 0 0 auto;
+}
+.weather-badge svg { color: var(--gold); }
+
 .logout-btn {
   border: 1px solid var(--border);
   background: rgba(212, 175, 55, 0.08);
@@ -186,15 +199,235 @@ html, body {
   .window-status { font-size: 10px; }
 }
 
+@media (max-width: 900px) {
+  .weather-badge { display: none !important; }
+}
+
 .window-body {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(240px, 340px) 1fr;
+  grid-template-columns: 220px minmax(0, 1fr) minmax(260px, 340px);
+}
+
+@media (max-width: 1080px) {
+  .window-body { grid-template-columns: 190px minmax(0, 1fr) minmax(240px, 300px); }
+}
+
+/* ---------- Sidebar (System Stats / Weather / Camera / Uptime) ---------- */
+
+.sidebar {
+  border-right: 1px solid var(--border);
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(8, 7, 5, 0.5);
+}
+
+/* telas medias (tablet): sidebar sai da coluna e vira uma faixa horizontal por cima do
+   avatar+conversa, que continuam lado a lado - evita esmagar tudo em 3 colunas estreitas.
+   Essas regras precisam vir DEPOIS da definicao base de .sidebar acima - CSS resolve empate
+   de especificidade pela ordem no arquivo, nao por qual media query "bate mais forte", entao
+   se a regra base viesse depois ela sempre ganharia e a sidebar nunca viraria linha horizontal. */
+@media (max-width: 900px) {
+  .window-body {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .sidebar {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    overflow-x: auto;
+    max-height: 190px;
+  }
+  .sidebar .panel { min-width: 220px; flex: 0 0 auto; }
 }
 
 @media (max-width: 720px) {
-  .window-body { grid-template-columns: 1fr; grid-template-rows: 38% 62%; }
+  .window-body { grid-template-columns: 1fr; grid-template-rows: auto 38% 1fr; }
+  .sidebar { grid-column: 1; }
+}
+
+.panel {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 12px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+.panel-title svg { color: var(--gold); flex: 0 0 auto; }
+
+.panel-refresh, .panel-toggle {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-dim);
+  border-radius: 7px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.panel-refresh:hover, .panel-toggle:hover { color: var(--gold-bright); border-color: var(--gold); }
+.panel-toggle.active { color: var(--gold-bright); border-color: var(--gold); box-shadow: 0 0 10px rgba(212, 175, 55, 0.45); }
+
+.stat-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin-bottom: 5px;
+}
+.stat-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.meter {
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+.meter-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--gold) 0%, var(--gold-bright) 100%);
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.6);
+  transition: width 0.5s ease;
+}
+/* silver quando o uso e baixo, dourado sobe conforme carga aumenta - da o "LED de status"
+   sem precisar de vermelho/verde fora da paleta pedida */
+.meter-fill.silver { background: linear-gradient(90deg, var(--silver-dim) 0%, var(--silver) 100%); box-shadow: 0 0 8px rgba(201, 204, 209, 0.5); }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.stat-mini {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 4px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.02);
+}
+.stat-mini-label {
+  display: block;
+  font-size: 9.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+.stat-mini-value {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Weather ---------- */
+
+.weather-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.weather-temp {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--gold-bright);
+  text-shadow: 0 0 14px rgba(212, 175, 55, 0.4);
+  line-height: 1.1;
+}
+.weather-place {
+  font-size: 11.5px;
+  color: var(--text);
+  margin-top: 2px;
+}
+.weather-cond {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  text-transform: capitalize;
+}
+.weather-icon { color: var(--silver); filter: drop-shadow(0 0 8px rgba(201, 204, 209, 0.4)); flex: 0 0 auto; }
+
+/* ---------- Camera ---------- */
+
+.camera-view {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.camera-view video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.camera-off {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.camera-off svg { color: var(--silver-dim); }
+.camera-hint {
+  margin: 8px 0 0;
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* ---------- Uptime ---------- */
+
+.uptime-live {
+  font-size: 10.5px;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+}
+.uptime-big {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--white);
+  text-shadow: 0 0 12px rgba(245, 245, 240, 0.25);
+  margin-bottom: 10px;
 }
 
 /* ---------- Avatar stage ---------- */

@@ -1,5 +1,8 @@
 import 'dotenv/config';
 import crypto from 'node:crypto';
+import os from 'node:os';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +10,8 @@ import { chat } from './cloudAgent.js';
 import { synthesizeSpeechWithTimestamps, transcribeAudio } from './gemini.js';
 import { transcribeAudioWhisper } from './whisper.js';
 import { sendTextMessage, downloadMedia } from './whatsapp.js';
+
+const execAsync = promisify(exec);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -48,6 +53,70 @@ app.post('/api/login', (req, res) => {
 
 app.use(express.static(PUBLIC_DIR));
 
+// ---------- Stats do sistema (painel do dashboard) ----------
+
+const sessoesVistas = new Set();
+let comandosProcessados = 0;
+
+// mede uso de CPU comparando os contadores acumulados de os.cpus() em dois instantes - a
+// API do Node nao da uma "porcentagem atual" pronta, so o total acumulado desde o boot
+function medirUsoCpu() {
+  const amostra = () => os.cpus().map((c) => ({ ocioso: c.times.idle, total: Object.values(c.times).reduce((s, v) => s + v, 0) }));
+  const inicio = amostra();
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const fim = amostra();
+      let ociosoDelta = 0, totalDelta = 0;
+      for (let i = 0; i < inicio.length; i++) {
+        ociosoDelta += fim[i].ocioso - inicio[i].ocioso;
+        totalDelta += fim[i].total - inicio[i].total;
+      }
+      resolve(totalDelta > 0 ? Math.round((1 - ociosoDelta / totalDelta) * 100) : 0);
+    }, 200);
+  });
+}
+
+// `df` so existe em Linux/Mac - em dev local no Windows (sem essa infra) devolve null em vez
+// de quebrar o painel inteiro
+async function medirDisco() {
+  try {
+    const { stdout } = await execAsync('df -Pk /');
+    const linha = stdout.trim().split('\n')[1];
+    const [, totalKb, usadoKb] = linha.split(/\s+/);
+    return {
+      usadoGB: Math.round((Number(usadoKb) / 1024 / 1024) * 10) / 10,
+      totalGB: Math.round((Number(totalKb) / 1024 / 1024) * 10) / 10,
+      percentual: Math.round((Number(usadoKb) / Number(totalKb)) * 100),
+    };
+  } catch {
+    return null;
+  }
+}
+
+app.get('/api/system-stats', async (req, res) => {
+  try {
+    const [cpuPercent, disco] = await Promise.all([medirUsoCpu(), medirDisco()]);
+    const ramTotal = os.totalmem();
+    const ramLivre = os.freemem();
+    const ramUsada = ramTotal - ramLivre;
+
+    res.json({
+      cpuPercent,
+      ram: {
+        usadoGB: Math.round((ramUsada / 1024 ** 3) * 10) / 10,
+        totalGB: Math.round((ramTotal / 1024 ** 3) * 10) / 10,
+        percentual: Math.round((ramUsada / ramTotal) * 100),
+      },
+      disco,
+      uptimeSegundos: Math.round(process.uptime()),
+      comandosProcessados,
+      sessoesAtivas: sessoesVistas.size,
+    });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId, attachments } = req.body || {};
   const temAnexo = Array.isArray(attachments) && attachments.length > 0;
@@ -56,6 +125,8 @@ app.post('/api/chat', async (req, res) => {
   }
 
   try {
+    sessoesVistas.add(sessionId);
+    comandosProcessados++;
     const reply = await chat(sessionId, message, attachments);
     res.json({ reply });
   } catch (err) {

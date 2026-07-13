@@ -21,6 +21,35 @@ const statusEl = document.getElementById('status');
 const clockEl = document.getElementById('clock');
 const hintEl = document.getElementById('hint');
 
+// ---------- Painel: elementos ----------
+const weatherBadge = document.getElementById('weatherBadge');
+const weatherBadgeTemp = document.getElementById('weatherBadgeTemp');
+const statsRefresh = document.getElementById('statsRefresh');
+const cpuValue = document.getElementById('cpuValue');
+const cpuBar = document.getElementById('cpuBar');
+const cpuMini = document.getElementById('cpuMini');
+const ramValue = document.getElementById('ramValue');
+const ramBar = document.getElementById('ramBar');
+const ramMini = document.getElementById('ramMini');
+const diskMini = document.getElementById('diskMini');
+const weatherRefresh = document.getElementById('weatherRefresh');
+const weatherTemp = document.getElementById('weatherTemp');
+const weatherPlace = document.getElementById('weatherPlace');
+const weatherCond = document.getElementById('weatherCond');
+const weatherHumidity = document.getElementById('weatherHumidity');
+const weatherWind = document.getElementById('weatherWind');
+const weatherFeels = document.getElementById('weatherFeels');
+const cameraToggle = document.getElementById('cameraToggle');
+const cameraVideo = document.getElementById('cameraVideo');
+const cameraOffMsg = document.getElementById('cameraOffMsg');
+const cameraHint = document.getElementById('cameraHint');
+const uptimeLive = document.getElementById('uptimeLive');
+const uptimeBig = document.getElementById('uptimeBig');
+const sessionValue = document.getElementById('sessionValue');
+const commandsValue = document.getElementById('commandsValue');
+const loadLabel = document.getElementById('loadLabel');
+const loadBar = document.getElementById('loadBar');
+
 let sessionId = localStorage.getItem('jarvis_session_id');
 if (!sessionId) {
   sessionId = 'sess-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -102,6 +131,8 @@ function mostrarApp() {
   // hidden) - o ResizeObserver nem sempre pega essa transicao de "escondido -> visivel",
   // entao forca a medicao de novo agora que o app realmente apareceu
   ajustarTamanhoCanvas();
+  iniciarPainelSistema();
+  iniciarClima();
 }
 
 function sair() {
@@ -748,6 +779,7 @@ async function enviarMensagem(texto) {
     }
     if (!res.ok) throw new Error(data.erro || 'Erro desconhecido');
 
+    registrarComando();
     const bubble = addBubble('', 'assistant');
     await falar(data.reply, bubble);
   } catch (err) {
@@ -1001,4 +1033,155 @@ muteBtn.addEventListener('click', () => {
   vozAtivada = !vozAtivada;
   muteBtn.textContent = vozAtivada ? '🔊' : '🔇';
   if (!vozAtivada) { window.speechSynthesis.cancel(); pararFalaVisual(); }
+});
+
+// ---------- Painel: System Stats + Uptime ----------
+// dados reais do proprio servidor (CPU/RAM/disco da VPS, comandos processados) - nada
+// inventado. O contador de comandos e por sessao de navegador (zera se recarregar a pagina),
+// o resto vem direto do /api/system-stats.
+
+let comandosNestaSessao = 0;
+function registrarComando() {
+  comandosNestaSessao++;
+  commandsValue.textContent = String(comandosNestaSessao);
+}
+
+function corMedidor(elemento, percentual) {
+  elemento.classList.toggle('silver', percentual < 55);
+}
+
+async function atualizarStatsSistema() {
+  try {
+    const res = await fetch('/api/system-stats', { headers: { 'x-app-password': appPassword } });
+    if (!res.ok) return;
+    const d = await res.json();
+
+    cpuValue.textContent = `${d.cpuPercent}%`;
+    cpuMini.textContent = `${d.cpuPercent}%`;
+    cpuBar.style.width = `${d.cpuPercent}%`;
+    corMedidor(cpuBar, d.cpuPercent);
+
+    ramValue.textContent = `${d.ram.usadoGB} GB`;
+    ramMini.textContent = `${d.ram.percentual}%`;
+    ramBar.style.width = `${d.ram.percentual}%`;
+    corMedidor(ramBar, d.ram.percentual);
+
+    diskMini.textContent = d.disco ? `${d.disco.usadoGB}/${d.disco.totalGB}GB` : 'N/D';
+
+    loadBar.style.width = `${d.cpuPercent}%`;
+    corMedidor(loadBar, d.cpuPercent);
+    loadLabel.textContent = d.cpuPercent < 30 ? 'Idle' : d.cpuPercent < 70 ? 'Moderate' : 'High';
+
+    sessionValue.textContent = String(d.sessoesAtivas || 1);
+
+    const h = Math.floor(d.uptimeSegundos / 3600).toString().padStart(2, '0');
+    const m = Math.floor((d.uptimeSegundos % 3600) / 60).toString().padStart(2, '0');
+    const s = Math.floor(d.uptimeSegundos % 60).toString().padStart(2, '0');
+    uptimeBig.textContent = `${h}:${m}:${s}`;
+    uptimeLive.textContent = `${h}:${m}:${s}`;
+  } catch {
+    // painel decorativo em cima de dados reais - se a rede falhar por um instante, so
+    // mantem o ultimo valor na tela em vez de quebrar a interface com erro visivel
+  }
+}
+
+function iniciarPainelSistema() {
+  atualizarStatsSistema();
+  setInterval(atualizarStatsSistema, 5000);
+  statsRefresh.addEventListener('click', atualizarStatsSistema);
+}
+
+// ---------- Painel: Weather ----------
+// Open-Meteo (previsao) + BigDataCloud (geocodificacao reversa) - as duas sao gratuitas e
+// nao exigem chave de API. Pede a localizacao real do navegador; se o usuario negar, cai
+// pra Maceio/AL (onde fica a clinica) em vez de travar o painel sem dado nenhum.
+const MACEIO_FALLBACK = { lat: -9.6498, lon: -35.7089, nome: 'Maceió, AL' };
+
+const CODIGOS_TEMPO = {
+  0: 'Ceu limpo', 1: 'Predominante limpo', 2: 'Parcialmente nublado', 3: 'Nublado',
+  45: 'Neblina', 48: 'Neblina com geada', 51: 'Garoa fraca', 53: 'Garoa', 55: 'Garoa forte',
+  61: 'Chuva fraca', 63: 'Chuva', 65: 'Chuva forte', 71: 'Neve fraca', 73: 'Neve',
+  75: 'Neve forte', 80: 'Pancadas de chuva', 81: 'Pancadas de chuva', 82: 'Pancadas fortes',
+  95: 'Tempestade', 96: 'Tempestade com granizo', 99: 'Tempestade forte',
+};
+
+async function buscarClima(lat, lon, nomeLocal) {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,weather_code`;
+    const res = await fetch(url);
+    const d = await res.json();
+    const c = d.current;
+    if (!c) return;
+
+    const temp = Math.round(c.temperature_2m);
+    weatherTemp.textContent = `${temp}°C`;
+    weatherBadgeTemp.textContent = `${temp}°`;
+    weatherBadge.hidden = false;
+    weatherPlace.textContent = nomeLocal;
+    weatherCond.textContent = CODIGOS_TEMPO[c.weather_code] || '';
+    weatherHumidity.textContent = `${Math.round(c.relative_humidity_2m)}%`;
+    weatherWind.textContent = `${c.wind_speed_10m.toFixed(1)} m/s`;
+    weatherFeels.textContent = `${Math.round(c.apparent_temperature)}°C`;
+  } catch {
+    weatherPlace.textContent = 'Indisponivel';
+  }
+}
+
+async function nomeDaLocalizacao(lat, lon) {
+  try {
+    const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=pt`);
+    const d = await res.json();
+    const cidade = d.city || d.locality || d.principalSubdivision;
+    return cidade ? `${cidade}${d.principalSubdivision ? ', ' + d.principalSubdivisionCode?.split('-')[1] || '' : ''}` : MACEIO_FALLBACK.nome;
+  } catch {
+    return MACEIO_FALLBACK.nome;
+  }
+}
+
+async function obterClimaLocal() {
+  if (!navigator.geolocation) {
+    return buscarClima(MACEIO_FALLBACK.lat, MACEIO_FALLBACK.lon, MACEIO_FALLBACK.nome);
+  }
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const { latitude, longitude } = pos.coords;
+      const nome = await nomeDaLocalizacao(latitude, longitude);
+      buscarClima(latitude, longitude, nome);
+    },
+    () => buscarClima(MACEIO_FALLBACK.lat, MACEIO_FALLBACK.lon, MACEIO_FALLBACK.nome),
+    { timeout: 8000 },
+  );
+}
+
+function iniciarClima() {
+  obterClimaLocal();
+  setInterval(obterClimaLocal, 15 * 60 * 1000); // a cada 15min - clima nao muda rapido
+  weatherRefresh.addEventListener('click', obterClimaLocal);
+}
+
+// ---------- Painel: Camera ----------
+// preview da webcam local, independente do microfone/gravacao de audio - so um toggle
+// liga/desliga, sem gravar nem mandar nada pra lugar nenhum.
+let cameraStream = null;
+cameraToggle.addEventListener('click', async () => {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach((t) => t.stop());
+    cameraStream = null;
+    cameraVideo.hidden = true;
+    cameraVideo.srcObject = null;
+    cameraOffMsg.hidden = false;
+    cameraHint.textContent = 'Camera is inactive. Click the power button to start.';
+    cameraToggle.classList.remove('active');
+    return;
+  }
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    cameraVideo.srcObject = cameraStream;
+    cameraVideo.hidden = false;
+    cameraOffMsg.hidden = true;
+    cameraHint.textContent = 'Camera ativa - fica so localmente, nada e enviado.';
+    cameraToggle.classList.add('active');
+  } catch (err) {
+    cameraHint.textContent = `Nao consegui acessar a camera: ${err.message}`;
+  }
 });

@@ -42,10 +42,122 @@
       <span class="online-pill"><span class="dot"></span>Online</span>
       <span class="clock" id="clock"></span>
       <span class="window-status" id="status">pronto</span>
+      <span class="weather-badge" id="weatherBadge" hidden>
+        <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M6 19a5 5 0 0 1-.6-9.97A6 6 0 0 1 17 8a4.5 4.5 0 0 1 .5 9H6z"/></svg>
+        <span id="weatherBadgeTemp">--°</span>
+      </span>
       <button type="button" class="logout-btn" id="logoutBtn" title="Sair">Sair</button>
     </div>
 
     <div class="window-body">
+      <aside class="sidebar">
+        <div class="panel" id="statsPanel">
+          <div class="panel-header">
+            <span class="panel-title"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z"/></svg>System Stats</span>
+            <button type="button" class="panel-refresh" id="statsRefresh" title="Atualizar agora">
+              <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M12 6V2L7 7l5 5V8a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg>
+            </button>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">CPU Usage</span>
+            <span class="stat-value" id="cpuValue">--%</span>
+          </div>
+          <div class="meter"><div class="meter-fill" id="cpuBar" style="width:0%"></div></div>
+
+          <div class="stat-row">
+            <span class="stat-label">RAM Usage</span>
+            <span class="stat-value" id="ramValue">-- GB</span>
+          </div>
+          <div class="meter"><div class="meter-fill" id="ramBar" style="width:0%"></div></div>
+
+          <div class="stat-grid">
+            <div class="stat-mini">
+              <span class="stat-mini-label">CPU</span>
+              <span class="stat-mini-value" id="cpuMini">--%</span>
+            </div>
+            <div class="stat-mini">
+              <span class="stat-mini-label">Memory</span>
+              <span class="stat-mini-value" id="ramMini">--%</span>
+            </div>
+            <div class="stat-mini">
+              <span class="stat-mini-label">Disk</span>
+              <span class="stat-mini-value" id="diskMini">--/--</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" id="weatherPanel">
+          <div class="panel-header">
+            <span class="panel-title"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M6 19a5 5 0 0 1-.6-9.97A6 6 0 0 1 17 8a4.5 4.5 0 0 1 .5 9H6z"/></svg>Weather</span>
+            <button type="button" class="panel-refresh" id="weatherRefresh" title="Atualizar clima">
+              <svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M12 6V2L7 7l5 5V8a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg>
+            </button>
+          </div>
+          <div class="weather-main">
+            <div>
+              <div class="weather-temp" id="weatherTemp">--°C</div>
+              <div class="weather-place" id="weatherPlace">Localizando...</div>
+              <div class="weather-cond" id="weatherCond">&nbsp;</div>
+            </div>
+            <svg viewBox="0 0 24 24" width="42" height="42" class="weather-icon"><path fill="currentColor" d="M6 19a5 5 0 0 1-.6-9.97A6 6 0 0 1 17 8a4.5 4.5 0 0 1 .5 9H6z"/></svg>
+          </div>
+          <div class="stat-grid">
+            <div class="stat-mini">
+              <span class="stat-mini-label">Humidity</span>
+              <span class="stat-mini-value" id="weatherHumidity">--%</span>
+            </div>
+            <div class="stat-mini">
+              <span class="stat-mini-label">Wind</span>
+              <span class="stat-mini-value" id="weatherWind">-- m/s</span>
+            </div>
+            <div class="stat-mini">
+              <span class="stat-mini-label">Feels Like</span>
+              <span class="stat-mini-value" id="weatherFeels">--°C</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" id="cameraPanel">
+          <div class="panel-header">
+            <span class="panel-title"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M4 7a2 2 0 0 1 2-2h2l1-2h6l1 2h2a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7zm8 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>Camera</span>
+            <button type="button" class="panel-toggle" id="cameraToggle" title="Ligar/desligar camera">
+              <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M13 3a1 1 0 1 0-2 0v8a1 1 0 1 0 2 0V3zm-6.7 2.3a1 1 0 0 0-1.4 1.4 8 8 0 1 0 10.2 0 1 1 0 1 0-1.4-1.4 6 6 0 1 1-7.4 0z"/></svg>
+            </button>
+          </div>
+          <div class="camera-view" id="cameraView">
+            <video id="cameraVideo" autoplay playsinline muted hidden></video>
+            <div class="camera-off" id="cameraOffMsg">
+              <svg viewBox="0 0 24 24" width="28" height="28"><path fill="currentColor" d="M4 7a2 2 0 0 1 2-2h2l1-2h6l1 2h2a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7zm8 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+              <span>Camera Off</span>
+            </div>
+          </div>
+          <p class="camera-hint" id="cameraHint">Camera is inactive. Click the power button to start.</p>
+        </div>
+
+        <div class="panel" id="uptimePanel">
+          <div class="panel-header">
+            <span class="panel-title"><svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 10.41V6h-2v7.41l5 3 1-1.73z"/></svg>System Uptime</span>
+            <span class="uptime-live" id="uptimeLive">00:00:00</span>
+          </div>
+          <div class="uptime-big" id="uptimeBig">00:00:00</div>
+          <div class="stat-grid">
+            <div class="stat-mini">
+              <span class="stat-mini-label">Session</span>
+              <span class="stat-mini-value" id="sessionValue">1</span>
+            </div>
+            <div class="stat-mini">
+              <span class="stat-mini-label">Commands</span>
+              <span class="stat-mini-value" id="commandsValue">0</span>
+            </div>
+          </div>
+          <div class="stat-row" style="margin-top:10px;">
+            <span class="stat-label">System Load</span>
+            <span class="stat-value" id="loadLabel">Idle</span>
+          </div>
+          <div class="meter"><div class="meter-fill" id="loadBar" style="width:0%"></div></div>
+        </div>
+      </aside>
+
       <div class="avatar-stage">
         <canvas class="bot" id="bot"></canvas>
         <video id="botSrcIdle1" class="bot-source bot-idle" muted playsinline loop autoplay preload="auto" src="lumia-idle.mp4"></video>
