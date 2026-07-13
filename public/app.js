@@ -787,7 +787,13 @@ const VOLUME_MINIMO_FALA = 12; // 0-255 (media de frequencia) - abaixo disso con
 
 async function pedirMicrofone() {
   if (micStream && micStream.active) return micStream;
-  micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  // em alguns navegadores/SOs o pedido de permissao do microfone simplesmente nunca resolve
+  // nem da erro (nao aparece prompt nenhum, ou fica pendurado) - sem esse limite, o modo
+  // conversa ficava com o botao aceso pra sempre sem nunca comecar a ouvir de verdade
+  const semResposta = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('o navegador nao respondeu ao pedido de microfone a tempo')), 10000);
+  });
+  micStream = await Promise.race([navigator.mediaDevices.getUserMedia({ audio: true }), semResposta]);
   return micStream;
 }
 
