@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chat } from './cloudAgent.js';
 import { synthesizeSpeechWithTimestamps, transcribeAudio } from './gemini.js';
+import { transcribeAudioWhisper } from './whisper.js';
 import { sendTextMessage, downloadMedia } from './whatsapp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -88,7 +89,12 @@ app.post('/api/transcribe', async (req, res) => {
 
   try {
     const buffer = Buffer.from(audioBase64, 'base64');
-    const texto = await transcribeAudio(buffer, mediaType || 'audio/webm');
+    // WHISPER_URL so existe nos ambientes com o Whisper auto-hospedado rodando ao lado (a
+    // VPS) - sem custo por uso e sem cota. Onde nao tem essa infra (ex: Render), cai pro
+    // Gemini como estava antes.
+    const texto = process.env.WHISPER_URL
+      ? await transcribeAudioWhisper(buffer, mediaType || 'audio/webm')
+      : await transcribeAudio(buffer, mediaType || 'audio/webm');
     res.json({ text: texto });
   } catch (err) {
     console.error('Erro na transcricao:', err);
