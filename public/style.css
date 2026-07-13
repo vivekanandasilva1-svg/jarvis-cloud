@@ -173,8 +173,18 @@ html, body {
   padding: 6px 12px;
   font-size: 12px;
   cursor: pointer;
+  flex: 0 0 auto;
 }
 .logout-btn:hover { background: rgba(212, 175, 55, 0.2); }
+
+/* em telas bem estreitas (celulares compactos) o relogio + status + "Sair" nao cabem numa
+   linha so e o botao de sair acaba empurrado pra fora da viewport (inclicavel) - o relogio e
+   o menos essencial dos itens, entao some com ele primeiro */
+@media (max-width: 420px) {
+  .window-titlebar { gap: 8px; padding: 10px 12px; }
+  .clock { display: none; }
+  .window-status { font-size: 10px; }
+}
 
 .window-body {
   flex: 1 1 auto;
@@ -418,6 +428,16 @@ html, body {
 }
 
 .icon-btn { display: flex; align-items: center; justify-content: center; padding: 9px; }
+
+/* na barra de composer ha 6 controles (anexar, microfone, modo conversa, campo de texto,
+   enviar, mudo) - em celulares compactos os 5 botoes fixos sozinhos ja tomam quase toda a
+   largura e o campo de texto encolhe pra poucos pixels, inutilizavel */
+@media (max-width: 420px) {
+  .composer { gap: 4px; padding: 12px 10px; }
+  .icon-btn, .send-btn { padding: 7px 8px; }
+  .icon-btn svg { width: 17px; height: 17px; }
+  .send-btn { font-size: 13px; }
+}
 
 .icon-btn:hover, .send-btn:hover {
   border-color: var(--gold);

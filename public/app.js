@@ -766,8 +766,12 @@ async function transcreverAudio(blob, mimeType) {
 
 // so usado no modo conversa: monitora o volume do microfone pra saber sozinho quando a
 // pessoa parou de falar (no modo de toque unico, quem decide e o proprio usuario clicando de novo)
-function monitorarSilencio(stream, aoParar) {
+async function monitorarSilencio(stream, aoParar) {
   const ctx = ensureAudioContext();
+  // sem isso, se o contexto ainda estiver suspenso (comum ate um gesto "de audio" liberar),
+  // o analisador so le silencio pra sempre - a gravacao fica esperando sem nunca detectar
+  // fala e nunca envia nada, o que parecia "o modo conversa nao funciona"
+  if (ctx.state === 'suspended') await ctx.resume();
   vadCtx = ctx;
   const source = ctx.createMediaStreamSource(stream);
   const analyser = ctx.createAnalyser();
