@@ -17,17 +17,33 @@ const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // em uso normal - isso e transitorio e quase sempre passa numa segunda tentativa. Sem retry,
 // qualquer pico momentaneo derrubava a transcricao/voz inteira (o usuario via "nao consegui
 // transcrever o audio" ou ficava sem ouvir a Lumia) mesmo quando o problema durava so 1-2s.
+// 429 NAO entra no retry: quando e cota diaria estourada (o caso mais comum no tier gratis),
+// as 3 tentativas vao falhar do mesmo jeito e so gastam tempo/mais chamadas a toa - so vale
+// retry pra estouro momentaneo de taxa, que o proprio 503 ja cobre na pratica.
 async function comRetry(chamarFetch, tentativas = 3) {
   let ultimoErro;
   for (let i = 0; i < tentativas; i++) {
     const res = await chamarFetch();
-    if (res.ok) return res;
-    const transitorio = res.status === 503 || res.status === 429;
-    if (!transitorio || i === tentativas - 1) return res;
+    if (res.ok || res.status !== 503 || i === tentativas - 1) return res;
     ultimoErro = res;
     await esperar(500 * (i + 1)); // 500ms, depois 1000ms
   }
   return ultimoErro;
+}
+
+// transforma o erro cru da API do Gemini numa mensagem que diz a causa de verdade - "cota
+// esgotada" (429, precisa esperar o reset diario ou ativar faturamento) e bem diferente de
+// "sobrecarregado" (503, tenta de novo em instantes), e o usuario precisa saber qual e qual
+// pra nao ficar achando que e um bug quando na verdade e limite de uso da API gratuita.
+async function erroGemini(res, contexto) {
+  const errText = await res.text().catch(() => '');
+  if (res.status === 429) {
+    return new Error(`${contexto}: cota da API do Gemini esgotada (429) - espera o reset diario ou ativa faturamento em aistudio.google.com`);
+  }
+  if (res.status === 503) {
+    return new Error(`${contexto}: Gemini sobrecarregado no momento (503) - tenta de novo em alguns segundos`);
+  }
+  return new Error(`${contexto} ${res.status}: ${errText.slice(0, 300)}`);
 }
 
 // monta um cabecalho WAV na frente do audio PCM cru que o Gemini devolve - o <audio> do
@@ -69,10 +85,7 @@ export async function synthesizeSpeechWithTimestamps(text) {
     }),
   }));
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`Gemini TTS erro ${res.status}: ${errText.slice(0, 300)}`);
-  }
+  if (!res.ok) throw await erroGemini(res, 'Gemini TTS erro');
 
   const data = await res.json();
   const part = data.candidates?.[0]?.content?.parts?.[0];
@@ -119,10 +132,7 @@ export async function transcribeAudio(buffer, mimeType = 'audio/webm') {
     }),
   }));
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`Gemini erro ${res.status}: ${errText.slice(0, 300)}`);
-  }
+  if (!res.ok) throw await erroGemini(res, 'Gemini erro');
 
   const data = await res.json();
   const texto = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';

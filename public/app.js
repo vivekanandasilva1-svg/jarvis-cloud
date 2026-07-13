@@ -655,9 +655,18 @@ async function falar(texto, bubbleEl) {
       await falarComVozNatural(texto, bubbleEl);
     } catch (err) {
       // cai pra voz robotica do navegador so como ultimo recurso - loga o motivo real (erro
-      // de rede, autoplay bloqueado etc) pra dar pra diagnosticar
+      // de rede, cota da API esgotada etc) pra dar pra diagnosticar
       console.warn('Voz do Gemini falhou, usando voz do navegador como fallback:', err);
-      await falarNavegador(texto, bubbleEl);
+      // sem isso a Lumia "ficava muda" sem nenhuma explicacao visivel - o usuario nao tinha
+      // como saber se era um bug ou so a cota da API do Gemini estourada (algo que so da pra
+      // resolver esperando o reset diario ou ativando faturamento, nao e algo que eu conserto)
+      addBubble(`Voz indisponivel no momento (${err.message}). A resposta acima ficou so em texto.`, 'system');
+      try {
+        await falarNavegador(texto, bubbleEl);
+      } catch (err2) {
+        console.warn('Fallback de voz do navegador tambem falhou:', err2);
+        if (bubbleEl) bubbleEl.textContent = texto;
+      }
     }
   } else if (bubbleEl) {
     bubbleEl.textContent = texto;
