@@ -414,21 +414,23 @@ new ResizeObserver(ajustarTamanhoCanvas).observe(bot);
 ajustarTamanhoCanvas();
 
 // desenha o video "cobrindo" o canvas inteiro (igual object-fit: cover), cortando o excesso
-function desenharComCover(ctx, video, destW, destH) {
+// "contain": encaixa o corpo inteiro dentro do quadro (nunca corta cabeca nem pe), ancorado
+// embaixo - sobra espaco vazio nas laterais quando o quadro e mais largo que o corpo, mas
+// isso e preferivel a cortar qualquer parte da Lumia (era o que "cover" fazia antes)
+function desenharContido(ctx, video, destW, destH) {
   const vw = video.videoWidth, vh = video.videoHeight;
   if (!vw || !vh) return false;
-  const escala = Math.max(destW / vw, destH / vh);
-  const sw = destW / escala, sh = destH / escala;
-  const sx = (vw - sw) / 2;
-  // quando o box e baixo/largo (celular deitado com pouca altura), cortar bem no meio corta
-  // o rosto - inclina o corte pra cima (mantem mais cabeca, corta mais do corpo debaixo)
-  const sy = (vh - sh) * 0.18;
-  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, destW, destH);
+  const escala = Math.min(destW / vw, destH / vh);
+  const sw = vw * escala, sh = vh * escala;
+  const dx = (destW - sw) / 2;
+  const dy = destH - sh; // ancora embaixo - fica "de pe" no chao do quadro, nao flutuando
+  ctx.clearRect(0, 0, destW, destH);
+  ctx.drawImage(video, 0, 0, vw, vh, dx, dy, sw, sh);
   return true;
 }
 
 function obterQuadroTratado(ctx, video, w, h) {
-  if (!desenharComCover(ctx, video, w, h)) return null;
+  if (!desenharContido(ctx, video, w, h)) return null;
   const frame = ctx.getImageData(0, 0, w, h);
   removerFundo(frame);
   return frame;
