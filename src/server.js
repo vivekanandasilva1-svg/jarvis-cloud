@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chat } from './cloudAgent.js';
+import { chat, continuarAcaoLocal } from './cloudAgent.js';
 import { synthesizeSpeechWithTimestamps, transcribeAudio } from './gemini.js';
 import { transcribeAudioWhisper } from './whisper.js';
 import { sendTextMessage, downloadMedia } from './whatsapp.js';
@@ -130,10 +130,29 @@ app.post('/api/chat', async (req, res) => {
   try {
     sessoesVistas.add(sessionId);
     comandosProcessados++;
-    const reply = await chat(sessionId, message, attachments);
-    res.json({ reply });
+    // chat() devolve { reply } no caso normal, ou { reply: null, localAction } quando a
+    // proxima coisa a fazer e uma acao no computador do usuario - o navegador que decide
+    // rodar (via o agente local) e reporta o resultado em /api/local-action-result
+    const resultado = await chat(sessionId, message, attachments);
+    res.json(resultado);
   } catch (err) {
     console.error('Erro no chat:', err);
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// o navegador chama isso depois de executar uma acao no computador do usuario (via agente
+// local) - devolve o resultado real pra Claude continuar a conversa de onde parou
+app.post('/api/local-action-result', async (req, res) => {
+  const { sessionId, resultado } = req.body || {};
+  if (!sessionId || resultado === undefined) {
+    return res.status(400).json({ erro: 'sessionId e resultado sao obrigatorios' });
+  }
+  try {
+    const saida = await continuarAcaoLocal(sessionId, resultado);
+    res.json(saida);
+  } catch (err) {
+    console.error('Erro ao continuar acao local:', err);
     res.status(500).json({ erro: err.message });
   }
 });
@@ -242,8 +261,14 @@ async function processarMensagemWhatsapp(msg) {
   if (!texto && attachments.length === 0) return;
 
   try {
-    const resposta = await chat(sessionId, texto, attachments);
-    await sendTextMessage(from, resposta);
+    const resultado = await chat(sessionId, texto, attachments);
+    // controle do computador so funciona pelo navegador no proprio PC (precisa do agente
+    // local) - por WhatsApp nao ha como executar isso, entao avisa em vez de travar
+    if (resultado.localAction) {
+      await sendTextMessage(from, 'Isso af envolve mexer no seu computador, e isso so funciona pelo app no proprio PC (nao da pra fazer por aqui pelo WhatsApp).');
+      return;
+    }
+    await sendTextMessage(from, resultado.reply);
   } catch (err) {
     console.error('Erro no chat via WhatsApp:', err);
     await sendTextMessage(from, `Deu erro por aqui: ${err.message}`).catch(() => {});

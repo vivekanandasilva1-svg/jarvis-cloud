@@ -58,7 +58,28 @@
         <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M6 19a5 5 0 0 1-.6-9.97A6 6 0 0 1 17 8a4.5 4.5 0 0 1 .5 9H6z"/></svg>
         <span id="weatherBadgeTemp">--°</span>
       </span>
+      <button type="button" class="agent-btn" id="agentBtn" title="Conectar agente local (controle do PC)">
+        <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M4 4h16v11H4V4zm0 13h16v2H4v-2zm6 2h4v1h-4v-1z"/></svg>
+        <span class="agent-dot" id="agentDot"></span>
+      </button>
       <button type="button" class="logout-btn" id="logoutBtn" title="Sair">Sair</button>
+    </div>
+
+    <div class="agent-panel" id="agentPanel" hidden>
+      <div class="agent-panel-header">
+        <span>Agente local (controle do computador)</span>
+        <button type="button" id="agentPanelClose">✕</button>
+      </div>
+      <p>
+        Pra Lumia abrir/editar arquivos e programas no seu computador, roda
+        <code>npm run local-agent</code> nesta maquina e cola aqui o token que aparecer no
+        terminal. So funciona enquanto essa aba estiver aberta neste PC - nunca pela internet.
+      </p>
+      <div class="agent-panel-row">
+        <input type="text" id="agentTokenInput" placeholder="Cole o token do agente local" autocomplete="off" />
+        <button type="button" id="agentSaveBtn">Salvar</button>
+      </div>
+      <p class="agent-status" id="agentStatus">Nao conectado.</p>
     </div>
 
     <div class="window-body">

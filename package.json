@@ -6,7 +6,8 @@
   "description": "Jarvis - assistente de anuncios (Meta Ads) e conversa, hospedado na nuvem com interface web de chat e voz",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "local-agent": "node local-agent/server.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",

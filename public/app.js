@@ -12,6 +12,13 @@ const micBtn = document.getElementById('micBtn');
 const convBtn = document.getElementById('convBtn');
 const muteBtn = document.getElementById('muteBtn');
 const logoutBtn = document.getElementById('logoutBtn');
+const agentBtn = document.getElementById('agentBtn');
+const agentDot = document.getElementById('agentDot');
+const agentPanel = document.getElementById('agentPanel');
+const agentPanelClose = document.getElementById('agentPanelClose');
+const agentTokenInput = document.getElementById('agentTokenInput');
+const agentSaveBtn = document.getElementById('agentSaveBtn');
+const agentStatus = document.getElementById('agentStatus');
 const clearBtn = document.getElementById('clearBtn');
 const extractBtn = document.getElementById('extractBtn');
 const attachBtn = document.getElementById('attachBtn');
@@ -136,6 +143,7 @@ function mostrarApp() {
   ajustarTamanhoCanvas();
   iniciarPainelSistema();
   iniciarClima();
+  testarConexaoAgenteLocal();
 }
 
 function sair() {
@@ -749,6 +757,89 @@ async function falar(texto, bubbleEl) {
   if (modoConversa) setTimeout(ouvirSegmento, 350);
 }
 
+// ---------- Agente local (controle do computador) ----------
+// o agente roda SO na maquina do usuario, escutando so em 127.0.0.1 - o navegador (aqui)
+// e quem fala com ele, nunca o servidor na nuvem. Por isso so funciona enquanto essa aba
+// esta aberta no PC de verdade, mesmo que a senha do site vaze pra alguem de fora.
+const LOCAL_AGENT_URL = 'http://127.0.0.1:5391';
+
+function obterTokenAgenteLocal() {
+  return localStorage.getItem('lumia_agent_token') || '';
+}
+
+const PC_ENDPOINTS = {
+  pc_abrir_app: { path: '/abrir-app', montar: (i) => ({ nome: i.nome }) },
+  pc_fechar_app: { path: '/fechar-app', montar: (i) => ({ nome: i.nome }) },
+  pc_abrir_arquivo: { path: '/abrir-arquivo', montar: (i) => ({ caminho: i.caminho }) },
+  pc_ler_arquivo: { path: '/ler-arquivo', montar: (i) => ({ caminho: i.caminho }) },
+  pc_listar_pasta: { path: '/listar-pasta', montar: (i) => ({ caminho: i.caminho }) },
+  pc_criar_arquivo: { path: '/criar-arquivo', montar: (i) => ({ caminho: i.caminho, conteudo: i.conteudo }) },
+  pc_editar_arquivo: { path: '/editar-arquivo', montar: (i) => ({ caminho: i.caminho, conteudo: i.conteudo }) },
+  pc_apagar_arquivo: { path: '/apagar-arquivo', montar: (i) => ({ caminho: i.caminho }) },
+};
+
+async function executarAcaoLocal(tool, input) {
+  const token = obterTokenAgenteLocal();
+  if (!token) {
+    return { erro: 'O agente local nao esta configurado neste navegador. Abre o icone de computador no topo, roda "npm run local-agent" no seu PC e cola o token que aparecer.' };
+  }
+  const endpoint = PC_ENDPOINTS[tool];
+  if (!endpoint) return { erro: `Acao desconhecida: ${tool}` };
+
+  const controlador = new AbortController();
+  const timer = setTimeout(() => controlador.abort(), 15000);
+  try {
+    const res = await fetch(LOCAL_AGENT_URL + endpoint.path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-agent-token': token },
+      body: JSON.stringify(endpoint.montar(input)),
+      signal: controlador.signal,
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) return { erro: (data && data.erro) || `agente local respondeu ${res.status}` };
+    return data;
+  } catch (err) {
+    return { erro: `Nao consegui falar com o agente local no seu computador (${err.message}). Confirma que ele esta ligado (npm run local-agent) e que voce esta usando o app neste mesmo PC.` };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function testarConexaoAgenteLocal() {
+  const token = obterTokenAgenteLocal();
+  if (!token) { agentDot.classList.remove('conectado'); agentStatus.classList.remove('conectado'); agentStatus.textContent = 'Nao conectado.'; return; }
+  try {
+    const controlador = new AbortController();
+    const timer = setTimeout(() => controlador.abort(), 4000);
+    const res = await fetch(`${LOCAL_AGENT_URL}/ping`, { headers: { 'x-agent-token': token }, signal: controlador.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      agentDot.classList.add('conectado');
+      agentStatus.classList.add('conectado');
+      agentStatus.textContent = 'Conectado - a Lumia ja pode controlar este computador.';
+    } else {
+      throw new Error('token invalido');
+    }
+  } catch {
+    agentDot.classList.remove('conectado');
+    agentStatus.classList.remove('conectado');
+    agentStatus.textContent = 'Nao conectado - confirma que o agente esta rodando (npm run local-agent) e que o token esta certo.';
+  }
+}
+
+agentBtn.addEventListener('click', () => {
+  agentPanel.hidden = !agentPanel.hidden;
+  if (!agentPanel.hidden) {
+    agentTokenInput.value = obterTokenAgenteLocal();
+    testarConexaoAgenteLocal();
+  }
+});
+agentPanelClose.addEventListener('click', () => { agentPanel.hidden = true; });
+agentSaveBtn.addEventListener('click', () => {
+  localStorage.setItem('lumia_agent_token', agentTokenInput.value.trim());
+  testarConexaoAgenteLocal();
+});
+
 async function enviarMensagem(texto) {
   const textoLimpo = (texto || '').trim();
   const anexos = anexosPendentes;
@@ -786,8 +877,29 @@ async function enviarMensagem(texto) {
     if (!res.ok) throw new Error(data.erro || 'Erro desconhecido');
 
     registrarComando();
+    let resultado = data;
+    // enquanto o servidor pedir uma acao no computador, executa aqui (via agente local) e
+    // manda o resultado de volta - pode encadear mais de uma (ex: ler um arquivo, editar ele)
+    while (resultado.localAction) {
+      const resultadoLocal = await executarAcaoLocal(resultado.localAction.tool, resultado.localAction.input);
+      const res2 = await fetch('/api/local-action-result', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ sessionId, resultado: resultadoLocal }),
+      });
+      const raw2 = await res2.text();
+      let data2;
+      try {
+        data2 = JSON.parse(raw2);
+      } catch {
+        throw new Error(`Servidor respondeu algo inesperado (status ${res2.status}). Tenta de novo em alguns segundos.`);
+      }
+      if (!res2.ok) throw new Error(data2.erro || 'Erro desconhecido');
+      resultado = data2;
+    }
+
     const bubble = addBubble('', 'assistant');
-    await falar(data.reply, bubble);
+    await falar(resultado.reply, bubble);
   } catch (err) {
     addBubble(`Erro: ${err.message}`, 'system');
     setStatus('erro', null);

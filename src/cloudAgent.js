@@ -75,7 +75,20 @@ Imagens chegam para voce de verdade (analise visual direta). Audio chega como um
 de fala para texto (voce nao ouve tom de voz, so o conteudo falado). Video chega como alguns
 quadros/imagens extraidos dele (voce ve cenas do video, mas nao ouve o audio do video nem ve
 ele por completo). Se a analise depender de algo que essas limitacoes deixam de fora, avise o
-usuario em vez de supor.`;
+usuario em vez de supor.
+
+Voce tambem pode controlar o computador do usuario: abrir/fechar programas, abrir/ler/criar/
+editar/apagar arquivos (ferramentas pc_*). Isso SO funciona quando o usuario esta com o app
+aberto no proprio computador rodando o agente local - se o agente nao estiver conectado, a
+ferramenta volta com um erro explicando isso, informe o usuario com clareza nesse caso (nao
+insista tentando de novo). Por seguranca, so consegue mexer em arquivos dentro da pasta pessoal
+do usuario (Documentos, Desktop, Downloads etc) - nunca em pastas de sistema, e isso e reforcado
+no proprio agente local, entao nem tente contornar. Fechar programa, sobrescrever arquivo
+existente e apagar arquivo/pasta pedem confirmacao do usuario antes de executar (o sistema
+cuida disso sozinho quando voce chama a ferramenta - so chame quando o pedido ja estiver claro
+o suficiente pra perguntar a confirmacao). NAO existe ferramenta para instalar ou baixar
+softwares novos - se pedirem isso, explique que voce so consegue abrir/fechar programas ja
+instalados e mexer em arquivos, nao instalar nada novo (por seguranca).`;
 
 function systemPromptComHoje() {
   const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -365,6 +378,88 @@ const tools = [
       required: ['treatmentId'],
     },
   },
+  // ---------- Controle do computador do usuario ----------
+  // essas ferramentas NAO executam no servidor - so funcionam quando o usuario esta com a
+  // aba da Lumia aberta no PRORIO computador, rodando o agente local (nao exposto pra
+  // internet). O navegador do usuario e quem de fato chama o agente local; o servidor so
+  // decide qual acao pedir e se ela precisa de confirmacao antes.
+  {
+    name: 'pc_abrir_app',
+    description: 'Abre um programa/aplicativo no computador do usuario (ex: "notepad", "calc", "chrome", ou o caminho completo de um .exe).',
+    input_schema: {
+      type: 'object',
+      properties: { nome: { type: 'string', description: 'Nome ou caminho do programa a abrir' } },
+      required: ['nome'],
+    },
+  },
+  {
+    name: 'pc_fechar_app',
+    description: 'Fecha um programa que esta rodando no computador do usuario (perde trabalho nao salvo - fica pendente de confirmacao).',
+    input_schema: {
+      type: 'object',
+      properties: { nome: { type: 'string', description: 'Nome do processo/programa a fechar (ex: "notepad", "chrome")' } },
+      required: ['nome'],
+    },
+  },
+  {
+    name: 'pc_abrir_arquivo',
+    description: 'Abre um arquivo no computador do usuario com o programa padrao dele (so dentro da pasta pessoal do usuario).',
+    input_schema: {
+      type: 'object',
+      properties: { caminho: { type: 'string', description: 'Caminho do arquivo, relativo a pasta do usuario (ex: "Desktop\\relatorio.pdf")' } },
+      required: ['caminho'],
+    },
+  },
+  {
+    name: 'pc_ler_arquivo',
+    description: 'Le o conteudo de texto de um arquivo no computador do usuario (so dentro da pasta pessoal).',
+    input_schema: {
+      type: 'object',
+      properties: { caminho: { type: 'string', description: 'Caminho do arquivo, relativo a pasta do usuario' } },
+      required: ['caminho'],
+    },
+  },
+  {
+    name: 'pc_listar_pasta',
+    description: 'Lista os arquivos e subpastas de uma pasta no computador do usuario (so dentro da pasta pessoal).',
+    input_schema: {
+      type: 'object',
+      properties: { caminho: { type: 'string', description: 'Caminho da pasta, relativo a pasta do usuario (vazio = raiz da pasta do usuario)' } },
+    },
+  },
+  {
+    name: 'pc_criar_arquivo',
+    description: 'Cria um arquivo NOVO (nunca sobrescreve um que ja existe) no computador do usuario, com o conteudo de texto dado.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        caminho: { type: 'string', description: 'Caminho do novo arquivo, relativo a pasta do usuario' },
+        conteudo: { type: 'string', description: 'Conteudo de texto do arquivo' },
+      },
+      required: ['caminho', 'conteudo'],
+    },
+  },
+  {
+    name: 'pc_editar_arquivo',
+    description: 'Sobrescreve o conteudo de um arquivo JA EXISTENTE no computador do usuario. Fica pendente de confirmacao, pois apaga o conteudo anterior.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        caminho: { type: 'string', description: 'Caminho do arquivo existente, relativo a pasta do usuario' },
+        conteudo: { type: 'string', description: 'Novo conteudo de texto completo do arquivo' },
+      },
+      required: ['caminho', 'conteudo'],
+    },
+  },
+  {
+    name: 'pc_apagar_arquivo',
+    description: 'Apaga um arquivo ou pasta no computador do usuario. Fica pendente de confirmacao - acao irreversivel.',
+    input_schema: {
+      type: 'object',
+      properties: { caminho: { type: 'string', description: 'Caminho do arquivo/pasta a apagar, relativo a pasta do usuario' } },
+      required: ['caminho'],
+    },
+  },
 ];
 
 const CONFIRM_TOOLS = new Set(['ads_criar_campanha', 'ads_alterar_status_campanha', 'ads_alterar_orcamento_adset']);
@@ -392,6 +487,31 @@ async function executeConfirmedAction(name, input) {
       return metaAds.updateAdSetBudget({ adSetId: input.adSetId, dailyBudgetCents: Math.round(input.dailyBudgetReais * 100) });
     default:
       throw new Error(`Acao desconhecida: ${name}`);
+  }
+}
+
+// ---------- Controle do computador do usuario ----------
+// nunca executam no servidor - o navegador do usuario que chama o agente local (127.0.0.1,
+// so acessivel na propria maquina). O servidor so decide qual acao pedir e se precisa de
+// confirmacao antes (mesma logica de "pendente" ja usada pros gastos de anuncio).
+const PC_TOOLS = new Set([
+  'pc_abrir_app', 'pc_fechar_app', 'pc_abrir_arquivo', 'pc_ler_arquivo',
+  'pc_listar_pasta', 'pc_criar_arquivo', 'pc_editar_arquivo', 'pc_apagar_arquivo',
+]);
+// so pedem confirmacao as que perdem trabalho nao salvo ou sao dificeis/impossiveis de
+// desfazer - abrir, ler, listar e criar (nunca sobrescreve) rodam direto
+const PC_CONFIRM_TOOLS = new Set(['pc_fechar_app', 'pc_editar_arquivo', 'pc_apagar_arquivo']);
+
+function describePcAction(name, input) {
+  switch (name) {
+    case 'pc_fechar_app':
+      return `fechar o programa "${input.nome}" (qualquer trabalho nao salvo nele sera perdido)`;
+    case 'pc_editar_arquivo':
+      return `sobrescrever o conteudo do arquivo "${input.caminho}"`;
+    case 'pc_apagar_arquivo':
+      return `apagar "${input.caminho}" - nao da pra desfazer`;
+    default:
+      return JSON.stringify(input);
   }
 }
 
@@ -565,6 +685,20 @@ async function runTool(name, input, session) {
     };
   }
 
+  // ferramentas de PC que precisam de confirmacao (fechar app, sobrescrever, apagar) resolvem
+  // o tool_use JA (com um status "aguardando confirmacao"), exatamente como as de anuncio
+  // acima - a API da Anthropic exige um tool_result logo em seguida a todo tool_use, entao
+  // nao da pra deixar isso pendurado esperando o usuario responder "sim"/"nao" depois. Quando
+  // o usuario confirmar, a execucao de verdade (no computador) acontece como um pedido novo,
+  // sem tentar reaproveitar esse tool_use ja fechado.
+  if (PC_CONFIRM_TOOLS.has(name)) {
+    session.pendingLocalAction = { tool: name, input, toolUseId: null };
+    return {
+      status: 'aguardando_confirmacao',
+      mensagem: `Preciso da sua confirmacao para ${describePcAction(name, input)}. Responda "sim" ou "nao".`,
+    };
+  }
+
   const handler = toolHandlers[name];
   if (!handler) return { erro: `Ferramenta desconhecida: ${name}` };
   try {
@@ -640,15 +774,87 @@ async function callClaude(history) {
 const sessions = new Map();
 
 function getSession(sessionId) {
-  if (!sessions.has(sessionId)) sessions.set(sessionId, { history: [], pendingAction: null });
+  if (!sessions.has(sessionId)) sessions.set(sessionId, { history: [], pendingAction: null, pendingLocalAction: null });
   return sessions.get(sessionId);
 }
 
 const MAX_TOOL_ROUNDS = 10;
 const MAX_HISTORY = 40;
 
+function aparaHistorico(session) {
+  if (session.history.length > MAX_HISTORY) {
+    session.history.splice(0, session.history.length - MAX_HISTORY);
+  }
+  apagarImagensAntigas(session.history);
+}
+
+// roda (ou retoma) o loop de ferramentas ate a Claude parar de pedir ferramenta. Pausa e
+// devolve cedo em dois casos: uma ferramenta real (ads_* ou pc_* que precisa de confirmacao)
+// ja resolve o tool_use na hora (com um status "aguardando confirmacao", igual sempre foi
+// pro fluxo de anuncio) e devolve o texto perguntando "sim ou nao"; uma ferramenta pc_* que
+// NAO precisa de confirmacao pausa sem resolver o tool_use - so devolve pro chamador o que
+// precisa rodar no navegador do usuario, que reporta o resultado depois via continuarAcaoLocal.
+async function rodarLoopDeFerramentas(session) {
+  let response = await callClaude(session.history);
+  let rounds = 0;
+
+  while (response.stop_reason === 'tool_use' && rounds < MAX_TOOL_ROUNDS) {
+    session.history.push({ role: 'assistant', content: response.content });
+    const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use');
+
+    // so as ferramentas pc_* que NAO exigem confirmacao pausam sem resolver o tool_use - as
+    // que exigem confirmacao passam pelo runTool() normal, que ja resolve na hora
+    const blocoPc = toolUseBlocks.find((b) => PC_TOOLS.has(b.name) && !PC_CONFIRM_TOOLS.has(b.name));
+    if (blocoPc) {
+      session.pendingLocalAction = { toolUseId: blocoPc.id, tool: blocoPc.name, input: blocoPc.input };
+      return { localAction: { tool: blocoPc.name, input: blocoPc.input } };
+    }
+
+    const toolResults = [];
+    for (const block of toolUseBlocks) {
+      const result = await runTool(block.name, block.input, session);
+      toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
+    }
+    session.history.push({ role: 'user', content: toolResults });
+
+    response = await callClaude(session.history);
+    rounds += 1;
+
+    if (session.pendingAction || session.pendingLocalAction) break;
+  }
+
+  const replyText = extractText(response) || 'Consegui os dados mas nao terminei de formular a resposta - pode perguntar de novo, talvez de forma mais especifica (ex: um periodo menor)?';
+  session.history.push({ role: 'assistant', content: replyText });
+  aparaHistorico(session);
+  return { texto: replyText };
+}
+
 export async function chat(sessionId, userMessage, attachments = []) {
   const session = getSession(sessionId);
+
+  // pendingLocalAction com toolUseId=null so acontece depois que uma ferramenta pc_* que
+  // precisa de confirmacao ja foi resolvida (status aguardando_confirmacao) - agora so falta
+  // saber se o usuario confirma ou nao, exatamente como o fluxo de anuncio abaixo
+  if (session.pendingLocalAction && session.pendingLocalAction.toolUseId === null) {
+    const { tool, input } = session.pendingLocalAction;
+    const positivo = /^\s*s(im)?\b/i.test(userMessage);
+    const negativo = /^\s*n(ã|a)?o?\b/i.test(userMessage);
+
+    if (positivo) {
+      session.history.push({ role: 'user', content: userMessage });
+      return { reply: null, localAction: { tool, input } };
+    }
+
+    if (negativo) {
+      session.pendingLocalAction = null;
+      const msg = 'Ok, cancelado.';
+      session.history.push({ role: 'user', content: userMessage });
+      session.history.push({ role: 'assistant', content: msg });
+      return { reply: msg };
+    }
+
+    session.pendingLocalAction = null; // nem sim nem nao - desiste da pendencia e segue como mensagem normal
+  }
 
   if (session.pendingAction) {
     const { name, input } = session.pendingAction;
@@ -671,7 +877,7 @@ export async function chat(sessionId, userMessage, attachments = []) {
       const response = await callClaude(session.history);
       const replyText = extractText(response);
       session.history.push({ role: 'assistant', content: replyText });
-      return replyText;
+      return { reply: replyText };
     }
 
     if (negativo) {
@@ -679,7 +885,7 @@ export async function chat(sessionId, userMessage, attachments = []) {
       const msg = 'Ok, cancelado.';
       session.history.push({ role: 'user', content: userMessage });
       session.history.push({ role: 'assistant', content: msg });
-      return msg;
+      return { reply: msg };
     }
 
     session.pendingAction = null;
@@ -690,44 +896,48 @@ export async function chat(sessionId, userMessage, attachments = []) {
   // e toda mensagem seguinte volta a falhar do mesmo jeito, pra sempre.
   const tamanhoAntes = session.history.length;
   try {
-    return await processarTurno(session, userMessage, attachments);
+    const content = await buildUserContent(userMessage, attachments);
+    session.history.push({ role: 'user', content });
+    const resultado = await rodarLoopDeFerramentas(session);
+    return resultado.localAction ? { reply: null, localAction: resultado.localAction } : { reply: resultado.texto };
   } catch (err) {
     session.history.splice(tamanhoAntes);
     throw err;
   }
 }
 
-async function processarTurno(session, userMessage, attachments) {
-  const content = await buildUserContent(userMessage, attachments);
-  session.history.push({ role: 'user', content });
-  let response = await callClaude(session.history);
+// chamado quando o navegador ja rodou a acao no computador do usuario e esta devolvendo o
+// resultado - continua a mesma conversa exatamente de onde a Claude parou de esperar
+export async function continuarAcaoLocal(sessionId, resultado) {
+  const session = getSession(sessionId);
+  if (!session.pendingLocalAction) throw new Error('Nao ha nenhuma acao local pendente nessa sessao.');
 
-  let rounds = 0;
-  while (response.stop_reason === 'tool_use' && rounds < MAX_TOOL_ROUNDS) {
-    session.history.push({ role: 'assistant', content: response.content });
+  const { toolUseId } = session.pendingLocalAction;
+  session.pendingLocalAction = null;
 
-    const toolUseBlocks = response.content.filter((b) => b.type === 'tool_use');
-    const toolResults = [];
-    for (const block of toolUseBlocks) {
-      const result = await runTool(block.name, block.input, session);
-      toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
-    }
-    session.history.push({ role: 'user', content: toolResults });
-
-    response = await callClaude(session.history);
-    rounds += 1;
-
-    if (session.pendingAction) break;
+  if (toolUseId) {
+    // veio de uma ferramenta que nao precisou de confirmacao - o tool_use ainda esta aberto,
+    // fecha ele com o resultado de verdade
+    session.history.push({
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: toolUseId, content: JSON.stringify(resultado) }],
+    });
+  } else {
+    // veio do fluxo de confirmacao - o tool_use original ja tinha sido resolvido antes (como
+    // "aguardando_confirmacao"), entao so reporta o resultado real como texto de sistema,
+    // igual o fluxo de anuncio confirmado faz
+    session.history.push({
+      role: 'user',
+      content: `[Sistema] A acao no computador do usuario foi executada. Resultado: ${JSON.stringify(resultado)}. Informe o usuario do resultado de forma natural.`,
+    });
   }
 
-  const replyText = extractText(response) || 'Consegui os dados mas nao terminei de formular a resposta - pode perguntar de novo, talvez de forma mais especifica (ex: um periodo menor)?';
-  session.history.push({ role: 'assistant', content: replyText });
-
-  if (session.history.length > MAX_HISTORY) {
-    session.history.splice(0, session.history.length - MAX_HISTORY);
+  const tamanhoAntes = session.history.length;
+  try {
+    const r = await rodarLoopDeFerramentas(session);
+    return r.localAction ? { reply: null, localAction: r.localAction } : { reply: r.texto };
+  } catch (err) {
+    session.history.splice(tamanhoAntes);
+    throw err;
   }
-
-  apagarImagensAntigas(session.history);
-
-  return replyText;
 }
