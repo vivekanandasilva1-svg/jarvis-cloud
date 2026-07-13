@@ -26,6 +26,9 @@ app.use(express.json({
 }));
 
 const APP_PASSWORD = process.env.APP_PASSWORD;
+// so um usuario "de verdade" (nao e um sistema de contas) - existe pra a tela de login pedir
+// usuario+senha em vez de so senha, sem precisar montar autenticacao multiusuario de verdade
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'Admin';
 
 // protege tudo (estaticos + api) com uma senha simples via header - o link fica publico na
 // internet e essa versao consegue mexer em orcamento real de anuncio, entao nao pode ficar
@@ -46,9 +49,9 @@ app.use((req, res, next) => {
 });
 
 app.post('/api/login', (req, res) => {
-  const { password } = req.body || {};
+  const { username, password } = req.body || {};
   if (!APP_PASSWORD) return res.json({ ok: true });
-  res.json({ ok: password === APP_PASSWORD });
+  res.json({ ok: username === ADMIN_USERNAME && password === APP_PASSWORD });
 });
 
 app.use(express.static(PUBLIC_DIR));

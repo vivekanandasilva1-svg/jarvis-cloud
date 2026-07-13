@@ -12,23 +12,58 @@
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
+    <div class="login-circuits" aria-hidden="true">
+      <svg viewBox="0 0 800 600" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <g class="circuit-lines" fill="none" stroke="currentColor" stroke-width="1.2">
+          <path d="M0 80 H180 L210 110 H420 L450 140 H800" />
+          <path d="M0 220 H120 L150 250 H340 V320 H620 L650 350 H800" />
+          <path d="M0 400 H260 L290 430 H500 L530 460 H800" />
+          <path d="M0 520 H160 V480 H380 L410 510 H800" />
+          <path d="M100 0 V60 L130 90 V260" />
+          <path d="M700 0 V100 L670 130 V300" />
+          <path d="M400 600 V480 L430 450 V300" />
+        </g>
+        <g class="circuit-nodes" fill="currentColor">
+          <circle cx="180" cy="80" r="4" /><circle cx="420" cy="110" r="4" />
+          <circle cx="150" cy="250" r="4" /><circle cx="620" cy="320" r="4" />
+          <circle cx="290" cy="400" r="4" /><circle cx="500" cy="430" r="4" />
+          <circle cx="160" cy="520" r="4" /><circle cx="410" cy="480" r="4" />
+          <circle cx="130" cy="150" r="4" /><circle cx="670" cy="200" r="4" />
+        </g>
+      </svg>
+    </div>
+
     <div class="login-card">
-      <svg class="login-logo" viewBox="0 0 220 240" xmlns="http://www.w3.org/2000/svg">
+      <svg class="login-logo" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <radialGradient id="loginFaceGrad" cx="40%" cy="30%" r="75%">
-            <stop offset="0%" stop-color="#fff8e6"/>
-            <stop offset="45%" stop-color="#d4af37"/>
-            <stop offset="100%" stop-color="#5a4a1e"/>
-          </radialGradient>
+          <linearGradient id="pinwheelGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#f5d576"/>
+            <stop offset="100%" stop-color="#b3872a"/>
+          </linearGradient>
+          <filter id="pinwheelGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
-        <path d="M110 30 C165 30 190 70 190 120 C190 175 155 210 110 210 C65 210 30 175 30 120 C30 70 55 30 110 30 Z" fill="url(#loginFaceGrad)"/>
-        <path d="M55 105 C55 85 80 78 110 78 C140 78 165 85 165 105 C165 120 140 128 110 128 C80 128 55 120 55 105 Z" fill="#0a0a0a" opacity="0.9"/>
-        <rect x="72" y="96" width="26" height="10" rx="5" fill="#f5f5f0"/>
-        <rect x="122" y="96" width="26" height="10" rx="5" fill="#f5f5f0"/>
+        <g transform="translate(110,110)" filter="url(#pinwheelGlow)">
+          <g class="pinwheel-spin">
+            <g class="pinwheel-blade"><path d="M0,0 C-8,-38 -2,-62 18,-92 C34,-70 40,-46 30,-14 C22,6 8,10 0,0 Z" fill="url(#pinwheelGrad)"/></g>
+            <g class="pinwheel-blade" transform="rotate(51.43)"><path d="M0,0 C-8,-38 -2,-62 18,-92 C34,-70 40,-46 30,-14 C22,6 8,10 0,0 Z" fill="url(#pinwheelGrad)"/></g>
+            <g class="pinwheel-blade" transform="rotate(102.86)"><path d="M0,0 C-8,-38 -2,-62 18,-92 C34,-70 40,-46 30,-14 C22,6 8,10 0,0 Z" fill="url(#pinwheelGrad)"/></g>
+            <g class="pinwheel-blade" transform="rotate(154.29)"><path d="M0,0 C-8,-38 -2,-62 18,-92 C34,-70 40,-46 30,-14 C22,6 8,10 0,0 Z" fill="url(#pinwheelGrad)"/></g>
+            <g class="pinwheel-blade" transform="rotate(205.71)"><path d="M0,0 C-8,-38 -2,-62 18,-92 C34,-70 40,-46 30,-14 C22,6 8,10 0,0 Z" fill="url(#pinwheelGrad)"/></g>
+            <g class="pinwheel-blade" transform="rotate(257.14)"><path d="M0,0 C-8,-38 -2,-62 18,-92 C34,-70 40,-46 30,-14 C22,6 8,10 0,0 Z" fill="url(#pinwheelGrad)"/></g>
+            <g class="pinwheel-blade" transform="rotate(308.57)"><path d="M0,0 C-8,-38 -2,-62 18,-92 C34,-70 40,-46 30,-14 C22,6 8,10 0,0 Z" fill="url(#pinwheelGrad)"/></g>
+          </g>
+        </g>
       </svg>
       <h1>Lumia</h1>
-      <p>Digite a senha de acesso</p>
+      <p>Acesso restrito - entre com suas credenciais</p>
       <form id="loginForm">
+        <input type="text" id="usernameInput" placeholder="Usuario" autocomplete="username" value="Admin" />
         <input type="password" id="passwordInput" placeholder="Senha" autocomplete="current-password" />
         <button type="submit">Entrar</button>
       </form>

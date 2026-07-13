@@ -1,5 +1,6 @@
 const loginScreen = document.getElementById('loginScreen');
 const loginForm = document.getElementById('loginForm');
+const usernameInput = document.getElementById('usernameInput');
 const passwordInput = document.getElementById('passwordInput');
 const loginError = document.getElementById('loginError');
 const appWindow = document.getElementById('appWindow');
@@ -105,11 +106,13 @@ document.addEventListener('keydown', desbloquearAudio);
 
 // ---------- Login / Logout ----------
 
-async function tentarEntrar(senha) {
+const ADMIN_USERNAME = 'Admin';
+
+async function tentarEntrar(usuario, senha) {
   const res = await fetch('/api/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: senha }),
+    body: JSON.stringify({ username: usuario, password: senha }),
   });
   const raw = await res.text();
   try {
@@ -148,7 +151,7 @@ function sair() {
 logoutBtn.addEventListener('click', sair);
 
 if (appPassword) {
-  tentarEntrar(appPassword).then((ok) => {
+  tentarEntrar(ADMIN_USERNAME, appPassword).then((ok) => {
     if (ok) mostrarApp();
     else { appPassword = ''; sessionStorage.removeItem('jarvis_password'); }
   });
@@ -156,15 +159,16 @@ if (appPassword) {
 
 loginForm.addEventListener('submit', async (e) => {
   e.preventDefault();
+  const usuario = usernameInput.value;
   const senha = passwordInput.value;
   loginError.textContent = '';
   if (!senhaValida(senha)) {
     loginError.textContent = 'Essa senha tem um caractere invalido (parece colada de algum lugar com formatacao) - tenta digitar direto.';
     return;
   }
-  const ok = await tentarEntrar(senha);
+  const ok = await tentarEntrar(usuario, senha);
   if (!ok) {
-    loginError.textContent = 'Senha incorreta.';
+    loginError.textContent = 'Usuario ou senha incorretos.';
     return;
   }
   appPassword = senha;
