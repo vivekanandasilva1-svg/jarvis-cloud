@@ -584,23 +584,41 @@ async function falarComVozNatural(texto, bubbleEl) {
   });
 }
 
-// a Web Speech API do navegador (usada so quando a voz do Gemini falha) escolhe uma voz
-// qualquer por padrao - as vezes vem masculina ou robotica generica. Fixamos uma voz
-// feminina em pt-BR, testando nomes conhecidos de cada plataforma antes de cair num
-// fallback generico (qualquer voz pt- que nao tenha nome tipicamente masculino).
+// a Web Speech API do navegador (usada so quando a voz do Gemini falha por cota estourada
+// ou qualquer outro erro) escolhe uma voz qualquer por padrao - as vezes vem masculina ou
+// robotica generica. E de graca e sem limite de uso nenhum (roda no proprio aparelho, nao
+// gasta cota de API nenhuma), entao vale escolher bem: primeiro tenta uma das vozes neurais
+// "Online (Natural)" do Edge/Windows moderno (a qualidade mais proxima de humana que da pra
+// ter sem pagar nada), depois nomes femininos conhecidos de cada plataforma (Android/Chrome,
+// iOS/Safari, Windows classico), so caindo pro fallback generico por ultimo.
 let vozFemininaCache = null;
 function obterVozFeminina() {
   if (vozFemininaCache) return vozFemininaCache;
   const vozes = window.speechSynthesis.getVoices();
   if (!vozes.length) return null;
-  const preferidas = ['Microsoft Maria', 'Microsoft Francisca', 'Luciana', 'Google português do Brasil', 'Google Brasil', 'Joana', 'Fernanda'];
+
+  const vozesPt = vozes.filter((v) => v.lang && v.lang.toLowerCase().startsWith('pt'));
+  const nomesMasculinosConhecidos = /daniel|felipe|ricardo|diego|joão|jorge|antonio|antônio|fabio|fábio|julio|júlio|duarte|humberto/i;
+
+  // 1) vozes neurais do Edge/Windows 11 ("Microsoft X Online (Natural)") - de longe as mais
+  // humanas entre as gratuitas/ilimitadas, mas so existem em navegadores/SOs recentes
+  const neuralFeminina = vozesPt.find((v) => /online \(natural\)/i.test(v.name) && !nomesMasculinosConhecidos.test(v.name));
+  if (neuralFeminina) { vozFemininaCache = neuralFeminina; return neuralFeminina; }
+
+  // 2) nomes femininos conhecidos, por plataforma (Windows classico, Android/Chrome, iOS)
+  const preferidas = [
+    'Microsoft Francisca', 'Microsoft Thalita', 'Microsoft Maria',
+    'Google português do Brasil', 'Google Brasil',
+    'Luciana', 'Joana', 'Fernanda', 'Camila', 'Vitória', 'Vitoria', 'Raquel',
+  ];
   for (const nome of preferidas) {
-    const achada = vozes.find((v) => v.name.includes(nome));
+    const achada = vozesPt.find((v) => v.name.includes(nome));
     if (achada) { vozFemininaCache = achada; return achada; }
   }
-  const candidatasPt = vozes.filter((v) => v.lang && v.lang.toLowerCase().startsWith('pt'));
-  const semNomeMasculino = candidatasPt.find((v) => !/daniel|felipe|ricardo|diego|joão|jorge/i.test(v.name));
-  vozFemininaCache = semNomeMasculino || candidatasPt[0] || vozes[0] || null;
+
+  // 3) qualquer voz pt- que nao tenha nome tipicamente masculino
+  const semNomeMasculino = vozesPt.find((v) => !nomesMasculinosConhecidos.test(v.name));
+  vozFemininaCache = semNomeMasculino || vozesPt[0] || vozes[0] || null;
   return vozFemininaCache;
 }
 if (window.speechSynthesis) {
@@ -619,7 +637,10 @@ function falarNavegador(texto, bubbleEl) {
     const iniciar = () => {
       const utter = new SpeechSynthesisUtterance(texto);
       utter.lang = 'pt-BR';
-      utter.rate = 1.02;
+      // um pouco mais devagar e um tico mais aguda que o padrao (1.0/1.0) fica com cadencia
+      // mais suave e menos "robo lendo rapido" - sutil, mas ajuda a soar mais humana
+      utter.rate = 0.98;
+      utter.pitch = 1.04;
       const voz = obterVozFeminina();
       if (voz) utter.voice = voz;
       utter.onstart = () => { clearTimeout(timeoutSeguranca); setStatus('falando', 'speaking'); iniciarFalaVisual(); };
