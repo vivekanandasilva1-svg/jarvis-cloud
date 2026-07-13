@@ -75,8 +75,14 @@ async function iniciar() {
   });
 
   app.post('/abrir-app', async (req, res) => {
-    const { nome } = req.body || {};
+    let { nome } = req.body || {};
     if (!nome) return res.status(400).json({ erro: 'nome obrigatorio' });
+    // a IA as vezes manda "chrome https://site.com" junto (tentando "abrir o chrome nesse
+    // site") - isso nao e um programa valido pro Windows achar. Se tiver uma URL no meio do
+    // texto, abre so ela - o "start" do Windows ja joga URL pro navegador padrao sozinho,
+    // sem precisar (nem poder) especificar qual navegador usar.
+    const matchUrl = nome.match(/https?:\/\/\S+/i);
+    if (matchUrl) nome = matchUrl[0];
     try {
       await execAsync(`start "" "${nome}"`, { shell: 'cmd.exe' });
       res.json({ ok: true, mensagem: `Abri "${nome}".` });

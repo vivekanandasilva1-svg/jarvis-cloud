@@ -385,10 +385,10 @@ const tools = [
   // decide qual acao pedir e se ela precisa de confirmacao antes.
   {
     name: 'pc_abrir_app',
-    description: 'Abre um programa/aplicativo no computador do usuario (ex: "notepad", "calc", "chrome", ou o caminho completo de um .exe).',
+    description: 'Abre um programa (ex: "notepad", "calc", "chrome", ou caminho completo de um .exe) OU um site (URL). Pra abrir um site, manda SO a URL (ex: "https://www.google.com") - nunca junte nome de navegador com a URL no mesmo texto, o navegador padrao do usuario abre sozinho.',
     input_schema: {
       type: 'object',
-      properties: { nome: { type: 'string', description: 'Nome ou caminho do programa a abrir' } },
+      properties: { nome: { type: 'string', description: 'Nome/caminho do programa, OU uma URL comecando com http:// ou https:// pra abrir um site' } },
       required: ['nome'],
     },
   },
