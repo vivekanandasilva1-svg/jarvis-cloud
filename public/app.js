@@ -559,12 +559,15 @@ async function falarComVozNatural(texto, bubbleEl) {
   const starts = data.alignment.character_start_times_seconds || [];
 
   await new Promise((resolve) => {
+    let timeoutSeguranca = null;
     audio.onplay = () => {
+      clearTimeout(timeoutSeguranca);
       setStatus('falando', 'speaking');
       iniciarFalaVisual();
       if (bubbleEl) legendarProgressivo(audio, bubbleEl, characters, starts);
     };
     const finalizar = () => {
+      clearTimeout(timeoutSeguranca);
       pararFalaVisual();
       pararLegenda(bubbleEl, texto);
       URL.revokeObjectURL(url);
@@ -574,6 +577,10 @@ async function falarComVozNatural(texto, bubbleEl) {
     audio.onended = finalizar;
     audio.onerror = finalizar;
     audio.play().catch(finalizar);
+    // se o <audio> nunca disparar "ended" (aba em segundo plano, engasgo do SO etc), o modo
+    // conversa ficava esperando pra sempre sem nunca voltar a ouvir - rede de seguranca com
+    // folga generosa (duracao estimada do audio, com minimo de 6s)
+    timeoutSeguranca = setTimeout(finalizar, Math.max(6000, (starts[starts.length - 1] || 0) * 1000 + 4000));
   });
 }
 
@@ -602,25 +609,41 @@ if (window.speechSynthesis) {
 
 function falarNavegador(texto, bubbleEl) {
   return new Promise((resolve) => {
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(texto);
-    utter.lang = 'pt-BR';
-    utter.rate = 1.02;
-    const voz = obterVozFeminina();
-    if (voz) utter.voice = voz;
-    utter.onstart = () => { setStatus('falando', 'speaking'); iniciarFalaVisual(); };
-    // a Web Speech API so da o indice do caractere onde comeca cada palavra (nao um
-    // alinhamento exato) - ainda assim da pra revelar palavra por palavra
-    utter.onboundary = (event) => {
-      if (bubbleEl && event.name === 'word') {
-        bubbleEl.textContent = texto.slice(0, event.charIndex + event.charLength || event.charIndex);
-        chatLog.scrollTop = chatLog.scrollHeight;
-      }
+    // cancel() imediatamente seguido de speak() no mesmo ciclo e um bug conhecido do
+    // Chrome/Edge: a fala nova pode nao sair nenhum som, sem erro nenhum (o motivo real de
+    // "nao ouco a voz dela" quando cai nesse fallback). So cancela se realmente tinha algo
+    // rodando, e ainda assim da um tick pro motor de voz respirar antes do speak() novo.
+    const tinhaAlgoTocando = window.speechSynthesis.speaking || window.speechSynthesis.pending;
+    if (tinhaAlgoTocando) window.speechSynthesis.cancel();
+
+    const iniciar = () => {
+      const utter = new SpeechSynthesisUtterance(texto);
+      utter.lang = 'pt-BR';
+      utter.rate = 1.02;
+      const voz = obterVozFeminina();
+      if (voz) utter.voice = voz;
+      utter.onstart = () => { clearTimeout(timeoutSeguranca); setStatus('falando', 'speaking'); iniciarFalaVisual(); };
+      // a Web Speech API so da o indice do caractere onde comeca cada palavra (nao um
+      // alinhamento exato) - ainda assim da pra revelar palavra por palavra
+      utter.onboundary = (event) => {
+        if (bubbleEl && event.name === 'word') {
+          bubbleEl.textContent = texto.slice(0, event.charIndex + event.charLength || event.charIndex);
+          chatLog.scrollTop = chatLog.scrollHeight;
+        }
+      };
+      const finalizar = () => { clearTimeout(timeoutSeguranca); pararFalaVisual(); if (bubbleEl) bubbleEl.textContent = texto; resolve(); };
+      utter.onend = finalizar;
+      utter.onerror = finalizar;
+      window.speechSynthesis.speak(utter);
+      // alguns navegadores/SOs simplesmente nunca disparam onstart/onend pra certos textos
+      // (trava silenciosa) - sem essa rede de seguranca o modo conversa ficava esperando pra
+      // sempre e nunca voltava a ouvir de novo
+      timeoutSeguranca = setTimeout(finalizar, Math.max(4000, texto.length * 160));
     };
-    const finalizar = () => { pararFalaVisual(); if (bubbleEl) bubbleEl.textContent = texto; resolve(); };
-    utter.onend = finalizar;
-    utter.onerror = finalizar;
-    window.speechSynthesis.speak(utter);
+
+    let timeoutSeguranca = null;
+    if (tinhaAlgoTocando) setTimeout(iniciar, 50);
+    else iniciar();
   });
 }
 
