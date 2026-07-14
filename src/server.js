@@ -11,6 +11,7 @@ import { synthesizeSpeechWithTimestamps, transcribeAudio } from './gemini.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
 import { transcribeAudioWhisper } from './whisper.js';
 import { sendTextMessage, downloadMedia } from './whatsapp.js';
+import { obterArquivo } from './arquivosGerados.js';
 
 const execAsync = promisify(exec);
 
@@ -156,6 +157,18 @@ app.post('/api/local-action-result', async (req, res) => {
     console.error('Erro ao continuar acao local:', err);
     res.status(500).json({ erro: err.message });
   }
+});
+
+// baixa um arquivo gerado pela Lumia (PDF/Word/Excel/grafico/imagem) - protegido pelo mesmo
+// middleware de senha do resto da API (o frontend busca via fetch com o header e monta o
+// download no navegador, nao e um link direto clicavel, porque um <a href> comum nao manda
+// o header x-app-password)
+app.get('/api/arquivos/:id', (req, res) => {
+  const item = obterArquivo(req.params.id);
+  if (!item) return res.status(404).json({ erro: 'Arquivo nao encontrado ou expirado (fica disponivel por 30min apos ser gerado)' });
+  res.setHeader('Content-Type', item.mediaType);
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(item.nomeArquivo)}"`);
+  res.send(item.buffer);
 });
 
 // apaga o historico da conversa de verdade (Postgres, nao so visualmente) - chamado pelo

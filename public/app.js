@@ -369,6 +369,45 @@ function addBubble(text, kind) {
   return div;
 }
 
+// baixa um arquivo gerado pela Lumia (PDF/Word/Excel/grafico/imagem) - via fetch autenticado
+// (com o header de senha do app) em vez de um <a href> direto, porque a API exige esse header
+// em toda chamada e um link comum de navegador nao manda header nenhum
+async function baixarArquivo(id, nomeArquivo, btn) {
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Baixando...';
+  try {
+    const res = await fetch(`/api/arquivos/${id}`, { headers: { 'x-app-password': appPassword } });
+    if (!res.ok) throw new Error((await res.json().catch(() => null))?.erro || `erro ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomeArquivo;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    btn.textContent = 'Baixado ✓';
+  } catch (err) {
+    btn.textContent = textoOriginal;
+    btn.disabled = false;
+    addBubble(`Nao consegui baixar o arquivo: ${err.message}`, 'system');
+  }
+}
+
+// anexa um botao real de download na bolha da resposta (nao um link vindo do texto da IA -
+// isso nunca depende de renderizar HTML/markdown gerado por ela, so um botao que a gente cria)
+function anexarBotaoDownload(bubbleEl, arquivo) {
+  const btn = document.createElement('button');
+  btn.className = 'botao-download-arquivo';
+  btn.textContent = `⬇ Baixar ${arquivo.nomeArquivo}`;
+  btn.addEventListener('click', () => baixarArquivo(arquivo.id, arquivo.nomeArquivo, btn));
+  bubbleEl.appendChild(document.createElement('br'));
+  bubbleEl.appendChild(btn);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
 // O avatar e um video real (com movimento e boca falando de verdade), gravado em fundo verde
 // de estudio de verdade - entao a gente desenha cada quadro num canvas e faz chroma-key: apaga
 // (ou suaviza, nas bordas) os pixels onde o verde domina claramente sobre vermelho/azul.
@@ -846,6 +885,7 @@ async function enviarMensagem(texto) {
 
     const bubble = addBubble('', 'assistant');
     await falar(resultado.reply, bubble);
+    if (resultado.arquivo) anexarBotaoDownload(bubble, resultado.arquivo);
   } catch (err) {
     addBubble(`Erro: ${err.message}`, 'system');
     setStatus('erro', null);

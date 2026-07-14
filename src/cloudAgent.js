@@ -2,7 +2,9 @@ import Anthropic from '@anthropic-ai/sdk';
 import pg from 'pg';
 import * as metaAds from './metaads.js';
 import * as clinicorp from './clinicorp.js';
-import { transcribeAudio } from './gemini.js';
+import { transcribeAudio, generateImageGemini } from './gemini.js';
+import { gerarPdf, gerarWord, gerarExcel, gerarGraficoSvg } from './geradorDocumentos.js';
+import { guardarArquivo } from './arquivosGerados.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -166,6 +168,16 @@ Voce tambem consegue enxergar pela camera do dispositivo do usuario, usando ver_
 a camera (se estiver desligada) e captura uma imagem do que esta sendo filmado. Use sempre que o
 usuario pedir pra voce ver/olhar/abrir os olhos pela camera, em qualquer formato (texto, audio ou
 modo conversa). Depois de ver a imagem, comente de forma natural o que voce enxergou.
+
+Voce consegue gerar arquivos de verdade, prontos pra download (o link aparece automaticamente na
+interface pro usuario, voce nao precisa - nem consegue - escrever o link): gerar_pdf, gerar_word
+e gerar_excel pra documentos/relatorios/planilhas, gerar_grafico pra visualizar dados (barra,
+linha ou pizza). Essas quatro sao de graca (bibliotecas locais, sem custo de API nenhum) - gere
+sem duvidar quando fizer sentido pro pedido. Ja gerar_imagem_ia (foto/arte/ilustracao realista por
+IA) tem custo real por uso - so chame quando o usuario pedir uma imagem gerada por IA de verdade,
+nao confunda com grafico de dados (que e de graca). Depois de gerar qualquer arquivo, so confirme
+de forma natural e breve que esta pronto - o botao de download ja aparece sozinho, nao descreva
+"aqui esta o link" nem invente URL nenhuma.
 
 Memoria: voce NUNCA esquece uma conversa sozinha - todo o historico fica salvo de verdade (nao
 so na memoria do navegador), sobrevivendo a fechar o app, atualizar a pagina ou o servidor
@@ -598,7 +610,73 @@ const tools = [
     name: 'esquecer_instrucoes_aprendidas',
     description: 'Apaga TODAS as instrucoes de comportamento que o usuario ja te ensinou (reseta o treinamento, nao mexe no historico da conversa). So use quando pedido explicitamente.',
     input_schema: { type: 'object', properties: {} },
-    // marca o fim do bloco de ferramentas como ponto de cache - a lista inteira (~30
+  },
+  {
+    name: 'gerar_pdf',
+    description: 'Gera um arquivo PDF de verdade, pronto pra download, a partir de um titulo e um texto - sem custo de API (biblioteca local). Use quando o usuario pedir um documento/relatorio/roteiro em PDF. No campo conteudo, escreva o texto corrido normalmente; uma linha comecando com "## " vira um subtitulo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        titulo: { type: 'string', description: 'Titulo do documento' },
+        conteudo: { type: 'string', description: 'Corpo do documento em texto - use "## " no inicio de uma linha para criar um subtitulo' },
+      },
+      required: ['titulo', 'conteudo'],
+    },
+  },
+  {
+    name: 'gerar_word',
+    description: 'Gera um arquivo Word (.docx) de verdade, pronto pra download, a partir de um titulo e um texto - sem custo de API (biblioteca local). Mesma formatacao simples do gerar_pdf ("## " vira subtitulo).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        titulo: { type: 'string', description: 'Titulo do documento' },
+        conteudo: { type: 'string', description: 'Corpo do documento em texto - use "## " no inicio de uma linha para criar um subtitulo' },
+      },
+      required: ['titulo', 'conteudo'],
+    },
+  },
+  {
+    name: 'gerar_excel',
+    description: 'Gera uma planilha Excel (.xlsx) de verdade, pronta pra download, com uma aba/tabela simples - sem custo de API (biblioteca local). Use pra listas, comparativos, relatorios tabulares.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        titulo: { type: 'string', description: 'Titulo/nome da planilha' },
+        colunas: { type: 'array', items: { type: 'string' }, description: 'Nomes das colunas (cabecalho)' },
+        linhas: {
+          type: 'array',
+          items: { type: 'array', items: { type: ['string', 'number'] } },
+          description: 'Cada item e uma linha da tabela, na mesma ordem das colunas',
+        },
+      },
+      required: ['titulo', 'colunas', 'linhas'],
+    },
+  },
+  {
+    name: 'gerar_grafico',
+    description: 'Gera uma imagem de grafico (SVG) de verdade, pronta pra download - sem custo de API (so geometria, biblioteca local). Use pra visualizar dados/comparativos (barra, linha ou pizza).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        titulo: { type: 'string', description: 'Titulo do grafico' },
+        tipo: { type: 'string', enum: ['barra', 'linha', 'pizza'], description: 'Tipo de grafico' },
+        rotulos: { type: 'array', items: { type: 'string' }, description: 'Rotulo de cada valor/fatia' },
+        valores: { type: 'array', items: { type: 'number' }, description: 'Valores numericos, na mesma ordem dos rotulos' },
+      },
+      required: ['titulo', 'tipo', 'rotulos', 'valores'],
+    },
+  },
+  {
+    name: 'gerar_imagem_ia',
+    description: 'Gera uma imagem de verdade (foto/arte/ilustracao realista) a partir de uma descricao, usando IA generativa de imagem - ATENCAO: diferente das outras ferramentas de arquivo, essa tem custo real por uso (chamada de API paga). So use quando o usuario pedir explicitamente uma imagem gerada por IA (nao confundir com grafico/infografico de dados, que e o gerar_grafico, gratuito).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        descricao: { type: 'string', description: 'Descricao detalhada da imagem a gerar, em portugues ou ingles' },
+      },
+      required: ['descricao'],
+    },
+    // marca o fim do bloco de ferramentas como ponto de cache - a lista inteira (~30+
     // ferramentas) e grande e quase nunca muda, entao cache_control aqui faz a Anthropic
     // cobrar bem mais barato nela nas chamadas seguintes dentro da janela de cache
     cache_control: { type: 'ephemeral' },
@@ -765,7 +843,57 @@ async function handleClinicorpPacienteExtra({ tipo, date, from, to }) {
   return clinicorp.getPatientEstimatesSum({ from, to });
 }
 
+function nomeArquivoSeguro(titulo, extensao) {
+  const base = (titulo || 'documento').trim().replace(/[^\p{L}\p{N} _-]/gu, '').replace(/\s+/g, '_').slice(0, 60) || 'documento';
+  return `${base}.${extensao}`;
+}
+
+// cada handler de geracao de arquivo devolve um marcador ___arquivoGerado (em vez do arquivo
+// binario em si, que nao faz sentido mandar pro modelo de texto) - rodarLoopDeFerramentas
+// intercepta esse marcador e expoe o link de download pro frontend, fora do fluxo normal de
+// tool_result
+async function handleGerarPdf({ titulo, conteudo }) {
+  const buffer = await gerarPdf(titulo, conteudo);
+  const nomeArquivo = nomeArquivoSeguro(titulo, 'pdf');
+  const id = guardarArquivo(buffer, nomeArquivo, 'application/pdf');
+  return { ___arquivoGerado: { id, nomeArquivo } };
+}
+
+async function handleGerarWord({ titulo, conteudo }) {
+  const buffer = await gerarWord(titulo, conteudo);
+  const nomeArquivo = nomeArquivoSeguro(titulo, 'docx');
+  const id = guardarArquivo(buffer, nomeArquivo, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  return { ___arquivoGerado: { id, nomeArquivo } };
+}
+
+async function handleGerarExcel({ titulo, colunas, linhas }) {
+  const buffer = await gerarExcel(titulo, colunas, linhas);
+  const nomeArquivo = nomeArquivoSeguro(titulo, 'xlsx');
+  const id = guardarArquivo(buffer, nomeArquivo, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  return { ___arquivoGerado: { id, nomeArquivo } };
+}
+
+async function handleGerarGrafico({ titulo, tipo, rotulos, valores }) {
+  const svg = gerarGraficoSvg(titulo, tipo, rotulos, valores);
+  const nomeArquivo = nomeArquivoSeguro(titulo, 'svg');
+  const id = guardarArquivo(Buffer.from(svg, 'utf8'), nomeArquivo, 'image/svg+xml');
+  return { ___arquivoGerado: { id, nomeArquivo } };
+}
+
+async function handleGerarImagemIA({ descricao }) {
+  const { buffer, mediaType } = await generateImageGemini(descricao);
+  const extensao = mediaType.includes('png') ? 'png' : 'jpg';
+  const nomeArquivo = nomeArquivoSeguro(descricao.slice(0, 40), extensao);
+  const id = guardarArquivo(buffer, nomeArquivo, mediaType);
+  return { ___arquivoGerado: { id, nomeArquivo } };
+}
+
 const toolHandlers = {
+  gerar_pdf: handleGerarPdf,
+  gerar_word: handleGerarWord,
+  gerar_excel: handleGerarExcel,
+  gerar_grafico: handleGerarGrafico,
+  gerar_imagem_ia: handleGerarImagemIA,
   ads_listar_contas: () => metaAds.listAdAccounts(),
   ads_listar_campanhas: ({ accountId, status }) => metaAds.listCampaigns({ accountId, status }),
   ads_listar_adsets: ({ campaignId }) => metaAds.listAdSets({ campaignId }),
@@ -1077,9 +1205,21 @@ async function rodarLoopDeFerramentas(session, sessionId) {
 
     const toolResults = [];
     let esqueceuTudo = false;
+    let arquivoGerado = null;
     for (const block of toolUseBlocks) {
       const result = await runTool(block.name, block.input, session, sessionId);
       if (result && result.___esqueceuTudo) { esqueceuTudo = true; continue; }
+      if (result && result.___arquivoGerado) {
+        arquivoGerado = result.___arquivoGerado;
+        // o Claude so precisa saber que deu certo pra confirmar naturalmente - o link de
+        // download em si vai direto pro frontend fora desse tool_result, nao faz sentido
+        // (nem cabe) mandar o arquivo binario de volta pro modelo de texto
+        toolResults.push({
+          type: 'tool_result', tool_use_id: block.id,
+          content: JSON.stringify({ ok: true, nomeArquivo: arquivoGerado.nomeArquivo, mensagem: 'Arquivo gerado - o link de download ja apareceu pro usuario na interface, so confirme de forma natural que esta pronto.' }),
+        });
+        continue;
+      }
       toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
     }
     // esqueceu tudo: o historico ja foi zerado dentro do runTool - nao da pra continuar o
@@ -1093,6 +1233,12 @@ async function rodarLoopDeFerramentas(session, sessionId) {
     rounds += 1;
 
     if (session.pendingAction || session.pendingLocalAction) break;
+    if (arquivoGerado) {
+      const replyText = extractText(response) || 'Prontinho, gerei o arquivo.';
+      session.history.push({ role: 'assistant', content: replyText });
+      aparaHistorico(session);
+      return { texto: replyText, arquivo: arquivoGerado };
+    }
   }
 
   const replyText = extractText(response) || 'Consegui os dados mas nao terminei de formular a resposta - pode perguntar de novo, talvez de forma mais especifica (ex: um periodo menor)?';
@@ -1169,7 +1315,8 @@ async function processarChat(session, sessionId, userMessage, attachments) {
     const content = await buildUserContent(userMessage, attachments);
     session.history.push({ role: 'user', content });
     const resultado = await rodarLoopDeFerramentas(session, sessionId);
-    return resultado.localAction ? { reply: null, localAction: resultado.localAction } : { reply: resultado.texto };
+    if (resultado.localAction) return { reply: null, localAction: resultado.localAction };
+    return { reply: resultado.texto, arquivo: resultado.arquivo || undefined };
   } catch (err) {
     session.history.splice(tamanhoAntes);
     throw err;
@@ -1232,7 +1379,7 @@ export async function continuarAcaoLocal(sessionId, resultado) {
   const tamanhoAntes = session.history.length;
   try {
     const r = await rodarLoopDeFerramentas(session, sessionId);
-    const saida = r.localAction ? { reply: null, localAction: r.localAction } : { reply: r.texto };
+    const saida = r.localAction ? { reply: null, localAction: r.localAction } : { reply: r.texto, arquivo: r.arquivo || undefined };
     await salvarSessao(sessionId, session);
     return saida;
   } catch (err) {

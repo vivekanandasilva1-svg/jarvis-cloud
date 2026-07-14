@@ -3,6 +3,9 @@ import { alinharTextoComAudio } from './audioAlign.js';
 const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 const MODELO_TTS = 'gemini-2.5-flash-preview-tts';
 const MODELO_TRANSCRICAO = 'gemini-flash-latest';
+// unico ponto do app que gera imagem por IA de verdade (foto/arte, nao grafico) - tem custo
+// real por chamada, ao contrario do resto (PDF/Word/Excel/grafico sao so bibliotecas locais)
+const MODELO_IMAGEM = 'gemini-2.5-flash-image';
 // "Leda" e descrita pela propria Google como uma voz jovem ("Youthful") - a mais proxima do
 // que foi pedido (jovem, humana, natural) entre as vozes prontas do Gemini.
 const VOZ = 'Leda';
@@ -149,4 +152,30 @@ export async function transcribeAudio(buffer, mimeType = 'audio/webm') {
   const data = await res.json();
   const texto = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
   return texto.trim();
+}
+
+// gera uma imagem de verdade (foto/arte/ilustracao) a partir de uma descricao em texto - ao
+// contrario do resto da geracao de arquivos (PDF/Word/Excel/grafico, que sao so bibliotecas
+// locais sem custo nenhum), isso aqui chama a API do Gemini de verdade e tem custo por uso.
+export async function generateImageGemini(description) {
+  const res = await comRetry((signal) => fetch(`${API_URL}/${MODELO_IMAGEM}:generateContent?key=${chaveApi()}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal,
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: description }] }],
+    }),
+  }), { tentativas: 2, timeoutMs: 30000 });
+
+  if (!res.ok) throw await erroGemini(res, 'Gemini geracao de imagem erro');
+
+  const data = await res.json();
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  const imagem = parts.find((p) => p.inlineData?.data);
+  if (!imagem) throw new Error('Gemini nao devolveu nenhuma imagem');
+
+  return {
+    buffer: Buffer.from(imagem.inlineData.data, 'base64'),
+    mediaType: imagem.inlineData.mimeType || 'image/png',
+  };
 }
