@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chat, continuarAcaoLocal } from './cloudAgent.js';
+import { chat, continuarAcaoLocal, limparConversa } from './cloudAgent.js';
 import { synthesizeSpeechWithTimestamps, transcribeAudio } from './gemini.js';
 import { transcribeAudioWhisper } from './whisper.js';
 import { sendTextMessage, downloadMedia } from './whatsapp.js';
@@ -153,6 +153,20 @@ app.post('/api/local-action-result', async (req, res) => {
     res.json(saida);
   } catch (err) {
     console.error('Erro ao continuar acao local:', err);
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// apaga o historico da conversa de verdade (Postgres, nao so visualmente) - chamado pelo
+// botao "Limpar" do app
+app.post('/api/session/clear', async (req, res) => {
+  const { sessionId } = req.body || {};
+  if (!sessionId) return res.status(400).json({ erro: 'sessionId obrigatorio' });
+  try {
+    await limparConversa(sessionId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Erro limpando sessao:', err);
     res.status(500).json({ erro: err.message });
   }
 });

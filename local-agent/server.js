@@ -184,6 +184,61 @@ async function iniciar() {
     }
   });
 
+  // le o arquivo de favoritos direto do perfil do navegador (Chrome/Edge guardam num JSON
+  // dentro da pasta do usuario) - so leitura, nao precisa de nenhuma configuracao extra
+  app.post('/favoritos', async (req, res) => {
+    const local = process.env.LOCALAPPDATA;
+    if (!local) return res.status(500).json({ erro: 'LOCALAPPDATA nao encontrado (so funciona no Windows)' });
+
+    const candidatos = [
+      { navegador: 'Chrome', caminho: path.join(local, 'Google', 'Chrome', 'User Data', 'Default', 'Bookmarks') },
+      { navegador: 'Edge', caminho: path.join(local, 'Microsoft', 'Edge', 'User Data', 'Default', 'Bookmarks') },
+    ];
+
+    function achatar(node) {
+      if (node.type === 'url') return [{ tipo: 'favorito', nome: node.name, url: node.url }];
+      if (node.type === 'folder') {
+        const filhos = (node.children || []).flatMap(achatar);
+        return [{ tipo: 'pasta', nome: node.name, itens: filhos }];
+      }
+      return [];
+    }
+
+    const resultado = [];
+    for (const { navegador, caminho } of candidatos) {
+      try {
+        const bruto = JSON.parse(await fs.readFile(caminho, 'utf8'));
+        const raizes = Object.values(bruto.roots || {}).filter((r) => r && typeof r === 'object' && r.children);
+        resultado.push({ navegador, pastas: raizes.flatMap(achatar) });
+      } catch { /* navegador nao instalado ou sem favoritos - so pula */ }
+    }
+
+    if (!resultado.length) return res.status(404).json({ erro: 'Nao encontrei favoritos do Chrome nem do Edge neste computador.' });
+    res.json({ ok: true, navegadores: resultado });
+  });
+
+  // abas abertas AGORA, em tempo real - exige o Chrome rodando com depuracao remota ligada
+  // (--remote-debugging-port=9222), pois nao existe API padrao pra "espiar" abas de um
+  // navegador comum sem isso ou uma extensao instalada
+  app.post('/abas', async (req, res) => {
+    try {
+      const controlador = new AbortController();
+      const timer = setTimeout(() => controlador.abort(), 3000);
+      const resp = await fetch('http://localhost:9222/json', { signal: controlador.signal });
+      clearTimeout(timer);
+      if (!resp.ok) throw new Error(`Chrome DevTools respondeu ${resp.status}`);
+      const alvos = await resp.json();
+      const abas = alvos
+        .filter((a) => a.type === 'page')
+        .map((a) => ({ titulo: a.title, url: a.url }));
+      res.json({ ok: true, abas });
+    } catch {
+      res.status(503).json({
+        erro: 'Nao consegui ver as abas abertas - o Chrome precisa estar rodando com depuracao remota ligada. Feche todo o Chrome e abra de novo com o atalho/comando que tem a flag --remote-debugging-port=9222.',
+      });
+    }
+  });
+
   app.get('/ping', (req, res) => res.json({ ok: true }));
 
   app.listen(PORT, '127.0.0.1', () => {

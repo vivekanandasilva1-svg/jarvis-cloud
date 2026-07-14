@@ -776,6 +776,8 @@ const PC_ENDPOINTS = {
   pc_criar_arquivo: { path: '/criar-arquivo', montar: (i) => ({ caminho: i.caminho, conteudo: i.conteudo }) },
   pc_editar_arquivo: { path: '/editar-arquivo', montar: (i) => ({ caminho: i.caminho, conteudo: i.conteudo }) },
   pc_apagar_arquivo: { path: '/apagar-arquivo', montar: (i) => ({ caminho: i.caminho }) },
+  pc_listar_favoritos: { path: '/favoritos', montar: () => ({}) },
+  pc_listar_abas_navegador: { path: '/abas', montar: () => ({}) },
 };
 
 async function executarAcaoLocal(tool, input) {
@@ -915,8 +917,19 @@ composer.addEventListener('submit', (e) => {
   enviarMensagem(textInput.value);
 });
 
-clearBtn.addEventListener('click', () => {
+clearBtn.addEventListener('click', async () => {
   chatLog.innerHTML = '';
+  // apaga de verdade no servidor (Postgres), nao so visualmente - senao a conversa "esquecida"
+  // reaparecia sozinha na proxima mensagem, porque o historico continuaria salvo la
+  try {
+    await fetch('/api/session/clear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ sessionId }),
+    });
+  } catch (err) {
+    console.warn('Nao consegui confirmar a limpeza no servidor:', err);
+  }
   addBubble('Conversa limpa. Pode continuar de onde quiser.', 'system');
 });
 

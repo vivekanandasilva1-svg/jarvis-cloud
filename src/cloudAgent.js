@@ -1,9 +1,38 @@
 import Anthropic from '@anthropic-ai/sdk';
+import pg from 'pg';
 import * as metaAds from './metaads.js';
 import * as clinicorp from './clinicorp.js';
 import { transcribeAudio } from './gemini.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// ---------- Memoria persistente (Postgres) ----------
+// sem DATABASE_URL, roda com memoria so em RAM (perde tudo se o servidor reiniciar) - continua
+// funcionando, so sem persistencia de verdade, pra nao quebrar ambientes sem banco configurado
+const pool = process.env.DATABASE_URL ? new pg.Pool({ connectionString: process.env.DATABASE_URL }) : null;
+
+async function garantirTabelas() {
+  if (!pool) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      session_id TEXT PRIMARY KEY,
+      history JSONB NOT NULL DEFAULT '[]'::jsonb,
+      pending_action JSONB,
+      pending_local_action JSONB,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS learned_instructions (
+      id SERIAL PRIMARY KEY,
+      texto TEXT NOT NULL,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+}
+const tabelasProntas = garantirTabelas().catch((err) => {
+  console.error('Erro criando tabelas no Postgres - memoria de conversa vai ficar so em RAM ate isso ser resolvido:', err.message);
+});
 
 const SYSTEM_PROMPT = `Voce e a Lumia, um superagente de inteligencia artificial de nivel senior
 que opera na fusao entre Engenharia Exata, Alta Performance Humana e Marketing de Resposta
@@ -32,6 +61,18 @@ NUCLEO DE COMPETENCIAS:
   profunda na comunicacao e lideranca.
 - Gestao empresarial e financas: CAC, LTV, ROAS, margem de contribuicao, lucro liquido,
   estruturacao contabil/holding/blindagem patrimonial.
+- Palestrante e mestra em falar em publico: oratoria, storytelling de palco, gatilhos mentais
+  (escassez, autoridade, prova social, reciprocidade, urgencia), neuromarketing, PNL aplicada
+  (ancoragem, rapport, calibragem de linguagem) e coaching/mentoring (perguntas poderosas,
+  quebra de crenca limitante, plano de acao).
+
+Quando o usuario pedir pra voce palestrar, ensinar, dar uma aula, apresentar algo ou falar como
+se tivesse um publico assistindo (e principalmente se ele disser que tem gente vendo/ouvindo
+nesse momento), assuma esse papel de verdade: fale como quem esta consciente de ser vista e
+ouvida por varias pessoas ao vivo - varia o ritmo, usa pausas estrategicas, storytelling, tom de
+voz. Isso vale tanto por texto quanto (principalmente) quando a resposta vai ser falada em voz
+alta pelo modo conversa. Nao seja um leitor de slide - seja a palestrante de verdade, natural,
+humana, energica, criando conexao com quem esta "na plateia".
 
 Formato de resposta - adapta pelo contexto, nao usa o mesmo formato pra tudo: numa pergunta
 rapida ou conversa (principalmente quando pode ser falada em voz alta pelo modo conversa),
@@ -88,11 +129,36 @@ existente e apagar arquivo/pasta pedem confirmacao do usuario antes de executar 
 cuida disso sozinho quando voce chama a ferramenta - so chame quando o pedido ja estiver claro
 o suficiente pra perguntar a confirmacao). NAO existe ferramenta para instalar ou baixar
 softwares novos - se pedirem isso, explique que voce so consegue abrir/fechar programas ja
-instalados e mexer em arquivos, nao instalar nada novo (por seguranca).`;
+instalados e mexer em arquivos, nao instalar nada novo (por seguranca).
 
-function systemPromptComHoje() {
+Voce tambem consegue ver os favoritos salvos no navegador do usuario (pc_listar_favoritos, com
+pastas e subpastas) e pode abrir qualquer um deles com pc_abrir_app passando a URL. Abas abertas
+AGORA no Chrome (pc_listar_abas_navegador) so funcionam se o usuario tiver aberto o Chrome com
+depuracao remota ligada - se der erro nessa ferramenta, explique que precisa fechar todo o
+Chrome e abrir de novo com a flag --remote-debugging-port=9222, em vez de insistir tentando de
+novo sozinho.
+
+Memoria: voce NUNCA esquece uma conversa sozinha - todo o historico fica salvo de verdade (nao
+so na memoria do navegador), sobrevivendo a fechar o app, atualizar a pagina ou o servidor
+reiniciar. So apaga quando o usuario pedir EXPLICITAMENTE (ferramenta esquecer_conversa) ou
+clicar no botao "Limpar" - nunca por conta propria, nem quando o assunto mudar.
+
+Voce tambem pode ser treinada: quando o usuario pedir explicitamente pra voce aprender/lembrar
+algo sobre como se comportar dali em diante (nao so nesta conversa, mas em qualquer conversa
+futura), use a ferramenta aprender_instrucao. Essas instrucoes aparecem nesse mesmo prompt, numa
+secao "INSTRUCOES QUE O USUARIO JA TE ENSINOU" (se houver) - trate como parte permanente de quem
+voce e. Se o usuario pedir pra esquecer o que te ensinou, use esquecer_instrucoes_aprendidas.`;
+
+async function systemPromptComHoje() {
   const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' });
-  return `${SYSTEM_PROMPT}\n\nA data de hoje e ${hoje} (fuso horario de Maceio/Brasil). Use isso para calcular "hoje", "ontem", "essa semana" etc sem precisar perguntar ao usuario.`;
+  let prompt = `${SYSTEM_PROMPT}\n\nA data de hoje e ${hoje} (fuso horario de Maceio/Brasil). Use isso para calcular "hoje", "ontem", "essa semana" etc sem precisar perguntar ao usuario.`;
+
+  const instrucoes = await listarInstrucoesAprendidas();
+  if (instrucoes.length) {
+    prompt += `\n\nINSTRUCOES QUE O USUARIO JA TE ENSINOU (siga todas, valem permanentemente ate ele pedir pra esquecer):\n${instrucoes.map((i, idx) => `${idx + 1}. ${i}`).join('\n')}`;
+  }
+
+  return prompt;
 }
 
 const tools = [
@@ -460,6 +526,36 @@ const tools = [
       required: ['caminho'],
     },
   },
+  {
+    name: 'pc_listar_favoritos',
+    description: 'Lista os favoritos (bookmarks) salvos no Chrome e/ou Edge do usuario, com pastas e subpastas.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'pc_listar_abas_navegador',
+    description: 'Lista as abas abertas AGORA no Chrome do usuario (titulo e URL de cada uma). So funciona se o usuario tiver aberto o Chrome com depuracao remota ligada - se der erro, explique que precisa disso.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  // ---------- Memoria da conversa e treinamento ----------
+  {
+    name: 'esquecer_conversa',
+    description: 'Apaga o historico desta conversa (fica tudo salvo na nuvem ate isso ser chamado, mesmo fechando o app ou atualizando a pagina). So use quando o usuario pedir EXPLICITAMENTE pra esquecer/apagar a conversa - nunca por conta propria.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'aprender_instrucao',
+    description: 'Guarda permanentemente uma instrucao sobre como voce deve se comportar dali em diante (o usuario "te ensinando/treinando") - fica valendo em toda conversa futura, ate ser apagada. Use quando o usuario pedir explicitamente pra voce aprender/lembrar/mudar algo no seu jeito de agir.',
+    input_schema: {
+      type: 'object',
+      properties: { instrucao: { type: 'string', description: 'A instrucao/comportamento a guardar, escrita de forma clara e reutilizavel' } },
+      required: ['instrucao'],
+    },
+  },
+  {
+    name: 'esquecer_instrucoes_aprendidas',
+    description: 'Apaga TODAS as instrucoes de comportamento que o usuario ja te ensinou (reseta o treinamento, nao mexe no historico da conversa). So use quando pedido explicitamente.',
+    input_schema: { type: 'object', properties: {} },
+  },
 ];
 
 const CONFIRM_TOOLS = new Set(['ads_criar_campanha', 'ads_alterar_status_campanha', 'ads_alterar_orcamento_adset']);
@@ -497,6 +593,7 @@ async function executeConfirmedAction(name, input) {
 const PC_TOOLS = new Set([
   'pc_abrir_app', 'pc_fechar_app', 'pc_abrir_arquivo', 'pc_ler_arquivo',
   'pc_listar_pasta', 'pc_criar_arquivo', 'pc_editar_arquivo', 'pc_apagar_arquivo',
+  'pc_listar_favoritos', 'pc_listar_abas_navegador',
 ]);
 // so pedem confirmacao as que perdem trabalho nao salvo ou sao dificeis/impossiveis de
 // desfazer - abrir, ler, listar e criar (nunca sobrescreve) rodam direto
@@ -676,7 +773,31 @@ const toolHandlers = {
   clinicorp_orcamento_detalhe: ({ treatmentId }) => clinicorp.getEstimateDetail({ treatmentId }),
 };
 
-async function runTool(name, input, session) {
+async function runTool(name, input, session, sessionId) {
+  if (name === 'esquecer_conversa') {
+    await limparSessao(sessionId);
+    session.history = [];
+    session.pendingAction = null;
+    session.pendingLocalAction = null;
+    return { ___esqueceuTudo: true };
+  }
+  if (name === 'aprender_instrucao') {
+    try {
+      await salvarInstrucaoAprendida(input.instrucao);
+      return { ok: true, mensagem: 'Instrucao guardada - vai valer em toda conversa futura, ate ser apagada.' };
+    } catch (err) {
+      return { erro: err.message };
+    }
+  }
+  if (name === 'esquecer_instrucoes_aprendidas') {
+    try {
+      await esquecerInstrucoesAprendidas();
+      return { ok: true, mensagem: 'Todas as instrucoes que voce me ensinou foram apagadas.' };
+    } catch (err) {
+      return { erro: err.message };
+    }
+  }
+
   if (CONFIRM_TOOLS.has(name)) {
     session.pendingAction = { name, input };
     return {
@@ -765,17 +886,101 @@ async function callClaude(history) {
   return anthropic.messages.create({
     model: 'claude-sonnet-5',
     max_tokens: 1500,
-    system: systemPromptComHoje(),
+    system: await systemPromptComHoje(),
     tools,
     messages: history,
   });
 }
 
-const sessions = new Map();
+// cache em RAM por cima do Postgres - evita ir no banco a cada mensagem da mesma conversa
+// (que normalmente acontecem em sequencia rapida); a fonte da verdade e sempre o Postgres,
+// isso aqui e so um acelerador que se reconstroi sozinho se o processo reiniciar
+const sessionsCache = new Map();
 
-function getSession(sessionId) {
-  if (!sessions.has(sessionId)) sessions.set(sessionId, { history: [], pendingAction: null, pendingLocalAction: null });
-  return sessions.get(sessionId);
+async function getSession(sessionId) {
+  if (sessionsCache.has(sessionId)) return sessionsCache.get(sessionId);
+
+  let session = { history: [], pendingAction: null, pendingLocalAction: null };
+  await tabelasProntas;
+  if (pool) {
+    try {
+      const { rows } = await pool.query(
+        'SELECT history, pending_action, pending_local_action FROM sessions WHERE session_id = $1',
+        [sessionId],
+      );
+      if (rows.length) {
+        session = {
+          history: rows[0].history || [],
+          pendingAction: rows[0].pending_action,
+          pendingLocalAction: rows[0].pending_local_action,
+        };
+      }
+    } catch (err) {
+      console.error('Erro carregando sessao do Postgres, comecando conversa nova em RAM:', err.message);
+    }
+  }
+  sessionsCache.set(sessionId, session);
+  return session;
+}
+
+async function salvarSessao(sessionId, session) {
+  sessionsCache.set(sessionId, session);
+  if (!pool) return;
+  try {
+    await pool.query(
+      `INSERT INTO sessions (session_id, history, pending_action, pending_local_action, updated_at)
+       VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb, now())
+       ON CONFLICT (session_id) DO UPDATE
+       SET history = $2::jsonb, pending_action = $3::jsonb, pending_local_action = $4::jsonb, updated_at = now()`,
+      [
+        sessionId,
+        JSON.stringify(session.history),
+        session.pendingAction ? JSON.stringify(session.pendingAction) : null,
+        session.pendingLocalAction ? JSON.stringify(session.pendingLocalAction) : null,
+      ],
+    );
+  } catch (err) {
+    console.error('Erro salvando sessao no Postgres (conversa continua funcionando so em RAM por agora):', err.message);
+  }
+}
+
+// apaga o historico da conversa (botao "Limpar" ou pedido explicito do usuario) - mantem a
+// sessao existindo, so zera o que ela lembra ate agora
+async function limparSessao(sessionId) {
+  sessionsCache.delete(sessionId);
+  if (!pool) return;
+  try {
+    await pool.query('DELETE FROM sessions WHERE session_id = $1', [sessionId]);
+  } catch (err) {
+    console.error('Erro apagando sessao no Postgres:', err.message);
+  }
+}
+
+async function salvarInstrucaoAprendida(texto) {
+  if (!pool) return;
+  await tabelasProntas;
+  await pool.query('INSERT INTO learned_instructions (texto) VALUES ($1)', [texto]);
+}
+
+async function listarInstrucoesAprendidas() {
+  if (!pool) return [];
+  await tabelasProntas;
+  try {
+    const { rows } = await pool.query('SELECT texto FROM learned_instructions ORDER BY criado_em ASC');
+    return rows.map((r) => r.texto);
+  } catch (err) {
+    console.error('Erro lendo instrucoes aprendidas do Postgres:', err.message);
+    return [];
+  }
+}
+
+async function esquecerInstrucoesAprendidas() {
+  if (!pool) return;
+  await pool.query('DELETE FROM learned_instructions');
+}
+
+export async function limparConversa(sessionId) {
+  await limparSessao(sessionId);
 }
 
 const MAX_TOOL_ROUNDS = 10;
@@ -794,7 +999,7 @@ function aparaHistorico(session) {
 // pro fluxo de anuncio) e devolve o texto perguntando "sim ou nao"; uma ferramenta pc_* que
 // NAO precisa de confirmacao pausa sem resolver o tool_use - so devolve pro chamador o que
 // precisa rodar no navegador do usuario, que reporta o resultado depois via continuarAcaoLocal.
-async function rodarLoopDeFerramentas(session) {
+async function rodarLoopDeFerramentas(session, sessionId) {
   let response = await callClaude(session.history);
   let rounds = 0;
 
@@ -811,9 +1016,16 @@ async function rodarLoopDeFerramentas(session) {
     }
 
     const toolResults = [];
+    let esqueceuTudo = false;
     for (const block of toolUseBlocks) {
-      const result = await runTool(block.name, block.input, session);
+      const result = await runTool(block.name, block.input, session, sessionId);
+      if (result && result.___esqueceuTudo) { esqueceuTudo = true; continue; }
       toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
+    }
+    // esqueceu tudo: o historico ja foi zerado dentro do runTool - nao da pra continuar o
+    // loop normal (nao sobrou historico nem tool_use pra fechar), entao encerra aqui direto
+    if (esqueceuTudo) {
+      return { texto: 'Prontinho, apaguei todo o historico dessa conversa - a proxima mensagem comeca do zero.' };
     }
     session.history.push({ role: 'user', content: toolResults });
 
@@ -829,9 +1041,7 @@ async function rodarLoopDeFerramentas(session) {
   return { texto: replyText };
 }
 
-export async function chat(sessionId, userMessage, attachments = []) {
-  const session = getSession(sessionId);
-
+async function processarChat(session, sessionId, userMessage, attachments) {
   // pendingLocalAction com toolUseId=null so acontece depois que uma ferramenta pc_* que
   // precisa de confirmacao ja foi resolvida (status aguardando_confirmacao) - agora so falta
   // saber se o usuario confirma ou nao, exatamente como o fluxo de anuncio abaixo
@@ -898,7 +1108,7 @@ export async function chat(sessionId, userMessage, attachments = []) {
   try {
     const content = await buildUserContent(userMessage, attachments);
     session.history.push({ role: 'user', content });
-    const resultado = await rodarLoopDeFerramentas(session);
+    const resultado = await rodarLoopDeFerramentas(session, sessionId);
     return resultado.localAction ? { reply: null, localAction: resultado.localAction } : { reply: resultado.texto };
   } catch (err) {
     session.history.splice(tamanhoAntes);
@@ -906,10 +1116,20 @@ export async function chat(sessionId, userMessage, attachments = []) {
   }
 }
 
+// ponto de entrada publico: carrega a sessao do Postgres (ou RAM se nao tiver banco), processa
+// o turno, e salva o resultado antes de devolver - qualquer que seja o caminho que
+// processarChat tomou, a sessao sempre fica persistida no fim
+export async function chat(sessionId, userMessage, attachments = []) {
+  const session = await getSession(sessionId);
+  const resultado = await processarChat(session, sessionId, userMessage, attachments);
+  await salvarSessao(sessionId, session);
+  return resultado;
+}
+
 // chamado quando o navegador ja rodou a acao no computador do usuario e esta devolvendo o
 // resultado - continua a mesma conversa exatamente de onde a Claude parou de esperar
 export async function continuarAcaoLocal(sessionId, resultado) {
-  const session = getSession(sessionId);
+  const session = await getSession(sessionId);
   if (!session.pendingLocalAction) throw new Error('Nao ha nenhuma acao local pendente nessa sessao.');
 
   const { toolUseId } = session.pendingLocalAction;
@@ -934,10 +1154,13 @@ export async function continuarAcaoLocal(sessionId, resultado) {
 
   const tamanhoAntes = session.history.length;
   try {
-    const r = await rodarLoopDeFerramentas(session);
-    return r.localAction ? { reply: null, localAction: r.localAction } : { reply: r.texto };
+    const r = await rodarLoopDeFerramentas(session, sessionId);
+    const saida = r.localAction ? { reply: null, localAction: r.localAction } : { reply: r.texto };
+    await salvarSessao(sessionId, session);
+    return saida;
   } catch (err) {
     session.history.splice(tamanhoAntes);
+    await salvarSessao(sessionId, session);
     throw err;
   }
 }
