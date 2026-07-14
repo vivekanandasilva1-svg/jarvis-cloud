@@ -781,6 +781,17 @@ const PC_ENDPOINTS = {
 };
 
 async function executarAcaoLocal(tool, input) {
+  // ver_camera roda direto no navegador (getUserMedia) - nao passa pelo agente local, entao
+  // nem precisa do token dele configurado
+  if (tool === 'ver_camera') {
+    try {
+      const imagemBase64 = await capturarFrameCamera();
+      return { imagemBase64, mediaType: 'image/jpeg' };
+    } catch (err) {
+      return { erro: `Nao consegui acessar a camera: ${err.message}` };
+    }
+  }
+
   const token = obterTokenAgenteLocal();
   if (!token) {
     return { erro: 'O agente local nao esta configurado neste navegador. Abre o icone de computador no topo, roda "npm run local-agent" no seu PC e cola o token que aparecer.' };
@@ -1294,6 +1305,18 @@ function iniciarClima() {
 // preview da webcam local, independente do microfone/gravacao de audio - so um toggle
 // liga/desliga, sem gravar nem mandar nada pra lugar nenhum.
 let cameraStream = null;
+
+async function ligarCamera() {
+  if (cameraStream) return cameraStream;
+  cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+  cameraVideo.srcObject = cameraStream;
+  cameraVideo.hidden = false;
+  cameraOffMsg.hidden = true;
+  cameraHint.textContent = 'Camera ativa - fica so localmente, nada e enviado.';
+  cameraToggle.classList.add('active');
+  return cameraStream;
+}
+
 cameraToggle.addEventListener('click', async () => {
   if (cameraStream) {
     cameraStream.getTracks().forEach((t) => t.stop());
@@ -1306,13 +1329,25 @@ cameraToggle.addEventListener('click', async () => {
     return;
   }
   try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
-    cameraVideo.srcObject = cameraStream;
-    cameraVideo.hidden = false;
-    cameraOffMsg.hidden = true;
-    cameraHint.textContent = 'Camera ativa - fica so localmente, nada e enviado.';
-    cameraToggle.classList.add('active');
+    await ligarCamera();
   } catch (err) {
     cameraHint.textContent = `Nao consegui acessar a camera: ${err.message}`;
   }
 });
+
+// usado quando a Lumia pede pra "ver" (ferramenta ver_camera) - liga a camera se estiver
+// desligada, espera um quadro de verdade estar pronto e captura ele como JPEG base64
+async function capturarFrameCamera() {
+  await ligarCamera();
+  if (cameraVideo.readyState < 2) {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('a camera demorou demais pra ficar pronta')), 5000);
+      cameraVideo.addEventListener('loadeddata', () => { clearTimeout(timer); resolve(); }, { once: true });
+    });
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = cameraVideo.videoWidth || 640;
+  canvas.height = cameraVideo.videoHeight || 480;
+  canvas.getContext('2d').drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+}

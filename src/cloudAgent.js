@@ -138,6 +138,11 @@ depuracao remota ligada - se der erro nessa ferramenta, explique que precisa fec
 Chrome e abrir de novo com a flag --remote-debugging-port=9222, em vez de insistir tentando de
 novo sozinho.
 
+Voce tambem consegue enxergar pela camera do dispositivo do usuario, usando ver_camera - ela liga
+a camera (se estiver desligada) e captura uma imagem do que esta sendo filmado. Use sempre que o
+usuario pedir pra voce ver/olhar/abrir os olhos pela camera, em qualquer formato (texto, audio ou
+modo conversa). Depois de ver a imagem, comente de forma natural o que voce enxergou.
+
 Memoria: voce NUNCA esquece uma conversa sozinha - todo o historico fica salvo de verdade (nao
 so na memoria do navegador), sobrevivendo a fechar o app, atualizar a pagina ou o servidor
 reiniciar. So apaga quando o usuario pedir EXPLICITAMENTE (ferramenta esquecer_conversa) ou
@@ -545,6 +550,11 @@ const tools = [
     description: 'Lista as abas abertas AGORA no Chrome do usuario (titulo e URL de cada uma). So funciona se o usuario tiver aberto o Chrome com depuracao remota ligada - se der erro, explique que precisa disso.',
     input_schema: { type: 'object', properties: {} },
   },
+  {
+    name: 'ver_camera',
+    description: 'Liga a camera do dispositivo do usuario (se estiver desligada) e captura uma imagem do que esta sendo filmado agora, pra voce enxergar e comentar. Use quando o usuario pedir pra voce "ver", "olhar", "abrir os olhos" pela camera - frases como "Lumia abra os olhos", "veja isso aqui", "veja quem esta aqui", "olha o que eu tô segurando" etc, seja por texto, audio ou no modo conversa. Precisa de permissao de camera do navegador - se o usuario negar, explique isso.',
+    input_schema: { type: 'object', properties: {} },
+  },
   // ---------- Memoria da conversa e treinamento ----------
   {
     name: 'esquecer_conversa',
@@ -606,7 +616,7 @@ async function executeConfirmedAction(name, input) {
 const PC_TOOLS = new Set([
   'pc_abrir_app', 'pc_fechar_app', 'pc_abrir_arquivo', 'pc_ler_arquivo',
   'pc_listar_pasta', 'pc_criar_arquivo', 'pc_editar_arquivo', 'pc_apagar_arquivo',
-  'pc_listar_favoritos', 'pc_listar_abas_navegador',
+  'pc_listar_favoritos', 'pc_listar_abas_navegador', 'ver_camera',
 ]);
 // so pedem confirmacao as que perdem trabalho nao salvo ou sao dificeis/impossiveis de
 // desfazer - abrir, ler, listar e criar (nunca sobrescreve) rodam direto
@@ -885,8 +895,15 @@ async function buildUserContent(userMessage, attachments) {
 function apagarImagensAntigas(history) {
   for (const turn of history) {
     if (Array.isArray(turn.content)) {
-      turn.content = turn.content.map((b) =>
-        b.type === 'image' ? { type: 'text', text: '[imagem enviada anteriormente pelo usuario, ja analisada]' } : b);
+      turn.content = turn.content.map((b) => {
+        if (b.type === 'image') return { type: 'text', text: '[imagem enviada anteriormente pelo usuario, ja analisada]' };
+        // imagem da camera veio dentro de um tool_result (ver_camera) - limpa tambem, senao
+        // fica sendo reenviada (e recobrada) pra sempre nas chamadas seguintes
+        if (b.type === 'tool_result' && Array.isArray(b.content) && b.content.some((c) => c.type === 'image')) {
+          return { ...b, content: '[imagem capturada pela camera, ja analisada]' };
+        }
+        return b;
+      });
     }
   }
 }
@@ -1145,16 +1162,33 @@ export async function continuarAcaoLocal(sessionId, resultado) {
   const session = await getSession(sessionId);
   if (!session.pendingLocalAction) throw new Error('Nao ha nenhuma acao local pendente nessa sessao.');
 
-  const { toolUseId } = session.pendingLocalAction;
+  const { toolUseId, tool } = session.pendingLocalAction;
   session.pendingLocalAction = null;
 
   if (toolUseId) {
-    // veio de uma ferramenta que nao precisou de confirmacao - o tool_use ainda esta aberto,
-    // fecha ele com o resultado de verdade
-    session.history.push({
-      role: 'user',
-      content: [{ type: 'tool_result', tool_use_id: toolUseId, content: JSON.stringify(resultado) }],
-    });
+    // ver_camera devolve a imagem capturada no navegador (base64) - manda como bloco de
+    // imagem de verdade no tool_result, pra Claude enxergar, em vez de JSON.stringify (que
+    // so viraria um texto gigante inutil pra ela "ver")
+    if (tool === 'ver_camera' && resultado && resultado.imagemBase64) {
+      session.history.push({
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          tool_use_id: toolUseId,
+          content: [{
+            type: 'image',
+            source: { type: 'base64', media_type: resultado.mediaType || 'image/jpeg', data: resultado.imagemBase64 },
+          }],
+        }],
+      });
+    } else {
+      // veio de uma ferramenta que nao precisou de confirmacao - o tool_use ainda esta aberto,
+      // fecha ele com o resultado de verdade
+      session.history.push({
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: toolUseId, content: JSON.stringify(resultado) }],
+      });
+    }
   } else {
     // veio do fluxo de confirmacao - o tool_use original ja tinha sido resolvido antes (como
     // "aguardando_confirmacao"), entao so reporta o resultado real como texto de sistema,

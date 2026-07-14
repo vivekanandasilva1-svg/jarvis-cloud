@@ -7,7 +7,10 @@ export async function transcribeAudioWhisper(buffer, mimeType = 'audio/webm') {
   const form = new FormData();
   form.append('audio_file', new Blob([buffer], { type: mimeType }), `audio.${extensao}`);
 
-  const url = `${process.env.WHISPER_URL}/asr?task=transcribe&language=pt&output=json`;
+  // vad_filter descarta os trechos de silencio antes de transcrever - reduz o tempo de
+  // processamento (menos audio pra rodar no modelo) sem perder precisao, ja que silencio nao
+  // tem fala pra perder mesmo
+  const url = `${process.env.WHISPER_URL}/asr?task=transcribe&language=pt&output=json&vad_filter=true`;
   const controlador = new AbortController();
   const timer = setTimeout(() => controlador.abort(), 30000);
   let res;
