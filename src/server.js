@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chat, continuarAcaoLocal, limparConversa } from './cloudAgent.js';
 import { synthesizeSpeechWithTimestamps, transcribeAudio } from './gemini.js';
+import { synthesizeSpeechKokoro } from './kokoro.js';
 import { transcribeAudioWhisper } from './whisper.js';
 import { sendTextMessage, downloadMedia } from './whatsapp.js';
 
@@ -178,7 +179,12 @@ app.post('/api/tts', async (req, res) => {
   if (!text) return res.status(400).json({ erro: 'text obrigatorio' });
 
   try {
-    const { audioBase64, alignment } = await synthesizeSpeechWithTimestamps(text);
+    // KOKORO_URL so existe nos ambientes com o Kokoro TTS auto-hospedado rodando ao lado (a
+    // VPS) - voz fixa, sem cota nem custo por uso. Onde nao tem essa infra (ex: Render), cai
+    // pro Gemini como estava antes.
+    const { audioBase64, alignment } = process.env.KOKORO_URL
+      ? await synthesizeSpeechKokoro(text)
+      : await synthesizeSpeechWithTimestamps(text);
     res.json({ audio: audioBase64, alignment });
   } catch (err) {
     console.error('Erro no TTS:', err);
