@@ -913,13 +913,19 @@ function extractText(response) {
 }
 
 async function callClaude(history) {
-  return anthropic.messages.create({
+  const response = await anthropic.messages.create({
     model: 'claude-sonnet-5',
     max_tokens: 1500,
     system: await systemPromptBlocos(),
     tools,
     messages: history,
   });
+  // log leve pra confirmar que o prompt caching esta funcionando de verdade -
+  // cache_read_input_tokens alto (vs input_tokens baixo) significa que a maior parte do
+  // prompt (system + tools) veio do cache, bem mais barato
+  const u = response.usage;
+  console.log(`[Claude usage] input=${u.input_tokens} output=${u.output_tokens} cache_criado=${u.cache_creation_input_tokens || 0} cache_lido=${u.cache_read_input_tokens || 0}`);
+  return response;
 }
 
 // cache em RAM por cima do Postgres - evita ir no banco a cada mensagem da mesma conversa
