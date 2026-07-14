@@ -659,89 +659,6 @@ async function falarComVozNatural(texto, bubbleEl) {
   });
 }
 
-// a Web Speech API do navegador (usada so quando a voz do Gemini falha por cota estourada
-// ou qualquer outro erro) escolhe uma voz qualquer por padrao - as vezes vem masculina ou
-// robotica generica. E de graca e sem limite de uso nenhum (roda no proprio aparelho, nao
-// gasta cota de API nenhuma), entao vale escolher bem: primeiro tenta uma das vozes neurais
-// "Online (Natural)" do Edge/Windows moderno (a qualidade mais proxima de humana que da pra
-// ter sem pagar nada), depois nomes femininos conhecidos de cada plataforma (Android/Chrome,
-// iOS/Safari, Windows classico), so caindo pro fallback generico por ultimo.
-let vozFemininaCache = null;
-function obterVozFeminina() {
-  if (vozFemininaCache) return vozFemininaCache;
-  const vozes = window.speechSynthesis.getVoices();
-  if (!vozes.length) return null;
-
-  const vozesPt = vozes.filter((v) => v.lang && v.lang.toLowerCase().startsWith('pt'));
-  const nomesMasculinosConhecidos = /daniel|felipe|ricardo|diego|joão|jorge|antonio|antônio|fabio|fábio|julio|júlio|duarte|humberto/i;
-
-  // 1) vozes neurais do Edge/Windows 11 ("Microsoft X Online (Natural)") - de longe as mais
-  // humanas entre as gratuitas/ilimitadas, mas so existem em navegadores/SOs recentes
-  const neuralFeminina = vozesPt.find((v) => /online \(natural\)/i.test(v.name) && !nomesMasculinosConhecidos.test(v.name));
-  if (neuralFeminina) { vozFemininaCache = neuralFeminina; return neuralFeminina; }
-
-  // 2) nomes femininos conhecidos, por plataforma (Windows classico, Android/Chrome, iOS)
-  const preferidas = [
-    'Microsoft Francisca', 'Microsoft Thalita', 'Microsoft Maria',
-    'Google português do Brasil', 'Google Brasil',
-    'Luciana', 'Joana', 'Fernanda', 'Camila', 'Vitória', 'Vitoria', 'Raquel',
-  ];
-  for (const nome of preferidas) {
-    const achada = vozesPt.find((v) => v.name.includes(nome));
-    if (achada) { vozFemininaCache = achada; return achada; }
-  }
-
-  // 3) qualquer voz pt- que nao tenha nome tipicamente masculino
-  const semNomeMasculino = vozesPt.find((v) => !nomesMasculinosConhecidos.test(v.name));
-  vozFemininaCache = semNomeMasculino || vozesPt[0] || vozes[0] || null;
-  return vozFemininaCache;
-}
-if (window.speechSynthesis) {
-  window.speechSynthesis.onvoiceschanged = () => { vozFemininaCache = null; obterVozFeminina(); };
-}
-
-function falarNavegador(texto, bubbleEl) {
-  return new Promise((resolve) => {
-    // cancel() imediatamente seguido de speak() no mesmo ciclo e um bug conhecido do
-    // Chrome/Edge: a fala nova pode nao sair nenhum som, sem erro nenhum (o motivo real de
-    // "nao ouco a voz dela" quando cai nesse fallback). So cancela se realmente tinha algo
-    // rodando, e ainda assim da um tick pro motor de voz respirar antes do speak() novo.
-    const tinhaAlgoTocando = window.speechSynthesis.speaking || window.speechSynthesis.pending;
-    if (tinhaAlgoTocando) window.speechSynthesis.cancel();
-
-    const iniciar = () => {
-      const utter = new SpeechSynthesisUtterance(texto);
-      utter.lang = 'pt-BR';
-      // um pouco mais devagar e um tico mais aguda que o padrao (1.0/1.0) fica com cadencia
-      // mais suave e menos "robo lendo rapido" - sutil, mas ajuda a soar mais humana
-      utter.rate = 0.98;
-      utter.pitch = 1.04;
-      const voz = obterVozFeminina();
-      if (voz) utter.voice = voz;
-      utter.onstart = () => { clearTimeout(timeoutSeguranca); setStatus('falando', 'speaking'); iniciarFalaVisual(); };
-      // a Web Speech API so da o indice do caractere onde comeca cada palavra (nao um
-      // alinhamento exato) - ainda assim da pra revelar palavra por palavra
-      utter.onboundary = (event) => {
-        if (bubbleEl && event.name === 'word') {
-          bubbleEl.textContent = texto.slice(0, event.charIndex + event.charLength || event.charIndex);
-          chatLog.scrollTop = chatLog.scrollHeight;
-        }
-      };
-      const finalizar = () => { clearTimeout(timeoutSeguranca); pararFalaVisual(); if (bubbleEl) bubbleEl.textContent = texto; resolve(); };
-      utter.onend = finalizar;
-      utter.onerror = finalizar;
-      window.speechSynthesis.speak(utter);
-      // alguns navegadores/SOs simplesmente nunca disparam onstart/onend pra certos textos
-      // (trava silenciosa) - sem essa rede de seguranca o modo conversa ficava esperando pra
-      // sempre e nunca voltava a ouvir de novo
-      timeoutSeguranca = setTimeout(finalizar, Math.max(4000, texto.length * 160));
-    };
-
-    let timeoutSeguranca = null;
-    if (tinhaAlgoTocando) setTimeout(iniciar, 50);
-    else iniciar();
-  });
-}
 
 // fala a resposta revelando o texto em sincronia; se o modo conversa estiver ativo, so
 // volta a ouvir depois de terminar
@@ -750,17 +667,18 @@ async function falar(texto, bubbleEl) {
     try {
       await falarComVozNatural(texto, bubbleEl);
     } catch (err) {
-      // cai pra voz robotica do navegador so como ultimo recurso - loga o motivo real (erro
-      // de rede, cota da API esgotada etc) pra dar pra diagnosticar
-      console.warn('Voz do Gemini falhou, usando voz do navegador como fallback:', err);
-      // sem isso a Lumia "ficava muda" sem nenhuma explicacao visivel - o usuario nao tinha
-      // como saber se era um bug ou so a cota da API do Gemini estourada (algo que so da pra
-      // resolver esperando o reset diario ou ativando faturamento, nao e algo que eu conserto)
-      addBubble(`Voz indisponivel no momento (${err.message}). A resposta acima ficou so em texto.`, 'system');
+      // a voz definitiva da Lumia e a Kokoro (auto-hospedada na VPS) - uma falha aqui costuma
+      // ser um engasgo passageiro (o container reiniciando, por exemplo), entao tenta mais
+      // uma vez antes de desistir, em vez de cair direto pra voz robotica do navegador. O
+      // usuario pediu explicitamente pra nunca trocar de voz no meio da conversa - preferimos
+      // ficar so em texto dessa vez a soar diferente dela mesma.
+      console.warn('Voz da Kokoro falhou na 1a tentativa, tentando de novo:', err);
       try {
-        await falarNavegador(texto, bubbleEl);
+        await new Promise((r) => setTimeout(r, 1200));
+        await falarComVozNatural(texto, bubbleEl);
       } catch (err2) {
-        console.warn('Fallback de voz do navegador tambem falhou:', err2);
+        console.warn('Voz da Kokoro falhou de novo, ficando so em texto (sem cair pra voz robotica):', err2);
+        addBubble(`Voz indisponivel no momento (${err2.message}). A resposta acima ficou so em texto.`, 'system');
         if (bubbleEl) bubbleEl.textContent = texto;
       }
     }
