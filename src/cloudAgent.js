@@ -149,16 +149,25 @@ futura), use a ferramenta aprender_instrucao. Essas instrucoes aparecem nesse me
 secao "INSTRUCOES QUE O USUARIO JA TE ENSINOU" (se houver) - trate como parte permanente de quem
 voce e. Se o usuario pedir pra esquecer o que te ensinou, use esquecer_instrucoes_aprendidas.`;
 
-async function systemPromptComHoje() {
+// devolve o system prompt em dois blocos, nao uma string so - isso e o que permite prompt
+// caching de verdade. O SYSTEM_PROMPT (grande, quase nunca muda) fica marcado com
+// cache_control: a Anthropic guarda ele por uns minutos e cobra soh ~10% do preco normal nas
+// chamadas seguintes que reusarem o mesmo prefixo - e a MESMA resposta, mesmo modelo, so mais
+// barato. A data de hoje e as instrucoes aprendidas (que mudam) ficam num segundo bloco, sem
+// cache, depois do ponto de corte - assim elas nao "quebram" o cache do bloco grande de cima.
+async function systemPromptBlocos() {
   const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' });
-  let prompt = `${SYSTEM_PROMPT}\n\nA data de hoje e ${hoje} (fuso horario de Maceio/Brasil). Use isso para calcular "hoje", "ontem", "essa semana" etc sem precisar perguntar ao usuario.`;
+  let dinamico = `A data de hoje e ${hoje} (fuso horario de Maceio/Brasil). Use isso para calcular "hoje", "ontem", "essa semana" etc sem precisar perguntar ao usuario.`;
 
   const instrucoes = await listarInstrucoesAprendidas();
   if (instrucoes.length) {
-    prompt += `\n\nINSTRUCOES QUE O USUARIO JA TE ENSINOU (siga todas, valem permanentemente ate ele pedir pra esquecer):\n${instrucoes.map((i, idx) => `${idx + 1}. ${i}`).join('\n')}`;
+    dinamico += `\n\nINSTRUCOES QUE O USUARIO JA TE ENSINOU (siga todas, valem permanentemente ate ele pedir pra esquecer):\n${instrucoes.map((i, idx) => `${idx + 1}. ${i}`).join('\n')}`;
   }
 
-  return prompt;
+  return [
+    { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: dinamico },
+  ];
 }
 
 const tools = [
@@ -555,6 +564,10 @@ const tools = [
     name: 'esquecer_instrucoes_aprendidas',
     description: 'Apaga TODAS as instrucoes de comportamento que o usuario ja te ensinou (reseta o treinamento, nao mexe no historico da conversa). So use quando pedido explicitamente.',
     input_schema: { type: 'object', properties: {} },
+    // marca o fim do bloco de ferramentas como ponto de cache - a lista inteira (~30
+    // ferramentas) e grande e quase nunca muda, entao cache_control aqui faz a Anthropic
+    // cobrar bem mais barato nela nas chamadas seguintes dentro da janela de cache
+    cache_control: { type: 'ephemeral' },
   },
 ];
 
@@ -886,7 +899,7 @@ async function callClaude(history) {
   return anthropic.messages.create({
     model: 'claude-sonnet-5',
     max_tokens: 1500,
-    system: await systemPromptComHoje(),
+    system: await systemPromptBlocos(),
     tools,
     messages: history,
   });
