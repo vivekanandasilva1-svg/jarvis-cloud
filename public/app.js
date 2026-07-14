@@ -82,7 +82,7 @@ let modoConversa = false;
 let aguardandoResposta = false;
 let processandoEnvio = false;
 let silenceTimer = null;
-const PAUSA_TOLERANCIA_MS = 1800; // quanto tempo de silencio aceitar (modo conversa) antes de considerar que a pessoa terminou de falar
+const PAUSA_TOLERANCIA_MS = 4000; // quanto tempo de silencio aceitar (modo conversa) antes de considerar que a pessoa terminou de falar
 
 // ---------- Relogio ----------
 
@@ -412,7 +412,11 @@ function removerFundo(imageData) {
 }
 
 function ajustarTamanhoCanvas() {
-  const dpr = window.devicePixelRatio || 1;
+  // limita o pixel ratio usado no canvas do avatar - em tela retina/4K (dpr 3+) o canvas real
+  // ficava enorme e cada quadro processado pixel a pixel (chave de croma pra tirar o fundo
+  // verde) custava muito mais CPU sem ganho visivel nenhum, ja que o avatar ocupa uma area
+  // modesta da tela
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const rect = bot.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) return; // ainda escondido (tela de login)
   bot.width = Math.max(1, Math.round(rect.width * dpr));
@@ -498,7 +502,19 @@ function escolherVideoTalk() {
 // corte seco a cada volta. Trocando um pouco antes (com dissolve) some esse "salto" periodico.
 const ANTECEDENCIA_LOOP_S = 0.5;
 
-function renderizarQuadro() {
+// a chave de croma (remocao do fundo verde) e processada pixel a pixel via getImageData -
+// rodar isso a 60fps o tempo todo (mesmo com a Lumia parada, so respirando) e o maior peso
+// do app na maquina do usuario. 30fps e imperceptivel num avatar com movimento sutil e corta
+// pela metade esse custo de CPU/GPU enquanto o app fica aberto.
+const FPS_ALVO_AVATAR = 30;
+const INTERVALO_QUADRO_MS = 1000 / FPS_ALVO_AVATAR;
+let ultimoQuadroEm = 0;
+
+function renderizarQuadro(agora) {
+  requestAnimationFrame(renderizarQuadro);
+  if (agora - ultimoQuadroEm < INTERVALO_QUADRO_MS) return;
+  ultimoQuadroEm = agora;
+
   const w = bot.width, h = bot.height;
   if (w > 0 && h > 0) {
     if (transicao) {
@@ -521,7 +537,6 @@ function renderizarQuadro() {
       }
     }
   }
-  requestAnimationFrame(renderizarQuadro);
 }
 requestAnimationFrame(renderizarQuadro);
 
@@ -972,7 +987,15 @@ let mediaRecorder = null;
 let audioChunks = [];
 let vadCtx = null;
 let vadRAF = null;
-const VOLUME_MINIMO_FALA = 12; // 0-255 (media de frequencia) - abaixo disso conta como silencio
+let vadSource = null;
+let vadAnalyser = null;
+let vadFailsafeTimer = null;
+const VOLUME_MINIMO_FALA = 12; // 0-255 (media de frequencia) - piso minimo do limiar de fala, mesmo apos calibrar
+// se passar tanto tempo assim sem detectar NENHUMA fala, reinicia sozinho o segmento de escuta
+// - antes disso, se o limiar de voz nunca disparasse (ambiente muito quieto, microfone com
+// ganho baixo etc), o modo conversa ficava "ouvindo" pra sempre sem nunca fazer nada, o que
+// parecia (e na pratica era) o modo conversa simplesmente nao funcionando
+const SILENCIO_MAXIMO_SEM_FALAR_MS = 20000;
 
 async function pedirMicrofone() {
   if (micStream && micStream.active) return micStream;
@@ -1036,21 +1059,49 @@ async function monitorarSilencio(stream, aoParar) {
   // fala e nunca envia nada, o que parecia "o modo conversa nao funciona"
   if (ctx.state === 'suspended') await ctx.resume();
   vadCtx = ctx;
-  const source = ctx.createMediaStreamSource(stream);
-  const analyser = ctx.createAnalyser();
-  analyser.fftSize = 512;
-  source.connect(analyser);
+  // cria (e guarda pra desconectar depois em pararMonitorSilencio) um novo par source/analyser
+  // a cada segmento de escuta - sem desconectar o anterior, cada rodada do modo conversa
+  // deixava mais nos de audio pendurados no mesmo AudioContext pra sempre (vazamento que ia
+  // deixando o navegador mais pesado quanto mais tempo a conversa continua ficava aberta)
+  vadSource = ctx.createMediaStreamSource(stream);
+  vadAnalyser = ctx.createAnalyser();
+  vadAnalyser.fftSize = 512;
+  vadSource.connect(vadAnalyser);
 
-  const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  const dataArray = new Uint8Array(vadAnalyser.frequencyBinCount);
   let falouAlgumaVez = false;
 
+  // calibra o "ruido da sala" nos primeiros ~300ms antes de comecar a detectar fala de
+  // verdade - assim o limiar se adapta ao microfone/ambiente de cada usuario, em vez de um
+  // numero fixo que funciona numa maquina e nunca dispara em outra (ganho de mic baixo,
+  // ruido de fundo diferente etc) - essa era a causa mais provavel do modo conversa parecer
+  // travado: ela escutava, mas o limiar fixo nunca cruzava e nada acontecia
+  const CALIBRACAO_FRAMES = 18; // ~300ms a 60fps
+  let framesCalibracao = 0;
+  let somaCalibracao = 0;
+  let limiarFala = VOLUME_MINIMO_FALA;
+
+  vadFailsafeTimer = setTimeout(() => { if (!falouAlgumaVez) aoParar(false); }, SILENCIO_MAXIMO_SEM_FALAR_MS);
+
   function checar() {
-    analyser.getByteFrequencyData(dataArray);
+    vadAnalyser.getByteFrequencyData(dataArray);
     const media = dataArray.reduce((s, v) => s + v, 0) / dataArray.length;
-    if (media > VOLUME_MINIMO_FALA) {
+
+    if (framesCalibracao < CALIBRACAO_FRAMES) {
+      framesCalibracao++;
+      somaCalibracao += media;
+      if (framesCalibracao === CALIBRACAO_FRAMES) {
+        const ruidoDeFundo = somaCalibracao / CALIBRACAO_FRAMES;
+        limiarFala = Math.min(45, Math.max(VOLUME_MINIMO_FALA, ruidoDeFundo * 1.8 + 6));
+      }
+      vadRAF = requestAnimationFrame(checar);
+      return;
+    }
+
+    if (media > limiarFala) {
       falouAlgumaVez = true;
       clearTimeout(silenceTimer);
-      silenceTimer = setTimeout(() => aoParar(falouAlgumaVez), PAUSA_TOLERANCIA_MS);
+      silenceTimer = setTimeout(() => { clearTimeout(vadFailsafeTimer); aoParar(falouAlgumaVez); }, PAUSA_TOLERANCIA_MS);
     }
     vadRAF = requestAnimationFrame(checar);
   }
@@ -1061,6 +1112,10 @@ function pararMonitorSilencio() {
   if (vadRAF) cancelAnimationFrame(vadRAF);
   vadRAF = null;
   clearTimeout(silenceTimer);
+  clearTimeout(vadFailsafeTimer);
+  vadFailsafeTimer = null;
+  if (vadSource) { try { vadSource.disconnect(); } catch { /* ja desconectado */ } vadSource = null; }
+  if (vadAnalyser) { try { vadAnalyser.disconnect(); } catch { /* ja desconectado */ } vadAnalyser = null; }
 }
 
 async function iniciarGravacao(comDeteccaoSilencio) {
@@ -1154,6 +1209,7 @@ function iniciarModoConversa() {
   aguardandoResposta = false;
   convBtn.classList.add('active');
   hintEl.textContent = 'Modo conversa ativo - pode falar quando quiser';
+  addBubble('Modo conversa ativado - pode falar, eu escuto e ja respondo sozinha.', 'system');
   ouvirSegmento();
 }
 
