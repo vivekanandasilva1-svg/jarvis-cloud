@@ -389,12 +389,17 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   const configAuto = await autoAtendimento.obterConfig();
   if (!configAuto.ativo || configAuto.instancia !== instanciaDoWebhook) return;
 
+  // mostra "digitando..." pro contato enquanto ela pensa a resposta - cosmetico, nunca deve
+  // travar o fluxo se o Evolution API recusar por qualquer motivo
+  await evolutionApi.enviarPresenca(instanciaDoWebhook, numero, 'composing').catch(() => {});
+
   try {
     const resultado = await autoAtendimento.processarMensagem(numero, instanciaDoWebhook, { texto, tipo, mensagemBruta: data });
     if (!resultado) return;
 
     if (resultado.respondeComAudio) {
       try {
+        await evolutionApi.enviarPresenca(instanciaDoWebhook, numero, 'recording').catch(() => {});
         await autoAtendimento.enviarRespostaEmAudio(instanciaDoWebhook, numero, resultado.texto);
         return;
       } catch (err) {
