@@ -798,10 +798,34 @@ html, body {
 .tab-auto {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 18px;
   padding: 18px;
   overflow-y: auto;
-  max-width: 640px;
+}
+@media (min-width: 860px) {
+  .tab-auto { flex-direction: row; align-items: stretch; }
+}
+
+.auto-coluna-esq {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  flex: 0 0 auto;
+}
+@media (min-width: 860px) {
+  .auto-coluna-esq { width: 380px; overflow-y: auto; }
+}
+
+.auto-coluna-dir {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-height: 320px;
+}
+@media (min-width: 860px) {
+  .auto-coluna-dir { min-height: 0; }
 }
 
 .auto-aviso {
@@ -869,17 +893,38 @@ html, body {
   font-weight: 600;
 }
 
+#autoFrequenciaAudio {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+#autoFrequenciaAudio:focus { border-color: var(--gold); }
+/* mesmo motivo do #autoInstancia option acima - lista suspensa nativa, so da pra controlar
+   background/cor do option, entao troca o branco padrao ilegivel por cinza claro + dourado */
+#autoFrequenciaAudio option {
+  background-color: #e8e6e1;
+  color: #8a6a12;
+  font-weight: 600;
+}
+
 #autoPrompt {
+  flex: 1 1 auto;
+  min-height: 320px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 12px;
+  padding: 14px;
   color: var(--text);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 13.5px;
+  line-height: 1.6;
   outline: none;
   font-family: inherit;
   resize: vertical;
+  overflow-y: auto;
 }
 #autoPrompt:focus { border-color: var(--gold); }
 
