@@ -61,8 +61,10 @@ const loadBar = document.getElementById('loadBar');
 // ---------- Abas: elementos ----------
 const tabBtnPainel = document.getElementById('tabBtnPainel');
 const tabBtnAgenda = document.getElementById('tabBtnAgenda');
+const tabBtnWhatsapp = document.getElementById('tabBtnWhatsapp');
 const tabPainel = document.getElementById('tabPainel');
 const tabAgenda = document.getElementById('tabAgenda');
+const tabWhatsapp = document.getElementById('tabWhatsapp');
 const agendaGoogleStatus = document.getElementById('agendaGoogleStatus');
 const agendaGoogleBtn = document.getElementById('agendaGoogleBtn');
 const agendaForm = document.getElementById('agendaForm');
@@ -75,6 +77,19 @@ const agendaDescricao = document.getElementById('agendaDescricao');
 const agendaErro = document.getElementById('agendaErro');
 const agendaLista = document.getElementById('agendaLista');
 const agendaRefresh = document.getElementById('agendaRefresh');
+
+// ---------- WhatsApp: elementos ----------
+const waInstanciaAtiva = document.getElementById('waInstanciaAtiva');
+const waBadge = document.getElementById('waBadge');
+const waAdminInput = document.getElementById('waAdminInput');
+const waAdminSalvar = document.getElementById('waAdminSalvar');
+const waNovoNome = document.getElementById('waNovoNome');
+const waNovoCriar = document.getElementById('waNovoCriar');
+const waQrArea = document.getElementById('waQrArea');
+const waQrImg = document.getElementById('waQrImg');
+const waQrFechar = document.getElementById('waQrFechar');
+const waLista = document.getElementById('waLista');
+const waRefresh = document.getElementById('waRefresh');
 
 let sessionId = localStorage.getItem('jarvis_session_id');
 if (!sessionId) {
@@ -1384,23 +1399,25 @@ async function capturarFrameCamera() {
   return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
 }
 
-// ---------- Abas: Painel / Agenda ----------
-let agendaCarregadaUmaVez = false;
-
+// ---------- Abas: Painel / Agenda / WhatsApp ----------
 function mudarAba(aba) {
-  const ehPainel = aba === 'painel';
-  tabPainel.hidden = !ehPainel;
-  tabAgenda.hidden = ehPainel;
-  tabBtnPainel.classList.toggle('active', ehPainel);
-  tabBtnAgenda.classList.toggle('active', !ehPainel);
-  if (!ehPainel) {
-    agendaCarregadaUmaVez = true;
+  tabPainel.hidden = aba !== 'painel';
+  tabAgenda.hidden = aba !== 'agenda';
+  tabWhatsapp.hidden = aba !== 'whatsapp';
+  tabBtnPainel.classList.toggle('active', aba === 'painel');
+  tabBtnAgenda.classList.toggle('active', aba === 'agenda');
+  tabBtnWhatsapp.classList.toggle('active', aba === 'whatsapp');
+  if (aba === 'agenda') {
     carregarStatusGoogleAgenda();
     carregarEventosAgenda();
+  } else if (aba === 'whatsapp') {
+    carregarStatusWhatsapp();
+    carregarInstanciasWhatsapp();
   }
 }
 tabBtnPainel.addEventListener('click', () => mudarAba('painel'));
 tabBtnAgenda.addEventListener('click', () => mudarAba('agenda'));
+tabBtnWhatsapp.addEventListener('click', () => mudarAba('whatsapp'));
 
 // ---------- Agenda: Google Agenda (conectar/desconectar) ----------
 async function carregarStatusGoogleAgenda() {
@@ -1582,6 +1599,202 @@ agendaForm.addEventListener('submit', async (e) => {
 
 // se o app abrir ja com ?agenda_google=... na URL (voltando do OAuth), mostra a aba Agenda
 // direto em vez de deixar escondida atras da aba Painel
-if (new URLSearchParams(window.location.search).has('agenda_google') && !agendaCarregadaUmaVez) {
+if (new URLSearchParams(window.location.search).has('agenda_google')) {
   mudarAba('agenda');
 }
+
+// ---------- WhatsApp: status da instancia ativa + numero admin ----------
+async function carregarStatusWhatsapp() {
+  try {
+    const res = await fetch('/api/whatsapp/status', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    waInstanciaAtiva.textContent = data.instanciaAtiva || '--';
+    waAdminInput.value = data.numeroAdmin || '';
+    const conectada = data.estado === 'open';
+    waBadge.textContent = conectada ? 'Conectada' : (data.estado === 'connecting' ? 'Conectando...' : 'Desconectada');
+    waBadge.className = `wa-badge ${conectada ? 'wa-badge-ok' : 'wa-badge-off'}`;
+  } catch (err) {
+    waBadge.textContent = 'Erro';
+    waBadge.className = 'wa-badge wa-badge-off';
+    waInstanciaAtiva.textContent = err.message;
+  }
+}
+
+waAdminSalvar.addEventListener('click', async () => {
+  const numero = waAdminInput.value.replace(/\D/g, '');
+  if (!numero) return;
+  waAdminSalvar.disabled = true;
+  try {
+    const res = await fetch('/api/whatsapp/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ numero }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    addBubble('Numero autorizado do WhatsApp atualizado.', 'system');
+  } catch (err) {
+    addBubble(`Erro salvando numero: ${err.message}`, 'system');
+  } finally {
+    waAdminSalvar.disabled = false;
+  }
+});
+
+// ---------- WhatsApp: lista de instancias ----------
+function mostrarQr(base64) {
+  waQrImg.src = base64;
+  waQrArea.hidden = false;
+  waQrArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+waQrFechar.addEventListener('click', () => { waQrArea.hidden = true; waQrImg.src = ''; });
+
+async function carregarInstanciasWhatsapp() {
+  waLista.textContent = '';
+  const carregando = document.createElement('p');
+  carregando.className = 'agenda-vazia';
+  carregando.textContent = 'Carregando...';
+  waLista.appendChild(carregando);
+
+  try {
+    const [resInstancias, resStatus] = await Promise.all([
+      fetch('/api/whatsapp/instancias', { headers: { 'x-app-password': appPassword } }),
+      fetch('/api/whatsapp/status', { headers: { 'x-app-password': appPassword } }),
+    ]);
+    const dataInstancias = await resInstancias.json();
+    const dataStatus = await resStatus.json();
+    if (!resInstancias.ok) throw new Error(dataInstancias.erro || 'erro desconhecido');
+
+    waLista.textContent = '';
+    const instancias = dataInstancias.instancias || [];
+    if (!instancias.length) {
+      const vazio = document.createElement('p');
+      vazio.className = 'agenda-vazia';
+      vazio.textContent = 'Nenhuma instancia encontrada.';
+      waLista.appendChild(vazio);
+      return;
+    }
+
+    for (const inst of instancias) {
+      const item = document.createElement('div');
+      item.className = 'wa-instancia';
+
+      const info = document.createElement('div');
+      info.className = 'wa-instancia-info';
+      const nome = document.createElement('div');
+      nome.className = 'wa-instancia-nome';
+      nome.textContent = inst.nome;
+      if (inst.nome === dataStatus.instanciaAtiva) {
+        const tag = document.createElement('span');
+        tag.className = 'agenda-evento-tag';
+        tag.textContent = 'Ativa';
+        nome.appendChild(tag);
+      }
+      const detalhe = document.createElement('div');
+      detalhe.className = 'wa-instancia-detalhe';
+      detalhe.textContent = `${inst.numero || 'sem numero'} · ${inst.status || 'desconhecido'}`;
+      info.appendChild(nome);
+      info.appendChild(detalhe);
+      item.appendChild(info);
+
+      const acoes = document.createElement('div');
+      acoes.className = 'wa-instancia-acoes';
+
+      if (inst.nome !== dataStatus.instanciaAtiva) {
+        const usarBtn = document.createElement('button');
+        usarBtn.type = 'button';
+        usarBtn.textContent = 'Usar esta';
+        usarBtn.addEventListener('click', async () => {
+          usarBtn.disabled = true;
+          try {
+            await fetch('/api/whatsapp/ativar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+              body: JSON.stringify({ nome: inst.nome }),
+            });
+            addBubble(`Instancia ativa trocada pra "${inst.nome}".`, 'system');
+            carregarStatusWhatsapp();
+            carregarInstanciasWhatsapp();
+          } catch (err) {
+            addBubble(`Erro ativando instancia: ${err.message}`, 'system');
+            usarBtn.disabled = false;
+          }
+        });
+        acoes.appendChild(usarBtn);
+      }
+
+      const qrBtn = document.createElement('button');
+      qrBtn.type = 'button';
+      qrBtn.textContent = 'Gerar QR';
+      qrBtn.addEventListener('click', async () => {
+        qrBtn.disabled = true;
+        try {
+          const res = await fetch(`/api/whatsapp/qrcode/${encodeURIComponent(inst.nome)}`, { headers: { 'x-app-password': appPassword } });
+          const data = await res.json();
+          if (!res.ok || !data.qrcode) throw new Error(data.erro || 'nao consegui gerar o QR (talvez ja esteja conectada)');
+          mostrarQr(data.qrcode);
+        } catch (err) {
+          addBubble(`Erro gerando QR: ${err.message}`, 'system');
+        } finally {
+          qrBtn.disabled = false;
+        }
+      });
+      acoes.appendChild(qrBtn);
+
+      const desconectarBtn = document.createElement('button');
+      desconectarBtn.type = 'button';
+      desconectarBtn.className = 'wa-instancia-desconectar';
+      desconectarBtn.textContent = 'Desconectar';
+      desconectarBtn.addEventListener('click', async () => {
+        if (!confirm(`Desconectar o numero da instancia "${inst.nome}"? Vai precisar escanear um QR novo pra reconectar.`)) return;
+        desconectarBtn.disabled = true;
+        try {
+          await fetch('/api/whatsapp/desconectar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+            body: JSON.stringify({ nome: inst.nome }),
+          });
+          carregarInstanciasWhatsapp();
+          carregarStatusWhatsapp();
+        } catch (err) {
+          addBubble(`Erro desconectando: ${err.message}`, 'system');
+          desconectarBtn.disabled = false;
+        }
+      });
+      acoes.appendChild(desconectarBtn);
+
+      item.appendChild(acoes);
+      waLista.appendChild(item);
+    }
+  } catch (err) {
+    waLista.textContent = '';
+    const erro = document.createElement('p');
+    erro.className = 'agenda-vazia';
+    erro.textContent = `Nao consegui carregar as instancias: ${err.message}`;
+    waLista.appendChild(erro);
+  }
+}
+waRefresh.addEventListener('click', () => { carregarInstanciasWhatsapp(); carregarStatusWhatsapp(); });
+
+waNovoCriar.addEventListener('click', async () => {
+  const nome = waNovoNome.value.trim();
+  if (!nome) return;
+  waNovoCriar.disabled = true;
+  try {
+    const res = await fetch('/api/whatsapp/instancias', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ nome }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    if (data.qrcode) mostrarQr(data.qrcode);
+    waNovoNome.value = '';
+    carregarInstanciasWhatsapp();
+    addBubble(`Instancia "${nome}" criada. Escaneia o QR pra conectar o numero, depois clica em "Usar esta" pra ativar ela.`, 'system');
+  } catch (err) {
+    addBubble(`Erro criando instancia: ${err.message}`, 'system');
+  } finally {
+    waNovoCriar.disabled = false;
+  }
+});

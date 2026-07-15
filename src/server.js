@@ -12,9 +12,11 @@ import { synthesizeSpeechKokoro } from './kokoro.js';
 import { transcribeAudioWhisper } from './whisper.js';
 import { sendTextMessage, downloadMedia } from './whatsapp.js';
 import { obterArquivo } from './arquivosGerados.js';
+import * as evolutionApi from './evolutionApi.js';
 import { enviarMensagemTexto } from './evolutionApi.js';
 import * as agenda from './agenda.js';
 import * as googleCalendar from './googleCalendar.js';
+import * as whatsappInstances from './whatsappInstances.js';
 
 const execAsync = promisify(exec);
 
@@ -338,13 +340,6 @@ app.post('/webhook/whatsapp', (req, res) => {
 // Web/Baileys) que ja roda na mesma VPS - sem as restricoes de janela de 24h/template da API
 // oficial da Meta, entao da pra mandar lembrete e mensagem proativa a qualquer hora.
 
-// so o numero admin configurado pode conversar com a Lumia por aqui - ela age de verdade
-// (ferramentas, lembretes), entao nao pode responder qualquer numero que ache essa instancia
-function numeroEvolutionPermitido(numero) {
-  const admin = process.env.LUMIA_WHATSAPP_ADMIN;
-  return !!admin && numero === admin;
-}
-
 // extrai o numero (so digitos) e o texto de uma mensagem do formato do Baileys - cobre o caso
 // mais comum (texto simples ou "resposta a algo"); outros tipos (audio/imagem/figurinha) ficam
 // de fora por enquanto, mesmo escopo do que ja funciona no chat de texto do app
@@ -356,10 +351,15 @@ function extrairMensagemEvolution(data) {
   return { numero, texto, fromMe: !!data?.key?.fromMe };
 }
 
-async function processarMensagemEvolution(data) {
+async function processarMensagemEvolution(instanciaDoWebhook, data) {
   const { numero, texto, fromMe } = extrairMensagemEvolution(data);
   if (fromMe || !texto) return; // ignora eco das proprias mensagens da Lumia e midia sem texto
-  if (!numeroEvolutionPermitido(numero)) return; // numero nao autorizado, ignora silenciosamente
+
+  const { instanciaAtiva, numeroAdmin } = await whatsappInstances.obterConfig();
+  // ignora mensagens vindas de uma instancia que nao e mais a ativa (numero antigo ainda
+  // conectado mas trocado no app) e de qualquer numero que nao seja o admin configurado
+  if (instanciaDoWebhook !== instanciaAtiva) return;
+  if (!numeroAdmin || numero !== numeroAdmin) return;
 
   const sessionId = `whatsapp-evo:${numero}`;
   try {
@@ -382,7 +382,85 @@ app.post('/api/whatsapp-evolution/webhook', (req, res) => {
   if (evento !== 'messages.upsert') return;
   const data = req.body?.data;
   if (!data) return;
-  processarMensagemEvolution(data).catch((err) => console.error('Erro ao processar mensagem do Evolution:', err));
+  processarMensagemEvolution(req.body?.instance, data).catch((err) => console.error('Erro ao processar mensagem do Evolution:', err));
+});
+
+// ---------- Gestao de instancias do WhatsApp (trocar/reconectar numero pelo app) ----------
+
+app.get('/api/whatsapp/status', async (req, res) => {
+  try {
+    const config = await whatsappInstances.obterConfig();
+    let conexao = null;
+    try {
+      conexao = await evolutionApi.statusConexaoInstancia(config.instanciaAtiva);
+    } catch (err) {
+      conexao = { instance: { state: 'erro', erro: err.message } };
+    }
+    res.json({ ...config, estado: conexao?.instance?.state || 'desconhecido' });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/whatsapp/instancias', async (req, res) => {
+  try {
+    res.json({ instancias: await evolutionApi.listarInstancias() });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/whatsapp/instancias', async (req, res) => {
+  const { nome } = req.body || {};
+  if (!nome) return res.status(400).json({ erro: 'nome obrigatorio' });
+  try {
+    const resultado = await evolutionApi.criarInstancia(nome);
+    res.json({ ok: true, qrcode: resultado?.qrcode?.base64 || null });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/whatsapp/qrcode/:nome', async (req, res) => {
+  try {
+    const resultado = await evolutionApi.obterQrCode(req.params.nome);
+    res.json({ qrcode: resultado?.base64 || null });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/whatsapp/desconectar', async (req, res) => {
+  const { nome } = req.body || {};
+  if (!nome) return res.status(400).json({ erro: 'nome obrigatorio' });
+  try {
+    await evolutionApi.desconectarInstancia(nome);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/whatsapp/ativar', async (req, res) => {
+  const { nome } = req.body || {};
+  if (!nome) return res.status(400).json({ erro: 'nome obrigatorio' });
+  try {
+    await whatsappInstances.definirInstanciaAtiva(nome);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/whatsapp/admin', async (req, res) => {
+  const { numero } = req.body || {};
+  if (!numero) return res.status(400).json({ erro: 'numero obrigatorio' });
+  try {
+    await whatsappInstances.definirNumeroAdmin(numero);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
 });
 
 // ---------- Agenda interna + sincronizacao opcional com o Google Agenda ----------

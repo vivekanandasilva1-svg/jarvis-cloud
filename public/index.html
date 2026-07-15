@@ -68,6 +68,7 @@
     <div class="tab-bar">
       <button type="button" class="tab-btn active" id="tabBtnPainel" data-tab="painel">Painel</button>
       <button type="button" class="tab-btn" id="tabBtnAgenda" data-tab="agenda">Agenda</button>
+      <button type="button" class="tab-btn" id="tabBtnWhatsapp" data-tab="whatsapp">WhatsApp</button>
     </div>
 
     <div class="agent-panel" id="agentPanel" hidden>
@@ -267,6 +268,50 @@
           <button type="button" id="agendaRefresh">Atualizar</button>
         </div>
         <div class="agenda-lista" id="agendaLista">
+          <p class="agenda-vazia">Carregando...</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="window-body tab-whatsapp" id="tabWhatsapp" hidden>
+      <div class="wa-status-card">
+        <div class="wa-status-row">
+          <div>
+            <strong>Instancia ativa</strong>
+            <p class="wa-status-sub" id="waInstanciaAtiva">--</p>
+          </div>
+          <span class="wa-badge" id="waBadge">verificando...</span>
+        </div>
+        <div class="wa-admin-row">
+          <label>Numero autorizado a conversar com a Lumia (com DDI, so numeros)</label>
+          <div class="wa-admin-inputs">
+            <input type="text" id="waAdminInput" placeholder="5582999999999" />
+            <button type="button" id="waAdminSalvar">Salvar</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="wa-nova">
+        <strong>Conectar numero novo</strong>
+        <p class="wa-hint">Cria uma instancia nova e gera um QR code pra escanear com o WhatsApp do numero que voce quiser usar.</p>
+        <div class="wa-nova-row">
+          <input type="text" id="waNovoNome" placeholder="Nome da instancia (ex: Lumia2)" />
+          <button type="button" id="waNovoCriar">Criar e gerar QR</button>
+        </div>
+      </div>
+
+      <div class="wa-qr-area" id="waQrArea" hidden>
+        <p id="waQrLegenda">Escaneie no WhatsApp: Aparelhos conectados → Conectar um aparelho</p>
+        <img id="waQrImg" alt="QR code de conexao do WhatsApp" />
+        <button type="button" id="waQrFechar">Fechar</button>
+      </div>
+
+      <div class="wa-lista-wrap">
+        <div class="wa-lista-header">
+          <span>Instancias existentes</span>
+          <button type="button" id="waRefresh">Atualizar</button>
+        </div>
+        <div class="wa-lista" id="waLista">
           <p class="agenda-vazia">Carregando...</p>
         </div>
       </div>

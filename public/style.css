@@ -630,6 +630,169 @@ html, body {
   cursor: pointer;
 }
 
+/* ---------- WhatsApp (aba tambem usa .window-body, mesma ordem exigida acima) ---------- */
+
+.tab-whatsapp {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  overflow-y: auto;
+  max-width: 720px;
+}
+
+.wa-status-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.wa-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.wa-status-row strong { color: var(--text); font-size: 13px; }
+.wa-status-sub { margin: 4px 0 0; font-size: 12px; color: var(--gold-bright); }
+.wa-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.wa-badge-ok { color: var(--gold-bright); border-color: rgba(212, 175, 55, 0.5); background: rgba(212, 175, 55, 0.1); }
+.wa-badge-off { color: #e8836b; border-color: rgba(232, 131, 107, 0.4); background: rgba(232, 131, 107, 0.08); }
+
+.wa-admin-row { border-top: 1px solid var(--border); padding-top: 12px; }
+.wa-admin-row label { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 6px; }
+.wa-admin-inputs { display: flex; gap: 8px; }
+.wa-admin-inputs input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+.wa-admin-inputs input:focus { border-color: var(--gold); }
+.wa-admin-inputs button,
+.wa-nova-row button,
+.wa-instancia-acoes button {
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  background: rgba(212, 175, 55, 0.14);
+  color: var(--gold-bright);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.wa-nova {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 14px;
+}
+.wa-nova strong { color: var(--text); font-size: 13px; }
+.wa-hint { margin: 4px 0 10px; font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
+.wa-nova-row { display: flex; gap: 8px; }
+.wa-nova-row input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+.wa-nova-row input:focus { border-color: var(--gold); }
+
+.wa-qr-area {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+.wa-qr-area p { margin: 0; font-size: 12px; color: var(--text-dim); }
+.wa-qr-area img { width: 220px; height: 220px; border-radius: 10px; background: #fff; padding: 8px; }
+.wa-qr-area button {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 7px 16px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.wa-lista-wrap { display: flex; flex-direction: column; gap: 10px; }
+.wa-lista-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.wa-lista-header button {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.wa-lista-header button:hover { color: var(--gold-bright); border-color: var(--gold); }
+
+.wa-lista { display: flex; flex-direction: column; gap: 8px; }
+.wa-instancia {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 10px 12px;
+}
+.wa-instancia-info { min-width: 0; }
+.wa-instancia-nome {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wa-instancia-detalhe { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
+.wa-instancia-acoes { display: flex; gap: 6px; flex-wrap: wrap; }
+.wa-instancia-desconectar {
+  border-color: rgba(232, 131, 107, 0.4) !important;
+  background: rgba(232, 131, 107, 0.08) !important;
+  color: #e8836b !important;
+}
+
 .panel {
   flex: 0 0 auto;
   border: 1px solid var(--border);
