@@ -100,21 +100,6 @@ export async function baixarMidiaMensagem(instancia, mensagemBruta) {
   });
 }
 
-// liga/desliga o "sempre online" da instancia (o numero aparece online com frequencia bem
-// maior, em vez de so quando alguem tem o WhatsApp aberto de verdade) - usado quando o auto
-// atendimento e ativado/desativado
-export async function definirSempreOnline(instancia, ativo) {
-  return chamar('POST', `/settings/set/${instancia}`, {
-    rejectCall: false,
-    msgCall: '',
-    groupsIgnore: true,
-    alwaysOnline: !!ativo,
-    readMessages: true,
-    readStatus: true,
-    syncFullHistory: false,
-  });
-}
-
 // mostra "digitando..." ou "gravando audio..." pro contato enquanto a resposta e preparada -
 // puramente cosmetico (nunca deve derrubar o fluxo se falhar, so um "melhor esforco")
 export async function enviarPresenca(instancia, numero, presence, delayMs = 1500) {

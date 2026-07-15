@@ -460,6 +460,13 @@ app.post('/api/whatsapp/instancias', async (req, res) => {
 
 app.get('/api/whatsapp/qrcode/:nome', async (req, res) => {
   try {
+    // pedir QR numa instancia que ja esta conectada pode forcar o Evolution API a reiniciar o
+    // socket dela - e foi exatamente isso (ou algo parecido) que causou uma desconexao real por
+    // "conflict/device_removed" nessa mesma instancia. So gera QR de verdade quando precisa.
+    const status = await evolutionApi.statusConexaoInstancia(req.params.nome).catch(() => null);
+    if (status?.instance?.state === 'open') {
+      return res.status(400).json({ erro: 'Essa instancia ja esta conectada - gerar um QR novo pode derrubar a conexao atual. So gera QR se ela estiver desconectada.' });
+    }
     const resultado = await evolutionApi.obterQrCode(req.params.nome);
     res.json({ qrcode: resultado?.base64 || null });
   } catch (err) {

@@ -64,7 +64,6 @@ export async function obterConfig() {
 export async function salvarConfig({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio }) {
   if (!pool) throw new Error('Precisa do Postgres configurado (DATABASE_URL) pra guardar essa configuracao.');
   await tabelasProntas;
-  const anterior = await obterConfig();
 
   await pool.query(
     `INSERT INTO auto_atendimento_config (id, ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, atualizado_em)
@@ -73,20 +72,9 @@ export async function salvarConfig({ ativo, instancia, prompt, frequenciaAudio, 
        ativo = $1, instancia = $2, prompt = $3, frequencia_audio = $4, audio_se_receber_audio = $5, atualizado_em = now()`,
     [!!ativo, instancia || null, prompt || '', Number(frequenciaAudio) || 0, !!audioSeReceberAudio],
   );
-
-  // liga "sempre online" no numero enquanto o auto-atendimento estiver ativo nele; se a
-  // instancia mudou ou foi desativado, desliga na antiga - melhor esforco, nunca derruba o
-  // salvamento da config em si se a chamada ao Evolution falhar por qualquer motivo
-  try {
-    if (anterior.instancia && anterior.instancia !== instancia) {
-      await evolutionApi.definirSempreOnline(anterior.instancia, false);
-    }
-    if (instancia) {
-      await evolutionApi.definirSempreOnline(instancia, !!ativo);
-    }
-  } catch (err) {
-    console.error('Erro ajustando "sempre online" no Evolution API:', err.message);
-  }
+  // NAO chama mais /settings/set aqui - ver nota grande em evolutionApi.js sobre o porque
+  // (causou pelo menos uma desconexao real por "conflict/device_removed" logo depois de
+  // chamado). Estabilidade da sessao do WhatsApp vale muito mais que o indicador "online".
 }
 
 // ---------- ferramentas: agenda + mandar um arquivo de referencia (contexto injetado por
