@@ -18,6 +18,7 @@ import * as agenda from './agenda.js';
 import * as googleCalendar from './googleCalendar.js';
 import * as whatsappInstances from './whatsappInstances.js';
 import * as autoAtendimento from './autoAtendimento.js';
+import * as autoArquivos from './autoAtendimentoArquivos.js';
 
 const execAsync = promisify(exec);
 
@@ -341,26 +342,33 @@ app.post('/webhook/whatsapp', (req, res) => {
 // Web/Baileys) que ja roda na mesma VPS - sem as restricoes de janela de 24h/template da API
 // oficial da Meta, entao da pra mandar lembrete e mensagem proativa a qualquer hora.
 
-// extrai o numero (so digitos) e o texto de uma mensagem do formato do Baileys - cobre o caso
-// mais comum (texto simples ou "resposta a algo"); outros tipos (audio/imagem/figurinha) ficam
-// de fora por enquanto, mesmo escopo do que ja funciona no chat de texto do app
+// extrai o numero (so digitos), o texto e o tipo de midia (se tiver) de uma mensagem no formato
+// do Baileys - texto simples/resposta, ou imagem/audio/video (com ou sem legenda)
 function extrairMensagemEvolution(data) {
   const remoteJid = data?.key?.remoteJid || '';
   const numero = remoteJid.split('@')[0];
   const msg = data?.message || {};
+
+  if (msg.imageMessage) return { numero, texto: msg.imageMessage.caption || '', tipo: 'image', fromMe: !!data?.key?.fromMe };
+  if (msg.audioMessage) return { numero, texto: '', tipo: 'audio', fromMe: !!data?.key?.fromMe };
+  if (msg.videoMessage) return { numero, texto: msg.videoMessage.caption || '', tipo: 'video', fromMe: !!data?.key?.fromMe };
+
   const texto = msg.conversation || msg.extendedTextMessage?.text || '';
-  return { numero, texto, fromMe: !!data?.key?.fromMe };
+  return { numero, texto, tipo: 'text', fromMe: !!data?.key?.fromMe };
 }
 
 async function processarMensagemEvolution(instanciaDoWebhook, data) {
-  const { numero, texto, fromMe } = extrairMensagemEvolution(data);
-  if (fromMe || !texto) return; // ignora eco das proprias mensagens da Lumia e midia sem texto
+  const { numero, texto, tipo, fromMe } = extrairMensagemEvolution(data);
+  if (fromMe) return; // ignora eco das proprias mensagens da Lumia
+  if (tipo === 'text' && !texto) return;
 
   const { instanciaAtiva, numeroAdmin } = await whatsappInstances.obterConfig();
 
   // mensagem do dono, na instancia pessoal ativa - conversa normal (todas as ferramentas,
-  // memoria persistente, personalidade completa)
+  // memoria persistente, personalidade completa). Midia do dono continua so texto por
+  // enquanto (esse caminho ja tinha essa limitacao antes do auto-atendimento existir).
   if (instanciaDoWebhook === instanciaAtiva && numeroAdmin && numero === numeroAdmin) {
+    if (tipo !== 'text') return;
     try {
       const resultado = await chat(`whatsapp-evo:${numero}`, texto, []);
       if (resultado.localAction) {
@@ -382,8 +390,18 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   if (!configAuto.ativo || configAuto.instancia !== instanciaDoWebhook) return;
 
   try {
-    const resposta = await autoAtendimento.processarMensagem(numero, texto);
-    await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, resposta);
+    const resultado = await autoAtendimento.processarMensagem(numero, instanciaDoWebhook, { texto, tipo, mensagemBruta: data });
+    if (!resultado) return;
+
+    if (resultado.respondeComAudio) {
+      try {
+        await autoAtendimento.enviarRespostaEmAudio(instanciaDoWebhook, numero, resultado.texto);
+        return;
+      } catch (err) {
+        console.error('Erro mandando resposta em audio, caindo pra texto:', err.message);
+      }
+    }
+    await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, resultado.texto);
   } catch (err) {
     console.error('Erro no auto-atendimento via Evolution/WhatsApp:', err);
   }
@@ -488,12 +506,45 @@ app.get('/api/auto-atendimento/config', async (req, res) => {
 });
 
 app.post('/api/auto-atendimento/config', async (req, res) => {
-  const { ativo, instancia, prompt } = req.body || {};
+  const { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio } = req.body || {};
   if (ativo && (!instancia || !prompt)) {
     return res.status(400).json({ erro: 'pra ativar, precisa escolher a instancia e escrever o prompt' });
   }
   try {
-    await autoAtendimento.salvarConfig({ ativo, instancia, prompt });
+    await autoAtendimento.salvarConfig({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// arquivos de referencia que a Lumia pode mandar durante o auto-atendimento (PDF, imagem,
+// video, audio) - sobem em base64 no corpo do JSON (o limite de 20mb do express.json ja cobre
+// arquivos de tamanho razoavel pra esse uso)
+app.get('/api/auto-atendimento/arquivos', async (req, res) => {
+  try {
+    res.json({ arquivos: await autoArquivos.listarArquivos() });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/auto-atendimento/arquivos', async (req, res) => {
+  const { nomeArquivo, descricao, mediaType, base64 } = req.body || {};
+  if (!nomeArquivo || !descricao || !mediaType || !base64) {
+    return res.status(400).json({ erro: 'nomeArquivo, descricao, mediaType e base64 sao obrigatorios' });
+  }
+  try {
+    const id = await autoArquivos.salvarArquivo(nomeArquivo, descricao, Buffer.from(base64, 'base64'), mediaType);
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/auto-atendimento/arquivos/:id', async (req, res) => {
+  try {
+    await autoArquivos.apagarArquivo(Number(req.params.id));
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });

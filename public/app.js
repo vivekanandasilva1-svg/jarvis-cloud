@@ -98,8 +98,16 @@ const autoAtivo = document.getElementById('autoAtivo');
 const autoAtivoLabel = document.getElementById('autoAtivoLabel');
 const autoInstancia = document.getElementById('autoInstancia');
 const autoPrompt = document.getElementById('autoPrompt');
+const autoFrequenciaAudio = document.getElementById('autoFrequenciaAudio');
+const autoAudioSeReceberAudio = document.getElementById('autoAudioSeReceberAudio');
 const autoSalvar = document.getElementById('autoSalvar');
 const autoErro = document.getElementById('autoErro');
+const autoArquivoInput = document.getElementById('autoArquivoInput');
+const autoArquivoEscolher = document.getElementById('autoArquivoEscolher');
+const autoArquivoNome = document.getElementById('autoArquivoNome');
+const autoArquivoDescricao = document.getElementById('autoArquivoDescricao');
+const autoArquivoEnviar = document.getElementById('autoArquivoEnviar');
+const autoArquivosLista = document.getElementById('autoArquivosLista');
 
 let sessionId = localStorage.getItem('jarvis_session_id');
 if (!sessionId) {
@@ -1846,10 +1854,13 @@ async function carregarConfigAutoAtendimento() {
     autoAtivoLabel.textContent = config.ativo ? 'Ativado' : 'Desativado';
     autoInstancia.value = config.instancia || '';
     autoPrompt.value = config.prompt || '';
+    autoFrequenciaAudio.value = String(config.frequenciaAudio || 0);
+    autoAudioSeReceberAudio.checked = !!config.audioSeReceberAudio;
   } catch (err) {
     autoErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
     autoErro.hidden = false;
   }
+  carregarArquivosAutoAtendimento();
 }
 
 autoSalvar.addEventListener('click', async () => {
@@ -1857,6 +1868,8 @@ autoSalvar.addEventListener('click', async () => {
   const ativo = autoAtivo.checked;
   const instancia = autoInstancia.value;
   const prompt = autoPrompt.value.trim();
+  const frequenciaAudio = Number(autoFrequenciaAudio.value) || 0;
+  const audioSeReceberAudio = autoAudioSeReceberAudio.checked;
   if (ativo && (!instancia || !prompt)) {
     autoErro.textContent = 'Pra ativar, escolhe o numero e escreve o prompt de treinamento.';
     autoErro.hidden = false;
@@ -1867,7 +1880,7 @@ autoSalvar.addEventListener('click', async () => {
     const res = await fetch('/api/auto-atendimento/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-      body: JSON.stringify({ ativo, instancia, prompt }),
+      body: JSON.stringify({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
@@ -1877,5 +1890,118 @@ autoSalvar.addEventListener('click', async () => {
     autoErro.hidden = false;
   } finally {
     autoSalvar.disabled = false;
+  }
+});
+
+// ---------- Auto Atendimento: arquivos de referencia ----------
+let autoArquivoSelecionado = null;
+
+autoArquivoEscolher.addEventListener('click', () => autoArquivoInput.click());
+autoArquivoInput.addEventListener('change', () => {
+  autoArquivoSelecionado = autoArquivoInput.files[0] || null;
+  autoArquivoNome.textContent = autoArquivoSelecionado ? autoArquivoSelecionado.name : 'Nenhum arquivo escolhido';
+});
+
+function formatarTamanho(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function carregarArquivosAutoAtendimento() {
+  autoArquivosLista.textContent = '';
+  const carregando = document.createElement('p');
+  carregando.className = 'agenda-vazia';
+  carregando.textContent = 'Carregando...';
+  autoArquivosLista.appendChild(carregando);
+
+  try {
+    const res = await fetch('/api/auto-atendimento/arquivos', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+
+    autoArquivosLista.textContent = '';
+    const lista = data.arquivos || [];
+    if (!lista.length) {
+      const vazio = document.createElement('p');
+      vazio.className = 'agenda-vazia';
+      vazio.textContent = 'Nenhum arquivo cadastrado ainda.';
+      autoArquivosLista.appendChild(vazio);
+      return;
+    }
+
+    for (const arq of lista) {
+      const item = document.createElement('div');
+      item.className = 'auto-arquivo-item';
+
+      const info = document.createElement('div');
+      info.className = 'auto-arquivo-info';
+      const nome = document.createElement('div');
+      nome.className = 'auto-arquivo-nome';
+      nome.textContent = arq.nome_arquivo;
+      const detalhe = document.createElement('div');
+      detalhe.className = 'auto-arquivo-detalhe';
+      detalhe.textContent = `${arq.descricao} · ${formatarTamanho(Number(arq.tamanho))}`;
+      info.appendChild(nome);
+      info.appendChild(detalhe);
+      item.appendChild(info);
+
+      const apagarBtn = document.createElement('button');
+      apagarBtn.type = 'button';
+      apagarBtn.className = 'agenda-evento-cancelar';
+      apagarBtn.textContent = '✕';
+      apagarBtn.title = 'Apagar arquivo';
+      apagarBtn.addEventListener('click', async () => {
+        if (!confirm(`Apagar "${arq.nome_arquivo}"?`)) return;
+        try {
+          await fetch(`/api/auto-atendimento/arquivos/${arq.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+          carregarArquivosAutoAtendimento();
+        } catch (err) {
+          addBubble(`Erro apagando arquivo: ${err.message}`, 'system');
+        }
+      });
+      item.appendChild(apagarBtn);
+
+      autoArquivosLista.appendChild(item);
+    }
+  } catch (err) {
+    autoArquivosLista.textContent = '';
+    const erro = document.createElement('p');
+    erro.className = 'agenda-vazia';
+    erro.textContent = `Nao consegui carregar os arquivos: ${err.message}`;
+    autoArquivosLista.appendChild(erro);
+  }
+}
+
+autoArquivoEnviar.addEventListener('click', async () => {
+  const descricao = autoArquivoDescricao.value.trim();
+  if (!autoArquivoSelecionado) { addBubble('Escolhe um arquivo primeiro.', 'system'); return; }
+  if (!descricao) { addBubble('Escreve pra que serve o arquivo antes de enviar.', 'system'); return; }
+
+  autoArquivoEnviar.disabled = true;
+  try {
+    const base64 = await arquivoParaBase64(autoArquivoSelecionado);
+    const res = await fetch('/api/auto-atendimento/arquivos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({
+        nomeArquivo: autoArquivoSelecionado.name,
+        descricao,
+        mediaType: autoArquivoSelecionado.type || 'application/octet-stream',
+        base64,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+
+    autoArquivoSelecionado = null;
+    autoArquivoInput.value = '';
+    autoArquivoNome.textContent = 'Nenhum arquivo escolhido';
+    autoArquivoDescricao.value = '';
+    carregarArquivosAutoAtendimento();
+  } catch (err) {
+    addBubble(`Erro enviando arquivo: ${err.message}`, 'system');
+  } finally {
+    autoArquivoEnviar.disabled = false;
   }
 });

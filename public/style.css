@@ -858,6 +858,16 @@ html, body {
   outline: none;
 }
 #autoInstancia:focus { border-color: var(--gold); }
+/* a lista suspensa de um <select> e desenhada pelo proprio navegador/SO, nao da pra estilizar
+   com o mesmo nivel de controle do resto do app - mas background-color/color no <option> e
+   respeitado pela maioria dos navegadores modernos (Chrome/Edge/Firefox), entao da pra pelo
+   menos trocar o branco padrao (que deixava o texto claro ilegivel) por um fundo cinza claro
+   com o texto dourado */
+#autoInstancia option {
+  background-color: #e8e6e1;
+  color: #8a6a12;
+  font-weight: 600;
+}
 
 #autoPrompt {
   background: rgba(255, 255, 255, 0.04);
@@ -884,6 +894,98 @@ html, body {
   font-weight: 600;
   cursor: pointer;
 }
+
+.auto-audio-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 12px 14px;
+}
+.auto-audio-row select {
+  margin-top: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 12.5px;
+  outline: none;
+}
+.auto-audio-row select:focus { border-color: var(--gold); }
+.auto-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  max-width: 260px;
+}
+.auto-checkbox-row input { accent-color: var(--gold); width: 16px; height: 16px; flex: 0 0 auto; }
+
+.auto-arquivos-wrap {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.auto-arquivos-header { font-size: 13px; font-weight: 600; color: var(--text); }
+.auto-upload-row { display: flex; align-items: center; gap: 10px; }
+.auto-upload-row button,
+.auto-arquivos-wrap > button {
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  background: rgba(212, 175, 55, 0.14);
+  color: var(--gold-bright);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+#autoArquivoNome { font-size: 11.5px; color: var(--text-dim); overflow-wrap: anywhere; }
+#autoArquivoDescricao {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+#autoArquivoDescricao:focus { border-color: var(--gold); }
+#autoArquivoEnviar {
+  align-self: flex-start;
+  border: 1px solid rgba(212, 175, 55, 0.5);
+  background: rgba(212, 175, 55, 0.16);
+  color: var(--gold-bright);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.auto-arquivos-lista { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.auto-arquivo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 9px 12px;
+}
+.auto-arquivo-info { min-width: 0; }
+.auto-arquivo-nome { font-size: 12.5px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.auto-arquivo-detalhe { font-size: 11px; color: var(--text-dim); margin-top: 2px; overflow-wrap: anywhere; }
 
 .panel {
   flex: 0 0 auto;

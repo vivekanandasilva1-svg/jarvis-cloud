@@ -71,6 +71,35 @@ export async function enviarMensagemTextoPor(instancia, numero, texto) {
   });
 }
 
+// mediatype: 'image' | 'video' | 'document'. media: base64 puro (sem "data:...;base64,")
+export async function enviarMidia(instancia, numero, { mediatype, mimetype, media, fileName, caption }) {
+  return chamar('POST', `/message/sendMedia/${instancia}`, {
+    number: numero,
+    mediatype,
+    mimetype,
+    media,
+    fileName,
+    caption,
+  });
+}
+
+// audio como nota de voz (PTT) - o proprio Evolution API converte o formato recebido (ex: WAV
+// do Kokoro) pro ogg/opus que o WhatsApp espera, via ffmpeg internamente
+export async function enviarAudio(instancia, numero, mediaBase64) {
+  return chamar('POST', `/message/sendWhatsAppAudio/${instancia}`, {
+    number: numero,
+    audio: mediaBase64,
+  });
+}
+
+// baixa o conteudo (base64) de uma midia recebida numa mensagem - usado pra "ver"/"ouvir" o
+// que um contato mandou (imagem, audio, video)
+export async function baixarMidiaMensagem(instancia, mensagemBruta) {
+  return chamar('POST', `/chat/getBase64FromMediaMessage/${instancia}`, {
+    message: { key: mensagemBruta.key, message: mensagemBruta.message },
+  });
+}
+
 // ---------- operacoes na instancia ATIVA (a que a Lumia usa no dia a dia) ----------
 
 export async function enviarMensagemTexto(numero, texto) {

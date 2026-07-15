@@ -341,8 +341,43 @@
       <label class="auto-label">Prompt de treinamento (como ela deve atender esses contatos)</label>
       <textarea id="autoPrompt" rows="10" placeholder="Ex: Voce e a recepcionista virtual da Clinica X. Seja cordial, colete nome e motivo do contato, e ofereça horarios disponiveis pra agendar consulta quando pedido..."></textarea>
 
+      <div class="auto-audio-row">
+        <div>
+          <label class="auto-label">Responder por audio a cada quantas mensagens de texto?</label>
+          <select id="autoFrequenciaAudio">
+            <option value="0">Nunca (so texto)</option>
+            <option value="3">A cada 3 mensagens</option>
+            <option value="4">A cada 4 mensagens</option>
+            <option value="5">A cada 5 mensagens</option>
+          </select>
+        </div>
+        <label class="auto-checkbox-row">
+          <input type="checkbox" id="autoAudioSeReceberAudio" />
+          <span>Se o contato mandar audio, ela responde por audio tambem</span>
+        </label>
+      </div>
+
       <button type="button" id="autoSalvar">Salvar configuracao</button>
       <p class="agenda-erro" id="autoErro" hidden></p>
+
+      <div class="auto-arquivos-wrap">
+        <div class="auto-arquivos-header">
+          <span>Arquivos de referencia (PDF, imagem, video, audio)</span>
+        </div>
+        <p class="wa-hint">Ela pode mandar esses arquivos pro contato durante a conversa quando fizer sentido - descreva bem pra que serve cada um.</p>
+
+        <div class="auto-upload-row">
+          <input type="file" id="autoArquivoInput" accept=".pdf,image/*,video/*,audio/*" hidden />
+          <button type="button" id="autoArquivoEscolher">Escolher arquivo</button>
+          <span id="autoArquivoNome">Nenhum arquivo escolhido</span>
+        </div>
+        <input type="text" id="autoArquivoDescricao" placeholder="Pra que serve esse arquivo (ex: tabela de precos 2026)" />
+        <button type="button" id="autoArquivoEnviar">Enviar arquivo</button>
+
+        <div class="auto-arquivos-lista" id="autoArquivosLista">
+          <p class="agenda-vazia">Carregando...</p>
+        </div>
+      </div>
     </div>
   </div>
 
