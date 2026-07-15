@@ -13,6 +13,8 @@ import { transcribeAudioWhisper } from './whisper.js';
 import { sendTextMessage, downloadMedia } from './whatsapp.js';
 import { obterArquivo } from './arquivosGerados.js';
 import { enviarMensagemTexto } from './evolutionApi.js';
+import * as agenda from './agenda.js';
+import * as googleCalendar from './googleCalendar.js';
 
 const execAsync = promisify(exec);
 
@@ -40,7 +42,17 @@ const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'Admin';
 // checando a assinatura da requisicao e o numero de quem manda a mensagem.
 app.use((req, res, next) => {
   if (!APP_PASSWORD) return next(); // sem senha configurada, roda aberto (nao recomendado)
-  if (req.path === '/api/login' || req.path === '/webhook/whatsapp' || req.path === '/api/whatsapp-evolution/webhook') return next();
+  // as duas rotas do Google ficam de fora porque sao navegacao de pagina de verdade (o
+  // navegador vai pro consentimento do Google e volta), nao um fetch que consiga mandar o
+  // header de senha - a seguranca aqui vem do proprio fluxo OAuth (o "code" so e valido uma
+  // vez, pro nosso client_id/redirect_uri exatos)
+  if (
+    req.path === '/api/login' ||
+    req.path === '/webhook/whatsapp' ||
+    req.path === '/api/whatsapp-evolution/webhook' ||
+    req.path === '/api/agenda/google/conectar' ||
+    req.path === '/api/agenda/google/callback'
+  ) return next();
 
   const provided = req.header('x-app-password');
   if (provided === APP_PASSWORD) return next();
@@ -371,6 +383,88 @@ app.post('/api/whatsapp-evolution/webhook', (req, res) => {
   const data = req.body?.data;
   if (!data) return;
   processarMensagemEvolution(data).catch((err) => console.error('Erro ao processar mensagem do Evolution:', err));
+});
+
+// ---------- Agenda interna + sincronizacao opcional com o Google Agenda ----------
+
+app.get('/api/agenda/eventos', async (req, res) => {
+  try {
+    const eventos = await agenda.listarEventos(req.query.from, req.query.to);
+    res.json({ eventos });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/agenda/eventos', async (req, res) => {
+  const { titulo, descricao, local, inicio, fim } = req.body || {};
+  if (!titulo || !inicio || !fim) return res.status(400).json({ erro: 'titulo, inicio e fim sao obrigatorios' });
+  try {
+    const resultado = await agenda.criarEvento({ titulo, descricao, local, inicio, fim });
+    res.json(resultado);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/agenda/eventos/:id', async (req, res) => {
+  try {
+    await agenda.cancelarEvento(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/agenda/google/status', async (req, res) => {
+  try {
+    res.json({ conectado: await googleCalendar.estaConectado() });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// estado anti-CSRF de curta duracao (2min) pro round-trip do OAuth - so existe pra confirmar
+// que o callback que voltou do Google corresponde a um "conectar" que a gente mesmo iniciou
+const estadosOAuthPendentes = new Map();
+setInterval(() => {
+  const agora = Date.now();
+  for (const [state, criadoEm] of estadosOAuthPendentes) {
+    if (agora - criadoEm > 2 * 60 * 1000) estadosOAuthPendentes.delete(state);
+  }
+}, 60 * 1000).unref();
+
+app.get('/api/agenda/google/conectar', (req, res) => {
+  try {
+    const state = crypto.randomUUID();
+    estadosOAuthPendentes.set(state, Date.now());
+    res.redirect(`${googleCalendar.urlAutorizacao()}&state=${state}`);
+  } catch (err) {
+    res.status(500).send(`Erro iniciando conexao com o Google: ${err.message}`);
+  }
+});
+
+app.get('/api/agenda/google/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+  if (error) return res.redirect(`/?agenda_google=erro&msg=${encodeURIComponent(String(error))}`);
+  if (!state || !estadosOAuthPendentes.has(String(state))) return res.status(400).send('Estado invalido ou expirado - tenta conectar de novo pelo app.');
+  estadosOAuthPendentes.delete(String(state));
+
+  try {
+    await googleCalendar.trocarCodigoPorToken(code);
+    res.redirect('/?agenda_google=conectado');
+  } catch (err) {
+    res.redirect(`/?agenda_google=erro&msg=${encodeURIComponent(err.message)}`);
+  }
+});
+
+app.post('/api/agenda/google/desconectar', async (req, res) => {
+  try {
+    await googleCalendar.desconectar();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
 });
 
 iniciarSchedulerLembretes();

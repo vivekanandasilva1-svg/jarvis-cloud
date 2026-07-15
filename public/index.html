@@ -65,6 +65,11 @@
       <button type="button" class="logout-btn" id="logoutBtn" title="Sair">Sair</button>
     </div>
 
+    <div class="tab-bar">
+      <button type="button" class="tab-btn active" id="tabBtnPainel" data-tab="painel">Painel</button>
+      <button type="button" class="tab-btn" id="tabBtnAgenda" data-tab="agenda">Agenda</button>
+    </div>
+
     <div class="agent-panel" id="agentPanel" hidden>
       <div class="agent-panel-header">
         <span>Agente local (controle do computador)</span>
@@ -82,7 +87,7 @@
       <p class="agent-status" id="agentStatus">Nao conectado.</p>
     </div>
 
-    <div class="window-body">
+    <div class="window-body" id="tabPainel">
       <aside class="sidebar">
         <div class="panel" id="statsPanel">
           <div class="panel-header">
@@ -228,6 +233,42 @@
           <button type="submit" class="send-btn" id="sendBtn">Enviar</button>
           <button type="button" class="icon-btn mute-btn" id="muteBtn" title="Silenciar voz">🔊</button>
         </form>
+      </div>
+    </div>
+
+    <div class="window-body tab-agenda" id="tabAgenda" hidden>
+      <div class="agenda-panel">
+        <div class="agenda-google">
+          <div>
+            <strong>Google Agenda</strong>
+            <p class="agenda-google-status" id="agendaGoogleStatus">Verificando conexao...</p>
+          </div>
+          <button type="button" id="agendaGoogleBtn">Conectar</button>
+        </div>
+
+        <form class="agenda-form" id="agendaForm">
+          <input type="text" id="agendaTitulo" placeholder="Titulo do compromisso" required />
+          <input type="text" id="agendaLocal" placeholder="Local (opcional)" />
+          <div class="agenda-form-row">
+            <input type="date" id="agendaData" required />
+            <input type="time" id="agendaHoraInicio" required />
+            <span>ate</span>
+            <input type="time" id="agendaHoraFim" required />
+          </div>
+          <textarea id="agendaDescricao" placeholder="Descricao (opcional)" rows="2"></textarea>
+          <button type="submit">Adicionar compromisso</button>
+        </form>
+        <p class="agenda-erro" id="agendaErro" hidden></p>
+      </div>
+
+      <div class="agenda-lista-wrap">
+        <div class="agenda-lista-header">
+          <span>Proximos compromissos</span>
+          <button type="button" id="agendaRefresh">Atualizar</button>
+        </div>
+        <div class="agenda-lista" id="agendaLista">
+          <p class="agenda-vazia">Carregando...</p>
+        </div>
       </div>
     </div>
   </div>

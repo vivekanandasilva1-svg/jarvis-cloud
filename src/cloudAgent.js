@@ -1,18 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk';
-import pg from 'pg';
 import * as metaAds from './metaads.js';
 import * as clinicorp from './clinicorp.js';
 import { transcribeAudio, generateImageGemini } from './gemini.js';
 import { gerarPdf, gerarWord, gerarExcel, gerarGraficoSvg } from './geradorDocumentos.js';
 import { guardarArquivo } from './arquivosGerados.js';
 import { enviarMensagemTexto } from './evolutionApi.js';
+import { pool } from './db.js';
+import * as agenda from './agenda.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-// ---------- Memoria persistente (Postgres) ----------
-// sem DATABASE_URL, roda com memoria so em RAM (perde tudo se o servidor reiniciar) - continua
-// funcionando, so sem persistencia de verdade, pra nao quebrar ambientes sem banco configurado
-const pool = process.env.DATABASE_URL ? new pg.Pool({ connectionString: process.env.DATABASE_URL }) : null;
 
 async function garantirTabelas() {
   if (!pool) return;
@@ -202,6 +198,13 @@ chegam automaticamente no WhatsApp do usuario na hora marcada, venha o pedido do
 WhatsApp - sempre calcule a data/hora absoluta certa a partir do "hoje" que voce ja sabe. Use
 whatsapp_listar_lembretes e whatsapp_cancelar_lembrete quando o usuario perguntar ou quiser
 desmarcar algo.
+
+Voce tem uma agenda propria (agenda_criar_evento, agenda_listar_eventos, agenda_cancelar_evento)
+que funciona sozinha, e pode ficar OPCIONALMENTE sincronizada com o Google Agenda (o usuario liga
+e desliga isso quando quiser na aba "Agenda" do app). Marque, consulte e cancele compromissos
+livremente quando pedido - sempre calculando data/hora absoluta a partir do "agora" que voce ja
+sabe. Quando a lista de eventos incluir itens vindos so do Google (campo origem: "google"), avise
+que esses vieram de la e nao podem ser cancelados por voce (o usuario cancela direto no Google).
 
 Voce tambem pode ser treinada: quando o usuario pedir explicitamente pra voce aprender/lembrar
 algo sobre como se comportar dali em diante (nao so nesta conversa, mas em qualquer conversa
@@ -727,6 +730,41 @@ const tools = [
       properties: { id: { type: 'number', description: 'id do lembrete a cancelar' } },
       required: ['id'],
     },
+  },
+  {
+    name: 'agenda_criar_evento',
+    description: 'Cria um evento/compromisso na agenda interna do usuario. Se a Google Agenda estiver conectada, o evento tambem e sincronizado la automaticamente (sem precisar fazer nada a mais). Calcule inicio/fim como data/hora absoluta ISO 8601 usando o "agora" que voce ja sabe.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        titulo: { type: 'string', description: 'Titulo/nome do compromisso' },
+        descricao: { type: 'string', description: 'Detalhes opcionais do compromisso' },
+        local: { type: 'string', description: 'Local opcional do compromisso' },
+        inicio: { type: 'string', description: 'Data/hora de inicio, ISO 8601 (ex: 2026-07-16T09:00:00-03:00)' },
+        fim: { type: 'string', description: 'Data/hora de fim, ISO 8601' },
+      },
+      required: ['titulo', 'inicio', 'fim'],
+    },
+  },
+  {
+    name: 'agenda_listar_eventos',
+    description: 'Lista os compromissos da agenda num periodo (inclui eventos do Google Agenda tambem, se estiver conectada). Se nao passar from/to, mostra os proximos 30 dias a partir de agora.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'Inicio do periodo, ISO 8601 (opcional)' },
+        to: { type: 'string', description: 'Fim do periodo, ISO 8601 (opcional)' },
+      },
+    },
+  },
+  {
+    name: 'agenda_cancelar_evento',
+    description: 'Cancela/remove um compromisso da agenda interna pelo id (use agenda_listar_eventos primeiro pra saber o id certo). So funciona pra eventos criados pela propria Lumia (origem "lumia"), nao eventos que vieram so do Google.',
+    input_schema: {
+      type: 'object',
+      properties: { id: { type: 'number', description: 'id do evento a cancelar' } },
+      required: ['id'],
+    },
     // marca o fim do bloco de ferramentas como ponto de cache - a lista inteira (~30+
     // ferramentas) e grande e quase nunca muda, entao cache_control aqui faz a Anthropic
     // cobrar bem mais barato nela nas chamadas seguintes dentro da janela de cache
@@ -945,6 +983,9 @@ const toolHandlers = {
   gerar_excel: handleGerarExcel,
   gerar_grafico: handleGerarGrafico,
   gerar_imagem_ia: handleGerarImagemIA,
+  agenda_criar_evento: (input) => agenda.criarEvento(input),
+  agenda_listar_eventos: ({ from, to }) => agenda.listarEventos(from, to),
+  agenda_cancelar_evento: async ({ id }) => { await agenda.cancelarEvento(id); return { ok: true, mensagem: 'Evento removido da agenda.' }; },
   ads_listar_contas: () => metaAds.listAdAccounts(),
   ads_listar_campanhas: ({ accountId, status }) => metaAds.listCampaigns({ accountId, status }),
   ads_listar_adsets: ({ campaignId }) => metaAds.listAdSets({ campaignId }),

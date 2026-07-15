@@ -58,6 +58,24 @@ const commandsValue = document.getElementById('commandsValue');
 const loadLabel = document.getElementById('loadLabel');
 const loadBar = document.getElementById('loadBar');
 
+// ---------- Abas: elementos ----------
+const tabBtnPainel = document.getElementById('tabBtnPainel');
+const tabBtnAgenda = document.getElementById('tabBtnAgenda');
+const tabPainel = document.getElementById('tabPainel');
+const tabAgenda = document.getElementById('tabAgenda');
+const agendaGoogleStatus = document.getElementById('agendaGoogleStatus');
+const agendaGoogleBtn = document.getElementById('agendaGoogleBtn');
+const agendaForm = document.getElementById('agendaForm');
+const agendaTitulo = document.getElementById('agendaTitulo');
+const agendaLocal = document.getElementById('agendaLocal');
+const agendaData = document.getElementById('agendaData');
+const agendaHoraInicio = document.getElementById('agendaHoraInicio');
+const agendaHoraFim = document.getElementById('agendaHoraFim');
+const agendaDescricao = document.getElementById('agendaDescricao');
+const agendaErro = document.getElementById('agendaErro');
+const agendaLista = document.getElementById('agendaLista');
+const agendaRefresh = document.getElementById('agendaRefresh');
+
 let sessionId = localStorage.getItem('jarvis_session_id');
 if (!sessionId) {
   sessionId = 'sess-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -1364,4 +1382,206 @@ async function capturarFrameCamera() {
   canvas.height = cameraVideo.videoHeight || 480;
   canvas.getContext('2d').drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+}
+
+// ---------- Abas: Painel / Agenda ----------
+let agendaCarregadaUmaVez = false;
+
+function mudarAba(aba) {
+  const ehPainel = aba === 'painel';
+  tabPainel.hidden = !ehPainel;
+  tabAgenda.hidden = ehPainel;
+  tabBtnPainel.classList.toggle('active', ehPainel);
+  tabBtnAgenda.classList.toggle('active', !ehPainel);
+  if (!ehPainel) {
+    agendaCarregadaUmaVez = true;
+    carregarStatusGoogleAgenda();
+    carregarEventosAgenda();
+  }
+}
+tabBtnPainel.addEventListener('click', () => mudarAba('painel'));
+tabBtnAgenda.addEventListener('click', () => mudarAba('agenda'));
+
+// ---------- Agenda: Google Agenda (conectar/desconectar) ----------
+async function carregarStatusGoogleAgenda() {
+  try {
+    const res = await fetch('/api/agenda/google/status', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (data.conectado) {
+      agendaGoogleStatus.textContent = 'Conectada - os compromissos ja sincronizam automaticamente.';
+      agendaGoogleBtn.textContent = 'Desconectar';
+      agendaGoogleBtn.classList.add('conectado');
+    } else {
+      agendaGoogleStatus.textContent = 'Nao conectada - a agenda funciona so aqui no app.';
+      agendaGoogleBtn.textContent = 'Conectar';
+      agendaGoogleBtn.classList.remove('conectado');
+    }
+  } catch {
+    agendaGoogleStatus.textContent = 'Nao consegui checar o status da conexao.';
+  }
+}
+
+agendaGoogleBtn.addEventListener('click', async () => {
+  const conectado = agendaGoogleBtn.classList.contains('conectado');
+  if (!conectado) {
+    // precisa ser navegacao de pagina de verdade (nao fetch) - o navegador vai pro
+    // consentimento do Google e volta sozinho pro callback do servidor
+    window.location.href = '/api/agenda/google/conectar';
+    return;
+  }
+  if (!confirm('Desconectar a Google Agenda? Os compromissos continuam salvos aqui no app, so param de sincronizar com o Google.')) return;
+  try {
+    await fetch('/api/agenda/google/desconectar', {
+      method: 'POST',
+      headers: { 'x-app-password': appPassword },
+    });
+    carregarStatusGoogleAgenda();
+  } catch (err) {
+    agendaGoogleStatus.textContent = `Erro desconectando: ${err.message}`;
+  }
+});
+
+// depois do OAuth, o servidor redireciona de volta pra cá com ?agenda_google=conectado|erro -
+// mostra o resultado numa bolha do chat e limpa o parametro da URL
+(function tratarRetornoOAuthGoogle() {
+  const params = new URLSearchParams(window.location.search);
+  const resultado = params.get('agenda_google');
+  if (!resultado) return;
+  if (resultado === 'conectado') {
+    addBubble('Google Agenda conectada com sucesso! Os compromissos ja passam a sincronizar.', 'system');
+  } else if (resultado === 'erro') {
+    addBubble(`Nao consegui conectar a Google Agenda: ${params.get('msg') || 'erro desconhecido'}`, 'system');
+  }
+  params.delete('agenda_google');
+  params.delete('msg');
+  const novaUrl = window.location.pathname + (params.toString() ? `?${params.toString()}` : '');
+  window.history.replaceState({}, '', novaUrl);
+})();
+
+// ---------- Agenda: lista + criar/cancelar evento ----------
+function formatarDataHoraEvento(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const data = d.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit' });
+  const hora = d.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' });
+  return `${data} as ${hora}`;
+}
+
+function renderizarEventosAgenda(eventos) {
+  agendaLista.textContent = '';
+  if (!eventos.length) {
+    const vazio = document.createElement('p');
+    vazio.className = 'agenda-vazia';
+    vazio.textContent = 'Nenhum compromisso nos proximos 30 dias.';
+    agendaLista.appendChild(vazio);
+    return;
+  }
+  for (const ev of eventos) {
+    const item = document.createElement('div');
+    item.className = ev.origem === 'google' ? 'agenda-evento agenda-evento-google' : 'agenda-evento';
+
+    const info = document.createElement('div');
+    info.className = 'agenda-evento-info';
+    const titulo = document.createElement('div');
+    titulo.className = 'agenda-evento-titulo';
+    titulo.textContent = ev.titulo;
+    if (ev.origem === 'google') {
+      const tag = document.createElement('span');
+      tag.className = 'agenda-evento-tag';
+      tag.textContent = 'Google';
+      titulo.appendChild(tag);
+    }
+    const quando = document.createElement('div');
+    quando.className = 'agenda-evento-quando';
+    quando.textContent = `${formatarDataHoraEvento(ev.inicio)} - ${formatarDataHoraEvento(ev.fim)}${ev.local ? ` · ${ev.local}` : ''}`;
+    info.appendChild(titulo);
+    info.appendChild(quando);
+    item.appendChild(info);
+
+    if (ev.origem !== 'google' && ev.id) {
+      const cancelarBtn = document.createElement('button');
+      cancelarBtn.type = 'button';
+      cancelarBtn.className = 'agenda-evento-cancelar';
+      cancelarBtn.textContent = '✕';
+      cancelarBtn.title = 'Cancelar compromisso';
+      cancelarBtn.addEventListener('click', async () => {
+        if (!confirm(`Cancelar "${ev.titulo}"?`)) return;
+        try {
+          await fetch(`/api/agenda/eventos/${ev.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+          carregarEventosAgenda();
+        } catch (err) {
+          agendaErro.textContent = `Erro cancelando: ${err.message}`;
+          agendaErro.hidden = false;
+        }
+      });
+      item.appendChild(cancelarBtn);
+    }
+
+    agendaLista.appendChild(item);
+  }
+}
+
+async function carregarEventosAgenda() {
+  agendaLista.textContent = '';
+  const carregando = document.createElement('p');
+  carregando.className = 'agenda-vazia';
+  carregando.textContent = 'Carregando...';
+  agendaLista.appendChild(carregando);
+  try {
+    const res = await fetch('/api/agenda/eventos', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    renderizarEventosAgenda(data.eventos || []);
+  } catch (err) {
+    agendaLista.textContent = '';
+    const erro = document.createElement('p');
+    erro.className = 'agenda-vazia';
+    erro.textContent = `Nao consegui carregar a agenda: ${err.message}`;
+    agendaLista.appendChild(erro);
+  }
+}
+
+agendaRefresh.addEventListener('click', carregarEventosAgenda);
+
+agendaForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  agendaErro.hidden = true;
+
+  const data = agendaData.value;
+  const horaInicio = agendaHoraInicio.value;
+  const horaFim = agendaHoraFim.value;
+  if (!data || !horaInicio || !horaFim) return;
+
+  // Maceio e sempre UTC-03:00 (Brasil nao tem mais horario de verao) - monta o ISO com o
+  // offset fixo pra nao depender do fuso do navegador de quem esta usando o app
+  const inicio = `${data}T${horaInicio}:00-03:00`;
+  const fim = `${data}T${horaFim}:00-03:00`;
+
+  try {
+    const res = await fetch('/api/agenda/eventos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({
+        titulo: agendaTitulo.value.trim(),
+        descricao: agendaDescricao.value.trim(),
+        local: agendaLocal.value.trim(),
+        inicio,
+        fim,
+      }),
+    });
+    const resultado = await res.json();
+    if (!res.ok) throw new Error(resultado.erro || 'erro desconhecido');
+
+    agendaForm.reset();
+    carregarEventosAgenda();
+  } catch (err) {
+    agendaErro.textContent = err.message;
+    agendaErro.hidden = false;
+  }
+});
+
+// se o app abrir ja com ?agenda_google=... na URL (voltando do OAuth), mostra a aba Agenda
+// direto em vez de deixar escondida atras da aba Painel
+if (new URLSearchParams(window.location.search).has('agenda_google') && !agendaCarregadaUmaVez) {
+  mudarAba('agenda');
 }
