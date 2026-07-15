@@ -793,6 +793,98 @@ html, body {
   color: #e8836b !important;
 }
 
+/* ---------- Auto Atendimento (aba tambem usa .window-body, mesma ordem exigida acima) ---------- */
+
+.tab-auto {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  overflow-y: auto;
+  max-width: 640px;
+}
+
+.auto-aviso {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(212, 175, 55, 0.06);
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.auto-toggle-row { display: flex; align-items: center; gap: 10px; }
+.auto-switch { position: relative; display: inline-block; }
+.auto-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 44px;
+  height: 24px;
+  margin: 0;
+  cursor: pointer;
+}
+.auto-switch-track {
+  display: block;
+  width: 44px;
+  height: 24px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  transition: background 0.15s ease;
+}
+.auto-switch-thumb {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--silver);
+  margin: 2px;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.auto-switch input:checked + .auto-switch-track { background: rgba(212, 175, 55, 0.25); border-color: var(--gold); }
+.auto-switch input:checked + .auto-switch-track .auto-switch-thumb { transform: translateX(20px); background: var(--gold-bright); }
+#autoAtivoLabel { font-size: 13px; font-weight: 600; color: var(--text); }
+
+.auto-label { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+#autoInstancia {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+#autoInstancia:focus { border-color: var(--gold); }
+
+#autoPrompt {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
+  outline: none;
+  font-family: inherit;
+  resize: vertical;
+}
+#autoPrompt:focus { border-color: var(--gold); }
+
+#autoSalvar {
+  align-self: flex-start;
+  border: 1px solid rgba(212, 175, 55, 0.5);
+  background: rgba(212, 175, 55, 0.16);
+  color: var(--gold-bright);
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .panel {
   flex: 0 0 auto;
   border: 1px solid var(--border);

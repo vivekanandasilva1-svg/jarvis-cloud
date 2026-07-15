@@ -69,6 +69,7 @@
       <button type="button" class="tab-btn active" id="tabBtnPainel" data-tab="painel">Painel</button>
       <button type="button" class="tab-btn" id="tabBtnAgenda" data-tab="agenda">Agenda</button>
       <button type="button" class="tab-btn" id="tabBtnWhatsapp" data-tab="whatsapp">WhatsApp</button>
+      <button type="button" class="tab-btn" id="tabBtnAuto" data-tab="auto">Auto Atendimento</button>
     </div>
 
     <div class="agent-panel" id="agentPanel" hidden>
@@ -315,6 +316,33 @@
           <p class="agenda-vazia">Carregando...</p>
         </div>
       </div>
+    </div>
+
+    <div class="window-body tab-auto" id="tabAuto" hidden>
+      <div class="auto-aviso">
+        Esse modo e totalmente separado da conversa normal dela com voce - so vale pra outros
+        contatos que mandarem mensagem pro numero escolhido abaixo. A Lumia continua agindo
+        normal com voce no app e no seu numero pessoal.
+      </div>
+
+      <div class="auto-toggle-row">
+        <label class="auto-switch">
+          <input type="checkbox" id="autoAtivo" />
+          <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+        </label>
+        <span id="autoAtivoLabel">Desativado</span>
+      </div>
+
+      <label class="auto-label">Numero que vai usar esse fluxo</label>
+      <select id="autoInstancia">
+        <option value="">Carregando instancias...</option>
+      </select>
+
+      <label class="auto-label">Prompt de treinamento (como ela deve atender esses contatos)</label>
+      <textarea id="autoPrompt" rows="10" placeholder="Ex: Voce e a recepcionista virtual da Clinica X. Seja cordial, colete nome e motivo do contato, e ofereça horarios disponiveis pra agendar consulta quando pedido..."></textarea>
+
+      <button type="button" id="autoSalvar">Salvar configuracao</button>
+      <p class="agenda-erro" id="autoErro" hidden></p>
     </div>
   </div>
 

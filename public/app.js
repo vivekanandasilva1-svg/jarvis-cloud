@@ -62,9 +62,11 @@ const loadBar = document.getElementById('loadBar');
 const tabBtnPainel = document.getElementById('tabBtnPainel');
 const tabBtnAgenda = document.getElementById('tabBtnAgenda');
 const tabBtnWhatsapp = document.getElementById('tabBtnWhatsapp');
+const tabBtnAuto = document.getElementById('tabBtnAuto');
 const tabPainel = document.getElementById('tabPainel');
 const tabAgenda = document.getElementById('tabAgenda');
 const tabWhatsapp = document.getElementById('tabWhatsapp');
+const tabAuto = document.getElementById('tabAuto');
 const agendaGoogleStatus = document.getElementById('agendaGoogleStatus');
 const agendaGoogleBtn = document.getElementById('agendaGoogleBtn');
 const agendaForm = document.getElementById('agendaForm');
@@ -90,6 +92,14 @@ const waQrImg = document.getElementById('waQrImg');
 const waQrFechar = document.getElementById('waQrFechar');
 const waLista = document.getElementById('waLista');
 const waRefresh = document.getElementById('waRefresh');
+
+// ---------- Auto Atendimento: elementos ----------
+const autoAtivo = document.getElementById('autoAtivo');
+const autoAtivoLabel = document.getElementById('autoAtivoLabel');
+const autoInstancia = document.getElementById('autoInstancia');
+const autoPrompt = document.getElementById('autoPrompt');
+const autoSalvar = document.getElementById('autoSalvar');
+const autoErro = document.getElementById('autoErro');
 
 let sessionId = localStorage.getItem('jarvis_session_id');
 if (!sessionId) {
@@ -1404,20 +1414,25 @@ function mudarAba(aba) {
   tabPainel.hidden = aba !== 'painel';
   tabAgenda.hidden = aba !== 'agenda';
   tabWhatsapp.hidden = aba !== 'whatsapp';
+  tabAuto.hidden = aba !== 'auto';
   tabBtnPainel.classList.toggle('active', aba === 'painel');
   tabBtnAgenda.classList.toggle('active', aba === 'agenda');
   tabBtnWhatsapp.classList.toggle('active', aba === 'whatsapp');
+  tabBtnAuto.classList.toggle('active', aba === 'auto');
   if (aba === 'agenda') {
     carregarStatusGoogleAgenda();
     carregarEventosAgenda();
   } else if (aba === 'whatsapp') {
     carregarStatusWhatsapp();
     carregarInstanciasWhatsapp();
+  } else if (aba === 'auto') {
+    carregarConfigAutoAtendimento();
   }
 }
 tabBtnPainel.addEventListener('click', () => mudarAba('painel'));
 tabBtnAgenda.addEventListener('click', () => mudarAba('agenda'));
 tabBtnWhatsapp.addEventListener('click', () => mudarAba('whatsapp'));
+tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
 
 // ---------- Agenda: Google Agenda (conectar/desconectar) ----------
 async function carregarStatusGoogleAgenda() {
@@ -1796,5 +1811,71 @@ waNovoCriar.addEventListener('click', async () => {
     addBubble(`Erro criando instancia: ${err.message}`, 'system');
   } finally {
     waNovoCriar.disabled = false;
+  }
+});
+
+// ---------- Auto Atendimento ----------
+autoAtivo.addEventListener('change', () => {
+  autoAtivoLabel.textContent = autoAtivo.checked ? 'Ativado' : 'Desativado';
+});
+
+async function carregarConfigAutoAtendimento() {
+  autoErro.hidden = true;
+  try {
+    const [resConfig, resInstancias] = await Promise.all([
+      fetch('/api/auto-atendimento/config', { headers: { 'x-app-password': appPassword } }),
+      fetch('/api/whatsapp/instancias', { headers: { 'x-app-password': appPassword } }),
+    ]);
+    const config = await resConfig.json();
+    const dataInstancias = await resInstancias.json();
+    if (!resConfig.ok) throw new Error(config.erro || 'erro desconhecido');
+
+    autoInstancia.textContent = '';
+    const vazio = document.createElement('option');
+    vazio.value = '';
+    vazio.textContent = '-- escolha um numero --';
+    autoInstancia.appendChild(vazio);
+    for (const inst of dataInstancias.instancias || []) {
+      const opt = document.createElement('option');
+      opt.value = inst.nome;
+      opt.textContent = `${inst.nome} (${inst.numero || 'sem numero'})`;
+      autoInstancia.appendChild(opt);
+    }
+
+    autoAtivo.checked = !!config.ativo;
+    autoAtivoLabel.textContent = config.ativo ? 'Ativado' : 'Desativado';
+    autoInstancia.value = config.instancia || '';
+    autoPrompt.value = config.prompt || '';
+  } catch (err) {
+    autoErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
+    autoErro.hidden = false;
+  }
+}
+
+autoSalvar.addEventListener('click', async () => {
+  autoErro.hidden = true;
+  const ativo = autoAtivo.checked;
+  const instancia = autoInstancia.value;
+  const prompt = autoPrompt.value.trim();
+  if (ativo && (!instancia || !prompt)) {
+    autoErro.textContent = 'Pra ativar, escolhe o numero e escreve o prompt de treinamento.';
+    autoErro.hidden = false;
+    return;
+  }
+  autoSalvar.disabled = true;
+  try {
+    const res = await fetch('/api/auto-atendimento/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ ativo, instancia, prompt }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    addBubble(`Auto atendimento ${ativo ? 'ativado' : 'salvo (desativado)'} ${ativo ? `no numero "${instancia}"` : ''}.`, 'system');
+  } catch (err) {
+    autoErro.textContent = err.message;
+    autoErro.hidden = false;
+  } finally {
+    autoSalvar.disabled = false;
   }
 });

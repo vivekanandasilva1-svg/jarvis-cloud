@@ -62,14 +62,18 @@ export async function desconectarInstancia(nome) {
   return chamar('DELETE', `/instance/logout/${nome}`);
 }
 
-// ---------- operacoes na instancia ATIVA (a que a Lumia usa no dia a dia) ----------
-
 // numero no formato so-digitos com DDI (ex: 5582991184771) - a propria API aceita nesse
 // formato e resolve pro jid do WhatsApp internamente
-export async function enviarMensagemTexto(numero, texto) {
-  const { instanciaAtiva } = await obterConfig();
-  return chamar('POST', `/message/sendText/${instanciaAtiva}`, {
+export async function enviarMensagemTextoPor(instancia, numero, texto) {
+  return chamar('POST', `/message/sendText/${instancia}`, {
     number: numero,
     text: texto,
   });
+}
+
+// ---------- operacoes na instancia ATIVA (a que a Lumia usa no dia a dia) ----------
+
+export async function enviarMensagemTexto(numero, texto) {
+  const { instanciaAtiva } = await obterConfig();
+  return enviarMensagemTextoPor(instanciaAtiva, numero, texto);
 }

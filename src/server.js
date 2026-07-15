@@ -17,6 +17,7 @@ import { enviarMensagemTexto } from './evolutionApi.js';
 import * as agenda from './agenda.js';
 import * as googleCalendar from './googleCalendar.js';
 import * as whatsappInstances from './whatsappInstances.js';
+import * as autoAtendimento from './autoAtendimento.js';
 
 const execAsync = promisify(exec);
 
@@ -356,22 +357,35 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   if (fromMe || !texto) return; // ignora eco das proprias mensagens da Lumia e midia sem texto
 
   const { instanciaAtiva, numeroAdmin } = await whatsappInstances.obterConfig();
-  // ignora mensagens vindas de uma instancia que nao e mais a ativa (numero antigo ainda
-  // conectado mas trocado no app) e de qualquer numero que nao seja o admin configurado
-  if (instanciaDoWebhook !== instanciaAtiva) return;
-  if (!numeroAdmin || numero !== numeroAdmin) return;
 
-  const sessionId = `whatsapp-evo:${numero}`;
-  try {
-    const resultado = await chat(sessionId, texto, []);
-    if (resultado.localAction) {
-      await enviarMensagemTexto(numero, 'Isso aí envolve mexer no seu computador, e isso só funciona pelo app no próprio PC (não dá pra fazer por aqui pelo WhatsApp).');
-      return;
+  // mensagem do dono, na instancia pessoal ativa - conversa normal (todas as ferramentas,
+  // memoria persistente, personalidade completa)
+  if (instanciaDoWebhook === instanciaAtiva && numeroAdmin && numero === numeroAdmin) {
+    try {
+      const resultado = await chat(`whatsapp-evo:${numero}`, texto, []);
+      if (resultado.localAction) {
+        await enviarMensagemTexto(numero, 'Isso aí envolve mexer no seu computador, e isso só funciona pelo app no próprio PC (não dá pra fazer por aqui pelo WhatsApp).');
+        return;
+      }
+      await enviarMensagemTexto(numero, resultado.reply);
+    } catch (err) {
+      console.error('Erro no chat via Evolution/WhatsApp:', err);
+      await enviarMensagemTexto(numero, `Deu erro por aqui: ${err.message}`).catch(() => {});
     }
-    await enviarMensagemTexto(numero, resultado.reply);
+    return;
+  }
+
+  // qualquer outro contato (nao o dono) - so responde se o auto-atendimento estiver ativo
+  // NESSA instancia especifica; usa um motor totalmente separado (prompt/historico/ferramentas
+  // proprios), nunca a conversa pessoal da Lumia
+  const configAuto = await autoAtendimento.obterConfig();
+  if (!configAuto.ativo || configAuto.instancia !== instanciaDoWebhook) return;
+
+  try {
+    const resposta = await autoAtendimento.processarMensagem(numero, texto);
+    await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, resposta);
   } catch (err) {
-    console.error('Erro no chat via Evolution/WhatsApp:', err);
-    await enviarMensagemTexto(numero, `Deu erro por aqui: ${err.message}`).catch(() => {});
+    console.error('Erro no auto-atendimento via Evolution/WhatsApp:', err);
   }
 }
 
@@ -457,6 +471,29 @@ app.post('/api/whatsapp/admin', async (req, res) => {
   if (!numero) return res.status(400).json({ erro: 'numero obrigatorio' });
   try {
     await whatsappInstances.definirNumeroAdmin(numero);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// ---------- Auto atendimento (persona/prompt isolado pra atender outros contatos) ----------
+
+app.get('/api/auto-atendimento/config', async (req, res) => {
+  try {
+    res.json(await autoAtendimento.obterConfig());
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/auto-atendimento/config', async (req, res) => {
+  const { ativo, instancia, prompt } = req.body || {};
+  if (ativo && (!instancia || !prompt)) {
+    return res.status(400).json({ erro: 'pra ativar, precisa escolher a instancia e escrever o prompt' });
+  }
+  try {
+    await autoAtendimento.salvarConfig({ ativo, instancia, prompt });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
