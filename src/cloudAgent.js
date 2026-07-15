@@ -5,6 +5,7 @@ import * as clinicorp from './clinicorp.js';
 import { transcribeAudio, generateImageGemini } from './gemini.js';
 import { gerarPdf, gerarWord, gerarExcel, gerarGraficoSvg } from './geradorDocumentos.js';
 import { guardarArquivo } from './arquivosGerados.js';
+import { enviarMensagemTexto } from './evolutionApi.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -28,6 +29,16 @@ async function garantirTabelas() {
     CREATE TABLE IF NOT EXISTS learned_instructions (
       id SERIAL PRIMARY KEY,
       texto TEXT NOT NULL,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS lembretes (
+      id SERIAL PRIMARY KEY,
+      telefone TEXT NOT NULL,
+      mensagem TEXT NOT NULL,
+      quando TIMESTAMPTZ NOT NULL,
+      enviado BOOLEAN NOT NULL DEFAULT false,
       criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
@@ -183,6 +194,14 @@ Memoria: voce NUNCA esquece uma conversa sozinha - todo o historico fica salvo d
 so na memoria do navegador), sobrevivendo a fechar o app, atualizar a pagina ou o servidor
 reiniciar. So apaga quando o usuario pedir EXPLICITAMENTE (ferramenta esquecer_conversa) ou
 clicar no botao "Limpar" - nunca por conta propria, nem quando o assunto mudar.
+
+Voce tambem conversa com o usuario direto pelo WhatsApp, num numero dedicado so seu - funciona
+igual ao chat do app (mesma personalidade, mesmas ferramentas, exceto controle do computador que
+so funciona no app pelo navegador). Voce pode criar lembretes (whatsapp_criar_lembrete) que
+chegam automaticamente no WhatsApp do usuario na hora marcada, venha o pedido do app ou do proprio
+WhatsApp - sempre calcule a data/hora absoluta certa a partir do "hoje" que voce ja sabe. Use
+whatsapp_listar_lembretes e whatsapp_cancelar_lembrete quando o usuario perguntar ou quiser
+desmarcar algo.
 
 Voce tambem pode ser treinada: quando o usuario pedir explicitamente pra voce aprender/lembrar
 algo sobre como se comportar dali em diante (nao so nesta conversa, mas em qualquer conversa
@@ -676,6 +695,32 @@ const tools = [
       },
       required: ['descricao'],
     },
+  },
+  {
+    name: 'whatsapp_criar_lembrete',
+    description: 'Cria um lembrete que sera mandado automaticamente pro WhatsApp do usuario na data/hora marcada (funciona vindo de qualquer canal - app web ou o proprio WhatsApp). Use quando o usuario pedir pra ser lembrado de algo. Calcule "quando" como uma data/hora absoluta ISO 8601 (voce ja sabe a data de hoje pelo contexto do sistema).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        mensagem: { type: 'string', description: 'O que lembrar, escrito de forma clara' },
+        quando: { type: 'string', description: 'Data/hora exata do lembrete, formato ISO 8601 (ex: 2026-07-15T14:30:00-03:00)' },
+      },
+      required: ['mensagem', 'quando'],
+    },
+  },
+  {
+    name: 'whatsapp_listar_lembretes',
+    description: 'Lista os lembretes pendentes (ainda nao enviados) do usuario.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'whatsapp_cancelar_lembrete',
+    description: 'Cancela um lembrete pendente pelo id (use whatsapp_listar_lembretes primeiro pra saber o id certo).',
+    input_schema: {
+      type: 'object',
+      properties: { id: { type: 'number', description: 'id do lembrete a cancelar' } },
+      required: ['id'],
+    },
     // marca o fim do bloco de ferramentas como ponto de cache - a lista inteira (~30+
     // ferramentas) e grande e quase nunca muda, entao cache_control aqui faz a Anthropic
     // cobrar bem mais barato nela nas chamadas seguintes dentro da janela de cache
@@ -972,6 +1017,33 @@ async function runTool(name, input, session, sessionId) {
       return { erro: err.message };
     }
   }
+  if (name === 'whatsapp_criar_lembrete') {
+    try {
+      const telefone = telefoneParaLembrete(sessionId);
+      const { id, quando } = await criarLembrete(telefone, input.mensagem, input.quando);
+      return { ok: true, id, quando, mensagem: 'Lembrete criado, vou mandar no WhatsApp na hora certa.' };
+    } catch (err) {
+      return { erro: err.message };
+    }
+  }
+  if (name === 'whatsapp_listar_lembretes') {
+    try {
+      const telefone = telefoneParaLembrete(sessionId);
+      const lembretes = await listarLembretesPendentes(telefone);
+      return { lembretes };
+    } catch (err) {
+      return { erro: err.message };
+    }
+  }
+  if (name === 'whatsapp_cancelar_lembrete') {
+    try {
+      const telefone = telefoneParaLembrete(sessionId);
+      await cancelarLembrete(input.id, telefone);
+      return { ok: true, mensagem: 'Lembrete cancelado.' };
+    } catch (err) {
+      return { erro: err.message };
+    }
+  }
 
   if (CONFIRM_TOOLS.has(name)) {
     session.pendingAction = { name, input };
@@ -1165,6 +1237,71 @@ async function listarInstrucoesAprendidas() {
 async function esquecerInstrucoesAprendidas() {
   if (!pool) return;
   await pool.query('DELETE FROM learned_instructions');
+}
+
+// ---------- Lembretes por WhatsApp ----------
+// se o pedido veio de uma conversa no WhatsApp (sessionId no formato "whatsapp-evo:<numero>"),
+// o lembrete vai pro mesmo numero de quem pediu; se veio do app web (sem numero de WhatsApp
+// associado), cai no numero admin configurado - assim "me lembra de X" funciona nos dois canais
+function telefoneParaLembrete(sessionId) {
+  if (sessionId?.startsWith('whatsapp-evo:')) return sessionId.slice('whatsapp-evo:'.length);
+  return process.env.LUMIA_WHATSAPP_ADMIN || null;
+}
+
+async function criarLembrete(telefone, mensagem, quandoISO) {
+  if (!pool) throw new Error('Lembretes precisam do Postgres configurado (DATABASE_URL) - nao disponivel neste ambiente.');
+  if (!telefone) throw new Error('Nao sei pra qual numero de WhatsApp mandar esse lembrete (nenhum configurado).');
+  await tabelasProntas;
+  const quando = new Date(quandoISO);
+  if (Number.isNaN(quando.getTime())) throw new Error(`Data/hora invalida: "${quandoISO}"`);
+  const { rows } = await pool.query(
+    'INSERT INTO lembretes (telefone, mensagem, quando) VALUES ($1, $2, $3) RETURNING id',
+    [telefone, mensagem, quando],
+  );
+  return { id: rows[0].id, quando: quando.toISOString() };
+}
+
+async function listarLembretesPendentes(telefone) {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    'SELECT id, mensagem, quando FROM lembretes WHERE telefone = $1 AND enviado = false ORDER BY quando ASC',
+    [telefone],
+  );
+  return rows;
+}
+
+async function cancelarLembrete(id, telefone) {
+  if (!pool) throw new Error('Lembretes precisam do Postgres configurado.');
+  const { rowCount } = await pool.query(
+    'DELETE FROM lembretes WHERE id = $1 AND telefone = $2 AND enviado = false',
+    [id, telefone],
+  );
+  if (!rowCount) throw new Error(`Nao achei nenhum lembrete pendente com id ${id} pra esse numero.`);
+}
+
+// roda em segundo plano no processo do servidor - a cada 30s checa se algum lembrete venceu
+// e manda pelo WhatsApp (Evolution API). So chamado uma vez, no boot do server.js.
+export function iniciarSchedulerLembretes() {
+  if (!pool) return;
+  setInterval(async () => {
+    try {
+      await tabelasProntas;
+      const { rows } = await pool.query(
+        'SELECT id, telefone, mensagem FROM lembretes WHERE enviado = false AND quando <= now()',
+      );
+      for (const lembrete of rows) {
+        try {
+          await enviarMensagemTexto(lembrete.telefone, `⏰ Lembrete: ${lembrete.mensagem}`);
+          await pool.query('UPDATE lembretes SET enviado = true WHERE id = $1', [lembrete.id]);
+        } catch (err) {
+          console.error(`Erro mandando lembrete ${lembrete.id} pro WhatsApp:`, err.message);
+        }
+      }
+    } catch (err) {
+      console.error('Erro checando lembretes pendentes:', err.message);
+    }
+  }, 30 * 1000).unref();
 }
 
 export async function limparConversa(sessionId) {

@@ -6,12 +6,13 @@ import { promisify } from 'node:util';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chat, continuarAcaoLocal, limparConversa } from './cloudAgent.js';
+import { chat, continuarAcaoLocal, limparConversa, iniciarSchedulerLembretes } from './cloudAgent.js';
 import { synthesizeSpeechWithTimestamps, transcribeAudio } from './gemini.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
 import { transcribeAudioWhisper } from './whisper.js';
 import { sendTextMessage, downloadMedia } from './whatsapp.js';
 import { obterArquivo } from './arquivosGerados.js';
+import { enviarMensagemTexto } from './evolutionApi.js';
 
 const execAsync = promisify(exec);
 
@@ -39,7 +40,7 @@ const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'Admin';
 // checando a assinatura da requisicao e o numero de quem manda a mensagem.
 app.use((req, res, next) => {
   if (!APP_PASSWORD) return next(); // sem senha configurada, roda aberto (nao recomendado)
-  if (req.path === '/api/login' || req.path === '/webhook/whatsapp') return next();
+  if (req.path === '/api/login' || req.path === '/webhook/whatsapp' || req.path === '/api/whatsapp-evolution/webhook') return next();
 
   const provided = req.header('x-app-password');
   if (provided === APP_PASSWORD) return next();
@@ -319,6 +320,60 @@ app.post('/webhook/whatsapp', (req, res) => {
     processarMensagemWhatsapp(msg).catch((err) => console.error('Erro ao processar mensagem do WhatsApp:', err));
   }
 });
+
+// ---------- WhatsApp (Evolution API - instancia propria e dedicada da Lumia) ----------
+// diferente do webhook da Meta acima, esse fala com uma instancia do Evolution API (WhatsApp
+// Web/Baileys) que ja roda na mesma VPS - sem as restricoes de janela de 24h/template da API
+// oficial da Meta, entao da pra mandar lembrete e mensagem proativa a qualquer hora.
+
+// so o numero admin configurado pode conversar com a Lumia por aqui - ela age de verdade
+// (ferramentas, lembretes), entao nao pode responder qualquer numero que ache essa instancia
+function numeroEvolutionPermitido(numero) {
+  const admin = process.env.LUMIA_WHATSAPP_ADMIN;
+  return !!admin && numero === admin;
+}
+
+// extrai o numero (so digitos) e o texto de uma mensagem do formato do Baileys - cobre o caso
+// mais comum (texto simples ou "resposta a algo"); outros tipos (audio/imagem/figurinha) ficam
+// de fora por enquanto, mesmo escopo do que ja funciona no chat de texto do app
+function extrairMensagemEvolution(data) {
+  const remoteJid = data?.key?.remoteJid || '';
+  const numero = remoteJid.split('@')[0];
+  const msg = data?.message || {};
+  const texto = msg.conversation || msg.extendedTextMessage?.text || '';
+  return { numero, texto, fromMe: !!data?.key?.fromMe };
+}
+
+async function processarMensagemEvolution(data) {
+  const { numero, texto, fromMe } = extrairMensagemEvolution(data);
+  if (fromMe || !texto) return; // ignora eco das proprias mensagens da Lumia e midia sem texto
+  if (!numeroEvolutionPermitido(numero)) return; // numero nao autorizado, ignora silenciosamente
+
+  const sessionId = `whatsapp-evo:${numero}`;
+  try {
+    const resultado = await chat(sessionId, texto, []);
+    if (resultado.localAction) {
+      await enviarMensagemTexto(numero, 'Isso aí envolve mexer no seu computador, e isso só funciona pelo app no próprio PC (não dá pra fazer por aqui pelo WhatsApp).');
+      return;
+    }
+    await enviarMensagemTexto(numero, resultado.reply);
+  } catch (err) {
+    console.error('Erro no chat via Evolution/WhatsApp:', err);
+    await enviarMensagemTexto(numero, `Deu erro por aqui: ${err.message}`).catch(() => {});
+  }
+}
+
+// o Evolution API tambem espera resposta rapida - responde 200 na hora e processa depois
+app.post('/api/whatsapp-evolution/webhook', (req, res) => {
+  res.sendStatus(200);
+  const evento = req.body?.event;
+  if (evento !== 'messages.upsert') return;
+  const data = req.body?.data;
+  if (!data) return;
+  processarMensagemEvolution(data).catch((err) => console.error('Erro ao processar mensagem do Evolution:', err));
+});
+
+iniciarSchedulerLembretes();
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
