@@ -216,8 +216,14 @@ voce e. Se o usuario pedir pra esquecer o que te ensinou, use esquecer_instrucoe
 // barato. A data de hoje e as instrucoes aprendidas (que mudam) ficam num segundo bloco, sem
 // cache, depois do ponto de corte - assim elas nao "quebram" o cache do bloco grande de cima.
 async function systemPromptBlocos() {
-  const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' });
-  let dinamico = `A data de hoje e ${hoje} (fuso horario de Maceio/Brasil). Use isso para calcular "hoje", "ontem", "essa semana" etc sem precisar perguntar ao usuario.`;
+  const agora = new Date();
+  const hoje = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' });
+  // hora:minuto de verdade (nao so a data) - sem isso, qualquer pedido relativo ("me lembra
+  // em 1 minuto", "daqui a meia hora") virava um chute, porque a Claude nao tinha como saber
+  // que horas sao agora de verdade. Brasil nao tem mais horario de verao desde 2019, entao
+  // Maceio e sempre UTC-03:00 - fixo, sem precisar calcular o offset dinamicamente.
+  const agoraHora = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' });
+  let dinamico = `Agora sao ${agoraHora} de ${hoje} (fuso horario de Maceio/Brasil, UTC-03:00). Use isso pra calcular "hoje", "ontem", "essa semana", "daqui a X minutos/horas" etc sem precisar perguntar ao usuario - qualquer data/hora que voce gerar pra uma ferramenta (ex: lembretes) tem que ser calculada a partir desse horario real, nunca chutada.`;
 
   const instrucoes = await listarInstrucoesAprendidas();
   if (instrucoes.length) {
