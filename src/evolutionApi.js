@@ -28,7 +28,12 @@ async function chamar(method, path, body) {
     // as vezes a mensagem de erro vem como array/objeto (varia por endpoint) em vez de string -
     // sem isso, "new Error(objeto)" virava a mensagem inutil "[object Object]" nos logs
     const bruto = data?.message ?? data?.response?.message;
-    const mensagem = Array.isArray(bruto) ? bruto.join('; ') : typeof bruto === 'string' ? bruto : JSON.stringify(bruto);
+    // cada item do array pode ser string OU objeto (varia por endpoint/tipo de erro) - sem o
+    // JSON.stringify por item, um array de objetos virava "[object Object]" no join (Array.join
+    // chama toString() em cada item, que pra objeto plano nao serializa nada util)
+    const mensagem = Array.isArray(bruto)
+      ? bruto.map((item) => (typeof item === 'string' ? item : JSON.stringify(item))).join('; ')
+      : typeof bruto === 'string' ? bruto : JSON.stringify(bruto);
     throw new Error(mensagem && mensagem !== '{}' ? mensagem : `Evolution API erro ${res.status}`);
   }
   return data;
