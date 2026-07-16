@@ -1829,6 +1829,22 @@ autoAtivo.addEventListener('change', () => {
   autoAtivoLabel.textContent = autoAtivo.checked ? 'Ativado' : 'Desativado';
 });
 
+// o botao "Salvar Configurações" fica vermelho assim que qualquer campo da aba muda (avisa que
+// tem alteracao pendente) e volta pro dourado (com um "pulso" rapido) so depois de salvar de
+// verdade com sucesso - assim fica visivelmente claro quando ainda falta salvar
+function marcarAlteracoesNaoSalvas() {
+  autoSalvar.classList.add('nao-salvo');
+  autoSalvar.classList.remove('salvo-pulso');
+  autoSalvar.textContent = 'Salvar Configurações *';
+}
+[autoAtivo, autoInstancia, autoPrompt, autoFrequenciaAudio, autoAudioSeReceberAudio, autoAgendarInterna, autoAgendarClinicorp]
+  .forEach((el) => {
+    // 'input' pega cada tecla digitada no prompt; 'change' cobre checkbox/select (que nem
+    // sempre disparam 'input' de forma consistente entre navegadores)
+    el.addEventListener('input', marcarAlteracoesNaoSalvas);
+    el.addEventListener('change', marcarAlteracoesNaoSalvas);
+  });
+
 async function carregarConfigAutoAtendimento() {
   autoErro.hidden = true;
   try {
@@ -1860,6 +1876,10 @@ async function carregarConfigAutoAtendimento() {
     autoAudioSeReceberAudio.checked = !!config.audioSeReceberAudio;
     autoAgendarInterna.checked = !!config.agendarAgendaInterna;
     autoAgendarClinicorp.checked = !!config.agendarClinicorp;
+
+    // acabou de carregar do servidor - nao tem nada "nao salvo" ainda
+    autoSalvar.classList.remove('nao-salvo', 'salvo-pulso');
+    autoSalvar.textContent = 'Salvar Configurações';
   } catch (err) {
     autoErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
     autoErro.hidden = false;
@@ -1893,6 +1913,17 @@ autoSalvar.addEventListener('click', async () => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+
+    // salvou de verdade - tira o vermelho, volta pro dourado com um "pulso" rapido pra ficar
+    // visivel que salvou agora mesmo (nao so que "nao ha mudanca pendente")
+    autoSalvar.classList.remove('nao-salvo');
+    autoSalvar.textContent = 'Salvo ✓';
+    autoSalvar.classList.add('salvo-pulso');
+    setTimeout(() => {
+      autoSalvar.classList.remove('salvo-pulso');
+      autoSalvar.textContent = 'Salvar Configurações';
+    }, 1200);
+
     addBubble(`Configurações salvas e já valendo${ativo ? ` no numero "${instancia}"` : ' (desativado)'}.`, 'system');
   } catch (err) {
     autoErro.textContent = err.message;

@@ -938,6 +938,27 @@ html, body {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+/* fica vermelho assim que qualquer campo da aba muda - avisa que tem alteracao pendente pra
+   salvar; volta pro dourado (via .salvo-pulso) so depois de salvar de verdade com sucesso */
+#autoSalvar.nao-salvo {
+  border-color: rgba(232, 74, 74, 0.7);
+  background: rgba(232, 74, 74, 0.18);
+  color: #ff6b6b;
+}
+#autoSalvar.nao-salvo:hover { background: rgba(232, 74, 74, 0.28); }
+#autoSalvar:active { transform: scale(0.96); }
+#autoSalvar.salvo-pulso {
+  border-color: var(--gold-bright);
+  background: rgba(212, 175, 55, 0.35);
+  color: var(--gold-bright);
+  animation: autoSalvoPulso 0.5s ease;
+}
+@keyframes autoSalvoPulso {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.6); }
+  40% { transform: scale(1.06); box-shadow: 0 0 0 8px rgba(212, 175, 55, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(212, 175, 55, 0); }
 }
 
 .auto-audio-row {
