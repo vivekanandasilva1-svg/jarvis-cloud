@@ -124,7 +124,7 @@ function toolCriarAgendamento({ agendarClinicorp, agendarAgendaInterna }) {
   if (agendarAgendaInterna) destinos.push('na agenda interna');
   return {
     name: 'criar_agendamento',
-    description: `Marca um agendamento/consulta ${destinos.join(' e ')}. Sempre inclua um resumo do que foi conversado com o contato nas observacoes. Calcule inicio/fim como data/hora absoluta ISO 8601 usando o "agora" informado.`,
+    description: `Marca um agendamento/consulta ${destinos.join(' e ')}. Sempre inclua um resumo do que foi conversado com o contato nas observacoes. Calcule inicio/fim como data/hora absoluta ISO 8601 usando o "agora" informado - NUNCA um horario que ja passou (o sistema rejeita e devolve erro se tentar). Antes de chamar essa ferramenta, SEMPRE consulte a disponibilidade primeiro (agenda_listar_eventos e/ou clinicorp_consultar_agenda_medico) pra nao sugerir um horario ocupado. Regras que o sistema aplica automaticamente: nunca duplica o mesmo paciente no mesmo horario, e no Clinicorp um mesmo horario aceita no maximo 2 pacientes diferentes com o mesmo medico (a partir do 3º, rejeita).`,
     input_schema: {
       type: 'object',
       properties: {
@@ -184,6 +184,15 @@ async function runTool(name, input, contexto) {
 
     if (name === 'criar_agendamento') {
       const config = contexto.config;
+
+      // regra de negocio que vale pros dois destinos: nunca marcar no passado - checa server
+      // side, nao confia so na IA calcular certo a partir do "agora" do prompt
+      const inicioData = new Date(input.inicio);
+      if (Number.isNaN(inicioData.getTime())) return { erro: `Data/hora de inicio invalida: "${input.inicio}"` };
+      if (inicioData.getTime() <= Date.now()) {
+        return { erro: 'Esse horario ja passou (ou e agora mesmo) - so da pra marcar pra um horario no futuro.' };
+      }
+
       const resultado = {};
 
       if (config.agendarClinicorp) {
@@ -192,17 +201,35 @@ async function runTool(name, input, contexto) {
           const data = input.inicio.slice(0, 10);
           const de = input.inicio.slice(11, 16);
           const ate = input.fim.slice(11, 16);
-          await clinicorp.createAppointment({
-            patientName: input.pacienteNome,
-            mobilePhone: input.pacienteTelefone || contexto.numero,
-            date: data,
-            fromTime: de,
-            toTime: ate,
-            dentistId: medico.id,
-            categoryDescription: 'Auto atendimento WhatsApp',
-            notes: input.resumo,
-          });
-          resultado.clinicorp = { ok: true, medico: medico.name };
+
+          // olha quem ja esta marcado com esse medico nesse dia, pra checar duplicidade e o
+          // limite de 2 pessoas diferentes no mesmo horario antes de tentar criar de verdade
+          const doDia = await clinicorp.listAppointments({ from: data, to: data });
+          const domedico = doDia.filter((a) => String(a.Dentist_PersonId) === String(medico.id));
+          const mesmoHorario = domedico.filter((a) => a.fromTime === de);
+          const nomeNovoPaciente = normalizarNome(input.pacienteNome);
+
+          const jaTemEsseMesmoPaciente = mesmoHorario.some((a) => normalizarNome(a.PatientName) === nomeNovoPaciente);
+          if (jaTemEsseMesmoPaciente) {
+            resultado.clinicorp = { erro: `${input.pacienteNome} ja tem um agendamento marcado com ${medico.name} nesse mesmo horario - nao duplica.` };
+          } else {
+            const pacientesDiferentes = new Set(mesmoHorario.map((a) => normalizarNome(a.PatientName)));
+            if (pacientesDiferentes.size >= 2) {
+              resultado.clinicorp = { erro: `Esse horario com ${medico.name} ja tem 2 pessoas diferentes marcadas - escolha outro horario.` };
+            } else {
+              await clinicorp.createAppointment({
+                patientName: input.pacienteNome,
+                mobilePhone: input.pacienteTelefone || contexto.numero,
+                date: data,
+                fromTime: de,
+                toTime: ate,
+                dentistId: medico.id,
+                categoryDescription: 'Auto atendimento WhatsApp',
+                notes: input.resumo,
+              });
+              resultado.clinicorp = { ok: true, medico: medico.name };
+            }
+          }
         } catch (err) {
           resultado.clinicorp = { erro: err.message };
         }
@@ -210,13 +237,22 @@ async function runTool(name, input, contexto) {
 
       if (config.agendarAgendaInterna) {
         try {
-          const r = await agenda.criarEvento({
-            titulo: `${input.pacienteNome}${input.medico ? ` - ${input.medico}` : ''}`,
-            descricao: input.resumo,
-            inicio: input.inicio,
-            fim: input.fim,
-          });
-          resultado.agendaInterna = { ok: true, id: r.id };
+          // agenda interna e de uso pessoal (1 coisa de cada vez) - nunca sobrepoe outro
+          // compromisso ja marcado, ao contrario do Clinicorp que aceita ate 2 pessoas
+          const existentes = await agenda.listarEventos(input.inicio, input.fim);
+          const fimData = new Date(input.fim);
+          const sobrepoe = existentes.some((e) => new Date(e.inicio) < fimData && new Date(e.fim) > inicioData);
+          if (sobrepoe) {
+            resultado.agendaInterna = { erro: 'Ja existe outro compromisso nesse horario na agenda interna - escolha outro horario.' };
+          } else {
+            const r = await agenda.criarEvento({
+              titulo: `${input.pacienteNome}${input.medico ? ` - ${input.medico}` : ''}`,
+              descricao: input.resumo,
+              inicio: input.inicio,
+              fim: input.fim,
+            });
+            resultado.agendaInterna = { ok: true, id: r.id };
+          }
         } catch (err) {
           resultado.agendaInterna = { erro: err.message };
         }
