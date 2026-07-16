@@ -897,6 +897,7 @@ async function enviarMensagem(texto) {
   const textoBolha = textoLimpo && resumoAnexos ? `${textoLimpo}\n${resumoAnexos}` : (textoLimpo || resumoAnexos);
   addBubble(textoBolha, 'user');
   textInput.value = '';
+  ajustarAlturaTextInput();
   setStatus('pensando', 'thinking');
 
   try {
@@ -956,6 +957,21 @@ async function enviarMensagem(texto) {
 composer.addEventListener('submit', (e) => {
   e.preventDefault();
   enviarMensagem(textInput.value);
+});
+
+// campo agora e um textarea multi-linha que cresce com o texto digitado (era um input de 1
+// linha so, dificil de ver mensagens maiores) - Enter continua enviando, Shift+Enter quebra
+// linha, igual WhatsApp/apps de chat em geral
+function ajustarAlturaTextInput() {
+  textInput.style.height = 'auto';
+  textInput.style.height = `${textInput.scrollHeight}px`;
+}
+textInput.addEventListener('input', ajustarAlturaTextInput);
+textInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    composer.requestSubmit();
+  }
 });
 
 clearBtn.addEventListener('click', async () => {

@@ -221,19 +221,21 @@
         <div class="attach-preview" id="attachPreview" hidden></div>
 
         <form class="composer" id="composer">
-          <button type="button" class="icon-btn attach-btn" id="attachBtn" title="Anexar imagem, audio ou video">
-            <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M16.5 6.5v10a4.5 4.5 0 0 1-9 0V5a3 3 0 0 1 6 0v9.5a1.5 1.5 0 0 1-3 0V7H9v7.5a3 3 0 0 0 6 0V5a4.5 4.5 0 0 0-9 0v11.5a6 6 0 0 0 12 0v-10h-1.5z"/></svg>
-          </button>
-          <input type="file" id="fileInput" accept="image/*,audio/*,video/*" multiple hidden />
-          <button type="button" class="icon-btn mic-btn" id="micBtn" title="Falar um comando">
-            <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
-          </button>
-          <button type="button" class="icon-btn conv-btn" id="convBtn" title="Ativar modo conversa continua">
-            <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 3a2 2 0 0 0-2 2v10a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2zM6 11a1 1 0 0 1 2 0v2a1 1 0 0 1-2 0v-2zm10 0a1 1 0 0 1 2 0v2a1 1 0 0 1-2 0v-2z"/></svg>
-          </button>
-          <input type="text" id="textInput" placeholder="Fale com a Lumia..." autocomplete="off" />
-          <button type="submit" class="send-btn" id="sendBtn">Enviar</button>
-          <button type="button" class="icon-btn mute-btn" id="muteBtn" title="Silenciar voz">🔊</button>
+          <textarea id="textInput" placeholder="Fale com a Lumia..." autocomplete="off" rows="1"></textarea>
+          <div class="composer-botoes">
+            <button type="button" class="icon-btn attach-btn" id="attachBtn" title="Anexar imagem, audio ou video">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M16.5 6.5v10a4.5 4.5 0 0 1-9 0V5a3 3 0 0 1 6 0v9.5a1.5 1.5 0 0 1-3 0V7H9v7.5a3 3 0 0 0 6 0V5a4.5 4.5 0 0 0-9 0v11.5a6 6 0 0 0 12 0v-10h-1.5z"/></svg>
+            </button>
+            <input type="file" id="fileInput" accept="image/*,audio/*,video/*" multiple hidden />
+            <button type="button" class="icon-btn mic-btn" id="micBtn" title="Falar um comando">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
+            </button>
+            <button type="button" class="icon-btn conv-btn" id="convBtn" title="Ativar modo conversa continua">
+              <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 3a2 2 0 0 0-2 2v10a2 2 0 0 0 4 0V5a2 2 0 0 0-2-2zM6 11a1 1 0 0 1 2 0v2a1 1 0 0 1-2 0v-2zm10 0a1 1 0 0 1 2 0v2a1 1 0 0 1-2 0v-2z"/></svg>
+            </button>
+            <button type="button" class="icon-btn mute-btn" id="muteBtn" title="Silenciar voz">🔊</button>
+            <button type="submit" class="send-btn" id="sendBtn">Enviar</button>
+          </div>
         </form>
       </div>
     </div>

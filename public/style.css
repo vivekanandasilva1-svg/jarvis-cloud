@@ -1520,31 +1520,50 @@ html, body {
 }
 .attach-chip button:hover { color: var(--gold-bright); }
 
+/* composer em duas linhas: campo de texto ocupando a largura toda em cima, botoes embaixo -
+   a coluna de conversa e uma barra lateral estreita (max 340px, ver .window-body), entao
+   colocar os botoes do lado do campo (like antes) deixava o campo com uns 40px de largura so,
+   quebrando o texto letra por letra em vez de ficar legivel */
 .composer {
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
   padding: 14px 16px;
   border-top: 1px solid var(--border);
   background: var(--panel);
 }
 
-.composer input[type="text"] {
-  flex: 1;
-  min-width: 0;
+.composer textarea#textInput {
+  width: 100%;
+  box-sizing: border-box;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 11px 12px;
+  padding: 13px 14px;
   color: var(--text);
-  font-size: 14px;
+  font-size: 15px;
+  font-family: inherit;
   outline: none;
+  resize: none;
+  min-height: 64px;
+  max-height: 240px;
+  line-height: 1.4;
+  overflow-y: auto;
 }
 
-.composer input[type="text"]:focus {
+.composer textarea#textInput:focus {
   border-color: var(--gold);
   box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15);
+}
+
+.composer-botoes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.composer-botoes .send-btn {
+  flex: 1 1 auto;
 }
 
 .icon-btn, .send-btn {
