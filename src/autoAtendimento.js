@@ -292,11 +292,36 @@ async function salvarSessao(numero, history, contagem) {
   );
 }
 
-function systemPromptComHoje(promptCustom) {
+// aviso dinamico, colocado no FIM do prompt (maior prioridade/recencia) - o prompt customizado
+// do usuario pode ter instrucoes gerais tipo "use uns emojis" (pensando em texto) que colidem
+// com a regra de audio; como aqui a gente ja sabe ANTES de gerar se essa resposta especifica
+// vai ser falada ou lida, da pra avisar a IA de forma inequivoca em vez de deixar ela adivinhar
+const AVISO_RESPOSTA_EM_AUDIO = `\n\nATENCAO - ESTA RESPOSTA ESPECIFICA VAI SER CONVERTIDA EM AUDIO E OUVIDA EM VOZ ALTA (nao lida como texto). Isso PREVALECE sobre qualquer instrucao anterior sobre emoji/formatacao: NUNCA use emoji (nem um so, mesmo que o prompt acima peca), NUNCA use asterisco, #, _, markdown ou qualquer simbolo de formatacao - escreva so texto corrido, como se estivesse falando naturalmente em voz alta. Fale horas por extenso (ex: "14 horas", "14 horas e 30", nunca "14h" ou "14:00h").`;
+
+function systemPromptComHoje(promptCustom, vaiSerAudio) {
   const agora = new Date();
   const hoje = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' });
   const agoraHora = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' });
-  return `${promptCustom}\n\nAgora sao ${agoraHora} de ${hoje} (fuso horario de Maceio/Brasil, UTC-03:00). Use isso pra calcular qualquer data/hora de agendamento - nunca chute.\n\nVoce pode receber do contato texto, audio (chega ja transcrito), imagem (voce ve de verdade) ou video (voce so sabe que recebeu, ainda nao consegue assistir).`;
+  let prompt = `${promptCustom}\n\nAgora sao ${agoraHora} de ${hoje} (fuso horario de Maceio/Brasil, UTC-03:00). Use isso pra calcular qualquer data/hora de agendamento - nunca chute.\n\nVoce pode receber do contato texto, audio (chega ja transcrito), imagem (voce ve de verdade) ou video (voce so sabe que recebeu, ainda nao consegue assistir).`;
+  if (vaiSerAudio) prompt += AVISO_RESPOSTA_EM_AUDIO;
+  return prompt;
+}
+
+// rede de seguranca no CODIGO (nao so no prompt) - mesmo que a IA "esqueça" a instrucao, isso
+// garante que nenhum audio saia com emoji falado por extenso ou simbolo de markdown lido em
+// voz alta, e converte "14h"/"14:00h" pro formato falado que foi pedido
+const REGEX_EMOJI = /[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{2190}-\u{21FF}️‍]/gu;
+export function prepararTextoParaAudio(texto) {
+  return texto
+    .replace(REGEX_EMOJI, '')
+    .replace(/\*\*|__|##+|`+/g, '')
+    .replace(/(?<![:\d])\b(\d{1,2}):00h?\b/g, '$1 horas')
+    .replace(/(?<![:\d])\b(\d{1,2}):(\d{2})h?\b/g, '$1 horas e $2')
+    .replace(/(?<![:\d])\b(\d{1,2})h00\b/g, '$1 horas')
+    .replace(/(?<![:\d])\b(\d{1,2})h(\d{2})\b/g, '$1 horas e $2')
+    .replace(/(?<![:\d])\b(\d{1,2})h\b/g, '$1 horas')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }
 
 const MAX_RODADAS_FERRAMENTA = 5;
@@ -328,6 +353,14 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
     : textoFinal.trim();
   history.push({ role: 'user', content: conteudoUsuario });
 
+  // decide ANTES de gerar se essa resposta vai por audio - sempre que o contato mandou audio
+  // (se a opcao estiver ligada), ou a cada N mensagens (cadencia configurada). Precisa saber
+  // isso agora (nao so depois) pra poder avisar a IA no proprio prompt desta chamada.
+  const novaContagem = contagem + 1;
+  const vaiSerAudio =
+    (config.audioSeReceberAudio && tipo === 'audio') ||
+    (config.frequenciaAudio > 0 && novaContagem % config.frequenciaAudio === 0);
+
   const listaArquivos = await arquivos.listarArquivos();
   const TOOLS = [];
   if (config.agendarAgendaInterna) TOOLS.push(TOOL_AGENDA_LISTAR_INTERNA);
@@ -335,7 +368,7 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
   if (config.agendarClinicorp || config.agendarAgendaInterna) TOOLS.push(toolCriarAgendamento(config));
   TOOLS.push(toolEnviarArquivo(listaArquivos));
   const contexto = { instancia, numero, config };
-  const system = systemPromptComHoje(config.prompt);
+  const system = systemPromptComHoje(config.prompt, vaiSerAudio);
 
   let response = await anthropic.messages.create({ model: 'claude-sonnet-5', max_tokens: 1000, system, tools: TOOLS, messages: history });
   let rounds = 0;
@@ -355,22 +388,16 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
     || 'Desculpa, nao consegui formular uma resposta agora - pode repetir de outro jeito?';
   history.push({ role: 'assistant', content: respostaTexto });
 
-  const novaContagem = contagem + 1;
   await salvarSessao(numero, history, novaContagem);
 
-  // decide se essa resposta vai por audio: sempre que o contato mandou audio (se a opcao
-  // estiver ligada), ou a cada N mensagens (cadencia configurada) - nunca as duas contando em
-  // dobro, um simples "ou" basta pro pedido original
-  const respondeComAudio =
-    (config.audioSeReceberAudio && tipo === 'audio') ||
-    (config.frequenciaAudio > 0 && novaContagem % config.frequenciaAudio === 0);
-
-  return { texto: respostaTexto, respondeComAudio };
+  return { texto: respostaTexto, respondeComAudio: vaiSerAudio };
 }
 
 // sintetiza e manda a resposta como nota de voz; se der qualquer erro, quem chamou deve cair
-// pra texto (nunca deixar o contato sem resposta nenhuma por causa disso)
+// pra texto (nunca deixar o contato sem resposta nenhuma por causa disso). Passa pelo filtro
+// de seguranca (prepararTextoParaAudio) mesmo que o prompt/aviso dinamico ja tenham pedido pra
+// IA nao usar emoji/markdown - garante o resultado mesmo se ela nao seguir 100%.
 export async function enviarRespostaEmAudio(instancia, numero, texto) {
-  const { audioBase64 } = await synthesizeSpeechKokoro(texto);
+  const { audioBase64 } = await synthesizeSpeechKokoro(prepararTextoParaAudio(texto));
   await evolutionApi.enviarAudio(instancia, numero, audioBase64);
 }
