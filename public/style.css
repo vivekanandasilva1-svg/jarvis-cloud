@@ -554,22 +554,46 @@ html, body {
   padding: 8px 10px;
 }
 
-.agenda-lista-wrap {
+/* ---------- Agenda: visao de dia estilo Clinicorp (coluna de horarios + blocos de compromisso) ---------- */
+.agenda-dia-wrap {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
-.agenda-lista-header {
+.agenda-dia-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.agenda-dia-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.agenda-dia-nav button {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 6px 10px;
   font-size: 12.5px;
+  cursor: pointer;
+  line-height: 1;
+}
+.agenda-dia-nav button:hover { color: var(--gold-bright); border-color: var(--gold); }
+.agenda-dia-titulo {
+  flex: 1 1 auto;
+  min-width: 120px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text);
+  text-transform: capitalize;
 }
-.agenda-lista-header button {
+#agendaRefresh {
   border: 1px solid var(--border);
   background: none;
   color: var(--text-dim);
@@ -577,57 +601,109 @@ html, body {
   padding: 6px 12px;
   font-size: 11.5px;
   cursor: pointer;
+  flex: 0 0 auto;
 }
-.agenda-lista-header button:hover { color: var(--gold-bright); border-color: var(--gold); }
+#agendaRefresh:hover { color: var(--gold-bright); border-color: var(--gold); }
 
-.agenda-lista { display: flex; flex-direction: column; gap: 8px; }
 .agenda-vazia { color: var(--text-dim); font-size: 12.5px; margin: 4px 0; }
 
-.agenda-evento {
+/* grade: coluna de horas fixa (como a lateral esquerda do Clinicorp) + coluna de compromissos
+   empilhados na ordem do dia - blocos com a altura proporcional a duracao, como um mini-grid,
+   sem precisar de posicionamento absoluto complexo pra caber bem no layout do app */
+.agenda-grade {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--panel);
-  padding: 10px 12px;
+  overflow: hidden;
 }
-.agenda-evento-google { border-color: rgba(201, 204, 209, 0.35); }
-.agenda-evento-info { min-width: 0; }
-.agenda-evento-titulo {
-  font-size: 13px;
+.agenda-grade-horas {
+  flex: 0 0 auto;
+  width: 52px;
+  border-right: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+.agenda-grade-hora {
+  height: 56px;
+  padding: 4px 6px 0;
+  font-size: 10.5px;
+  color: var(--text-dim);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  box-sizing: border-box;
+}
+.agenda-grade-corpo {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+}
+.agenda-grade-linha {
+  height: 56px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  box-sizing: border-box;
+}
+.agenda-grade-linha:nth-child(even) { background: rgba(255, 255, 255, 0.012); }
+
+.agenda-bloco {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  min-height: 30px;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  background: rgba(212, 175, 55, 0.14);
+  border-radius: 8px;
+  padding: 4px 8px;
+  overflow: hidden;
+  box-sizing: border-box;
+  cursor: default;
+}
+.agenda-bloco-google { border-color: rgba(201, 204, 209, 0.4); background: rgba(201, 204, 209, 0.1); }
+.agenda-bloco-titulo {
+  font-size: 12px;
   font-weight: 600;
   color: var(--text);
   display: flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.agenda-evento-tag {
-  font-size: 9.5px;
+.agenda-bloco-tag {
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--silver);
   border: 1px solid rgba(201, 204, 209, 0.4);
   border-radius: 5px;
-  padding: 1px 5px;
-}
-.agenda-evento-quando {
-  font-size: 11.5px;
-  color: var(--text-dim);
-  margin-top: 2px;
-  overflow-wrap: anywhere;
-}
-.agenda-evento-cancelar {
+  padding: 0 4px;
   flex: 0 0 auto;
-  border: 1px solid rgba(232, 131, 107, 0.4);
-  background: rgba(232, 131, 107, 0.08);
+}
+.agenda-bloco-quando {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.agenda-bloco-cancelar {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  border: none;
+  background: none;
   color: #e8836b;
-  border-radius: 7px;
-  width: 26px;
-  height: 26px;
   font-size: 12px;
   cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+.agenda-fora-do-dia {
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
 }
 
 /* ---------- WhatsApp (aba tambem usa .window-body, mesma ordem exigida acima) ---------- */

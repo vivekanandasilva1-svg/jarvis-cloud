@@ -77,8 +77,12 @@ const agendaHoraInicio = document.getElementById('agendaHoraInicio');
 const agendaHoraFim = document.getElementById('agendaHoraFim');
 const agendaDescricao = document.getElementById('agendaDescricao');
 const agendaErro = document.getElementById('agendaErro');
-const agendaLista = document.getElementById('agendaLista');
+const agendaGrade = document.getElementById('agendaGrade');
 const agendaRefresh = document.getElementById('agendaRefresh');
+const agendaDiaTitulo = document.getElementById('agendaDiaTitulo');
+const agendaDiaAnterior = document.getElementById('agendaDiaAnterior');
+const agendaDiaHoje = document.getElementById('agendaDiaHoje');
+const agendaDiaProximo = document.getElementById('agendaDiaProximo');
 
 // ---------- WhatsApp: elementos ----------
 const waInstanciaAtiva = document.getElementById('waInstanciaAtiva');
@@ -1500,90 +1504,191 @@ agendaGoogleBtn.addEventListener('click', async () => {
   window.history.replaceState({}, '', novaUrl);
 })();
 
-// ---------- Agenda: lista + criar/cancelar evento ----------
-function formatarDataHoraEvento(iso) {
+// ---------- Agenda: visao de dia estilo Clinicorp (coluna de horarios + blocos) ----------
+const AGENDA_HORA_INICIO = 7; // 07:00
+const AGENDA_HORA_FIM = 20; // ate 20:00 (compromissos fora dessa janela caem numa lista a parte)
+const AGENDA_ALTURA_HORA = 56; // px, precisa bater com --agenda-grade-hora/linha no CSS
+
+let agendaDiaSelecionado = new Date(); // sempre meio-dia local pra evitar virar o dia trocando fuso
+
+function formatarDataAgendaISO(d) {
+  const ano = d.getFullYear();
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
+}
+
+function formatarHoraEvento(iso) {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const data = d.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit' });
-  const hora = d.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' });
-  return `${data} as ${hora}`;
+  if (Number.isNaN(d.getTime())) return '--:--';
+  return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' });
+}
+
+function atualizarTituloDia() {
+  agendaDiaTitulo.textContent = agendaDiaSelecionado.toLocaleDateString('pt-BR', {
+    timeZone: 'America/Maceio',
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+  });
+}
+
+function montarGradeVazia() {
+  agendaGrade.textContent = '';
+
+  const colHoras = document.createElement('div');
+  colHoras.className = 'agenda-grade-horas';
+  for (let h = AGENDA_HORA_INICIO; h < AGENDA_HORA_FIM; h++) {
+    const marca = document.createElement('div');
+    marca.className = 'agenda-grade-hora';
+    marca.textContent = `${String(h).padStart(2, '0')}:00`;
+    colHoras.appendChild(marca);
+  }
+
+  const corpo = document.createElement('div');
+  corpo.className = 'agenda-grade-corpo';
+  corpo.id = 'agendaGradeCorpo';
+  const totalHoras = AGENDA_HORA_FIM - AGENDA_HORA_INICIO;
+  corpo.style.height = `${totalHoras * AGENDA_ALTURA_HORA}px`;
+  for (let h = AGENDA_HORA_INICIO; h < AGENDA_HORA_FIM; h++) {
+    const linha = document.createElement('div');
+    linha.className = 'agenda-grade-linha';
+    corpo.appendChild(linha);
+  }
+
+  agendaGrade.appendChild(colHoras);
+  agendaGrade.appendChild(corpo);
+  return corpo;
+}
+
+function criarBlocoEvento(ev) {
+  const bloco = document.createElement('div');
+  bloco.className = ev.origem === 'google' ? 'agenda-bloco agenda-bloco-google' : 'agenda-bloco';
+
+  const titulo = document.createElement('div');
+  titulo.className = 'agenda-bloco-titulo';
+  titulo.textContent = ev.titulo;
+  if (ev.origem === 'google') {
+    const tag = document.createElement('span');
+    tag.className = 'agenda-bloco-tag';
+    tag.textContent = 'Google';
+    titulo.appendChild(tag);
+  }
+  bloco.appendChild(titulo);
+
+  const quando = document.createElement('div');
+  quando.className = 'agenda-bloco-quando';
+  quando.textContent = `${formatarHoraEvento(ev.inicio)} - ${formatarHoraEvento(ev.fim)}${ev.local ? ` · ${ev.local}` : ''}`;
+  bloco.appendChild(quando);
+
+  if (ev.origem !== 'google' && ev.id) {
+    const cancelarBtn = document.createElement('button');
+    cancelarBtn.type = 'button';
+    cancelarBtn.className = 'agenda-bloco-cancelar';
+    cancelarBtn.textContent = '✕';
+    cancelarBtn.title = 'Cancelar compromisso';
+    cancelarBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Cancelar "${ev.titulo}"?`)) return;
+      try {
+        await fetch(`/api/agenda/eventos/${ev.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+        carregarEventosAgenda();
+      } catch (err) {
+        agendaErro.textContent = `Erro cancelando: ${err.message}`;
+        agendaErro.hidden = false;
+      }
+    });
+    bloco.appendChild(cancelarBtn);
+  }
+
+  return bloco;
 }
 
 function renderizarEventosAgenda(eventos) {
-  agendaLista.textContent = '';
+  const corpo = montarGradeVazia();
+  const janelaInicioMin = AGENDA_HORA_INICIO * 60;
+  const janelaFimMin = AGENDA_HORA_FIM * 60;
+  const foraDoHorario = [];
+
+  for (const ev of eventos) {
+    const inicio = new Date(ev.inicio);
+    const fim = new Date(ev.fim);
+    if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime())) continue;
+
+    const minutosInicio = inicio.getHours() * 60 + inicio.getMinutes();
+    let minutosFim = fim.getHours() * 60 + fim.getMinutes();
+    if (fim.toDateString() !== inicio.toDateString()) minutosFim = janelaFimMin; // continua pro proximo dia - corta na borda
+
+    if (minutosFim <= janelaInicioMin || minutosInicio >= janelaFimMin) {
+      foraDoHorario.push(ev);
+      continue;
+    }
+
+    const inicioClamp = Math.max(minutosInicio, janelaInicioMin);
+    const fimClamp = Math.min(minutosFim, janelaFimMin);
+    const top = ((inicioClamp - janelaInicioMin) / 60) * AGENDA_ALTURA_HORA;
+    const altura = Math.max(((fimClamp - inicioClamp) / 60) * AGENDA_ALTURA_HORA, 26);
+
+    const bloco = criarBlocoEvento(ev);
+    bloco.style.top = `${top}px`;
+    bloco.style.height = `${altura}px`;
+    corpo.appendChild(bloco);
+  }
+
   if (!eventos.length) {
     const vazio = document.createElement('p');
-    vazio.className = 'agenda-vazia';
-    vazio.textContent = 'Nenhum compromisso nos proximos 30 dias.';
-    agendaLista.appendChild(vazio);
-    return;
-  }
-  for (const ev of eventos) {
-    const item = document.createElement('div');
-    item.className = ev.origem === 'google' ? 'agenda-evento agenda-evento-google' : 'agenda-evento';
-
-    const info = document.createElement('div');
-    info.className = 'agenda-evento-info';
-    const titulo = document.createElement('div');
-    titulo.className = 'agenda-evento-titulo';
-    titulo.textContent = ev.titulo;
-    if (ev.origem === 'google') {
-      const tag = document.createElement('span');
-      tag.className = 'agenda-evento-tag';
-      tag.textContent = 'Google';
-      titulo.appendChild(tag);
-    }
-    const quando = document.createElement('div');
-    quando.className = 'agenda-evento-quando';
-    quando.textContent = `${formatarDataHoraEvento(ev.inicio)} - ${formatarDataHoraEvento(ev.fim)}${ev.local ? ` · ${ev.local}` : ''}`;
-    info.appendChild(titulo);
-    info.appendChild(quando);
-    item.appendChild(info);
-
-    if (ev.origem !== 'google' && ev.id) {
-      const cancelarBtn = document.createElement('button');
-      cancelarBtn.type = 'button';
-      cancelarBtn.className = 'agenda-evento-cancelar';
-      cancelarBtn.textContent = '✕';
-      cancelarBtn.title = 'Cancelar compromisso';
-      cancelarBtn.addEventListener('click', async () => {
-        if (!confirm(`Cancelar "${ev.titulo}"?`)) return;
-        try {
-          await fetch(`/api/agenda/eventos/${ev.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
-          carregarEventosAgenda();
-        } catch (err) {
-          agendaErro.textContent = `Erro cancelando: ${err.message}`;
-          agendaErro.hidden = false;
-        }
-      });
-      item.appendChild(cancelarBtn);
-    }
-
-    agendaLista.appendChild(item);
+    vazio.className = 'agenda-fora-do-dia';
+    vazio.textContent = 'Nenhum compromisso nesse dia.';
+    corpo.appendChild(vazio);
+  } else if (foraDoHorario.length) {
+    const aviso = document.createElement('p');
+    aviso.className = 'agenda-fora-do-dia';
+    aviso.textContent = `+ ${foraDoHorario.length} compromisso(s) fora do horario ${String(AGENDA_HORA_INICIO).padStart(2, '0')}:00-${String(AGENDA_HORA_FIM).padStart(2, '0')}:00: ${foraDoHorario.map((e) => `${e.titulo} (${formatarHoraEvento(e.inicio)})`).join(', ')}`;
+    agendaGrade.appendChild(aviso);
   }
 }
 
 async function carregarEventosAgenda() {
-  agendaLista.textContent = '';
+  atualizarTituloDia();
+  agendaGrade.textContent = '';
   const carregando = document.createElement('p');
   carregando.className = 'agenda-vazia';
   carregando.textContent = 'Carregando...';
-  agendaLista.appendChild(carregando);
+  agendaGrade.appendChild(carregando);
+
+  const inicioDia = new Date(agendaDiaSelecionado);
+  inicioDia.setHours(0, 0, 0, 0);
+  const fimDia = new Date(agendaDiaSelecionado);
+  fimDia.setHours(23, 59, 59, 999);
+
   try {
-    const res = await fetch('/api/agenda/eventos', { headers: { 'x-app-password': appPassword } });
+    const params = new URLSearchParams({ from: inicioDia.toISOString(), to: fimDia.toISOString() });
+    const res = await fetch(`/api/agenda/eventos?${params}`, { headers: { 'x-app-password': appPassword } });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
     renderizarEventosAgenda(data.eventos || []);
   } catch (err) {
-    agendaLista.textContent = '';
+    agendaGrade.textContent = '';
     const erro = document.createElement('p');
     erro.className = 'agenda-vazia';
     erro.textContent = `Nao consegui carregar a agenda: ${err.message}`;
-    agendaLista.appendChild(erro);
+    agendaGrade.appendChild(erro);
   }
 }
 
 agendaRefresh.addEventListener('click', carregarEventosAgenda);
+agendaDiaAnterior.addEventListener('click', () => {
+  agendaDiaSelecionado.setDate(agendaDiaSelecionado.getDate() - 1);
+  carregarEventosAgenda();
+});
+agendaDiaProximo.addEventListener('click', () => {
+  agendaDiaSelecionado.setDate(agendaDiaSelecionado.getDate() + 1);
+  carregarEventosAgenda();
+});
+agendaDiaHoje.addEventListener('click', () => {
+  agendaDiaSelecionado = new Date();
+  carregarEventosAgenda();
+});
 
 agendaForm.addEventListener('submit', async (e) => {
   e.preventDefault();

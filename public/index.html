@@ -263,12 +263,17 @@
         <p class="agenda-erro" id="agendaErro" hidden></p>
       </div>
 
-      <div class="agenda-lista-wrap">
-        <div class="agenda-lista-header">
-          <span>Proximos compromissos</span>
+      <div class="agenda-dia-wrap">
+        <div class="agenda-dia-header">
+          <div class="agenda-dia-nav">
+            <button type="button" id="agendaDiaAnterior" title="Dia anterior">‹</button>
+            <button type="button" id="agendaDiaHoje">Hoje</button>
+            <button type="button" id="agendaDiaProximo" title="Proximo dia">›</button>
+          </div>
+          <strong class="agenda-dia-titulo" id="agendaDiaTitulo">--</strong>
           <button type="button" id="agendaRefresh">Atualizar</button>
         </div>
-        <div class="agenda-lista" id="agendaLista">
+        <div class="agenda-grade" id="agendaGrade">
           <p class="agenda-vazia">Carregando...</p>
         </div>
       </div>
