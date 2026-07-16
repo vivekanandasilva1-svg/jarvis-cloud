@@ -10,8 +10,11 @@ function subscriberId() {
   return process.env.CLINICORP_SUBSCRIBER_ID;
 }
 
+// numero, nao string - o endpoint de criar agendamento valida o tipo e rejeita
+// (400 "Clinic_BusinessId nao pode ser string") se vier como texto, que e como toda env var
+// chega por padrao. Os outros endpoints (query string) nao ligam pro tipo, so esse.
 function defaultBusinessId() {
-  return process.env.CLINICORP_DEFAULT_BUSINESS_ID;
+  return Number(process.env.CLINICORP_DEFAULT_BUSINESS_ID);
 }
 
 async function request(method, path, { query, body } = {}) {
@@ -32,7 +35,9 @@ async function request(method, path, { query, body } = {}) {
   const data = await res.json().catch(() => null);
 
   if (!res.ok) {
-    const message = data?.Message || `Erro ${res.status} ao chamar ${path}`;
+    // a API do Clinicorp as vezes devolve o erro em "Message" (string) e as vezes em
+    // "Messages" (array) - depende do endpoint/tipo de erro, entao cobre os dois formatos
+    const message = data?.Message || (Array.isArray(data?.Messages) ? data.Messages.join('; ') : null) || `Erro ${res.status} ao chamar ${path}`;
     throw new Error(message);
   }
 
