@@ -24,7 +24,13 @@ async function chamar(method, path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.message || data?.response?.message || `Evolution API erro ${res.status}`);
+  if (!res.ok) {
+    // as vezes a mensagem de erro vem como array/objeto (varia por endpoint) em vez de string -
+    // sem isso, "new Error(objeto)" virava a mensagem inutil "[object Object]" nos logs
+    const bruto = data?.message ?? data?.response?.message;
+    const mensagem = Array.isArray(bruto) ? bruto.join('; ') : typeof bruto === 'string' ? bruto : JSON.stringify(bruto);
+    throw new Error(mensagem && mensagem !== '{}' ? mensagem : `Evolution API erro ${res.status}`);
+  }
   return data;
 }
 
