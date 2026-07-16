@@ -9,6 +9,7 @@ import * as agenda from './agenda.js';
 import * as evolutionApi from './evolutionApi.js';
 import * as arquivos from './autoAtendimentoArquivos.js';
 import * as clinicorp from './clinicorp.js';
+import * as crm from './crm.js';
 import { transcribeAudio } from './gemini.js';
 import { transcribeAudioWhisper } from './whisper.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
@@ -256,6 +257,12 @@ async function runTool(name, input, contexto) {
         } catch (err) {
           resultado.agendaInterna = { erro: err.message };
         }
+      }
+
+      // pula o card do contato pro "Agendado" no CRM se qualquer um dos dois destinos deu certo
+      // - best-effort, nunca deve quebrar a resposta pro contato se o CRM falhar
+      if (resultado.clinicorp?.ok || resultado.agendaInterna?.ok) {
+        crm.marcarAgendado(contexto.numero, contexto.instancia).catch((err) => console.error('Erro movendo card no CRM:', err.message));
       }
 
       return resultado;

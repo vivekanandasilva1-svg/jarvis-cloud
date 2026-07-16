@@ -69,6 +69,7 @@
       <button type="button" class="tab-btn active" id="tabBtnPainel" data-tab="painel">Painel</button>
       <button type="button" class="tab-btn" id="tabBtnAgenda" data-tab="agenda">Agenda</button>
       <button type="button" class="tab-btn" id="tabBtnWhatsapp" data-tab="whatsapp">WhatsApp</button>
+      <button type="button" class="tab-btn" id="tabBtnCrm" data-tab="crm">CRM</button>
       <button type="button" class="tab-btn" id="tabBtnAuto" data-tab="auto">Auto Atendimento</button>
     </div>
 
@@ -322,6 +323,34 @@
         <div class="wa-lista" id="waLista">
           <p class="agenda-vazia">Carregando...</p>
         </div>
+      </div>
+    </div>
+
+    <div class="window-body tab-crm" id="tabCrm" hidden>
+      <div class="crm-board-wrap">
+        <div class="crm-board-header">
+          <span>Funil de conversas (arraste os cards entre as colunas)</span>
+          <button type="button" id="crmRefresh">Atualizar</button>
+        </div>
+        <div class="crm-board" id="crmBoard">
+          <p class="agenda-vazia">Carregando...</p>
+        </div>
+      </div>
+
+      <div class="crm-conversa" id="crmConversa" hidden>
+        <div class="crm-conversa-header">
+          <div>
+            <strong id="crmConversaNome">--</strong>
+            <p class="crm-conversa-sub" id="crmConversaNumero">--</p>
+          </div>
+          <button type="button" id="crmConversaFechar">✕</button>
+        </div>
+        <div class="crm-conversa-log" id="crmConversaLog"></div>
+        <form class="crm-conversa-form" id="crmConversaForm">
+          <input type="text" id="crmConversaInput" placeholder="Escreva uma mensagem..." autocomplete="off" />
+          <button type="submit">Enviar</button>
+        </form>
+        <p class="crm-conversa-erro" id="crmConversaErro" hidden></p>
       </div>
     </div>
 

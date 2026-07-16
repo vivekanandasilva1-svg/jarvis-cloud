@@ -62,10 +62,12 @@ const loadBar = document.getElementById('loadBar');
 const tabBtnPainel = document.getElementById('tabBtnPainel');
 const tabBtnAgenda = document.getElementById('tabBtnAgenda');
 const tabBtnWhatsapp = document.getElementById('tabBtnWhatsapp');
+const tabBtnCrm = document.getElementById('tabBtnCrm');
 const tabBtnAuto = document.getElementById('tabBtnAuto');
 const tabPainel = document.getElementById('tabPainel');
 const tabAgenda = document.getElementById('tabAgenda');
 const tabWhatsapp = document.getElementById('tabWhatsapp');
+const tabCrm = document.getElementById('tabCrm');
 const tabAuto = document.getElementById('tabAuto');
 const agendaGoogleStatus = document.getElementById('agendaGoogleStatus');
 const agendaGoogleBtn = document.getElementById('agendaGoogleBtn');
@@ -96,6 +98,18 @@ const waQrImg = document.getElementById('waQrImg');
 const waQrFechar = document.getElementById('waQrFechar');
 const waLista = document.getElementById('waLista');
 const waRefresh = document.getElementById('waRefresh');
+
+// ---------- CRM: elementos ----------
+const crmBoard = document.getElementById('crmBoard');
+const crmRefresh = document.getElementById('crmRefresh');
+const crmConversa = document.getElementById('crmConversa');
+const crmConversaNome = document.getElementById('crmConversaNome');
+const crmConversaNumero = document.getElementById('crmConversaNumero');
+const crmConversaLog = document.getElementById('crmConversaLog');
+const crmConversaForm = document.getElementById('crmConversaForm');
+const crmConversaInput = document.getElementById('crmConversaInput');
+const crmConversaFechar = document.getElementById('crmConversaFechar');
+const crmConversaErro = document.getElementById('crmConversaErro');
 
 // ---------- Auto Atendimento: elementos ----------
 const autoAtivo = document.getElementById('autoAtivo');
@@ -1444,10 +1458,12 @@ function mudarAba(aba) {
   tabPainel.hidden = aba !== 'painel';
   tabAgenda.hidden = aba !== 'agenda';
   tabWhatsapp.hidden = aba !== 'whatsapp';
+  tabCrm.hidden = aba !== 'crm';
   tabAuto.hidden = aba !== 'auto';
   tabBtnPainel.classList.toggle('active', aba === 'painel');
   tabBtnAgenda.classList.toggle('active', aba === 'agenda');
   tabBtnWhatsapp.classList.toggle('active', aba === 'whatsapp');
+  tabBtnCrm.classList.toggle('active', aba === 'crm');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   if (aba === 'agenda') {
     carregarStatusGoogleAgenda();
@@ -1455,13 +1471,20 @@ function mudarAba(aba) {
   } else if (aba === 'whatsapp') {
     carregarStatusWhatsapp();
     carregarInstanciasWhatsapp();
+  } else if (aba === 'crm') {
+    carregarCrm();
   } else if (aba === 'auto') {
     carregarConfigAutoAtendimento();
   }
+  // o polling do CRM (contatos + conversa aberta) so deve rodar com a aba visivel, senao fica
+  // batendo na API/banco a toa em segundo plano pra sempre
+  pararPollingCrm();
+  if (aba === 'crm') iniciarPollingCrm();
 }
 tabBtnPainel.addEventListener('click', () => mudarAba('painel'));
 tabBtnAgenda.addEventListener('click', () => mudarAba('agenda'));
 tabBtnWhatsapp.addEventListener('click', () => mudarAba('whatsapp'));
+tabBtnCrm.addEventListener('click', () => mudarAba('crm'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
 
 // ---------- Agenda: Google Agenda (conectar/desconectar) ----------
@@ -1942,6 +1965,215 @@ waNovoCriar.addEventListener('click', async () => {
     addBubble(`Erro criando instancia: ${err.message}`, 'system');
   } finally {
     waNovoCriar.disabled = false;
+  }
+});
+
+// ---------- CRM Kanban ----------
+let crmContatoAberto = null; // {id, numero, instancia} - conversa aberta no momento, se tiver
+let crmPollingContatos = null;
+let crmPollingConversa = null;
+let crmArrastandoId = null;
+
+function crmFormatarQuando(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const agora = new Date();
+  const mesmoDia = d.toDateString() === agora.toDateString();
+  return mesmoDia
+    ? d.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit' });
+}
+
+function crmCriarCard(contato) {
+  const card = document.createElement('div');
+  card.className = 'crm-card';
+  card.draggable = true;
+  card.dataset.id = contato.id;
+
+  const nome = document.createElement('div');
+  nome.className = 'crm-card-nome';
+  nome.textContent = contato.nome || contato.numero;
+  card.appendChild(nome);
+
+  const numero = document.createElement('div');
+  numero.className = 'crm-card-numero';
+  numero.textContent = `${contato.numero} · ${contato.instancia}`;
+  card.appendChild(numero);
+
+  if (contato.ultima_mensagem) {
+    const preview = document.createElement('div');
+    preview.className = 'crm-card-preview';
+    preview.textContent = contato.ultima_mensagem;
+    card.appendChild(preview);
+  }
+
+  const quando = document.createElement('div');
+  quando.className = 'crm-card-quando';
+  quando.textContent = crmFormatarQuando(contato.ultima_mensagem_em);
+  card.appendChild(quando);
+
+  card.addEventListener('dragstart', () => {
+    crmArrastandoId = contato.id;
+    card.classList.add('dragging');
+  });
+  card.addEventListener('dragend', () => {
+    card.classList.remove('dragging');
+    crmArrastandoId = null;
+  });
+  card.addEventListener('click', () => abrirConversaCrm(contato));
+
+  return card;
+}
+
+async function carregarCrm() {
+  try {
+    const res = await fetch('/api/crm/contatos', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    renderizarCrmBoard(data.etapas || [], data.contatos || []);
+  } catch (err) {
+    crmBoard.textContent = '';
+    const erro = document.createElement('p');
+    erro.className = 'agenda-vazia';
+    erro.textContent = `Nao consegui carregar o CRM: ${err.message}`;
+    crmBoard.appendChild(erro);
+  }
+}
+
+function renderizarCrmBoard(etapas, contatos) {
+  crmBoard.textContent = '';
+  for (const etapa of etapas) {
+    const coluna = document.createElement('div');
+    coluna.className = 'crm-coluna';
+    coluna.dataset.etapa = etapa.id;
+
+    const contatosDaEtapa = contatos.filter((c) => c.etapa === etapa.id);
+
+    const header = document.createElement('div');
+    header.className = 'crm-coluna-header';
+    const titulo = document.createElement('span');
+    titulo.textContent = etapa.nome;
+    const contagem = document.createElement('span');
+    contagem.className = 'crm-coluna-contagem';
+    contagem.textContent = contatosDaEtapa.length;
+    header.appendChild(titulo);
+    header.appendChild(contagem);
+    coluna.appendChild(header);
+
+    const cardsWrap = document.createElement('div');
+    cardsWrap.className = 'crm-coluna-cards';
+    if (!contatosDaEtapa.length) {
+      const vazio = document.createElement('p');
+      vazio.className = 'crm-coluna-vazia';
+      vazio.textContent = 'Nenhum contato aqui.';
+      cardsWrap.appendChild(vazio);
+    } else {
+      for (const contato of contatosDaEtapa) cardsWrap.appendChild(crmCriarCard(contato));
+    }
+    coluna.appendChild(cardsWrap);
+
+    coluna.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      coluna.classList.add('drag-over');
+    });
+    coluna.addEventListener('dragleave', () => coluna.classList.remove('drag-over'));
+    coluna.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      coluna.classList.remove('drag-over');
+      const id = crmArrastandoId;
+      if (!id) return;
+      try {
+        await fetch(`/api/crm/contatos/${id}/etapa`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+          body: JSON.stringify({ etapa: etapa.id }),
+        });
+        carregarCrm();
+      } catch (err) {
+        addBubble(`Erro movendo o card: ${err.message}`, 'system');
+      }
+    });
+
+    crmBoard.appendChild(coluna);
+  }
+}
+
+crmRefresh.addEventListener('click', carregarCrm);
+
+function iniciarPollingCrm() {
+  crmPollingContatos = setInterval(carregarCrm, 8000);
+}
+function pararPollingCrm() {
+  if (crmPollingContatos) { clearInterval(crmPollingContatos); crmPollingContatos = null; }
+  pararPollingConversaCrm();
+}
+function pararPollingConversaCrm() {
+  if (crmPollingConversa) { clearInterval(crmPollingConversa); crmPollingConversa = null; }
+}
+
+function crmRenderizarMensagens(mensagens) {
+  crmConversaLog.textContent = '';
+  for (const m of mensagens) {
+    const bubble = document.createElement('div');
+    // "entrada" = o contato mandou (fica a esquerda, como as respostas da Lumia no chat
+    // principal); "saida" = a gente/Lumia mandou (fica a direita, como as mensagens do usuario)
+    bubble.className = m.direcao === 'entrada' ? 'bubble assistant' : 'bubble user';
+    bubble.textContent = m.texto || (m.tipo !== 'text' ? `[${m.tipo}]` : '');
+    crmConversaLog.appendChild(bubble);
+  }
+  crmConversaLog.scrollTop = crmConversaLog.scrollHeight;
+}
+
+async function carregarMensagensCrm() {
+  if (!crmContatoAberto) return;
+  try {
+    const params = new URLSearchParams({ numero: crmContatoAberto.numero, instancia: crmContatoAberto.instancia });
+    const res = await fetch(`/api/crm/mensagens?${params}`, { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    crmRenderizarMensagens(data.mensagens || []);
+  } catch (err) {
+    crmConversaErro.textContent = `Nao consegui carregar a conversa: ${err.message}`;
+    crmConversaErro.hidden = false;
+  }
+}
+
+function abrirConversaCrm(contato) {
+  crmContatoAberto = contato;
+  crmConversaNome.textContent = contato.nome || contato.numero;
+  crmConversaNumero.textContent = `${contato.numero} · ${contato.instancia}`;
+  crmConversaErro.hidden = true;
+  crmConversa.hidden = false;
+  carregarMensagensCrm();
+  pararPollingConversaCrm();
+  crmPollingConversa = setInterval(carregarMensagensCrm, 5000);
+}
+
+crmConversaFechar.addEventListener('click', () => {
+  crmConversa.hidden = true;
+  crmContatoAberto = null;
+  pararPollingConversaCrm();
+});
+
+crmConversaForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  crmConversaErro.hidden = true;
+  const texto = crmConversaInput.value.trim();
+  if (!texto || !crmContatoAberto) return;
+  try {
+    const res = await fetch('/api/crm/mensagens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ numero: crmContatoAberto.numero, instancia: crmContatoAberto.instancia, texto }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    crmConversaInput.value = '';
+    carregarMensagensCrm();
+  } catch (err) {
+    crmConversaErro.textContent = err.message;
+    crmConversaErro.hidden = false;
   }
 });
 

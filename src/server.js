@@ -19,6 +19,7 @@ import * as googleCalendar from './googleCalendar.js';
 import * as whatsappInstances from './whatsappInstances.js';
 import * as autoAtendimento from './autoAtendimento.js';
 import * as autoArquivos from './autoAtendimentoArquivos.js';
+import * as crm from './crm.js';
 
 const execAsync = promisify(exec);
 
@@ -364,6 +365,14 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
 
   const { instanciaAtiva, numeroAdmin } = await whatsappInstances.obterConfig();
 
+  // espelha no CRM (Kanban) qualquer mensagem recebida de um contato que nao seja o proprio
+  // dono, em qualquer instancia conectada - "best-effort", nunca trava o fluxo principal (a
+  // resposta da Lumia) se o CRM der erro
+  if (!(numeroAdmin && numero === numeroAdmin)) {
+    crm.registrarMensagem({ numero, instancia: instanciaDoWebhook, direcao: 'entrada', tipo, texto, nome: data?.pushName })
+      .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
+  }
+
   // mensagem do dono, na instancia pessoal ativa - conversa normal (todas as ferramentas,
   // memoria persistente, personalidade completa). Midia do dono continua so texto por
   // enquanto (esse caminho ja tinha essa limitacao antes do auto-atendimento existir).
@@ -411,12 +420,16 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
     if (resultado.respondeComAudio) {
       try {
         await autoAtendimento.enviarRespostaEmAudio(instanciaDoWebhook, numero, resultado.texto);
+        crm.registrarMensagem({ numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'audio', texto: resultado.texto })
+          .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
         return;
       } catch (err) {
         console.error('Erro mandando resposta em audio, caindo pra texto:', err.message);
       }
     }
     await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, resultado.texto);
+    crm.registrarMensagem({ numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'text', texto: resultado.texto })
+      .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
   } catch (err) {
     console.error('Erro no auto-atendimento via Evolution/WhatsApp:', err);
   } finally {
@@ -569,6 +582,48 @@ app.post('/api/auto-atendimento/arquivos', async (req, res) => {
 app.delete('/api/auto-atendimento/arquivos/:id', async (req, res) => {
   try {
     await autoArquivos.apagarArquivo(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// ---------- CRM estilo Kanban (espelho das conversas do WhatsApp por etapa do funil) ----------
+
+app.get('/api/crm/contatos', async (req, res) => {
+  try {
+    res.json({ etapas: crm.ETAPAS, contatos: await crm.listarContatos() });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/crm/mensagens', async (req, res) => {
+  const { numero, instancia } = req.query;
+  if (!numero || !instancia) return res.status(400).json({ erro: 'numero e instancia sao obrigatorios' });
+  try {
+    res.json({ mensagens: await crm.listarMensagens(String(numero), String(instancia)) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/mensagens', async (req, res) => {
+  const { numero, instancia, texto } = req.body || {};
+  if (!numero || !instancia || !texto) return res.status(400).json({ erro: 'numero, instancia e texto sao obrigatorios' });
+  try {
+    await crm.enviarMensagem(numero, instancia, texto);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/contatos/:id/etapa', async (req, res) => {
+  const { etapa } = req.body || {};
+  if (!etapa) return res.status(400).json({ erro: 'etapa e obrigatoria' });
+  try {
+    await crm.moverEtapa(Number(req.params.id), etapa);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
