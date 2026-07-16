@@ -101,8 +101,10 @@ export async function baixarMidiaMensagem(instancia, mensagemBruta) {
 }
 
 // mostra "digitando..." ou "gravando audio..." pro contato enquanto a resposta e preparada -
-// puramente cosmetico (nunca deve derrubar o fluxo se falhar, so um "melhor esforco")
-export async function enviarPresenca(instancia, numero, presence, delayMs = 1500) {
+// puramente cosmetico (nunca deve derrubar o fluxo se falhar, so um "melhor esforco").
+// delayMs maior que o intervalo do heartbeat que renova essa chamada (ver server.js) - sem
+// essa folga, o indicador podia sumir por uma fracao de segundo entre uma renovacao e outra.
+export async function enviarPresenca(instancia, numero, presence, delayMs = 6000) {
   return chamar('POST', `/chat/sendPresence/${instancia}`, {
     number: numero,
     delay: delayMs,

@@ -389,17 +389,27 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   const configAuto = await autoAtendimento.obterConfig();
   if (!configAuto.ativo || configAuto.instancia !== instanciaDoWebhook) return;
 
-  // mostra "digitando..." pro contato enquanto ela pensa a resposta - cosmetico, nunca deve
-  // travar o fluxo se o Evolution API recusar por qualquer motivo
-  await evolutionApi.enviarPresenca(instanciaDoWebhook, numero, 'composing').catch(() => {});
+  // "digitando..."/"gravando audio..." no WhatsApp expira sozinho depois de poucos segundos
+  // (o app do contato esconde o indicador se nao renovar) - como pensar a resposta (chamar a
+  // IA, rodar ferramenta de agenda/Clinicorp etc) pode levar bem mais que isso, reenvia o
+  // sinal em loop ate o instante exato de mandar a mensagem de verdade, sem deixar "apagar" no
+  // meio do caminho. Ja sabe de antemao se vai ser audio ou texto, pra mostrar o icone certo
+  // desde o comeco (nao so "digitando" ate o fim e "gravando" so no ultimo segundo).
+  const provavelAudio = await autoAtendimento.preverVaiSerAudio(numero, tipo).catch(() => false);
+  const tipoPresenca = provavelAudio ? 'recording' : 'composing';
+  const manterPresenca = setInterval(() => {
+    evolutionApi.enviarPresenca(instanciaDoWebhook, numero, tipoPresenca).catch(() => {});
+  }, 4000);
+  evolutionApi.enviarPresenca(instanciaDoWebhook, numero, tipoPresenca).catch(() => {});
 
   try {
     const resultado = await autoAtendimento.processarMensagem(numero, instanciaDoWebhook, { texto, tipo, mensagemBruta: data });
     if (!resultado) return;
 
+    clearInterval(manterPresenca); // para de renovar bem no instante de mandar a mensagem
+
     if (resultado.respondeComAudio) {
       try {
-        await evolutionApi.enviarPresenca(instanciaDoWebhook, numero, 'recording').catch(() => {});
         await autoAtendimento.enviarRespostaEmAudio(instanciaDoWebhook, numero, resultado.texto);
         return;
       } catch (err) {
@@ -409,6 +419,8 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
     await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, resultado.texto);
   } catch (err) {
     console.error('Erro no auto-atendimento via Evolution/WhatsApp:', err);
+  } finally {
+    clearInterval(manterPresenca);
   }
 }
 

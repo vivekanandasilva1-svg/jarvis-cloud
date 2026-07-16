@@ -326,6 +326,23 @@ export function prepararTextoParaAudio(texto) {
 
 const MAX_RODADAS_FERRAMENTA = 5;
 
+function decidirSeAudio(config, novaContagem, tipo) {
+  return (
+    (config.audioSeReceberAudio && tipo === 'audio') ||
+    (config.frequenciaAudio > 0 && novaContagem % config.frequenciaAudio === 0)
+  );
+}
+
+// consulta rapida (sem gerar nada) pra saber com antecedencia se a PROXIMA resposta desse
+// contato vai ser audio ou texto - usada pelo servidor pra ja mostrar o indicador de presenca
+// certo ("digitando" ou "gravando audio") antes mesmo de comecar a pensar na resposta
+export async function preverVaiSerAudio(numero, tipo) {
+  const config = await obterConfig();
+  if (!config.ativo) return false;
+  const { contagem } = await obterSessao(numero);
+  return decidirSeAudio(config, contagem + 1, tipo);
+}
+
 // tipo: 'text' | 'image' | 'audio' | 'video' (o que o CONTATO mandou, se nao for so texto)
 export async function processarMensagem(numero, instancia, { texto, tipo, mensagemBruta }) {
   const config = await obterConfig();
@@ -357,9 +374,7 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
   // (se a opcao estiver ligada), ou a cada N mensagens (cadencia configurada). Precisa saber
   // isso agora (nao so depois) pra poder avisar a IA no proprio prompt desta chamada.
   const novaContagem = contagem + 1;
-  const vaiSerAudio =
-    (config.audioSeReceberAudio && tipo === 'audio') ||
-    (config.frequenciaAudio > 0 && novaContagem % config.frequenciaAudio === 0);
+  const vaiSerAudio = decidirSeAudio(config, novaContagem, tipo);
 
   const listaArquivos = await arquivos.listarArquivos();
   const TOOLS = [];
