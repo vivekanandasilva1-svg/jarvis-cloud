@@ -102,6 +102,8 @@ const waRefresh = document.getElementById('waRefresh');
 // ---------- CRM: elementos ----------
 const crmBoard = document.getElementById('crmBoard');
 const crmRefresh = document.getElementById('crmRefresh');
+const crmScrollEsq = document.getElementById('crmScrollEsq');
+const crmScrollDir = document.getElementById('crmScrollDir');
 const crmConversa = document.getElementById('crmConversa');
 const crmConversaNome = document.getElementById('crmConversaNome');
 const crmConversaNumero = document.getElementById('crmConversaNumero');
@@ -2100,6 +2102,11 @@ function renderizarCrmBoard(etapas, contatos) {
 }
 
 crmRefresh.addEventListener('click', carregarCrm);
+// rolagem horizontal do board por botao - alem da barra de rolagem (que ja fica visivel/dourada
+// no CSS), garante um jeito obvio de ver colunas que passam da largura da tela (ex: "Perdidos",
+// a ultima, que ficava parecendo cortada sem nenhuma pista de que dava pra rolar)
+crmScrollEsq.addEventListener('click', () => crmBoard.scrollBy({ left: -260, behavior: 'smooth' }));
+crmScrollDir.addEventListener('click', () => crmBoard.scrollBy({ left: 260, behavior: 'smooth' }));
 
 function iniciarPollingCrm() {
   crmPollingContatos = setInterval(carregarCrm, 8000);

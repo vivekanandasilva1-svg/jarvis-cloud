@@ -412,7 +412,14 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   evolutionApi.enviarPresenca(instanciaDoWebhook, numero, tipoPresenca).catch(() => {});
 
   try {
-    const resultado = await autoAtendimento.processarMensagem(numero, instanciaDoWebhook, { texto, tipo, mensagemBruta: data });
+    // trava de seguranca: mesmo com os timeouts internos (Clinicorp, Evolution), algo
+    // inesperado (ex: a propria API da Anthropic pendurada) ainda podia deixar o contato sem
+    // resposta pra sempre - "travado" do lado de quem manda mensagem. Isso garante um limite
+    // maximo de espera; se estourar, cai no catch abaixo e manda um aviso em vez de silencio.
+    const resultado = await Promise.race([
+      autoAtendimento.processarMensagem(numero, instanciaDoWebhook, { texto, tipo, mensagemBruta: data }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Demorou demais pra gerar uma resposta (mais de 55s)')), 55000)),
+    ]);
     if (!resultado) return;
 
     clearInterval(manterPresenca); // para de renovar bem no instante de mandar a mensagem
@@ -432,6 +439,10 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
       .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
   } catch (err) {
     console.error('Erro no auto-atendimento via Evolution/WhatsApp:', err);
+    // nunca deixa o contato literalmente sem resposta nenhuma por causa de um erro tecnico -
+    // antes disso, um erro (Anthropic sobrecarregada, Clinicorp fora do ar etc) resultava em
+    // silencio total, o que parecia a Lumia ter "travado" pra quem estava mandando mensagem
+    await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, 'Desculpa, tive um probleminha técnico aqui agora. Pode mandar sua mensagem de novo?').catch(() => {});
   } finally {
     clearInterval(manterPresenca);
   }

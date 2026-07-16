@@ -18,11 +18,26 @@ function apiKey() {
 }
 
 async function chamar(method, path, body) {
-  const res = await fetch(`${baseUrl()}${path}`, {
-    method,
-    headers: { 'Content-Type': 'application/json', apikey: apiKey() },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  // sem timeout, uma chamada travada no Evolution API (rede instavel, instancia com problema
+  // etc) deixava o fetch pendurado pra sempre - e como varias operacoes (mandar mensagem,
+  // consultar midia) acontecem no meio do processamento de uma mensagem do auto-atendimento,
+  // isso "travava" a conversa inteira sem o contato nunca receber resposta nem erro nenhum
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+  let res;
+  try {
+    res = await fetch(`${baseUrl()}${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', apikey: apiKey() },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error(`Evolution API demorou demais pra responder (mais de 25s) em ${path}`);
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     // as vezes a mensagem de erro vem como array/objeto (varia por endpoint) em vez de string -

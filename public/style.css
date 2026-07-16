@@ -743,6 +743,8 @@ html, body {
   cursor: pointer;
 }
 .crm-board-header button:hover { color: var(--gold-bright); border-color: var(--gold); }
+.crm-board-nav { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+#crmScrollEsq, #crmScrollDir { padding: 6px 10px; font-size: 14px; line-height: 1; }
 
 .crm-board {
   flex: 1 1 auto;
@@ -751,8 +753,16 @@ html, body {
   gap: 12px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding-bottom: 4px;
+  padding-bottom: 12px;
 }
+/* rolagem horizontal precisa ficar bem visivel (dourada, mais grossa que o padrao do app) -
+   com 5 colunas de 240px o board quase sempre excede a largura da aba, e sem uma barra clara
+   a ultima coluna (Perdidos) parece "cortada" sem nenhuma pista de que da pra rolar pra ver ela */
+.crm-board::-webkit-scrollbar { height: 10px; }
+.crm-board::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.03); border-radius: 8px; }
+.crm-board::-webkit-scrollbar-thumb { background: rgba(212, 175, 55, 0.45); border-radius: 8px; }
+.crm-board::-webkit-scrollbar-thumb:hover { background: rgba(212, 175, 55, 0.7); }
+.crm-board { scrollbar-color: rgba(212, 175, 55, 0.45) rgba(255, 255, 255, 0.03); scrollbar-width: thin; }
 
 .crm-coluna {
   flex: 0 0 240px;
@@ -1824,5 +1834,5 @@ html, body {
   font-size: 13px;
 }
 
-::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 8px; }

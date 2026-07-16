@@ -23,14 +23,28 @@ async function request(method, path, { query, body } = {}) {
     if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
   }
 
-  const res = await fetch(url, {
-    method,
-    headers: {
-      Authorization: authHeader(),
-      'Content-Type': 'application/json',
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  // sem timeout, uma API do Clinicorp lenta/travada deixava o fetch pendurado pra sempre - e
+  // como o auto-atendimento espera essa resposta antes de responder o contato, isso "travava"
+  // a conversa inteira (o contato nunca recebia resposta nenhuma, nem erro)
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: {
+        Authorization: authHeader(),
+        'Content-Type': 'application/json',
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error(`Clinicorp demorou demais pra responder (mais de 15s) em ${path}`);
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   const data = await res.json().catch(() => null);
 
