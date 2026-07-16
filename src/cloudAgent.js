@@ -1217,7 +1217,10 @@ async function getSession(sessionId) {
       );
       if (rows.length) {
         session = {
-          history: rows[0].history || [],
+          // repara aqui tambem: sessoes que ja ficaram com um tool_result orfao salvo no banco
+          // (de antes desse fix, ou de uma interrupcao a meio do loop) precisam disso pra sair
+          // do estado quebrado, senao toda mensagem nessa sessao volta a falhar pra sempre.
+          history: repararHistorico(rows[0].history || []),
           pendingAction: rows[0].pending_action,
           pendingLocalAction: rows[0].pending_local_action,
         };
@@ -1358,10 +1361,50 @@ export async function limparConversa(sessionId) {
 const MAX_TOOL_ROUNDS = 10;
 const MAX_HISTORY = 40;
 
+// a API da Anthropic exige que todo tool_result tenha o tool_use correspondente na mensagem
+// anterior - um tool_use e o(s) tool_result(s) dele sao sempre pushados como mensagens
+// adjacentes no historico (ver rodarLoopDeFerramentas/continuarAcaoLocal), mas SEPARADAS (uma
+// e 'assistant', a outra e 'user'). Se algo cortar o historico entre essas duas mensagens - o
+// corte por tamanho de aparaHistorico() e o principal suspeito, mas uma sessao ja salva assim
+// no Postgres (de antes desse fix, ou de uma interrupcao) tambem serve - sobra um tool_result
+// orfao como resultado, e a proxima chamada pra API quebra com 400 pra sempre nessa sessao.
+// Essa funcao varre o historico e descarta qualquer bloco tool_result cujo tool_use_id nao
+// esteja "aberto" (tool_use visto antes e ainda nao fechado); se a mensagem ficar sem nenhum
+// bloco depois disso, ela e descartada inteira.
+function repararHistorico(history) {
+  const abertos = new Set();
+  const reparado = [];
+  for (const msg of history) {
+    if (msg.role === 'assistant') {
+      reparado.push(msg);
+      if (Array.isArray(msg.content)) {
+        for (const b of msg.content) {
+          if (b.type === 'tool_use') abertos.add(b.id);
+        }
+      }
+      continue;
+    }
+    if (msg.role === 'user' && Array.isArray(msg.content)) {
+      const blocosValidos = msg.content.filter((b) => {
+        if (b.type !== 'tool_result') return true;
+        const valido = abertos.has(b.tool_use_id);
+        if (valido) abertos.delete(b.tool_use_id);
+        return valido;
+      });
+      if (!blocosValidos.length) continue;
+      reparado.push(blocosValidos.length === msg.content.length ? msg : { ...msg, content: blocosValidos });
+      continue;
+    }
+    reparado.push(msg);
+  }
+  return reparado;
+}
+
 function aparaHistorico(session) {
   if (session.history.length > MAX_HISTORY) {
     session.history.splice(0, session.history.length - MAX_HISTORY);
   }
+  session.history = repararHistorico(session.history);
   apagarImagensAntigas(session.history);
 }
 
