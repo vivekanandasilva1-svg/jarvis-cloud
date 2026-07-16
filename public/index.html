@@ -355,7 +355,21 @@
           </label>
         </div>
 
-        <button type="button" id="autoSalvar">Salvar configuracao</button>
+        <div class="auto-audio-row">
+          <div>
+            <label class="auto-label">Onde os agendamentos feitos por ela devem ser criados?</label>
+            <label class="auto-checkbox-row">
+              <input type="checkbox" id="autoAgendarInterna" />
+              <span>Agenda interna da Lumia</span>
+            </label>
+            <label class="auto-checkbox-row">
+              <input type="checkbox" id="autoAgendarClinicorp" />
+              <span>Clinicorp (agenda de um dentista especifico)</span>
+            </label>
+          </div>
+        </div>
+
+        <button type="button" id="autoSalvar">Salvar Configurações</button>
         <p class="agenda-erro" id="autoErro" hidden></p>
 
         <div class="auto-arquivos-wrap">

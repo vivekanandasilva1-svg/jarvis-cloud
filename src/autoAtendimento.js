@@ -8,6 +8,7 @@ import { pool } from './db.js';
 import * as agenda from './agenda.js';
 import * as evolutionApi from './evolutionApi.js';
 import * as arquivos from './autoAtendimentoArquivos.js';
+import * as clinicorp from './clinicorp.js';
 import { transcribeAudio } from './gemini.js';
 import { transcribeAudioWhisper } from './whisper.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
@@ -30,6 +31,10 @@ async function garantirTabelas() {
   // que ja tinham essa tabela antes dessa funcionalidade existir
   await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS frequencia_audio INT NOT NULL DEFAULT 0;`);
   await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS audio_se_receber_audio BOOLEAN NOT NULL DEFAULT false;`);
+  // onde o agendamento feito pelo auto-atendimento deve ser criado - pode ligar os dois ao
+  // mesmo tempo (cria nos dois lugares)
+  await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS agendar_clinicorp BOOLEAN NOT NULL DEFAULT false;`);
+  await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS agendar_agenda_interna BOOLEAN NOT NULL DEFAULT true;`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS auto_atendimento_sessions (
       numero TEXT PRIMARY KEY,
@@ -45,11 +50,14 @@ const tabelasProntas = garantirTabelas().catch((err) => {
 });
 
 export async function obterConfig() {
-  const vazio = { ativo: false, instancia: null, prompt: '', frequenciaAudio: 0, audioSeReceberAudio: false };
+  const vazio = {
+    ativo: false, instancia: null, prompt: '', frequenciaAudio: 0, audioSeReceberAudio: false,
+    agendarClinicorp: false, agendarAgendaInterna: true,
+  };
   if (!pool) return vazio;
   await tabelasProntas;
   const { rows } = await pool.query(
-    'SELECT ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio FROM auto_atendimento_config WHERE id = 1',
+    'SELECT ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna FROM auto_atendimento_config WHERE id = 1',
   );
   if (!rows.length) return vazio;
   return {
@@ -58,56 +66,79 @@ export async function obterConfig() {
     prompt: rows[0].prompt || '',
     frequenciaAudio: rows[0].frequencia_audio || 0,
     audioSeReceberAudio: !!rows[0].audio_se_receber_audio,
+    agendarClinicorp: !!rows[0].agendar_clinicorp,
+    agendarAgendaInterna: !!rows[0].agendar_agenda_interna,
   };
 }
 
-export async function salvarConfig({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio }) {
+export async function salvarConfig({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna }) {
   if (!pool) throw new Error('Precisa do Postgres configurado (DATABASE_URL) pra guardar essa configuracao.');
   await tabelasProntas;
 
   await pool.query(
-    `INSERT INTO auto_atendimento_config (id, ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, atualizado_em)
-     VALUES (1, $1, $2, $3, $4, $5, now())
+    `INSERT INTO auto_atendimento_config (id, ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, atualizado_em)
+     VALUES (1, $1, $2, $3, $4, $5, $6, $7, now())
      ON CONFLICT (id) DO UPDATE SET
-       ativo = $1, instancia = $2, prompt = $3, frequencia_audio = $4, audio_se_receber_audio = $5, atualizado_em = now()`,
-    [!!ativo, instancia || null, prompt || '', Number(frequenciaAudio) || 0, !!audioSeReceberAudio],
+       ativo = $1, instancia = $2, prompt = $3, frequencia_audio = $4, audio_se_receber_audio = $5,
+       agendar_clinicorp = $6, agendar_agenda_interna = $7, atualizado_em = now()`,
+    [!!ativo, instancia || null, prompt || '', Number(frequenciaAudio) || 0, !!audioSeReceberAudio, !!agendarClinicorp, !!agendarAgendaInterna],
   );
   // NAO chama mais /settings/set aqui - ver nota grande em evolutionApi.js sobre o porque
   // (causou pelo menos uma desconexao real por "conflict/device_removed" logo depois de
   // chamado). Estabilidade da sessao do WhatsApp vale muito mais que o indicador "online".
 }
 
-// ---------- ferramentas: agenda + mandar um arquivo de referencia (contexto injetado por
-// closure, pra tool_use conseguir mandar midia sem precisar de parametros extras vindos da IA) ----------
+// ---------- ferramentas: agenda interna e/ou Clinicorp (conforme configurado) + mandar um
+// arquivo de referencia (contexto injetado por closure, pra tool_use conseguir mandar midia
+// sem precisar de parametros extras vindos da IA) ----------
 
-const TOOLS_BASE = [
-  {
-    name: 'agenda_criar_evento',
-    description: 'Marca um compromisso/agendamento na agenda. Calcule inicio/fim como data/hora absoluta ISO 8601 usando o "agora" informado.',
+const TOOL_AGENDA_LISTAR_INTERNA = {
+  name: 'agenda_listar_eventos',
+  description: 'Lista os horarios ja ocupados na agenda interna num periodo, pra saber o que esta livre antes de sugerir um horario.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      from: { type: 'string', description: 'Inicio do periodo, ISO 8601 (opcional)' },
+      to: { type: 'string', description: 'Fim do periodo, ISO 8601 (opcional)' },
+    },
+  },
+};
+
+const TOOL_CLINICORP_CONSULTAR_AGENDA = {
+  name: 'clinicorp_consultar_agenda_medico',
+  description: 'Lista os horarios JA OCUPADOS de um dentista especifico da clinica (Clinicorp) num periodo - use antes de marcar, pra saber o que sugerir. Passe o nome do medico como o contato falou (ex: "Dr. Thales", "Dra. Vanessa") - o sistema encontra o profissional certo pelo nome.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      medico: { type: 'string', description: 'Nome (completo ou parcial) do dentista' },
+      from: { type: 'string', description: 'Inicio do periodo, formato AAAA-MM-DD' },
+      to: { type: 'string', description: 'Fim do periodo, formato AAAA-MM-DD' },
+    },
+    required: ['medico', 'from', 'to'],
+  },
+};
+
+function toolCriarAgendamento({ agendarClinicorp, agendarAgendaInterna }) {
+  const destinos = [];
+  if (agendarClinicorp) destinos.push('na agenda do Clinicorp (precisa informar o medico)');
+  if (agendarAgendaInterna) destinos.push('na agenda interna');
+  return {
+    name: 'criar_agendamento',
+    description: `Marca um agendamento/consulta ${destinos.join(' e ')}. Sempre inclua um resumo do que foi conversado com o contato nas observacoes. Calcule inicio/fim como data/hora absoluta ISO 8601 usando o "agora" informado.`,
     input_schema: {
       type: 'object',
       properties: {
-        titulo: { type: 'string', description: 'Titulo do compromisso (ex: nome do contato + assunto)' },
-        descricao: { type: 'string', description: 'Detalhes opcionais' },
-        local: { type: 'string', description: 'Local opcional' },
+        pacienteNome: { type: 'string', description: 'Nome do contato/paciente' },
+        pacienteTelefone: { type: 'string', description: 'Telefone do contato, se souber' },
+        medico: { type: 'string', description: agendarClinicorp ? 'Nome do dentista escolhido (obrigatorio pro Clinicorp)' : 'Nome do profissional, se houver' },
         inicio: { type: 'string', description: 'Data/hora de inicio, ISO 8601' },
         fim: { type: 'string', description: 'Data/hora de fim, ISO 8601' },
+        resumo: { type: 'string', description: 'Resumo do que foi tratado/conversado com o contato - vai nas observacoes do agendamento' },
       },
-      required: ['titulo', 'inicio', 'fim'],
+      required: agendarClinicorp ? ['pacienteNome', 'medico', 'inicio', 'fim', 'resumo'] : ['pacienteNome', 'inicio', 'fim', 'resumo'],
     },
-  },
-  {
-    name: 'agenda_listar_eventos',
-    description: 'Lista os horarios ja ocupados na agenda num periodo, pra saber o que esta livre antes de sugerir um horario.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        from: { type: 'string', description: 'Inicio do periodo, ISO 8601 (opcional)' },
-        to: { type: 'string', description: 'Fim do periodo, ISO 8601 (opcional)' },
-      },
-    },
-  },
-];
+  };
+}
 
 function toolEnviarArquivo(listaDisponiveis) {
   return {
@@ -125,10 +156,75 @@ function toolEnviarArquivo(listaDisponiveis) {
   };
 }
 
+// acha o profissional certo pelo nome que o contato falou (aceita nome parcial, sem
+// acento/maiusculas - "Thales", "dr thales" ou o nome completo todos acham o mesmo)
+function normalizarNome(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/^dr\.?a?\.?\s+/, '').trim();
+}
+async function resolverMedico(nomeFalado) {
+  const profissionais = await clinicorp.listProfessionals();
+  const alvo = normalizarNome(nomeFalado);
+  const achado = profissionais.find((p) => normalizarNome(p.name).includes(alvo) || alvo.includes(normalizarNome(p.name)));
+  if (!achado) throw new Error(`Nao encontrei nenhum dentista chamado "${nomeFalado}" no Clinicorp.`);
+  return achado;
+}
+
 async function runTool(name, input, contexto) {
   try {
-    if (name === 'agenda_criar_evento') return await agenda.criarEvento(input);
     if (name === 'agenda_listar_eventos') return await agenda.listarEventos(input.from, input.to);
+
+    if (name === 'clinicorp_consultar_agenda_medico') {
+      const medico = await resolverMedico(input.medico);
+      const todos = await clinicorp.listAppointments({ from: input.from, to: input.to });
+      const doMedico = todos
+        .filter((a) => String(a.Dentist_PersonId) === String(medico.id))
+        .map((a) => ({ paciente: a.PatientName, data: a.date?.slice(0, 10), de: a.fromTime, ate: a.toTime }));
+      return { medico: medico.name, horariosOcupados: doMedico };
+    }
+
+    if (name === 'criar_agendamento') {
+      const config = contexto.config;
+      const resultado = {};
+
+      if (config.agendarClinicorp) {
+        try {
+          const medico = await resolverMedico(input.medico);
+          const data = input.inicio.slice(0, 10);
+          const de = input.inicio.slice(11, 16);
+          const ate = input.fim.slice(11, 16);
+          await clinicorp.createAppointment({
+            patientName: input.pacienteNome,
+            mobilePhone: input.pacienteTelefone || contexto.numero,
+            date: data,
+            fromTime: de,
+            toTime: ate,
+            dentistId: medico.id,
+            categoryDescription: 'Auto atendimento WhatsApp',
+            notes: input.resumo,
+          });
+          resultado.clinicorp = { ok: true, medico: medico.name };
+        } catch (err) {
+          resultado.clinicorp = { erro: err.message };
+        }
+      }
+
+      if (config.agendarAgendaInterna) {
+        try {
+          const r = await agenda.criarEvento({
+            titulo: `${input.pacienteNome}${input.medico ? ` - ${input.medico}` : ''}`,
+            descricao: input.resumo,
+            inicio: input.inicio,
+            fim: input.fim,
+          });
+          resultado.agendaInterna = { ok: true, id: r.id };
+        } catch (err) {
+          resultado.agendaInterna = { erro: err.message };
+        }
+      }
+
+      return resultado;
+    }
+
     if (name === 'enviar_arquivo_referencia') {
       const arq = await arquivos.obterArquivo(input.id);
       if (!arq) return { erro: `arquivo com id ${input.id} nao encontrado` };
@@ -233,8 +329,12 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
   history.push({ role: 'user', content: conteudoUsuario });
 
   const listaArquivos = await arquivos.listarArquivos();
-  const TOOLS = [...TOOLS_BASE, toolEnviarArquivo(listaArquivos)];
-  const contexto = { instancia, numero };
+  const TOOLS = [];
+  if (config.agendarAgendaInterna) TOOLS.push(TOOL_AGENDA_LISTAR_INTERNA);
+  if (config.agendarClinicorp) TOOLS.push(TOOL_CLINICORP_CONSULTAR_AGENDA);
+  if (config.agendarClinicorp || config.agendarAgendaInterna) TOOLS.push(toolCriarAgendamento(config));
+  TOOLS.push(toolEnviarArquivo(listaArquivos));
+  const contexto = { instancia, numero, config };
   const system = systemPromptComHoje(config.prompt);
 
   let response = await anthropic.messages.create({ model: 'claude-sonnet-5', max_tokens: 1000, system, tools: TOOLS, messages: history });

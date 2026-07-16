@@ -518,12 +518,12 @@ app.get('/api/auto-atendimento/config', async (req, res) => {
 });
 
 app.post('/api/auto-atendimento/config', async (req, res) => {
-  const { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio } = req.body || {};
+  const { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna } = req.body || {};
   if (ativo && (!instancia || !prompt)) {
     return res.status(400).json({ erro: 'pra ativar, precisa escolher a instancia e escrever o prompt' });
   }
   try {
-    await autoAtendimento.salvarConfig({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio });
+    await autoAtendimento.salvarConfig({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });

@@ -100,6 +100,8 @@ const autoInstancia = document.getElementById('autoInstancia');
 const autoPrompt = document.getElementById('autoPrompt');
 const autoFrequenciaAudio = document.getElementById('autoFrequenciaAudio');
 const autoAudioSeReceberAudio = document.getElementById('autoAudioSeReceberAudio');
+const autoAgendarInterna = document.getElementById('autoAgendarInterna');
+const autoAgendarClinicorp = document.getElementById('autoAgendarClinicorp');
 const autoSalvar = document.getElementById('autoSalvar');
 const autoErro = document.getElementById('autoErro');
 const autoArquivoInput = document.getElementById('autoArquivoInput');
@@ -1856,6 +1858,8 @@ async function carregarConfigAutoAtendimento() {
     autoPrompt.value = config.prompt || '';
     autoFrequenciaAudio.value = String(config.frequenciaAudio || 0);
     autoAudioSeReceberAudio.checked = !!config.audioSeReceberAudio;
+    autoAgendarInterna.checked = !!config.agendarAgendaInterna;
+    autoAgendarClinicorp.checked = !!config.agendarClinicorp;
   } catch (err) {
     autoErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
     autoErro.hidden = false;
@@ -1863,6 +1867,9 @@ async function carregarConfigAutoAtendimento() {
   carregarArquivosAutoAtendimento();
 }
 
+// um unico botao "Salvar Configurações" grava TUDO da tela de uma vez (ativo/inativo, numero,
+// prompt, cadencia de audio, destino do agendamento) - entra em vigor imediatamente na proxima
+// mensagem, sem precisar de mais nada (a config e lida do banco a cada mensagem recebida)
 autoSalvar.addEventListener('click', async () => {
   autoErro.hidden = true;
   const ativo = autoAtivo.checked;
@@ -1870,6 +1877,8 @@ autoSalvar.addEventListener('click', async () => {
   const prompt = autoPrompt.value.trim();
   const frequenciaAudio = Number(autoFrequenciaAudio.value) || 0;
   const audioSeReceberAudio = autoAudioSeReceberAudio.checked;
+  const agendarAgendaInterna = autoAgendarInterna.checked;
+  const agendarClinicorp = autoAgendarClinicorp.checked;
   if (ativo && (!instancia || !prompt)) {
     autoErro.textContent = 'Pra ativar, escolhe o numero e escreve o prompt de treinamento.';
     autoErro.hidden = false;
@@ -1880,11 +1889,11 @@ autoSalvar.addEventListener('click', async () => {
     const res = await fetch('/api/auto-atendimento/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-      body: JSON.stringify({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio }),
+      body: JSON.stringify({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarAgendaInterna, agendarClinicorp }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
-    addBubble(`Auto atendimento ${ativo ? 'ativado' : 'salvo (desativado)'} ${ativo ? `no numero "${instancia}"` : ''}.`, 'system');
+    addBubble(`Configurações salvas e já valendo${ativo ? ` no numero "${instancia}"` : ' (desativado)'}.`, 'system');
   } catch (err) {
     autoErro.textContent = err.message;
     autoErro.hidden = false;

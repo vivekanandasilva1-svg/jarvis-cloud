@@ -117,6 +117,7 @@ export async function createAppointment({
   procedures,
   categoryColor,
   categoryDescription,
+  notes,
 } = {}) {
   return request('POST', '/appointment/create_appointment_by_api', {
     body: {
@@ -132,6 +133,7 @@ export async function createAppointment({
       Procedures: procedures,
       CategoryColor: categoryColor,
       CategoryDescription: categoryDescription,
+      Notes: notes,
     },
   });
 }
