@@ -1167,8 +1167,18 @@ async function buildUserContent(userMessage, attachments) {
 // Depois que a Lumia ja respondeu usando uma imagem ou PDF, troca o bloco no historico por um
 // marcador leve - senao o binario seria reenviado (e recobrado) em todo turno seguinte da
 // mesma sessao. A analise em texto que a Lumia deu ja fica registrada na resposta.
-function apagarImagensAntigas(history) {
-  for (const turn of history) {
+//
+// indiceProtegido marca onde comeca o turno ATUAL (antes do anexo dessa mensagem ser
+// empurrado) - mensagens a partir dai NUNCA sao apagadas aqui, mesmo que essa chamada de
+// aparaHistorico() esteja fechando o turno. Isso importa porque essa funcao roda tanto
+// quando a resposta deu certo quanto quando o loop de ferramentas estourou o limite de
+// rodadas sem produzir texto nenhum (ex: PDF grande/complexo que consome todo o max_tokens
+// so "pensando") - sem essa protecao, o anexo seria apagado do historico no mesmo turno em
+// que falhou em ser realmente lido, e o usuario perderia o arquivo pra sempre so por ter
+// pedido de novo.
+function apagarImagensAntigas(history, indiceProtegido = history.length) {
+  for (let i = 0; i < Math.min(indiceProtegido, history.length); i++) {
+    const turn = history[i];
     if (Array.isArray(turn.content)) {
       turn.content = turn.content.map((b) => {
         if (b.type === 'image') return { type: 'text', text: '[imagem enviada anteriormente pelo usuario, ja analisada]' };
@@ -1191,7 +1201,11 @@ function extractText(response) {
 async function callClaude(history) {
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-5',
-    max_tokens: 1500,
+    // 1500 era curto demais pra analise de anexo pesado (PDF/foto com bastante conteudo) -
+    // a resposta cortava no meio (stop_reason max_tokens) antes de produzir texto nenhum,
+    // dando a impressao de que a Lumia "nao entendeu" o arquivo quando na verdade ela nem
+    // chegou a terminar de formular a resposta.
+    max_tokens: 4096,
     system: await systemPromptBlocos(),
     tools,
     messages: history,
@@ -1405,12 +1419,14 @@ function repararHistorico(history) {
   return reparado;
 }
 
-function aparaHistorico(session) {
+function aparaHistorico(session, indiceProtegido = 0) {
   if (session.history.length > MAX_HISTORY) {
-    session.history.splice(0, session.history.length - MAX_HISTORY);
+    const removidos = session.history.length - MAX_HISTORY;
+    session.history.splice(0, removidos);
+    indiceProtegido = Math.max(0, indiceProtegido - removidos);
   }
   session.history = repararHistorico(session.history);
-  apagarImagensAntigas(session.history);
+  apagarImagensAntigas(session.history, Math.min(indiceProtegido, session.history.length));
 }
 
 // roda (ou retoma) o loop de ferramentas ate a Claude parar de pedir ferramenta. Pausa e
@@ -1419,7 +1435,7 @@ function aparaHistorico(session) {
 // pro fluxo de anuncio) e devolve o texto perguntando "sim ou nao"; uma ferramenta pc_* que
 // NAO precisa de confirmacao pausa sem resolver o tool_use - so devolve pro chamador o que
 // precisa rodar no navegador do usuario, que reporta o resultado depois via continuarAcaoLocal.
-async function rodarLoopDeFerramentas(session, sessionId) {
+async function rodarLoopDeFerramentas(session, sessionId, indiceProtegido = session.history.length) {
   let response = await callClaude(session.history);
   let rounds = 0;
 
@@ -1468,14 +1484,14 @@ async function rodarLoopDeFerramentas(session, sessionId) {
     if (arquivoGerado) {
       const replyText = extractText(response) || 'Prontinho, gerei o arquivo.';
       session.history.push({ role: 'assistant', content: replyText });
-      aparaHistorico(session);
+      aparaHistorico(session, indiceProtegido);
       return { texto: replyText, arquivo: arquivoGerado };
     }
   }
 
   const replyText = extractText(response) || 'Consegui os dados mas nao terminei de formular a resposta - pode perguntar de novo, talvez de forma mais especifica (ex: um periodo menor)?';
   session.history.push({ role: 'assistant', content: replyText });
-  aparaHistorico(session);
+  aparaHistorico(session, indiceProtegido);
   return { texto: replyText };
 }
 
@@ -1546,7 +1562,7 @@ async function processarChat(session, sessionId, userMessage, attachments) {
   try {
     const content = await buildUserContent(userMessage, attachments);
     session.history.push({ role: 'user', content });
-    const resultado = await rodarLoopDeFerramentas(session, sessionId);
+    const resultado = await rodarLoopDeFerramentas(session, sessionId, tamanhoAntes);
     if (resultado.localAction) return { reply: null, localAction: resultado.localAction };
     return { reply: resultado.texto, arquivo: resultado.arquivo || undefined };
   } catch (err) {
@@ -1573,6 +1589,11 @@ export async function continuarAcaoLocal(sessionId, resultado) {
 
   const { toolUseId, tool } = session.pendingLocalAction;
   session.pendingLocalAction = null;
+
+  // protege o tool_result que esta prestes a ser empurrado (a imagem da camera, por exemplo)
+  // de ser apagado do historico caso esse mesmo turno estoure o limite de rodadas sem
+  // produzir resposta - mesmo motivo do indiceProtegido em processarChat.
+  const indiceProtegido = session.history.length;
 
   if (toolUseId) {
     // ver_camera devolve a imagem capturada no navegador (base64) - manda como bloco de
@@ -1610,7 +1631,7 @@ export async function continuarAcaoLocal(sessionId, resultado) {
 
   const tamanhoAntes = session.history.length;
   try {
-    const r = await rodarLoopDeFerramentas(session, sessionId);
+    const r = await rodarLoopDeFerramentas(session, sessionId, indiceProtegido);
     const saida = r.localAction ? { reply: null, localAction: r.localAction } : { reply: r.texto, arquivo: r.arquivo || undefined };
     await salvarSessao(sessionId, session);
     return saida;
