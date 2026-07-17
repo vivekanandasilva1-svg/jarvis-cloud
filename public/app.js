@@ -902,6 +902,62 @@ agentSaveBtn.addEventListener('click', () => {
   testarConexaoAgenteLocal();
 });
 
+// ---------- Indicador de status "ao vivo" na janela de conversa ----------
+// enquanto espera a resposta de /api/chat (que pode levar um tempo se a Lumia estiver
+// rodando varias ferramentas em sequencia), mostra uma bolha na propria janela de conversa
+// com o que ela esta fazendo agora (pensando, calculando, transcrevendo audio, executando
+// uma acao...), via polling num endpoint leve que so le um status em RAM no servidor.
+let statusBubbleEl = null;
+let statusPollTimer = null;
+
+const ICONES_STATUS = {
+  pensando: '🧠',
+  executando: '⚙️',
+  calculando: '🧮',
+  transcrevendo: '🎙️',
+  gerando_arquivo: '📄',
+};
+
+function mostrarBolhaStatus(estado, detalhe) {
+  if (!statusBubbleEl) {
+    statusBubbleEl = document.createElement('div');
+    statusBubbleEl.className = 'bubble assistant status-bubble';
+    chatLog.appendChild(statusBubbleEl);
+  }
+  const icone = ICONES_STATUS[estado] || '💭';
+  statusBubbleEl.innerHTML = `<span class="status-bubble-icone">${icone}</span><span class="status-bubble-texto">${detalhe || 'Trabalhando nisso...'}</span><span class="status-bubble-pontos"><span></span><span></span><span></span></span>`;
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+function removerBolhaStatus() {
+  if (statusBubbleEl) {
+    statusBubbleEl.remove();
+    statusBubbleEl = null;
+  }
+}
+
+function iniciarPollingStatus() {
+  pararPollingStatus();
+  mostrarBolhaStatus('pensando', 'Pensando na resposta...');
+  statusPollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/chat/status?sessionId=${encodeURIComponent(sessionId)}`, {
+        headers: { 'x-app-password': appPassword },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.estado) mostrarBolhaStatus(data.estado, data.detalhe);
+    } catch {
+      // e so um indicador visual - uma falha no polling nao pode travar o fluxo principal
+    }
+  }, 700);
+}
+
+function pararPollingStatus() {
+  if (statusPollTimer) { clearInterval(statusPollTimer); statusPollTimer = null; }
+  removerBolhaStatus();
+}
+
 async function enviarMensagem(texto) {
   const textoLimpo = (texto || '').trim();
   const anexos = anexosPendentes;
@@ -919,6 +975,7 @@ async function enviarMensagem(texto) {
   textInput.value = '';
   ajustarAlturaTextInput();
   setStatus('pensando', 'thinking');
+  iniciarPollingStatus();
 
   try {
     const res = await fetch('/api/chat', {
@@ -927,7 +984,7 @@ async function enviarMensagem(texto) {
       body: JSON.stringify({
         message: textoLimpo,
         sessionId,
-        attachments: anexos.map(({ kind, mediaType, base64 }) => ({ kind, mediaType, base64 })),
+        attachments: anexos.map(({ kind, mediaType, base64, label }) => ({ kind, mediaType, base64, label })),
       }),
     });
     const raw = await res.text();
@@ -961,16 +1018,19 @@ async function enviarMensagem(texto) {
       resultado = data2;
     }
 
+    pararPollingStatus();
     const bubble = addBubble('', 'assistant');
     await falar(resultado.reply, bubble);
     if (resultado.arquivo) anexarBotaoDownload(bubble, resultado.arquivo);
   } catch (err) {
+    pararPollingStatus();
     addBubble(`Erro: ${err.message}`, 'system');
     setStatus('erro', null);
     aguardandoResposta = false;
     if (modoConversa) setTimeout(ouvirSegmento, 800);
   } finally {
     processandoEnvio = false;
+    pararPollingStatus();
   }
 }
 

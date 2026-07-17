@@ -1584,6 +1584,24 @@ html, body {
   box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.5), inset 0 0 60px rgba(212, 175, 55, 0.35);
 }
 
+/* enquanto ela esta pensando/rodando uma ferramenta - brilho roxo pulsando, pra diferenciar
+   visualmente de "falando" (azul) e "ouvindo" (dourado) so pelo avatar, sem precisar olhar
+   pro texto do status */
+#bot.thinking {
+  animation: botPensandoPulso 1.6s ease-in-out infinite;
+}
+
+@keyframes botPensandoPulso {
+  0%, 100% {
+    filter: drop-shadow(0 0 12px rgba(168, 111, 255, 0.35));
+    box-shadow: inset 0 0 0 1px rgba(168, 111, 255, 0.35), inset 0 0 40px rgba(168, 111, 255, 0.2);
+  }
+  50% {
+    filter: drop-shadow(0 0 20px rgba(168, 111, 255, 0.6));
+    box-shadow: inset 0 0 0 1px rgba(168, 111, 255, 0.55), inset 0 0 60px rgba(168, 111, 255, 0.35);
+  }
+}
+
 .hint {
   position: absolute;
   left: 0;
@@ -1671,6 +1689,51 @@ html, body {
   font-size: 12px;
   border-style: dashed;
   opacity: 0.8;
+}
+
+/* bolha temporaria mostrando o que a Lumia esta fazendo agora (pensando, executando uma
+   ferramenta, calculando, transcrevendo audio...) - some assim que a resposta de verdade
+   chega, nunca fica salva no historico visual */
+.status-bubble {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.status-bubble-icone {
+  font-size: 15px;
+  animation: statusBubblePulso 1.4s ease-in-out infinite;
+}
+
+.status-bubble-pontos {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 2px;
+}
+
+.status-bubble-pontos span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+  animation: statusBubblePontos 1.2s ease-in-out infinite;
+}
+
+.status-bubble-pontos span:nth-child(2) { animation-delay: 0.2s; }
+.status-bubble-pontos span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes statusBubblePulso {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+
+@keyframes statusBubblePontos {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-2px); }
 }
 
 .botao-download-arquivo {

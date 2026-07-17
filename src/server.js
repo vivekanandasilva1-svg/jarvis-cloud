@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chat, continuarAcaoLocal, limparConversa, iniciarSchedulerLembretes } from './cloudAgent.js';
+import { chat, continuarAcaoLocal, limparConversa, iniciarSchedulerLembretes, obterStatusAoVivo } from './cloudAgent.js';
 import { synthesizeSpeechWithTimestamps, transcribeAudio } from './gemini.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
 import { transcribeAudioWhisper } from './whisper.js';
@@ -159,6 +159,15 @@ app.post('/api/chat', async (req, res) => {
     console.error('Erro no chat:', err);
     res.status(500).json({ erro: err.message });
   }
+});
+
+// o app faz polling nisso enquanto espera a resposta de /api/chat, pra mostrar um indicador
+// na janela de conversa (pensando, rodando ferramenta, calculando, transcrevendo audio...) -
+// leitura rapida em RAM, sem tocar no Postgres
+app.get('/api/chat/status', (req, res) => {
+  const { sessionId } = req.query;
+  if (!sessionId) return res.status(400).json({ erro: 'sessionId obrigatorio' });
+  res.json(obterStatusAoVivo(sessionId) || { estado: null });
 });
 
 // o navegador chama isso depois de executar uma acao no computador do usuario (via agente

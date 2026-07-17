@@ -38,6 +38,20 @@ async function garantirTabelas() {
       criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // registro do que a Lumia ja leu (PDF, imagem, video, audio) nesta conversa - sobrevive ao
+  // "esquecimento" do anexo no historico (apagarImagensAntigas) e ao corte por tamanho
+  // (MAX_HISTORY), pra ela conseguir responder "o que tinha naquele PDF que te mandei" mesmo
+  // dias depois, via a ferramenta consultar_anexos_lidos
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS anexos_lidos (
+      id SERIAL PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      tipo TEXT NOT NULL,
+      nome_arquivo TEXT,
+      resumo TEXT NOT NULL,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas no Postgres - memoria de conversa vai ficar so em RAM ate isso ser resolvido:', err.message);
@@ -140,6 +154,11 @@ de fala para texto (voce nao ouve tom de voz, so o conteudo falado). Video chega
 quadros/imagens extraidos dele (voce ve cenas do video, mas nao ouve o audio do video nem ve
 ele por completo). Se a analise depender de algo que essas limitacoes deixam de fora, avise o
 usuario em vez de supor.
+
+O binario desses anexos some da conversa depois de um tempo (pra nao reenviar/recobrar o
+arquivo em todo turno), mas o resumo/analise que voce deu na hora fica guardado - se o usuario
+perguntar sobre um arquivo que ele mandou antes e voce nao tiver mais ele na conversa visivel,
+use a ferramenta consultar_anexos_lidos antes de dizer que nao lembra ou que perdeu o arquivo.
 
 O usuario te autorizou explicitamente a analisar beleza, estetica, aparencia e comportamento (via
 foto, video, camera ao vivo ou so pela descricao em texto) e dar sua opiniao real e formada sobre
@@ -622,6 +641,16 @@ const tools = [
   },
   // ---------- Memoria da conversa e treinamento ----------
   {
+    name: 'consultar_anexos_lidos',
+    description: 'Consulta o registro de arquivos (PDF, imagem, video ou audio) que o usuario ja mandou nesta conversa e que voce ja analisou antes, mesmo que o conteudo original ja tenha saido da conversa visivel (isso acontece depois de um tempo, pra nao reenviar o binario toda hora). Use quando o usuario perguntar sobre algo que ele mandou anteriormente (ex: "o que tinha naquele PDF que te mandei", "lembra da foto que te mandei ontem"). Devolve o resumo/analise que voce mesma deu na hora que leu.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        termo: { type: 'string', description: 'Palavra-chave pra filtrar por nome do arquivo ou conteudo do resumo - opcional, se vazio devolve os mais recentes' },
+      },
+    },
+  },
+  {
     name: 'esquecer_conversa',
     description: 'Apaga o historico desta conversa (fica tudo salvo na nuvem ate isso ser chamado, mesmo fechando o app ou atualizando a pagina). So use quando o usuario pedir EXPLICITAMENTE pra esquecer/apagar a conversa - nunca por conta propria.',
     input_schema: { type: 'object', properties: {} },
@@ -1065,6 +1094,9 @@ async function runTool(name, input, session, sessionId) {
       return { erro: err.message };
     }
   }
+  if (name === 'consultar_anexos_lidos') {
+    return consultarAnexosLidos(sessionId, input?.termo);
+  }
   if (name === 'whatsapp_criar_lembrete') {
     try {
       const telefone = telefoneParaLembrete(sessionId);
@@ -1377,6 +1409,95 @@ export async function limparConversa(sessionId) {
   await limparSessao(sessionId);
 }
 
+// ---------- Status "ao vivo" do que a Lumia esta fazendo agora ----------
+// so em RAM (nao precisa sobreviver a reinicio) - o app web faz polling nisso enquanto espera
+// a resposta de /api/chat, pra mostrar um indicador na janela de conversa (pensando, rodando
+// uma ferramenta, calculando numeros, transcrevendo audio etc), em vez de ficar "mudo" durante
+// todo o tempo que o loop de ferramentas leva pra terminar.
+const statusPorSessao = new Map();
+
+function definirStatus(sessionId, estado, detalhe) {
+  if (!sessionId) return;
+  statusPorSessao.set(sessionId, { estado, detalhe: detalhe || null, atualizadoEm: Date.now() });
+}
+
+function limparStatus(sessionId) {
+  statusPorSessao.delete(sessionId);
+}
+
+export function obterStatusAoVivo(sessionId) {
+  return statusPorSessao.get(sessionId) || null;
+}
+
+// mapeia o nome de uma ferramenta pra um estado/frase amigavel de "o que ela esta fazendo
+// agora" - por familia de prefixo, nao precisa ser uma entrada por ferramenta
+function descreverFerramentaEmAndamento(name) {
+  if (name.startsWith('gerar_')) return { estado: 'gerando_arquivo', detalhe: 'Gerando o arquivo...' };
+  if ([
+    'ads_consultar_metricas', 'ads_diagnostico_campanha', 'clinicorp_relatorio_financeiro',
+    'clinicorp_relatorio_comercial', 'clinicorp_agenda_estatisticas', 'clinicorp_faturamento',
+  ].includes(name)) {
+    return { estado: 'calculando', detalhe: 'Calculando os numeros...' };
+  }
+  if (name.startsWith('ads_')) return { estado: 'executando', detalhe: 'Consultando as contas de anuncio...' };
+  if (name.startsWith('clinicorp_')) return { estado: 'executando', detalhe: 'Consultando o Clinicorp...' };
+  if (name.startsWith('agenda_')) return { estado: 'executando', detalhe: 'Mexendo na agenda...' };
+  if (name.startsWith('whatsapp_')) return { estado: 'executando', detalhe: 'Mexendo no WhatsApp...' };
+  if (name === 'ver_camera') return { estado: 'executando', detalhe: 'Ligando a camera...' };
+  if (name.startsWith('pc_')) return { estado: 'executando', detalhe: 'Executando uma acao no seu computador...' };
+  if (name === 'consultar_anexos_lidos') return { estado: 'executando', detalhe: 'Procurando nos arquivos que voce ja mandou...' };
+  return { estado: 'executando', detalhe: 'Trabalhando nisso...' };
+}
+
+// ---------- Memoria de arquivos ja lidos (PDF, imagem, video, audio) ----------
+// guarda o resumo/analise que a Lumia deu na hora que leu o anexo, pra poder responder
+// "o que tinha naquele arquivo" depois que o binario ja saiu do historico ativo (ver
+// apagarImagensAntigas) ou depois que o turno inteiro ja saiu do MAX_HISTORY.
+async function registrarAnexosLidos(sessionId, attachments, resumoTexto) {
+  if (!pool || !attachments?.length || !resumoTexto) return;
+  await tabelasProntas;
+  const vistos = new Set();
+  for (const att of attachments) {
+    if (!att) continue;
+    const tipo = { document: 'pdf', image: 'imagem', video_frame: 'video', audio: 'audio' }[att.kind];
+    if (!tipo) continue;
+    // varios quadros do mesmo video (video_frame) tem o mesmo nome base ("arquivo.mp4 (quadro N)")
+    // - so um registro por arquivo, nao um por quadro
+    const nomeArquivo = (att.label || '').replace(/^\p{Extended_Pictographic}\s*/u, '').replace(/\s*\(quadro \d+\)$/, '').trim() || null;
+    const chave = `${tipo}:${nomeArquivo}`;
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    try {
+      await pool.query(
+        'INSERT INTO anexos_lidos (session_id, tipo, nome_arquivo, resumo) VALUES ($1, $2, $3, $4)',
+        [sessionId, tipo, nomeArquivo, resumoTexto.slice(0, 4000)],
+      );
+    } catch (err) {
+      console.error('Erro salvando anexo lido:', err.message);
+    }
+  }
+}
+
+async function consultarAnexosLidos(sessionId, termo) {
+  if (!pool) return { erro: 'Historico de arquivos precisa do Postgres configurado - nao disponivel neste ambiente.' };
+  await tabelasProntas;
+  const params = [sessionId];
+  let where = 'session_id = $1';
+  if (termo) {
+    params.push(`%${termo}%`);
+    where += ' AND (nome_arquivo ILIKE $2 OR resumo ILIKE $2)';
+  }
+  const { rows } = await pool.query(
+    `SELECT tipo, nome_arquivo, resumo, criado_em FROM anexos_lidos WHERE ${where} ORDER BY criado_em DESC LIMIT 15`,
+    params,
+  );
+  if (!rows.length) return { encontrados: 0, mensagem: 'Nenhum arquivo registrado ainda nesta conversa.' };
+  return {
+    encontrados: rows.length,
+    arquivos: rows.map((r) => ({ tipo: r.tipo, nomeArquivo: r.nome_arquivo, resumo: r.resumo, quando: r.criado_em })),
+  };
+}
+
 const MAX_TOOL_ROUNDS = 10;
 const MAX_HISTORY = 40;
 
@@ -1436,6 +1557,7 @@ function aparaHistorico(session, indiceProtegido = 0) {
 // NAO precisa de confirmacao pausa sem resolver o tool_use - so devolve pro chamador o que
 // precisa rodar no navegador do usuario, que reporta o resultado depois via continuarAcaoLocal.
 async function rodarLoopDeFerramentas(session, sessionId, indiceProtegido = session.history.length) {
+  definirStatus(sessionId, 'pensando', 'Pensando na resposta...');
   let response = await callClaude(session.history);
   let rounds = 0;
 
@@ -1450,6 +1572,9 @@ async function rodarLoopDeFerramentas(session, sessionId, indiceProtegido = sess
       session.pendingLocalAction = { toolUseId: blocoPc.id, tool: blocoPc.name, input: blocoPc.input };
       return { localAction: { tool: blocoPc.name, input: blocoPc.input } };
     }
+
+    const { estado: estadoFerramenta, detalhe: detalheFerramenta } = descreverFerramentaEmAndamento(toolUseBlocks[0].name);
+    definirStatus(sessionId, estadoFerramenta, detalheFerramenta);
 
     const toolResults = [];
     let esqueceuTudo = false;
@@ -1477,6 +1602,7 @@ async function rodarLoopDeFerramentas(session, sessionId, indiceProtegido = sess
     }
     session.history.push({ role: 'user', content: toolResults });
 
+    definirStatus(sessionId, 'pensando', 'Pensando na resposta...');
     response = await callClaude(session.history);
     rounds += 1;
 
@@ -1560,10 +1686,16 @@ async function processarChat(session, sessionId, userMessage, attachments) {
   // e toda mensagem seguinte volta a falhar do mesmo jeito, pra sempre.
   const tamanhoAntes = session.history.length;
   try {
+    if (attachments?.some((a) => a?.kind === 'audio')) {
+      definirStatus(sessionId, 'transcrevendo', 'Transcrevendo audio...');
+    }
     const content = await buildUserContent(userMessage, attachments);
     session.history.push({ role: 'user', content });
     const resultado = await rodarLoopDeFerramentas(session, sessionId, tamanhoAntes);
     if (resultado.localAction) return { reply: null, localAction: resultado.localAction };
+    // grava o que a Lumia leu (PDF/imagem/video) nesta resposta na "memoria de arquivos",
+    // pra ela conseguir consultar depois mesmo que o binario ja tenha saido do historico ativo
+    if (resultado.texto) await registrarAnexosLidos(sessionId, attachments, resultado.texto);
     return { reply: resultado.texto, arquivo: resultado.arquivo || undefined };
   } catch (err) {
     session.history.splice(tamanhoAntes);
@@ -1576,9 +1708,13 @@ async function processarChat(session, sessionId, userMessage, attachments) {
 // processarChat tomou, a sessao sempre fica persistida no fim
 export async function chat(sessionId, userMessage, attachments = []) {
   const session = await getSession(sessionId);
-  const resultado = await processarChat(session, sessionId, userMessage, attachments);
-  await salvarSessao(sessionId, session);
-  return resultado;
+  try {
+    const resultado = await processarChat(session, sessionId, userMessage, attachments);
+    await salvarSessao(sessionId, session);
+    return resultado;
+  } finally {
+    limparStatus(sessionId);
+  }
 }
 
 // chamado quando o navegador ja rodou a acao no computador do usuario e esta devolvendo o
@@ -1639,5 +1775,7 @@ export async function continuarAcaoLocal(sessionId, resultado) {
     session.history.splice(tamanhoAntes);
     await salvarSessao(sessionId, session);
     throw err;
+  } finally {
+    limparStatus(sessionId);
   }
 }
