@@ -224,10 +224,10 @@
         <form class="composer" id="composer">
           <textarea id="textInput" placeholder="Fale com a Lumia..." autocomplete="off" rows="1"></textarea>
           <div class="composer-botoes">
-            <button type="button" class="icon-btn attach-btn" id="attachBtn" title="Anexar imagem, audio, video ou PDF">
+            <button type="button" class="icon-btn attach-btn" id="attachBtn" title="Anexar imagem, audio, video, PDF, Word ou Excel">
               <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M16.5 6.5v10a4.5 4.5 0 0 1-9 0V5a3 3 0 0 1 6 0v9.5a1.5 1.5 0 0 1-3 0V7H9v7.5a3 3 0 0 0 6 0V5a4.5 4.5 0 0 0-9 0v11.5a6 6 0 0 0 12 0v-10h-1.5z"/></svg>
             </button>
-            <input type="file" id="fileInput" accept="image/*,audio/*,video/*,.pdf,application/pdf" multiple hidden />
+            <input type="file" id="fileInput" accept="image/*,audio/*,video/*,.pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple hidden />
             <button type="button" class="icon-btn mic-btn" id="micBtn" title="Falar um comando">
               <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
             </button>

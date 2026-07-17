@@ -374,6 +374,12 @@ async function adicionarArquivo(file) {
     } else if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
       const base64 = await arquivoParaBase64(file);
       anexosPendentes.push({ kind: 'document', mediaType: 'application/pdf', base64, label: `📄 ${file.name}` });
+    } else if (file.name.toLowerCase().endsWith('.docx') || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      const base64 = await arquivoParaBase64(file);
+      anexosPendentes.push({ kind: 'word', mediaType: file.type, base64, label: `📝 ${file.name}` });
+    } else if (file.name.toLowerCase().endsWith('.xlsx') || file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+      const base64 = await arquivoParaBase64(file);
+      anexosPendentes.push({ kind: 'excel', mediaType: file.type, base64, label: `📊 ${file.name}` });
     } else if (file.type.startsWith('audio/')) {
       const base64 = await arquivoParaBase64(file);
       anexosPendentes.push({ kind: 'audio', mediaType: file.type || 'audio/mpeg', base64, label: `🎵 ${file.name}` });
@@ -407,6 +413,8 @@ function resumirAnexosParaBolha(anexos) {
   for (const a of anexos) {
     if (a.kind === 'image') partes.push(`📷 ${a.label}`);
     else if (a.kind === 'document') partes.push(a.label);
+    else if (a.kind === 'word') partes.push(a.label);
+    else if (a.kind === 'excel') partes.push(a.label);
     else if (a.kind === 'audio') partes.push(a.label);
     else if (a.kind === 'video_frame') {
       const nomeArquivo = a.label.replace(/^🎬 /, '').replace(/ \(quadro \d+\)$/, '');
@@ -915,6 +923,7 @@ const ICONES_STATUS = {
   executando: '⚙️',
   calculando: '🧮',
   transcrevendo: '🎙️',
+  lendo_arquivo: '📄',
   gerando_arquivo: '📄',
 };
 

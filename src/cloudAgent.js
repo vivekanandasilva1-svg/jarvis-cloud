@@ -3,6 +3,7 @@ import * as metaAds from './metaads.js';
 import * as clinicorp from './clinicorp.js';
 import { transcribeAudio, generateImageGemini } from './gemini.js';
 import { gerarPdf, gerarWord, gerarExcel, gerarGraficoSvg } from './geradorDocumentos.js';
+import { extrairTextoWord, extrairTextoExcel } from './leitorDocumentos.js';
 import { guardarArquivo } from './arquivosGerados.js';
 import { enviarMensagemTexto } from './evolutionApi.js';
 import { pool } from './db.js';
@@ -147,18 +148,32 @@ endpoint de upload (mandar arquivo novo), nao de consulta. Se o usuario pedir pr
 fotos de paciente, explique essa limitacao com clareza em vez de inventar uma resposta ou
 fingir que puxou o dado.
 
-O usuario tambem pode anexar arquivos na conversa (imagem, PDF, audio ou video) para voce
-analisar. Imagens e PDFs chegam para voce de verdade (analise visual direta do PDF - texto,
-tabelas, graficos e paginas escaneadas, pagina por pagina). Audio chega como uma transcricao
-de fala para texto (voce nao ouve tom de voz, so o conteudo falado). Video chega como alguns
-quadros/imagens extraidos dele (voce ve cenas do video, mas nao ouve o audio do video nem ve
-ele por completo). Se a analise depender de algo que essas limitacoes deixam de fora, avise o
-usuario em vez de supor.
+O usuario tambem pode anexar arquivos na conversa (imagem, PDF, Word, Excel, audio ou video)
+para voce analisar. Imagens e PDFs chegam para voce de verdade (analise visual direta do PDF -
+texto, tabelas, graficos e paginas escaneadas, pagina por pagina). Word e Excel chegam como o
+texto/tabelas extraidos do arquivo (voce nao ve formatacao visual, imagens embutidas ou
+graficos do Excel, so o conteudo em si). Audio chega como uma transcricao de fala para texto
+(voce nao ouve tom de voz, so o conteudo falado). Video chega como alguns quadros/imagens
+extraidos dele (voce ve cenas do video, mas nao ouve o audio do video nem ve ele por completo).
+Se a analise depender de algo que essas limitacoes deixam de fora, avise o usuario em vez de
+supor.
 
 O binario desses anexos some da conversa depois de um tempo (pra nao reenviar/recobrar o
 arquivo em todo turno), mas o resumo/analise que voce deu na hora fica guardado - se o usuario
 perguntar sobre um arquivo que ele mandou antes e voce nao tiver mais ele na conversa visivel,
 use a ferramenta consultar_anexos_lidos antes de dizer que nao lembra ou que perdeu o arquivo.
+
+REGRA CRITICA, SEM EXCECAO: nunca invente, estime ou "preencha de forma plausivel" nomes,
+numeros, horarios, datas ou qualquer dado especifico de um arquivo que voce nao esta vendo de
+verdade AGORA (nem como anexo real neste turno, nem como resumo real vindo de
+consultar_anexos_lidos). Se o que chegou for so o marcador generico ("[PDF/imagem enviado
+anteriormente, ja analisado]") e voce nao achar nada util em consultar_anexos_lidos, diga
+isso claramente e peca pro usuario reenviar o arquivo - mesmo que ele insista, repita o pedido
+ou demonstre impaciencia ("estou aguardando" etc). Isso vale com forca redobrada pra dados que
+afetam decisao sobre pessoas de verdade (avaliacao de colaborador, financeiro, medico/paciente,
+juridico) - um dado inventado ali nao e so um erro, e uma decisao errada tomada em cima de algo
+que voce fabricou. Prefira sempre "nao tenho esse dado ainda" a uma resposta convincente porem
+falsa.
 
 O usuario te autorizou explicitamente a analisar beleza, estetica, aparencia e comportamento (via
 foto, video, camera ao vivo ou so pela descricao em texto) e dar sua opiniao real e formada sobre
@@ -1161,10 +1176,11 @@ const IMAGE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'imag
 // Monta o content da mensagem do usuario misturando texto com anexos: imagens e quadros de
 // video viram blocos de imagem de verdade pro Claude "ver"; PDF vira um bloco de documento (a
 // Claude le o PDF de verdade - texto, tabelas e paginas escaneadas - sem precisar de OCR a
-// parte); audio e transcrito (fala -> texto) e entra como texto na propria mensagem.
+// parte); Word/Excel nao tem suporte nativo na API, entao o texto/tabelas sao extraidos aqui
+// e entram como texto (mesmo esquema do audio); audio e transcrito (fala -> texto).
 async function buildUserContent(userMessage, attachments) {
   const arquivos = [];
-  let transcricoes = '';
+  let extras = '';
 
   for (const att of attachments || []) {
     if (!att || !att.base64) continue;
@@ -1178,15 +1194,29 @@ async function buildUserContent(userMessage, attachments) {
       try {
         const buffer = Buffer.from(att.base64, 'base64');
         const texto = await transcribeAudio(buffer, att.mediaType || 'audio/mpeg');
-        transcricoes += `\n\n[Audio enviado pelo usuario - transcricao]: "${texto || '(sem fala reconhecida)'}"`;
+        extras += `\n\n[Audio enviado pelo usuario - transcricao]: "${texto || '(sem fala reconhecida)'}"`;
       } catch (err) {
-        transcricoes += `\n\n[Audio enviado pelo usuario - falha ao transcrever: ${err.message}]`;
+        extras += `\n\n[Audio enviado pelo usuario - falha ao transcrever: ${err.message}]`;
+      }
+    } else if (att.kind === 'word') {
+      try {
+        const texto = await extrairTextoWord(Buffer.from(att.base64, 'base64'));
+        extras += `\n\n[Documento Word "${att.label || 'anexo'}" enviado pelo usuario - texto extraido]:\n${texto || '(documento vazio ou sem texto extraivel)'}`;
+      } catch (err) {
+        extras += `\n\n[Documento Word "${att.label || 'anexo'}" enviado pelo usuario - falha ao ler: ${err.message}]`;
+      }
+    } else if (att.kind === 'excel') {
+      try {
+        const texto = await extrairTextoExcel(Buffer.from(att.base64, 'base64'));
+        extras += `\n\n[Planilha Excel "${att.label || 'anexo'}" enviada pelo usuario - conteudo extraido]:\n${texto || '(planilha vazia ou sem dados)'}`;
+      } catch (err) {
+        extras += `\n\n[Planilha Excel "${att.label || 'anexo'}" enviada pelo usuario - falha ao ler: ${err.message}]`;
       }
     }
   }
 
   let texto = (userMessage || '').trim();
-  if (transcricoes) texto = (texto ? `${texto}\n` : '') + transcricoes.trim();
+  if (extras) texto = (texto ? `${texto}\n` : '') + extras.trim();
   if (!texto && arquivos.length) texto = 'O usuario enviou arquivo(s) para voce analisar - veja os anexos.';
 
   if (!arquivos.length) return texto;
@@ -1459,7 +1489,7 @@ async function registrarAnexosLidos(sessionId, attachments, resumoTexto) {
   const vistos = new Set();
   for (const att of attachments) {
     if (!att) continue;
-    const tipo = { document: 'pdf', image: 'imagem', video_frame: 'video', audio: 'audio' }[att.kind];
+    const tipo = { document: 'pdf', image: 'imagem', video_frame: 'video', audio: 'audio', word: 'word', excel: 'excel' }[att.kind];
     if (!tipo) continue;
     // varios quadros do mesmo video (video_frame) tem o mesmo nome base ("arquivo.mp4 (quadro N)")
     // - so um registro por arquivo, nao um por quadro
@@ -1615,10 +1645,14 @@ async function rodarLoopDeFerramentas(session, sessionId, indiceProtegido = sess
     }
   }
 
-  const replyText = extractText(response) || 'Consegui os dados mas nao terminei de formular a resposta - pode perguntar de novo, talvez de forma mais especifica (ex: um periodo menor)?';
+  const textoReal = extractText(response);
+  const replyText = textoReal || 'Consegui os dados mas nao terminei de formular a resposta - pode perguntar de novo, talvez de forma mais especifica (ex: um periodo menor)?';
   session.history.push({ role: 'assistant', content: replyText });
   aparaHistorico(session, indiceProtegido);
-  return { texto: replyText };
+  // incompleto = a Claude nao chegou a gerar texto nenhum (ex: estourou o budget de tokens
+  // "pensando" num anexo pesado) - o chamador usa isso pra NAO deixar o proximo turno apagar
+  // o anexo que ela ainda nao conseguiu de fato ler, mesmo sem re-anexar nada
+  return { texto: replyText, incompleto: !textoReal };
 }
 
 async function processarChat(session, sessionId, userMessage, attachments) {
@@ -1685,17 +1719,32 @@ async function processarChat(session, sessionId, userMessage, attachments) {
   // que foi empurrado nesta chamada - senao a sessao fica com um turno quebrado no historico
   // e toda mensagem seguinte volta a falhar do mesmo jeito, pra sempre.
   const tamanhoAntes = session.history.length;
+  // se o turno anterior nao conseguiu de fato ler/usar um anexo (resposta "incompleta" - ver
+  // rodarLoopDeFerramentas), session.protegidoDesde ainda aponta pra ele - continua protegendo
+  // dali em diante em vez de "esquecer" o anexo so porque o usuario tentou de novo sem
+  // reanexar. So em RAM (nao precisa sobreviver reinicio do processo - pior caso nesse cenario
+  // raro e voltar ao comportamento antigo de proteger so o turno atual).
+  const indiceProtegido = session.protegidoDesde != null ? Math.min(session.protegidoDesde, tamanhoAntes) : tamanhoAntes;
   try {
     if (attachments?.some((a) => a?.kind === 'audio')) {
       definirStatus(sessionId, 'transcrevendo', 'Transcrevendo audio...');
+    } else if (attachments?.some((a) => a?.kind === 'word' || a?.kind === 'excel')) {
+      definirStatus(sessionId, 'lendo_arquivo', 'Lendo o arquivo...');
     }
     const content = await buildUserContent(userMessage, attachments);
     session.history.push({ role: 'user', content });
-    const resultado = await rodarLoopDeFerramentas(session, sessionId, tamanhoAntes);
+    const resultado = await rodarLoopDeFerramentas(session, sessionId, indiceProtegido);
     if (resultado.localAction) return { reply: null, localAction: resultado.localAction };
-    // grava o que a Lumia leu (PDF/imagem/video) nesta resposta na "memoria de arquivos",
-    // pra ela conseguir consultar depois mesmo que o binario ja tenha saido do historico ativo
-    if (resultado.texto) await registrarAnexosLidos(sessionId, attachments, resultado.texto);
+    if (resultado.incompleto) {
+      // nao conseguiu terminar de ler o anexo - mantem a protecao pro proximo turno em vez
+      // de deixar aparaHistorico apagar algo que ela nem chegou a usar de verdade
+      session.protegidoDesde = indiceProtegido;
+    } else {
+      session.protegidoDesde = null;
+      // grava o que a Lumia leu (PDF/imagem/video) nesta resposta na "memoria de arquivos",
+      // pra ela conseguir consultar depois mesmo que o binario ja tenha saido do historico ativo
+      if (resultado.texto) await registrarAnexosLidos(sessionId, attachments, resultado.texto);
+    }
     return { reply: resultado.texto, arquivo: resultado.arquivo || undefined };
   } catch (err) {
     session.history.splice(tamanhoAntes);
@@ -1728,8 +1777,11 @@ export async function continuarAcaoLocal(sessionId, resultado) {
 
   // protege o tool_result que esta prestes a ser empurrado (a imagem da camera, por exemplo)
   // de ser apagado do historico caso esse mesmo turno estoure o limite de rodadas sem
-  // produzir resposta - mesmo motivo do indiceProtegido em processarChat.
-  const indiceProtegido = session.history.length;
+  // produzir resposta - mesmo motivo do indiceProtegido em processarChat, incluindo o mesmo
+  // "sticky" de session.protegidoDesde quando o turno anterior ja tinha ficado incompleto.
+  const indiceProtegido = session.protegidoDesde != null
+    ? Math.min(session.protegidoDesde, session.history.length)
+    : session.history.length;
 
   if (toolUseId) {
     // ver_camera devolve a imagem capturada no navegador (base64) - manda como bloco de
@@ -1768,6 +1820,7 @@ export async function continuarAcaoLocal(sessionId, resultado) {
   const tamanhoAntes = session.history.length;
   try {
     const r = await rodarLoopDeFerramentas(session, sessionId, indiceProtegido);
+    session.protegidoDesde = r.incompleto ? indiceProtegido : null;
     const saida = r.localAction ? { reply: null, localAction: r.localAction } : { reply: r.texto, arquivo: r.arquivo || undefined };
     await salvarSessao(sessionId, session);
     return saida;
