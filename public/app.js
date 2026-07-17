@@ -371,6 +371,9 @@ async function adicionarArquivo(file) {
     if (file.type.startsWith('image/')) {
       const { base64, mediaType } = await redimensionarImagem(file);
       anexosPendentes.push({ kind: 'image', mediaType, base64, label: file.name, thumb: `data:${mediaType};base64,${base64}` });
+    } else if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      const base64 = await arquivoParaBase64(file);
+      anexosPendentes.push({ kind: 'document', mediaType: 'application/pdf', base64, label: `📄 ${file.name}` });
     } else if (file.type.startsWith('audio/')) {
       const base64 = await arquivoParaBase64(file);
       anexosPendentes.push({ kind: 'audio', mediaType: file.type || 'audio/mpeg', base64, label: `🎵 ${file.name}` });
@@ -403,6 +406,7 @@ function resumirAnexosParaBolha(anexos) {
   const contagemVideo = {};
   for (const a of anexos) {
     if (a.kind === 'image') partes.push(`📷 ${a.label}`);
+    else if (a.kind === 'document') partes.push(a.label);
     else if (a.kind === 'audio') partes.push(a.label);
     else if (a.kind === 'video_frame') {
       const nomeArquivo = a.label.replace(/^🎬 /, '').replace(/ \(quadro \d+\)$/, '');

@@ -133,8 +133,9 @@ endpoint de upload (mandar arquivo novo), nao de consulta. Se o usuario pedir pr
 fotos de paciente, explique essa limitacao com clareza em vez de inventar uma resposta ou
 fingir que puxou o dado.
 
-O usuario tambem pode anexar arquivos na conversa (imagem, audio ou video) para voce analisar.
-Imagens chegam para voce de verdade (analise visual direta). Audio chega como uma transcricao
+O usuario tambem pode anexar arquivos na conversa (imagem, PDF, audio ou video) para voce
+analisar. Imagens e PDFs chegam para voce de verdade (analise visual direta do PDF - texto,
+tabelas, graficos e paginas escaneadas, pagina por pagina). Audio chega como uma transcricao
 de fala para texto (voce nao ouve tom de voz, so o conteudo falado). Video chega como alguns
 quadros/imagens extraidos dele (voce ve cenas do video, mas nao ouve o audio do video nem ve
 ele por completo). Se a analise depender de algo que essas limitacoes deixam de fora, avise o
@@ -1126,10 +1127,11 @@ async function runTool(name, input, session, sessionId) {
 const IMAGE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
 // Monta o content da mensagem do usuario misturando texto com anexos: imagens e quadros de
-// video viram blocos de imagem de verdade pro Claude "ver"; audio e transcrito (fala -> texto)
-// e entra como texto na propria mensagem.
+// video viram blocos de imagem de verdade pro Claude "ver"; PDF vira um bloco de documento (a
+// Claude le o PDF de verdade - texto, tabelas e paginas escaneadas - sem precisar de OCR a
+// parte); audio e transcrito (fala -> texto) e entra como texto na propria mensagem.
 async function buildUserContent(userMessage, attachments) {
-  const images = [];
+  const arquivos = [];
   let transcricoes = '';
 
   for (const att of attachments || []) {
@@ -1137,7 +1139,9 @@ async function buildUserContent(userMessage, attachments) {
 
     if (att.kind === 'image' || att.kind === 'video_frame') {
       const mediaType = IMAGE_MEDIA_TYPES.has(att.mediaType) ? att.mediaType : 'image/jpeg';
-      images.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data: att.base64 } });
+      arquivos.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data: att.base64 } });
+    } else if (att.kind === 'document') {
+      arquivos.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: att.base64 } });
     } else if (att.kind === 'audio') {
       try {
         const buffer = Buffer.from(att.base64, 'base64');
@@ -1151,23 +1155,24 @@ async function buildUserContent(userMessage, attachments) {
 
   let texto = (userMessage || '').trim();
   if (transcricoes) texto = (texto ? `${texto}\n` : '') + transcricoes.trim();
-  if (!texto && images.length) texto = 'O usuario enviou arquivo(s) para voce analisar - veja as imagens anexadas.';
+  if (!texto && arquivos.length) texto = 'O usuario enviou arquivo(s) para voce analisar - veja os anexos.';
 
-  if (!images.length) return texto;
+  if (!arquivos.length) return texto;
   const content = [];
   if (texto) content.push({ type: 'text', text: texto });
-  content.push(...images);
+  content.push(...arquivos);
   return content;
 }
 
-// Depois que a Lumia ja respondeu usando uma imagem, troca o bloco de imagem no historico por
-// um marcador leve - senao o binario da imagem seria reenviado (e recobrado) em todo turno
-// seguinte da mesma sessao. A analise em texto que a Lumia deu ja fica registrada na resposta.
+// Depois que a Lumia ja respondeu usando uma imagem ou PDF, troca o bloco no historico por um
+// marcador leve - senao o binario seria reenviado (e recobrado) em todo turno seguinte da
+// mesma sessao. A analise em texto que a Lumia deu ja fica registrada na resposta.
 function apagarImagensAntigas(history) {
   for (const turn of history) {
     if (Array.isArray(turn.content)) {
       turn.content = turn.content.map((b) => {
         if (b.type === 'image') return { type: 'text', text: '[imagem enviada anteriormente pelo usuario, ja analisada]' };
+        if (b.type === 'document') return { type: 'text', text: '[PDF enviado anteriormente pelo usuario, ja analisado]' };
         // imagem da camera veio dentro de um tool_result (ver_camera) - limpa tambem, senao
         // fica sendo reenviada (e recobrada) pra sempre nas chamadas seguintes
         if (b.type === 'tool_result' && Array.isArray(b.content) && b.content.some((c) => c.type === 'image')) {
