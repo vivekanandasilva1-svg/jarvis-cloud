@@ -158,6 +158,15 @@ isso livremente, incluindo criar/cancelar agendamentos e cadastrar pacientes, se
 confirmar cada chamada - execute direto quando o pedido for claro. So avise (sem bloquear) se
 for algo de volume/impacto incomum, como cancelar varios agendamentos de uma vez.
 
+Cada agendamento tem um status (confirmado, em espera, em atendimento, atendido, atrasado,
+faltou, protese pendente etc) - clinicorp_listar_agendamentos ja devolve o nome do status
+resolvido (campo "status"), nao so o codigo numerico cru; use clinicorp_listar_status_agendamento
+se precisar do catalogo completo (id, descricao, cor). Perguntas tipo "quantos agendados essa
+semana", "quantos faltaram", "como esta o controle protetico" (agendamentos com status
+"Protese pendente" - pacientes aguardando material/protese do laboratorio) sao respondidas
+filtrando/contando por esse campo "status" - nunca diga que so ve "codigos" ou que nao tem
+acesso a isso, essa informacao esta disponivel.
+
 IMPORTANTE - limitacao real do Clinicorp: a API NAO da acesso a prontuario clinico (fichas,
 odontograma, evolucao clinica) nem a fotos/imagens ja salvas dos pacientes - so existe um
 endpoint de upload (mandar arquivo novo), nao de consulta. Se o usuario pedir prontuario ou
@@ -399,7 +408,7 @@ const tools = [
   },
   {
     name: 'clinicorp_listar_agendamentos',
-    description: 'Lista os agendamentos da clinica num periodo (agenda geral, ou de um paciente/profissional especifico).',
+    description: 'Lista os agendamentos da clinica num periodo (agenda geral, ou de um paciente/profissional especifico). Cada agendamento vem com o campo "status" ja traduzido pro nome de verdade (ex: "8-Faltou", "4-Atendido", "1-Confirmado", "7-Protese pendente" - esse ultimo e o status de controle protetico: agendamentos aguardando material/protese do laboratorio) - use isso pra responder perguntas tipo "quantos faltaram essa semana", "quantos atendidos", ou consultar o controle protetico (filtre pelos que tem status comecando com "7-"). Se precisar da lista completa de status possiveis (id, descricao, cor), use clinicorp_listar_status_agendamento.',
     input_schema: {
       type: 'object',
       properties: {
@@ -410,6 +419,11 @@ const tools = [
       },
       required: ['from', 'to'],
     },
+  },
+  {
+    name: 'clinicorp_listar_status_agendamento',
+    description: 'Lista o catalogo completo de status de agendamento configurados na clinica (id, descricao, tipo, cor) - ex: Confirmado, Em espera, Em atendimento, Atendido, Atrasado, Faltou, Protese pendente (controle protetico). Use pra entender quais status existem antes de filtrar/contar agendamentos por status, ou quando o usuario perguntar "quais status existem" / sobre as cores usadas na agenda.',
+    input_schema: { type: 'object', properties: {} },
   },
   {
     name: 'clinicorp_buscar_paciente',
@@ -1038,6 +1052,21 @@ async function handleGerarImagemIA({ descricao }) {
   return { ___arquivoGerado: { id, nomeArquivo } };
 }
 
+// cache leve do catalogo de status de agendamento (Confirmado, Faltou, Protese pendente etc) -
+// raramente muda, entao evita bater na API do Clinicorp de novo a cada pergunta sobre
+// agendados/faltosos/controle protetico dentro da mesma janela de 10 minutos
+let statusAgendamentoCache = null;
+let statusAgendamentoCacheEm = 0;
+async function obterStatusAgendamento() {
+  if (statusAgendamentoCache && Date.now() - statusAgendamentoCacheEm < 10 * 60 * 1000) {
+    return statusAgendamentoCache;
+  }
+  const lista = await clinicorp.getAppointmentStatusList();
+  statusAgendamentoCache = lista;
+  statusAgendamentoCacheEm = Date.now();
+  return lista;
+}
+
 const toolHandlers = {
   gerar_pdf: handleGerarPdf,
   gerar_word: handleGerarWord,
@@ -1054,10 +1083,16 @@ const toolHandlers = {
   ads_listar_anuncios: ({ adSetId }) => metaAds.listAds({ adSetId }),
   ads_diagnostico_campanha: ({ campaignId, since, until, datePreset }) => metaAds.analyzeCampaignAds({ campaignId, since, until, datePreset }),
   clinicorp_listar_profissionais: () => clinicorp.listProfessionals(),
+  clinicorp_listar_status_agendamento: async () => {
+    const lista = await obterStatusAgendamento();
+    return lista.map((s) => ({ id: s.id, descricao: s.Description, tipo: s.Type, cor: s.Color }));
+  },
   clinicorp_listar_agendamentos: async ({ from, to, patientId, includeCanceled }) => {
-    const appointments = await clinicorp.listAppointments({
-      from, to, patientId, includeCanceled: includeCanceled ? 'X' : undefined,
-    });
+    const [appointments, statusList] = await Promise.all([
+      clinicorp.listAppointments({ from, to, patientId, includeCanceled: includeCanceled ? 'X' : undefined }),
+      obterStatusAgendamento(),
+    ]);
+    const statusPorId = new Map(statusList.map((s) => [String(s.id), s]));
     // a API devolve registros enormes (notas longas, dezenas de campos internos) - resume
     // antes de mandar pro modelo, senao estoura o limite de tokens da resposta
     return {
@@ -1069,7 +1104,9 @@ const toolHandlers = {
         de: a.fromTime,
         ate: a.toTime,
         dentistaId: a.Dentist_PersonId,
+        // codigo cru so como reserva - o nome ja resolvido (statusPorId) e o que a IA deve usar
         statusId: a.StatusId,
+        status: statusPorId.get(String(a.StatusId))?.Description || null,
         categoria: a.CategoryDescription,
         cancelado: a.Canceled === 'X',
         motivoCancelamento: a.Canceled === 'X' ? a.CancelReason : undefined,

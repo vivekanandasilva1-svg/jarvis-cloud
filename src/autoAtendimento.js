@@ -210,6 +210,20 @@ async function resolverMedico(nomeFalado) {
   return achado;
 }
 
+// cache leve do catalogo de status de agendamento (Confirmado, Faltou, Protese pendente etc) -
+// raramente muda, evita bater na API do Clinicorp de novo a cada checagem de comparecimento
+let statusAgendamentoCache = null;
+let statusAgendamentoCacheEm = 0;
+async function obterStatusAgendamento() {
+  if (statusAgendamentoCache && Date.now() - statusAgendamentoCacheEm < 10 * 60 * 1000) {
+    return statusAgendamentoCache;
+  }
+  const lista = await clinicorp.getAppointmentStatusList();
+  statusAgendamentoCache = lista;
+  statusAgendamentoCacheEm = Date.now();
+  return lista;
+}
+
 async function runTool(name, input, contexto) {
   try {
     if (name === 'agenda_listar_eventos') return await agenda.listarEventos(input.from, input.to);
@@ -283,11 +297,18 @@ async function runTool(name, input, contexto) {
           if (!patientId) {
             resultado.clinicorp = { mensagem: 'Nenhum paciente encontrado no Clinicorp com esse telefone - nao da pra checar historico la.' };
           } else {
-            const agendamentos = await clinicorp.listAppointments({ patientId, from, to, includeCanceled: 'X' });
+            const [agendamentos, statusList] = await Promise.all([
+              clinicorp.listAppointments({ patientId, from, to, includeCanceled: 'X' }),
+              obterStatusAgendamento(),
+            ]);
+            const statusPorId = new Map(statusList.map((s) => [String(s.id), s.Description]));
             resultado.clinicorp = agendamentos.map((a) => ({
               data: a.date?.slice(0, 10),
               de: a.fromTime,
               ate: a.toTime,
+              // status resolvido (ex: "8-Faltou", "4-Atendido") - mais confiavel que so olhar
+              // cancelado, que so cobre cancelamento explicito, nao falta registrada depois
+              status: statusPorId.get(String(a.StatusId)) || null,
               cancelado: a.Canceled === 'X',
               motivoCancelamento: a.Canceled === 'X' ? a.CancelReason : undefined,
               categoria: a.CategoryDescription,
