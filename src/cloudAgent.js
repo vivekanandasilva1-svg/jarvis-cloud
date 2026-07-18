@@ -408,7 +408,7 @@ const tools = [
   },
   {
     name: 'clinicorp_listar_agendamentos',
-    description: 'Lista os agendamentos da clinica num periodo (agenda geral, ou de um paciente/profissional especifico). Cada agendamento vem com o campo "status" ja traduzido pro nome de verdade (ex: "8-Faltou", "4-Atendido", "1-Confirmado", "7-Protese pendente" - esse ultimo e o status de controle protetico: agendamentos aguardando material/protese do laboratorio) - use isso pra responder perguntas tipo "quantos faltaram essa semana", "quantos atendidos", ou consultar o controle protetico (filtre pelos que tem status comecando com "7-"). Se precisar da lista completa de status possiveis (id, descricao, cor), use clinicorp_listar_status_agendamento.',
+    description: 'Lista os agendamentos da clinica num periodo, um por um (agenda geral, ou de um paciente/profissional especifico) - cada um com o campo "status" ja traduzido pro nome de verdade (ex: "8-Faltou", "4-Atendido", "1-Confirmado", "7-Protese pendente"). Use quando precisar dos detalhes individuais (nome do paciente, horario, etc). Se a pergunta for so sobre QUANTIDADE/CONTAGEM (quantos agendados, quantos faltaram, quantos com protese pendente), use clinicorp_contar_agendamentos_por_status em vez desta - e muito mais leve, essa aqui pode devolver uma lista grande e estourar o espaco de resposta se o periodo tiver muitos agendamentos.',
     input_schema: {
       type: 'object',
       properties: {
@@ -421,8 +421,21 @@ const tools = [
     },
   },
   {
+    name: 'clinicorp_contar_agendamentos_por_status',
+    description: 'Conta quantos agendamentos existem por status num periodo (ex: quantos confirmados, quantos faltaram, quantos com protese pendente/controle protetico) - a contagem e feita no servidor, nao precisa listar e somar um por um. Use SEMPRE que a pergunta for sobre quantidade/total (ex: "quantos agendados essa semana", "quantos faltaram", "como esta o controle protetico") em vez de clinicorp_listar_agendamentos.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'Data inicial YYYY-MM-DD' },
+        to: { type: 'string', description: 'Data final YYYY-MM-DD' },
+        includeCanceled: { type: 'boolean', description: 'Incluir cancelados na contagem (default false)' },
+      },
+      required: ['from', 'to'],
+    },
+  },
+  {
     name: 'clinicorp_listar_status_agendamento',
-    description: 'Lista o catalogo completo de status de agendamento configurados na clinica (id, descricao, tipo, cor) - ex: Confirmado, Em espera, Em atendimento, Atendido, Atrasado, Faltou, Protese pendente (controle protetico). Use pra entender quais status existem antes de filtrar/contar agendamentos por status, ou quando o usuario perguntar "quais status existem" / sobre as cores usadas na agenda.',
+    description: 'Lista o catalogo completo de status de agendamento configurados na clinica (id, descricao, tipo, cor) - ex: Confirmado, Em espera, Em atendimento, Atendido, Atrasado, Faltou, Protese pendente (controle protetico). Use pra entender quais status existem, ou quando o usuario perguntar "quais status existem" / sobre as cores usadas na agenda.',
     input_schema: { type: 'object', properties: {} },
   },
   {
@@ -1086,6 +1099,22 @@ const toolHandlers = {
   clinicorp_listar_status_agendamento: async () => {
     const lista = await obterStatusAgendamento();
     return lista.map((s) => ({ id: s.id, descricao: s.Description, tipo: s.Type, cor: s.Color }));
+  },
+  clinicorp_contar_agendamentos_por_status: async ({ from, to, includeCanceled }) => {
+    const [appointments, statusList] = await Promise.all([
+      clinicorp.listAppointments({ from, to, includeCanceled: includeCanceled ? 'X' : undefined }),
+      obterStatusAgendamento(),
+    ]);
+    const statusPorId = new Map(statusList.map((s) => [String(s.id), s.Description]));
+    // contagem feita aqui no codigo, nao pela IA lendo um por um - uma semana cheia pode ter
+    // dezenas/centenas de agendamentos, e listar todos pra ela somar manualmente ja estourou
+    // o limite de tokens de resposta numa pergunta real do usuario
+    const porStatus = {};
+    for (const a of appointments) {
+      const nome = statusPorId.get(String(a.StatusId)) || `status desconhecido (id ${a.StatusId})`;
+      porStatus[nome] = (porStatus[nome] || 0) + 1;
+    }
+    return { total: appointments.length, porStatus };
   },
   clinicorp_listar_agendamentos: async ({ from, to, patientId, includeCanceled }) => {
     const [appointments, statusList] = await Promise.all([
