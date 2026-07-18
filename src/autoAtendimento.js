@@ -119,6 +119,18 @@ const TOOL_CLINICORP_CONSULTAR_AGENDA = {
   },
 };
 
+const TOOL_VERIFICAR_COMPARECIMENTO = {
+  name: 'verificar_comparecimento',
+  description: 'Verifica os agendamentos do contato num periodo (agenda interna e/ou Clinicorp, conforme o que estiver ativo), incluindo status de cancelamento quando disponivel no Clinicorp. Use sempre que o contato mencionar uma data/agendamento que ja passou, ou quando voce perceber que ele tinha algo marcado numa data ja passada - antes de marcar algo novo ou seguir a conversa, confira se ele compareceu. Se o resultado nao deixar claro se ele foi ou faltou (o Clinicorp so mostra cancelamento explicito, nao confirma presenca por si so), pergunte diretamente pro contato em vez de supor.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      from: { type: 'string', description: 'Inicio do periodo a checar, formato AAAA-MM-DD (opcional, padrao 60 dias atras)' },
+      to: { type: 'string', description: 'Fim do periodo a checar, formato AAAA-MM-DD (opcional, padrao hoje)' },
+    },
+  },
+};
+
 function toolCriarAgendamento({ agendarClinicorp, agendarAgendaInterna }) {
   const destinos = [];
   if (agendarClinicorp) destinos.push('na agenda do Clinicorp (precisa informar o medico)');
@@ -181,6 +193,48 @@ async function runTool(name, input, contexto) {
         .filter((a) => String(a.Dentist_PersonId) === String(medico.id))
         .map((a) => ({ paciente: a.PatientName, data: a.date?.slice(0, 10), de: a.fromTime, ate: a.toTime }));
       return { medico: medico.name, horariosOcupados: doMedico };
+    }
+
+    if (name === 'verificar_comparecimento') {
+      const hoje = new Date();
+      const from = input.from || new Date(hoje.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const to = input.to || hoje.toISOString().slice(0, 10);
+      const resultado = {};
+
+      if (contexto.config.agendarAgendaInterna) {
+        try {
+          const eventos = await agenda.listarEventos(from, to);
+          resultado.agendaInterna = eventos.map((e) => ({ titulo: e.titulo, inicio: e.inicio, fim: e.fim }));
+        } catch (err) {
+          resultado.agendaInterna = { erro: err.message };
+        }
+      }
+
+      if (contexto.config.agendarClinicorp) {
+        try {
+          const paciente = await clinicorp.findPatient({ phone: contexto.numero });
+          // o campo do id do paciente varia (Id/PersonId/PatientId, conforme a config da
+          // clinica) - tenta os nomes conhecidos em vez de travar num so
+          const patientId = paciente?.Id ?? paciente?.PersonId ?? paciente?.PatientId ?? paciente?.id;
+          if (!patientId) {
+            resultado.clinicorp = { mensagem: 'Nenhum paciente encontrado no Clinicorp com esse telefone - nao da pra checar historico la.' };
+          } else {
+            const agendamentos = await clinicorp.listAppointments({ patientId, from, to, includeCanceled: 'X' });
+            resultado.clinicorp = agendamentos.map((a) => ({
+              data: a.date?.slice(0, 10),
+              de: a.fromTime,
+              ate: a.toTime,
+              cancelado: a.Canceled === 'X',
+              motivoCancelamento: a.Canceled === 'X' ? a.CancelReason : undefined,
+              categoria: a.CategoryDescription,
+            }));
+          }
+        } catch (err) {
+          resultado.clinicorp = { erro: err.message };
+        }
+      }
+
+      return resultado;
     }
 
     if (name === 'criar_agendamento') {
@@ -386,12 +440,21 @@ const AVISO_RESPOSTA_EM_AUDIO = `\n\nATENCAO - ESTA RESPOSTA ESPECIFICA VAI SER 
 // audio, onde cada segundo a mais cansa muito mais que na leitura.
 const AVISO_OBJETIVIDADE = `\n\nSeja sempre objetiva e curta - va direto ao ponto na primeira frase, sem introducao nem enrolacao. Mantenha toda informacao util e necessaria, mas resuma de forma dinamica: entregue a conclusao/resposta direta primeiro, sem listar tudo em detalhe se nao for pedido. Respostas longas cansam quem esta lendo ou ouvindo no WhatsApp - poucas frases bem resolvidas valem mais que um paragrafo longo. So se estenda se o contato pedir mais detalhe explicitamente.`;
 
-function systemPromptComHoje(promptCustom, vaiSerAudio) {
+// regra fixa tambem (nao no prompt customizado) - so entra quando alguma agenda esta ativa
+// (senao mencionaria uma ferramenta que nem existe nesse turno). O sistema ja rejeita no
+// codigo qualquer NOVO agendamento numa data/hora que ja passou (ver criar_agendamento) - isso
+// aqui cobre o outro lado: perceber quando o contato fala de algo que JA ACONTECEU (marcado
+// antes) e investigar comparecimento em vez de so seguir a conversa como se nada tivesse
+// passado, ou pior, tratar aquela data velha como se ainda fosse marcavel.
+const AVISO_DATAS_PASSADAS = `\n\nSobre datas/agendamentos: nunca confirme ou trate como valido um agendamento numa data/hora que ja passou - o sistema rejeita automaticamente qualquer tentativa de marcar no passado, entao se o contato pedir isso, explique que precisa ser uma data futura e ja sugira alternativas. Alem disso, sempre que o contato mencionar uma data ou agendamento que ja passou, ou quando voce perceber (pelo contexto da conversa ou ao consultar a agenda) que ele tinha algo marcado numa data que ja passou, use a ferramenta verificar_comparecimento pra checar a agenda interna e o Clinicorp antes de continuar. Se dessa checagem nao ficar claro se ele compareceu ou faltou, pergunte diretamente pro contato ("voce chegou a comparecer nessa consulta?"). Se ele confirmar que faltou, ou se a falta parecer provavel, direcione a conversa pra oferecer um novo horario - nunca deixe barato nem ignore uma falta.`;
+
+function systemPromptComHoje(promptCustom, vaiSerAudio, temAgenda) {
   const agora = new Date();
   const hoje = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' });
   const agoraHora = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' });
   let prompt = `${promptCustom}\n\nAgora sao ${agoraHora} de ${hoje} (fuso horario de Maceio/Brasil, UTC-03:00). Use isso pra calcular qualquer data/hora de agendamento - nunca chute.\n\nVoce pode receber do contato texto, audio (chega ja transcrito), imagem (voce ve de verdade) ou video (voce so sabe que recebeu, ainda nao consegue assistir).`;
   prompt += AVISO_OBJETIVIDADE;
+  if (temAgenda) prompt += AVISO_DATAS_PASSADAS;
   if (vaiSerAudio) prompt += AVISO_RESPOSTA_EM_AUDIO;
   return prompt;
 }
@@ -469,10 +532,13 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
   const TOOLS = [];
   if (config.agendarAgendaInterna) TOOLS.push(TOOL_AGENDA_LISTAR_INTERNA);
   if (config.agendarClinicorp) TOOLS.push(TOOL_CLINICORP_CONSULTAR_AGENDA);
-  if (config.agendarClinicorp || config.agendarAgendaInterna) TOOLS.push(toolCriarAgendamento(config));
+  if (config.agendarClinicorp || config.agendarAgendaInterna) {
+    TOOLS.push(toolCriarAgendamento(config));
+    TOOLS.push(TOOL_VERIFICAR_COMPARECIMENTO);
+  }
   TOOLS.push(toolEnviarArquivo(listaArquivos));
   const contexto = { instancia, numero, config };
-  const system = systemPromptComHoje(config.prompt, vaiSerAudio);
+  const system = systemPromptComHoje(config.prompt, vaiSerAudio, config.agendarClinicorp || config.agendarAgendaInterna);
 
   let response = await anthropic.messages.create({ model: 'claude-sonnet-5', max_tokens: 2048, system, tools: TOOLS, messages: history });
   let rounds = 0;
