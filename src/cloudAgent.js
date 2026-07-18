@@ -1427,10 +1427,20 @@ async function callClaude(history) {
     // 1500 era curto demais pra analise de anexo pesado (PDF/foto com bastante conteudo) -
     // a resposta cortava no meio (stop_reason max_tokens) antes de produzir texto nenhum,
     // dando a impressao de que a Lumia "nao entendeu" o arquivo quando na verdade ela nem
-    // chegou a terminar de formular a resposta. Depois, 4096 ainda cortava respostas com
-    // listas longas (ex: dezenas/centenas de pacientes de um relatorio do Clinicorp) no meio
-    // da propria resposta em texto - subiu pra 8192 pra dar folga real nesses casos.
-    max_tokens: 8192,
+    // chegou a terminar de formular a resposta. Depois, 8192 sem limite de "pensamento"
+    // ainda deixava esse mesmo problema acontecer: com um resultado de ferramenta grande
+    // (ex: lista de pacientes de um relatorio do Clinicorp), o modelo as vezes gastava o
+    // budget INTEIRO "pensando" (bloco thinking) e nunca sobrava nada pro texto de verdade
+    // (stop_reason=max_tokens, resposta so com bloco "thinking", zero texto). Agora o
+    // "pensar" tem um teto proprio, garantindo que sempre sobre espaco de verdade pra
+    // escrever a resposta. claude-sonnet-5 usa o esquema novo de thinking (adaptive +
+    // output_config.effort) - o antigo (enabled/budget_tokens) da 400 "nao suportado nesse
+    // modelo". Testado ao vivo contra o caso real que travava (lista de 192 pacientes): com
+    // adaptive+medium o stop_reason vira end_turn e thinking_tokens fica em 0 (nao compete
+    // mais pelo espaco do texto de verdade).
+    max_tokens: 16000,
+    thinking: { type: 'adaptive' },
+    output_config: { effort: 'medium' },
     system: await systemPromptBlocos(),
     tools,
     messages: history,

@@ -678,7 +678,12 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
   const contexto = { instancia, numero, config };
   const system = systemPromptComHoje(config.prompt, vaiSerAudio, config.agendarClinicorp || config.agendarAgendaInterna);
 
-  let response = await anthropic.messages.create({ model: 'claude-sonnet-5', max_tokens: 2048, system, tools: TOOLS, messages: history });
+  // thinking adaptive + effort medio: sem isso, o modelo as vezes gasta o max_tokens inteiro
+  // "pensando" internamente (bloco thinking) e nao sobra nada pro texto de verdade da resposta
+  // (stop_reason=max_tokens, zero texto) - mesmo bug encontrado no chat pessoal (cloudAgent.js),
+  // aqui seria ainda pior: o contato do WhatsApp ficaria sem resposta nenhuma ("travado").
+  const configClaude = { model: 'claude-sonnet-5', max_tokens: 4096, thinking: { type: 'adaptive' }, output_config: { effort: 'medium' }, system, tools: TOOLS };
+  let response = await anthropic.messages.create({ ...configClaude, messages: history });
   let rounds = 0;
   while (response.stop_reason === 'tool_use' && rounds < MAX_RODADAS_FERRAMENTA) {
     history.push({ role: 'assistant', content: response.content });
@@ -688,7 +693,7 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
       toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
     }
     history.push({ role: 'user', content: toolResults });
-    response = await anthropic.messages.create({ model: 'claude-sonnet-5', max_tokens: 2048, system, tools: TOOLS, messages: history });
+    response = await anthropic.messages.create({ ...configClaude, messages: history });
     rounds += 1;
   }
 
