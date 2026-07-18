@@ -131,18 +131,46 @@ const TOOL_VERIFICAR_COMPARECIMENTO = {
   },
 };
 
+const TOOL_CLINICORP_BUSCAR_PACIENTE = {
+  name: 'clinicorp_buscar_paciente',
+  description: 'Busca se o contato ja tem cadastro de paciente no Clinicorp, pelo telefone (padrao: o proprio numero de WhatsApp da conversa) e/ou nome. Use SEMPRE antes de marcar um agendamento no Clinicorp com um contato que voce ainda nao confirmou que ja e paciente cadastrado - nunca cadastre de novo sem checar antes, pra nao duplicar.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      telefone: { type: 'string', description: 'Telefone a buscar (padrao: o numero do proprio contato dessa conversa)' },
+      nome: { type: 'string', description: 'Nome a buscar - use se a busca por telefone nao achar nada' },
+    },
+  },
+};
+
+const TOOL_CLINICORP_CADASTRAR_PACIENTE = {
+  name: 'clinicorp_cadastrar_paciente',
+  description: 'Cadastra um paciente novo de verdade no Clinicorp - use SOMENTE depois de confirmar com clinicorp_buscar_paciente que ele ainda nao tem cadastro. O Clinicorp exige pelo menos nome completo e data de nascimento - pergunte isso ao contato antes de chamar essa ferramenta, nunca invente ou deixe em branco. Depois de cadastrar, use o id do paciente devolvido (patientId) na ferramenta criar_agendamento, pra vincular o agendamento a esse cadastro de verdade.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      nome: { type: 'string', description: 'Nome completo do paciente' },
+      nascimento: { type: 'string', description: 'Data de nascimento, formato AAAA-MM-DD - obrigatorio, pergunte ao contato' },
+      telefone: { type: 'string', description: 'Telefone (padrao: o proprio numero da conversa)' },
+      email: { type: 'string', description: 'Email, se o contato informar (opcional)' },
+    },
+    required: ['nome', 'nascimento'],
+  },
+};
+
 function toolCriarAgendamento({ agendarClinicorp, agendarAgendaInterna }) {
   const destinos = [];
   if (agendarClinicorp) destinos.push('na agenda do Clinicorp (precisa informar o medico)');
   if (agendarAgendaInterna) destinos.push('na agenda interna');
   return {
     name: 'criar_agendamento',
-    description: `Marca um agendamento/consulta ${destinos.join(' e ')}. Sempre inclua um resumo do que foi conversado com o contato nas observacoes. Calcule inicio/fim como data/hora absoluta ISO 8601 usando o "agora" informado - NUNCA um horario que ja passou (o sistema rejeita e devolve erro se tentar). Antes de chamar essa ferramenta, SEMPRE consulte a disponibilidade primeiro (agenda_listar_eventos e/ou clinicorp_consultar_agenda_medico) pra nao sugerir um horario ocupado. Regras que o sistema aplica automaticamente: nunca duplica o mesmo paciente no mesmo horario, e no Clinicorp um mesmo horario aceita no maximo 2 pacientes diferentes com o mesmo medico (a partir do 3º, rejeita).`,
+    description: `Marca um agendamento/consulta ${destinos.join(' e ')} DE VERDADE (chamada real na API, nao e so um texto de confirmacao) - so diga pro contato que esta confirmado DEPOIS de ver no resultado desta ferramenta que deu certo (ok: true no destino configurado); se vier erro, NUNCA finja que deu certo, explique o problema pro contato ou tente resolver (ex: escolher outro horario). ${agendarClinicorp ? 'Pro Clinicorp: se o contato for paciente novo (sem cadastro), use clinicorp_buscar_paciente e, se nao achar, clinicorp_cadastrar_paciente ANTES de chamar essa ferramenta, e passe o patientId encontrado/criado aqui - nao deixe so pro campo pacienteNome tentar criar um cadastro incompleto sozinho.' : ''} Sempre inclua um resumo do que foi conversado com o contato nas observacoes. Calcule inicio/fim como data/hora absoluta ISO 8601 usando o "agora" informado - NUNCA um horario que ja passou (o sistema rejeita e devolve erro se tentar). Antes de chamar essa ferramenta, SEMPRE consulte a disponibilidade primeiro (agenda_listar_eventos e/ou clinicorp_consultar_agenda_medico) pra nao sugerir um horario ocupado. Regras que o sistema aplica automaticamente: nunca duplica o mesmo paciente no mesmo horario, e no Clinicorp um mesmo horario aceita no maximo 2 pacientes diferentes com o mesmo medico (a partir do 3º, rejeita).`,
     input_schema: {
       type: 'object',
       properties: {
         pacienteNome: { type: 'string', description: 'Nome do contato/paciente' },
         pacienteTelefone: { type: 'string', description: 'Telefone do contato, se souber' },
+        patientId: { type: 'string', description: 'Id do paciente no Clinicorp (de clinicorp_buscar_paciente ou clinicorp_cadastrar_paciente), se ja tiver - vincula o agendamento ao cadastro de verdade em vez de so passar o nome' },
         medico: { type: 'string', description: agendarClinicorp ? 'Nome do dentista escolhido (obrigatorio pro Clinicorp)' : 'Nome do profissional, se houver' },
         inicio: { type: 'string', description: 'Data/hora de inicio, ISO 8601' },
         fim: { type: 'string', description: 'Data/hora de fim, ISO 8601' },
@@ -193,6 +221,42 @@ async function runTool(name, input, contexto) {
         .filter((a) => String(a.Dentist_PersonId) === String(medico.id))
         .map((a) => ({ paciente: a.PatientName, data: a.date?.slice(0, 10), de: a.fromTime, ate: a.toTime }));
       return { medico: medico.name, horariosOcupados: doMedico };
+    }
+
+    if (name === 'clinicorp_buscar_paciente') {
+      const telefone = input.telefone || contexto.numero;
+      // findPatient lanca erro (404) quando nao acha nada, dependendo da API - trata qualquer
+      // falha na busca como "nao encontrado" em vez de propagar erro, pra IA seguir o fluxo
+      // normal de "nao achei, vou cadastrar" em vez de travar
+      try {
+        const porTelefone = await clinicorp.findPatient({ phone: telefone });
+        const idTelefone = porTelefone?.Id ?? porTelefone?.PersonId ?? porTelefone?.PatientId ?? porTelefone?.id;
+        if (idTelefone) return { encontrado: true, patientId: idTelefone, paciente: porTelefone };
+      } catch { /* segue pra tentar por nome, se informado */ }
+
+      if (input.nome) {
+        try {
+          const porNome = await clinicorp.findPatient({ name: input.nome });
+          const idNome = porNome?.Id ?? porNome?.PersonId ?? porNome?.PatientId ?? porNome?.id;
+          if (idNome) return { encontrado: true, patientId: idNome, paciente: porNome };
+        } catch { /* nao achou por nome tambem */ }
+      }
+      return { encontrado: false };
+    }
+
+    if (name === 'clinicorp_cadastrar_paciente') {
+      try {
+        const paciente = await clinicorp.createPatient({
+          name: input.nome,
+          birthDate: input.nascimento,
+          mobilePhone: input.telefone || contexto.numero,
+          email: input.email,
+        });
+        const patientId = paciente?.Id ?? paciente?.PersonId ?? paciente?.PatientId ?? paciente?.id;
+        return { ok: true, patientId, paciente };
+      } catch (err) {
+        return { ok: false, erro: err.message };
+      }
     }
 
     if (name === 'verificar_comparecimento') {
@@ -273,6 +337,7 @@ async function runTool(name, input, contexto) {
               resultado.clinicorp = { erro: `Esse horario com ${medico.name} ja tem 2 pessoas diferentes marcadas - escolha outro horario.` };
             } else {
               await clinicorp.createAppointment({
+                patientId: input.patientId || undefined,
                 patientName: input.pacienteNome,
                 mobilePhone: input.pacienteTelefone || contexto.numero,
                 date: data,
@@ -446,7 +511,9 @@ const AVISO_OBJETIVIDADE = `\n\nSeja sempre objetiva e curta - va direto ao pont
 // aqui cobre o outro lado: perceber quando o contato fala de algo que JA ACONTECEU (marcado
 // antes) e investigar comparecimento em vez de so seguir a conversa como se nada tivesse
 // passado, ou pior, tratar aquela data velha como se ainda fosse marcavel.
-const AVISO_DATAS_PASSADAS = `\n\nSobre datas/agendamentos: nunca confirme ou trate como valido um agendamento numa data/hora que ja passou - o sistema rejeita automaticamente qualquer tentativa de marcar no passado, entao se o contato pedir isso, explique que precisa ser uma data futura e ja sugira alternativas. Alem disso, sempre que o contato mencionar uma data ou agendamento que ja passou, ou quando voce perceber (pelo contexto da conversa ou ao consultar a agenda) que ele tinha algo marcado numa data que ja passou, use a ferramenta verificar_comparecimento pra checar a agenda interna e o Clinicorp antes de continuar. Se dessa checagem nao ficar claro se ele compareceu ou faltou, pergunte diretamente pro contato ("voce chegou a comparecer nessa consulta?"). Se ele confirmar que faltou, ou se a falta parecer provavel, direcione a conversa pra oferecer um novo horario - nunca deixe barato nem ignore uma falta.`;
+const AVISO_DATAS_PASSADAS = `\n\nSobre datas/agendamentos: nunca confirme ou trate como valido um agendamento numa data/hora que ja passou - o sistema rejeita automaticamente qualquer tentativa de marcar no passado, entao se o contato pedir isso, explique que precisa ser uma data futura e ja sugira alternativas. Alem disso, sempre que o contato mencionar uma data ou agendamento que ja passou, ou quando voce perceber (pelo contexto da conversa ou ao consultar a agenda) que ele tinha algo marcado numa data que ja passou, use a ferramenta verificar_comparecimento pra checar a agenda interna e o Clinicorp antes de continuar. Se dessa checagem nao ficar claro se ele compareceu ou faltou, pergunte diretamente pro contato ("voce chegou a comparecer nessa consulta?"). Se ele confirmar que faltou, ou se a falta parecer provavel, direcione a conversa pra oferecer um novo horario - nunca deixe barato nem ignore uma falta.
+
+REGRA CRITICA sobre confirmar agendamento: so diga pro contato que o agendamento esta confirmado/marcado DEPOIS de chamar criar_agendamento e ver no resultado que o destino configurado voltou com "ok: true" - nunca diga "confirmado" ou "marcado" so porque decidiu marcar ou porque a conversa chegou nesse ponto, isso seria inventar um agendamento que nao existe de verdade. Se o resultado vier com erro, NUNCA finja sucesso pro contato - explique o problema (outro horario, tente de novo) ou avise que precisa verificar manualmente. Se o contato ainda nao tem cadastro de paciente no Clinicorp (confira com clinicorp_buscar_paciente antes de marcar pela primeira vez), pergunte nome completo e data de nascimento e cadastre de verdade com clinicorp_cadastrar_paciente antes de criar o agendamento - nunca deixe o cadastro incompleto ou pule essa etapa.`;
 
 function systemPromptComHoje(promptCustom, vaiSerAudio, temAgenda) {
   const agora = new Date();
@@ -531,7 +598,11 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
   const listaArquivos = await arquivos.listarArquivos();
   const TOOLS = [];
   if (config.agendarAgendaInterna) TOOLS.push(TOOL_AGENDA_LISTAR_INTERNA);
-  if (config.agendarClinicorp) TOOLS.push(TOOL_CLINICORP_CONSULTAR_AGENDA);
+  if (config.agendarClinicorp) {
+    TOOLS.push(TOOL_CLINICORP_CONSULTAR_AGENDA);
+    TOOLS.push(TOOL_CLINICORP_BUSCAR_PACIENTE);
+    TOOLS.push(TOOL_CLINICORP_CADASTRAR_PACIENTE);
+  }
   if (config.agendarClinicorp || config.agendarAgendaInterna) {
     TOOLS.push(toolCriarAgendamento(config));
     TOOLS.push(TOOL_VERIFICAR_COMPARECIMENTO);
