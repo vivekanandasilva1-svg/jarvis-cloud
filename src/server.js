@@ -358,26 +358,65 @@ function extrairMensagemEvolution(data) {
   const remoteJid = data?.key?.remoteJid || '';
   const numero = remoteJid.split('@')[0];
   const msg = data?.message || {};
+  const id = data?.key?.id || null;
 
-  if (msg.imageMessage) return { numero, texto: msg.imageMessage.caption || '', tipo: 'image', fromMe: !!data?.key?.fromMe };
-  if (msg.audioMessage) return { numero, texto: '', tipo: 'audio', fromMe: !!data?.key?.fromMe };
-  if (msg.videoMessage) return { numero, texto: msg.videoMessage.caption || '', tipo: 'video', fromMe: !!data?.key?.fromMe };
+  if (msg.imageMessage) return { numero, texto: msg.imageMessage.caption || '', tipo: 'image', fromMe: !!data?.key?.fromMe, id };
+  if (msg.audioMessage) return { numero, texto: '', tipo: 'audio', fromMe: !!data?.key?.fromMe, id };
+  if (msg.videoMessage) return { numero, texto: msg.videoMessage.caption || '', tipo: 'video', fromMe: !!data?.key?.fromMe, id };
 
   const texto = msg.conversation || msg.extendedTextMessage?.text || '';
-  return { numero, texto, tipo: 'text', fromMe: !!data?.key?.fromMe };
+  return { numero, texto, tipo: 'text', fromMe: !!data?.key?.fromMe, id };
+}
+
+// compara dois numeros de telefone ignorando formatacao (DDI "55" presente ou nao, o "9" extra
+// de celular presente ou nao) - comparar string exata quebrava silenciosamente quando o numero
+// admin era salvo sem o "55" na frente (formato facil de digitar errado na tela de config)
+function normalizarTelefone(n) {
+  return (n || '').replace(/\D/g, '');
+}
+function mesmoNumero(a, b) {
+  const na = normalizarTelefone(a);
+  const nb = normalizarTelefone(b);
+  if (!na || !nb) return false;
+  return na === nb || na.slice(-10) === nb.slice(-10);
+}
+
+// ids das mensagens que a PROPRIA Lumia acabou de mandar pro numero do dono - quando o
+// WhatsApp do dono e a mesma conta que a instancia da Lumia usa (o dono "conversa com ela
+// mesma" no chat de "Mensagem para voce mesmo"), toda mensagem enviada por QUALQUER dispositivo
+// dessa conta (inclusive as respostas que a propria Lumia manda) chega no webhook com
+// fromMe:true - sem rastrear o que a gente mesma mandou, a resposta da Lumia seria reprocessada
+// como se fosse uma nova pergunta do dono, entrando em loop infinito consigo mesma.
+const idsEnviadosPorNos = new Set();
+function lembrarEnviada(resposta) {
+  const id = resposta?.key?.id;
+  if (!id) return;
+  idsEnviadosPorNos.add(id);
+  if (idsEnviadosPorNos.size > 200) {
+    idsEnviadosPorNos.delete(idsEnviadosPorNos.values().next().value);
+  }
 }
 
 async function processarMensagemEvolution(instanciaDoWebhook, data) {
-  const { numero, texto, tipo, fromMe } = extrairMensagemEvolution(data);
-  if (fromMe) return; // ignora eco das proprias mensagens da Lumia
-  if (tipo === 'text' && !texto) return;
-
+  const { numero, texto, tipo, fromMe, id } = extrairMensagemEvolution(data);
   const { instanciaAtiva, numeroAdmin } = await whatsappInstances.obterConfig();
+  const ehNumeroAdmin = numeroAdmin && mesmoNumero(numero, numeroAdmin);
+
+  if (fromMe) {
+    // eco confirmado de algo que a propria Lumia mandou - ignora sempre
+    if (id && idsEnviadosPorNos.has(id)) { idsEnviadosPorNos.delete(id); return; }
+    // fromMe sem ser eco rastreado: so processa se for exatamente o numero do dono (chat
+    // "Mensagem para voce mesmo" - o dono digitando de verdade pra Lumia, nao um eco dela).
+    // Qualquer outro fromMe (ex: o dono mandando mensagem de outro dispositivo pra um
+    // paciente) continua ignorado, igual sempre foi.
+    if (!ehNumeroAdmin) return;
+  }
+  if (tipo === 'text' && !texto) return;
 
   // espelha no CRM (Kanban) qualquer mensagem recebida de um contato que nao seja o proprio
   // dono, em qualquer instancia conectada - "best-effort", nunca trava o fluxo principal (a
   // resposta da Lumia) se o CRM der erro
-  if (!(numeroAdmin && numero === numeroAdmin)) {
+  if (!ehNumeroAdmin) {
     crm.registrarMensagem({ numero, instancia: instanciaDoWebhook, direcao: 'entrada', tipo, texto, nome: data?.pushName })
       .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
   }
@@ -385,18 +424,18 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   // mensagem do dono, na instancia pessoal ativa - conversa normal (todas as ferramentas,
   // memoria persistente, personalidade completa). Midia do dono continua so texto por
   // enquanto (esse caminho ja tinha essa limitacao antes do auto-atendimento existir).
-  if (instanciaDoWebhook === instanciaAtiva && numeroAdmin && numero === numeroAdmin) {
+  if (instanciaDoWebhook === instanciaAtiva && ehNumeroAdmin) {
     if (tipo !== 'text') return;
     try {
       const resultado = await chat(`whatsapp-evo:${numero}`, texto, []);
       if (resultado.localAction) {
-        await enviarMensagemTexto(numero, 'Isso aí envolve mexer no seu computador, e isso só funciona pelo app no próprio PC (não dá pra fazer por aqui pelo WhatsApp).');
+        lembrarEnviada(await enviarMensagemTexto(numero, 'Isso aí envolve mexer no seu computador, e isso só funciona pelo app no próprio PC (não dá pra fazer por aqui pelo WhatsApp).'));
         return;
       }
-      await enviarMensagemTexto(numero, resultado.reply);
+      lembrarEnviada(await enviarMensagemTexto(numero, resultado.reply));
     } catch (err) {
       console.error('Erro no chat via Evolution/WhatsApp:', err);
-      await enviarMensagemTexto(numero, `Deu erro por aqui: ${err.message}`).catch(() => {});
+      lembrarEnviada(await enviarMensagemTexto(numero, `Deu erro por aqui: ${err.message}`).catch(() => {}));
     }
     return;
   }
