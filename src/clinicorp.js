@@ -224,7 +224,7 @@ function dividirEmJanelasDe31Dias(from, to) {
 // "" = ainda nao) - e' o unico jeito de saber, pela API, se um orcamento aprovado ja foi
 // finalizado na pratica ou ainda esta em andamento (nao existe endpoint separado de prontuario/
 // execucao clinica, mas esse dado ja vem embutido aqui)
-export async function getEstimatesExecutionSummary({ from, to, status } = {}) {
+export async function getEstimatesExecutionSummary({ from, to, status, situacaoClinica } = {}) {
   const janelas = dividirEmJanelasDe31Dias(from, to);
   const todos = [];
   for (const janela of janelas) {
@@ -235,7 +235,7 @@ export async function getEstimatesExecutionSummary({ from, to, status } = {}) {
   // um mesmo orcamento pode aparecer em mais de uma janela se a busca original cruzar meses -
   // dedup pelo id do orcamento (TreatmentId/PaymentPlanId, aqui exposto como "id")
   const vistos = new Set();
-  const orcamentos = [];
+  const todosOrcamentos = [];
   for (const o of todos) {
     if (vistos.has(o.id)) continue;
     vistos.add(o.id);
@@ -243,9 +243,10 @@ export async function getEstimatesExecutionSummary({ from, to, status } = {}) {
     const procedimentos = o.ProcedureList || [];
     const executados = procedimentos.filter((p) => p.Executed === 'X').length;
     const total = procedimentos.length;
-    orcamentos.push({
+    todosOrcamentos.push({
       id: o.id,
       paciente: o.PatientName,
+      telefone: o.PatientMobilePhone,
       profissional: o.ProfessionalName,
       valor: o.Amount,
       status: o.Status,
@@ -256,13 +257,17 @@ export async function getEstimatesExecutionSummary({ from, to, status } = {}) {
     });
   }
 
-  const resumo = { totalOrcamentos: orcamentos.length, finalizados: 0, emAndamento: 0, naoIniciados: 0, semProcedimentos: 0, valorFinalizado: 0, valorNaoFinalizado: 0 };
-  for (const o of orcamentos) {
+  // resumo (contagens/valores) sempre calculado em cima de TODOS, mesmo se o chamador pedir
+  // so uma situacao especifica na lista - assim o total nunca fica inconsistente com o filtro
+  const resumo = { totalOrcamentos: todosOrcamentos.length, finalizados: 0, emAndamento: 0, naoIniciados: 0, semProcedimentos: 0, valorFinalizado: 0, valorNaoFinalizado: 0 };
+  for (const o of todosOrcamentos) {
     if (o.situacaoClinica === 'finalizado') { resumo.finalizados++; resumo.valorFinalizado += o.valor; }
     else if (o.situacaoClinica === 'em_andamento') { resumo.emAndamento++; resumo.valorNaoFinalizado += o.valor; }
     else if (o.situacaoClinica === 'nao_iniciado') { resumo.naoIniciados++; resumo.valorNaoFinalizado += o.valor; }
     else resumo.semProcedimentos++;
   }
+
+  const orcamentos = situacaoClinica ? todosOrcamentos.filter((o) => o.situacaoClinica === situacaoClinica) : todosOrcamentos;
 
   return { resumo, orcamentos };
 }

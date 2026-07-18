@@ -637,13 +637,14 @@ const tools = [
   },
   {
     name: 'clinicorp_orcamentos_execucao',
-    description: 'Cruza os orcamentos de um periodo com a execucao clinica real de cada procedimento (o Clinicorp marca cada procedimento como executado ou nao dentro do proprio orcamento) - responde com precisao quantos orcamentos aprovados/abertos ja foram finalizados (todos os procedimentos executados), quantos estao em andamento (parte executada) e quantos ainda nao foram iniciados, alem do valor financeiro de cada grupo. Aceita qualquer periodo (quebra automaticamente em janelas de 31 dias, limite da API). Use "status" pra filtrar so aprovados (APPROVED) ou outro status especifico.',
+    description: 'Cruza os orcamentos de um periodo com a execucao clinica real de cada procedimento (o Clinicorp marca cada procedimento como executado ou nao dentro do proprio orcamento) - responde com precisao quantos orcamentos aprovados/abertos ja foram finalizados (todos os procedimentos executados), quantos estao em andamento (parte executada) e quantos ainda nao foram iniciados, alem do valor financeiro de cada grupo. Aceita qualquer periodo (quebra automaticamente em janelas de 31 dias, limite da API). Use "status" pra filtrar so aprovados (APPROVED) ou outro status especifico. Se o usuario pedir a lista de QUEM sao os pacientes de um grupo especifico (ex: "quem sao os 192 nao iniciados"), chame de novo passando "situacaoClinica" (nao_iniciado, em_andamento, finalizado) - a lista devolvida ja vem filtrada e com nome/telefone de cada paciente, sem precisar filtrar voce mesma nem arriscar cortar a lista pela metade. Pra listas longas (dezenas de nomes), prefira gerar um arquivo (gerar_excel) em vez de escrever todos os nomes na propria mensagem de texto.',
     input_schema: {
       type: 'object',
       properties: {
         from: { type: 'string', description: 'Data inicial YYYY-MM-DD' },
         to: { type: 'string', description: 'Data final YYYY-MM-DD' },
         status: { type: 'string', description: 'Filtra por status do orcamento (ex: APPROVED) - opcional, sem filtro traz todos' },
+        situacaoClinica: { type: 'string', description: 'Filtra a lista de orcamentos devolvida por situacao clinica: nao_iniciado, em_andamento ou finalizado - opcional, use quando o usuario quiser saber QUEM sao os pacientes de um grupo especifico' },
       },
       required: ['from', 'to'],
     },
@@ -1232,12 +1233,16 @@ const toolHandlers = {
   clinicorp_organizacao: handleClinicorpOrganizacao,
   clinicorp_paciente_extra: handleClinicorpPacienteExtra,
   clinicorp_orcamento_detalhe: ({ treatmentId }) => clinicorp.getEstimateDetail({ treatmentId }),
-  clinicorp_orcamentos_execucao: async ({ from, to, status }) => {
-    const { resumo, orcamentos } = await clinicorp.getEstimatesExecutionSummary({ from, to, status });
+  clinicorp_orcamentos_execucao: async ({ from, to, status, situacaoClinica }) => {
+    const { resumo, orcamentos } = await clinicorp.getEstimatesExecutionSummary({ from, to, status, situacaoClinica });
     // o resumo (contagens/valores exatos) sempre vai completo - e a resposta precisa que o
-    // usuario pediu. A lista individual de orcamentos so serve de exemplo/drill-down, entao
-    // essa sim corta se for grande (mesmo motivo do resumirLista: nao estourar tokens)
-    return { resumo, orcamentos: resumirLista(orcamentos, ['id', 'paciente', 'profissional', 'valor', 'status', 'data', 'totalProcedimentos', 'procedimentosExecutados', 'situacaoClinica']) };
+    // usuario pediu. A lista individual so corta se vier SEM filtro de situacao (potencialmente
+    // centenas de orcamentos misturados, so serve de amostra ali); quando o usuario pede um
+    // grupo especifico (ex: "quem sao os nao iniciados"), o filtro ja reduz bastante o volume e
+    // a resposta precisa E a lista completa desse grupo - cortar de novo aqui reintroduziria o
+    // mesmo problema que causou a Lumia dizer "nao terminei de formular a resposta".
+    const campos = ['id', 'paciente', 'telefone', 'profissional', 'valor', 'status', 'data', 'totalProcedimentos', 'procedimentosExecutados', 'situacaoClinica'];
+    return { resumo, orcamentos: resumirLista(orcamentos, campos, situacaoClinica ? 400 : 40) };
   },
 };
 
@@ -1422,8 +1427,10 @@ async function callClaude(history) {
     // 1500 era curto demais pra analise de anexo pesado (PDF/foto com bastante conteudo) -
     // a resposta cortava no meio (stop_reason max_tokens) antes de produzir texto nenhum,
     // dando a impressao de que a Lumia "nao entendeu" o arquivo quando na verdade ela nem
-    // chegou a terminar de formular a resposta.
-    max_tokens: 4096,
+    // chegou a terminar de formular a resposta. Depois, 4096 ainda cortava respostas com
+    // listas longas (ex: dezenas/centenas de pacientes de um relatorio do Clinicorp) no meio
+    // da propria resposta em texto - subiu pra 8192 pra dar folga real nesses casos.
+    max_tokens: 8192,
     system: await systemPromptBlocos(),
     tools,
     messages: history,
