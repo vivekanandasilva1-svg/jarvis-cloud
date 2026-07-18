@@ -950,6 +950,16 @@ const PC_TOOLS = new Set([
 // desfazer - abrir, ler, listar e criar (nunca sobrescreve) rodam direto
 const PC_CONFIRM_TOOLS = new Set(['pc_fechar_app', 'pc_editar_arquivo', 'pc_apagar_arquivo']);
 
+// as ferramentas de controle do PC dependem do agente local rodando no navegador do usuario
+// (ver PC_TOOLS acima) - via WhatsApp nao existe esse navegador pra executar nada, entao alem
+// de nunca funcionar de verdade, a ferramenta "pc_*" sem confirmacao (ver_camera, pc_abrir_app
+// etc) deixa um tool_use pendurado sem tool_result pra sempre no historico da sessao do
+// WhatsApp (ninguem chama continuarAcaoLocal por la pra fechar o par) - a proxima mensagem
+// nessa sessao quebra com 400 da API pra sempre. Por isso essas ferramentas nem aparecem na
+// lista que a Claude ve quando a sessao e do WhatsApp (ver callClaude) - ela sabe que nao tem
+// essas ferramentas disponiveis ali, em vez de tentar e travar a conversa.
+const TOOLS_SEM_CONTROLE_PC = tools.filter((t) => !PC_TOOLS.has(t.name));
+
 function describePcAction(name, input) {
   switch (name) {
     case 'pc_fechar_app':
@@ -1421,7 +1431,10 @@ function extractText(response) {
   return response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
 }
 
-async function callClaude(history) {
+async function callClaude(history, sessionId) {
+  // sessao do WhatsApp (ver processarMensagemEvolution em server.js) - ver comentario em
+  // TOOLS_SEM_CONTROLE_PC pra entender por que ela nao pode ver as ferramentas de PC
+  const ehWhatsapp = sessionId?.startsWith('whatsapp-evo:');
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-5',
     // 1500 era curto demais pra analise de anexo pesado (PDF/foto com bastante conteudo) -
@@ -1442,7 +1455,7 @@ async function callClaude(history) {
     thinking: { type: 'adaptive' },
     output_config: { effort: 'medium' },
     system: await systemPromptBlocos(),
-    tools,
+    tools: ehWhatsapp ? TOOLS_SEM_CONTROLE_PC : tools,
     messages: history,
   });
   // log leve pra confirmar que o prompt caching esta funcionando de verdade -
@@ -1810,7 +1823,7 @@ function aparaHistorico(session, indiceProtegido = 0) {
 // precisa rodar no navegador do usuario, que reporta o resultado depois via continuarAcaoLocal.
 async function rodarLoopDeFerramentas(session, sessionId, indiceProtegido = session.history.length) {
   definirStatus(sessionId, 'pensando', 'Pensando na resposta...');
-  let response = await callClaude(session.history);
+  let response = await callClaude(session.history, sessionId);
   let rounds = 0;
 
   while (response.stop_reason === 'tool_use' && rounds < MAX_TOOL_ROUNDS) {
@@ -1855,7 +1868,7 @@ async function rodarLoopDeFerramentas(session, sessionId, indiceProtegido = sess
     session.history.push({ role: 'user', content: toolResults });
 
     definirStatus(sessionId, 'pensando', 'Pensando na resposta...');
-    response = await callClaude(session.history);
+    response = await callClaude(session.history, sessionId);
     rounds += 1;
 
     if (session.pendingAction || session.pendingLocalAction) break;
@@ -1882,7 +1895,7 @@ async function rodarLoopDeFerramentas(session, sessionId, indiceProtegido = sess
       { role: 'assistant', content: response.content },
       { role: 'user', content: 'Responda de forma direta e objetiva com o resultado que voce ja tem - sem pensar mais, so o texto final da resposta.' },
     ];
-    textoReal = extractText(await callClaude(historicoComNudge));
+    textoReal = extractText(await callClaude(historicoComNudge, sessionId));
   }
   const replyText = textoReal || 'Tive um problema tecnico formulando a resposta - pode perguntar de novo?';
   session.history.push({ role: 'assistant', content: replyText });
@@ -1936,7 +1949,7 @@ async function processarChat(session, sessionId, userMessage, attachments) {
         role: 'user',
         content: `[Sistema] A acao foi confirmada pelo usuario e executada. Resultado: ${JSON.stringify(resultado)}. Informe o usuario do resultado de forma natural.`,
       });
-      const response = await callClaude(session.history);
+      const response = await callClaude(session.history, sessionId);
       const replyText = extractText(response);
       session.history.push({ role: 'assistant', content: replyText });
       return { reply: replyText };
