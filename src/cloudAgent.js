@@ -637,7 +637,7 @@ const tools = [
   },
   {
     name: 'clinicorp_orcamentos_execucao',
-    description: 'Cruza os orcamentos de um periodo com a execucao clinica real de cada procedimento (o Clinicorp marca cada procedimento como executado ou nao dentro do proprio orcamento) - responde com precisao quantos orcamentos aprovados/abertos ja foram finalizados (todos os procedimentos executados), quantos estao em andamento (parte executada) e quantos ainda nao foram iniciados, alem do valor financeiro de cada grupo. Aceita qualquer periodo (quebra automaticamente em janelas de 31 dias, limite da API). Use "status" pra filtrar so aprovados (APPROVED) ou outro status especifico. Se o usuario pedir a lista de QUEM sao os pacientes de um grupo especifico (ex: "quem sao os 192 nao iniciados"), chame de novo passando "situacaoClinica" (nao_iniciado, em_andamento, finalizado) - a lista devolvida ja vem filtrada e com nome/telefone de cada paciente, sem precisar filtrar voce mesma nem arriscar cortar a lista pela metade. Pra listas longas (dezenas de nomes), prefira gerar um arquivo (gerar_excel) em vez de escrever todos os nomes na propria mensagem de texto.',
+    description: 'Cruza os orcamentos de um periodo com a execucao clinica real de cada procedimento (o Clinicorp marca cada procedimento como executado ou nao dentro do proprio orcamento) - responde com precisao quantos orcamentos aprovados/abertos ja foram finalizados (todos os procedimentos executados), quantos estao em andamento (parte executada) e quantos ainda nao foram iniciados, alem do valor financeiro de cada grupo. Aceita qualquer periodo (quebra automaticamente em janelas de 31 dias, limite da API). Use "status" pra filtrar so aprovados (APPROVED) ou outro status especifico. Se o usuario pedir a lista de QUEM sao os pacientes de um grupo especifico (ex: "quem sao os 192 nao iniciados"), chame de novo passando "situacaoClinica" (nao_iniciado, em_andamento, finalizado) - a lista devolvida ja vem filtrada e com nome/telefone de cada paciente, sem precisar filtrar voce mesma nem arriscar cortar a lista pela metade. IMPORTANTE: quando o usuario referenciar um numero que voce mesma deu antes ("esses 192", "os que voce contou"), use EXATAMENTE o mesmo "from"/"to" (e "status") da chamada anterior que gerou aquele numero - nunca invente um periodo novo/menor, senao o resultado sai inconsistente com o que o usuario esta perguntando. Pra listas longas (dezenas de nomes), prefira gerar um arquivo (gerar_excel) em vez de escrever todos os nomes na propria mensagem de texto.',
     input_schema: {
       type: 'object',
       properties: {
@@ -1857,8 +1857,24 @@ async function rodarLoopDeFerramentas(session, sessionId, indiceProtegido = sess
     }
   }
 
-  const textoReal = extractText(response);
-  const replyText = textoReal || 'Consegui os dados mas nao terminei de formular a resposta - pode perguntar de novo, talvez de forma mais especifica (ex: um periodo menor)?';
+  let textoReal = extractText(response);
+  if (!textoReal) {
+    // a Claude as vezes termina uma rodada sem nenhum bloco de texto (todo o budget foi pro
+    // "pensando" internamente, ex: tentando resumir um resultado de ferramenta grande) - log
+    // pra conseguir diagnosticar se isso persistir, e uma segunda tentativa pedindo uma
+    // resposta direta em vez de simplesmente desistir com a mensagem generica pro usuario.
+    // As duas mensagens temporarias (a resposta vazia + o pedido de retentativa) NUNCA ficam
+    // no historico salvo - so serve pra essa chamada extra, o historico real so recebe o
+    // texto final (de verdade ou o aviso de erro) alguns passos abaixo.
+    console.error(`[callClaude] resposta sem texto - stop_reason=${response.stop_reason}, blocos=${response.content.map((b) => b.type).join(',')}`);
+    const historicoComNudge = [
+      ...session.history,
+      { role: 'assistant', content: response.content },
+      { role: 'user', content: 'Responda de forma direta e objetiva com o resultado que voce ja tem - sem pensar mais, so o texto final da resposta.' },
+    ];
+    textoReal = extractText(await callClaude(historicoComNudge));
+  }
+  const replyText = textoReal || 'Tive um problema tecnico formulando a resposta - pode perguntar de novo?';
   session.history.push({ role: 'assistant', content: replyText });
   aparaHistorico(session, indiceProtegido);
   // incompleto = a Claude nao chegou a gerar texto nenhum (ex: estourou o budget de tokens
