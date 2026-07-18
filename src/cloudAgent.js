@@ -8,6 +8,7 @@ import { guardarArquivo } from './arquivosGerados.js';
 import { enviarMensagemTexto } from './evolutionApi.js';
 import { pool } from './db.js';
 import * as agenda from './agenda.js';
+import { gerarRelatorioDiario } from './relatorioDiario.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -102,10 +103,12 @@ REGRA CRITICA DE FORMATACAO, SEM EXCECAO: nunca use os caracteres "#", "##", "##
 (bold/italico em markdown) em nenhuma resposta de chat - nem falada (audio/modo conversa/
 WhatsApp) nem escrita (texto da conversa). A janela de conversa mostra texto puro, sem
 renderizar markdown - "##"/"**" aparecem literalmente na tela (ou sao lidos em voz alta como
-"hashtag"/"asterisco" pela sintese de voz), o que e sempre errado. Isso NAO se aplica ao campo
+"hashtag"/"asterisco" pela sintese de voz), o que e sempre errado. Duas excecoes: (1) o campo
 "conteudo" das ferramentas gerar_pdf/gerar_word (ali "## " no inicio da linha e a sintaxe
 propria dessas ferramentas pra virar subtitulo dentro do arquivo gerado, nunca aparece cru pro
-usuario) - so vale pro texto que voce escreve na propria conversa.
+usuario); (2) o texto que vem pronto de gerar_relatorio_diario - ele usa "*" de proposito como
+marcador de lista pro WhatsApp, e deve ser reproduzido EXATAMENTE como veio, sem tirar os "*".
+Fora essas duas excecoes, vale sempre - nunca use "*"/"#" no texto que voce mesma escreve.
 
 Formato de resposta - adapta pelo contexto, nao usa o mesmo formato pra tudo: numa pergunta
 rapida ou conversa (principalmente quando pode ser falada em voz alta pelo modo conversa),
@@ -152,6 +155,18 @@ responder quando perguntado, o sistema tambem MONITORA sozinho em segundo plano 
 horas) e manda um aviso automatico no WhatsApp do usuario quando alguma conta prepaga esgota ou
 fica com saldo baixo - se o usuario perguntar como funciona esse alerta, explique que ja esta
 ativo e roda sozinho, sem precisar ele pedir toda vez.
+
+Existe tambem um "Relatorio de Gestao Diaria" pronto (ferramenta gerar_relatorio_diario) - saldo
+de todas as contas de anuncio (esgotadas, criticas, saudaveis) mais o resumo financeiro/
+operacional do Clinicorp, num formato fixo que o usuario configurou. Ele ja e mandado sozinho
+todo dia as 07h no WhatsApp do usuario, mas tambem pode ser pedido a qualquer momento (app ou
+WhatsApp) - quando pedido, chame a ferramenta e devolva o resultado EXATAMENTE como veio, sem
+reescrever ou resumir (ver descricao da ferramenta pro detalhe).
+
+REGRA DE MOEDA: "R$" (com o R) sempre significa Real - NUNCA trate um valor com "R$" como se
+fosse dolar. Ja o cifrao sozinho ("$", sem o R na frente) significa Dolar americano - nunca
+trate esse como Real. Ao escrever valores, seja sempre explicito: "R$" pra reais, "US$" ou "$"
+pra dolar, nunca deixe ambiguo.
 
 Ferramentas de anuncio que envolvem gastar dinheiro real (ativar campanha, mudar orcamento,
 criar campanha) NAO executam na hora - elas ficam pendentes de confirmacao e o proprio sistema
@@ -747,6 +762,16 @@ const tools = [
     description: 'Liga a camera do dispositivo do usuario (se estiver desligada) e captura uma imagem do que esta sendo filmado agora, pra voce enxergar e comentar. Use quando o usuario pedir pra voce "ver", "olhar", "abrir os olhos" pela camera - frases como "Lumia abra os olhos", "veja isso aqui", "veja quem esta aqui", "olha o que eu tô segurando" etc, seja por texto, audio ou no modo conversa. Precisa de permissao de camera do navegador - se o usuario negar, explique isso.',
     input_schema: { type: 'object', properties: {} },
   },
+  {
+    name: 'gerar_relatorio_diario',
+    description: 'Gera o "Relatorio de Gestao Diaria" (saldo de todas as contas de anuncio Meta - esgotadas, criticas e saudaveis - e resumo financeiro/operacional do Clinicorp) no formato fixo que o usuario configurou. O resultado JA VEM formatado e pronto - devolva o texto EXATAMENTE como veio, sem reescrever, resumir, traduzir emoji ou adicionar comentario antes/depois (nem "aqui esta o relatorio:") - a formatacao exata (quebras de linha, marcadores "*", emojis) e proposital e nao pode mudar. Use quando o usuario pedir o relatorio diario/de gestao, ou perguntar "como estao as contas hoje" de forma abrangente (saldo + Clinicorp junto).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        diasClinicorp: { type: 'integer', description: 'Quantos dias pra tras considerar no resumo do Clinicorp (padrao 30)' },
+      },
+    },
+  },
   // ---------- Memoria da conversa e treinamento ----------
   {
     name: 'consultar_anexos_lidos',
@@ -1141,6 +1166,7 @@ async function obterStatusAgendamento() {
 }
 
 const toolHandlers = {
+  gerar_relatorio_diario: ({ diasClinicorp }) => gerarRelatorioDiario({ diasClinicorp }),
   gerar_pdf: handleGerarPdf,
   gerar_word: handleGerarWord,
   gerar_excel: handleGerarExcel,
@@ -1685,6 +1711,38 @@ export function iniciarSchedulerSaldoAnuncios() {
 
   checar(); // uma checagem logo no boot, nao so daqui a 6h
   setInterval(checar, 6 * 60 * 60 * 1000).unref();
+}
+
+// data (AAAA-MM-DD, fuso Maceio) do ultimo envio automatico do relatorio diario - evita
+// mandar duas vezes no mesmo dia mesmo checando a cada poucos minutos
+let ultimaDataRelatorioEnviado = null;
+
+// roda em segundo plano - checa a cada 5min se e 07:00 (fuso Maceio) e ainda nao mandou o
+// relatorio hoje; se sim, gera e manda pro WhatsApp do dono. Chama gerarRelatorioDiario()
+// direto (sem passar pela Claude) - o envio automatico tem que sair sempre identico, sem
+// depender do modelo reproduzir o texto formatado certinho toda vez.
+export function iniciarSchedulerRelatorioDiario() {
+  const numeroAdmin = process.env.LUMIA_WHATSAPP_ADMIN;
+  if (!numeroAdmin) return;
+
+  const checar = async () => {
+    try {
+      const agora = new Date();
+      const hora = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit', hour12: false });
+      const dataHoje = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio' });
+      const [h, m] = hora.split(':').map(Number);
+      if (h !== 7 || m >= 5) return; // so dispara na janela 07:00-07:04, uma vez por dia
+      if (ultimaDataRelatorioEnviado === dataHoje) return;
+
+      const texto = await gerarRelatorioDiario();
+      await enviarMensagemTexto(numeroAdmin, texto);
+      ultimaDataRelatorioEnviado = dataHoje;
+    } catch (err) {
+      console.error('Erro mandando relatorio diario automatico:', err.message);
+    }
+  };
+
+  setInterval(checar, 5 * 60 * 1000).unref();
 }
 
 // ---------- Status "ao vivo" do que a Lumia esta fazendo agora ----------
