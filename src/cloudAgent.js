@@ -637,7 +637,7 @@ const tools = [
   },
   {
     name: 'clinicorp_orcamentos_execucao',
-    description: 'Cruza os orcamentos de um periodo com a execucao clinica real de cada procedimento (o Clinicorp marca cada procedimento como executado ou nao dentro do proprio orcamento) - responde com precisao quantos orcamentos aprovados/abertos ja foram finalizados (todos os procedimentos executados), quantos estao em andamento (parte executada) e quantos ainda nao foram iniciados, alem do valor financeiro de cada grupo. Aceita qualquer periodo (quebra automaticamente em janelas de 31 dias, limite da API). Use "status" pra filtrar so aprovados (APPROVED) ou outro status especifico. Se o usuario pedir a lista de QUEM sao os pacientes de um grupo especifico (ex: "quem sao os 192 nao iniciados"), chame de novo passando "situacaoClinica" (nao_iniciado, em_andamento, finalizado) - a lista devolvida ja vem filtrada e com nome/telefone de cada paciente, sem precisar filtrar voce mesma nem arriscar cortar a lista pela metade. IMPORTANTE: quando o usuario referenciar um numero que voce mesma deu antes ("esses 192", "os que voce contou"), use EXATAMENTE o mesmo "from"/"to" (e "status") da chamada anterior que gerou aquele numero - nunca invente um periodo novo/menor, senao o resultado sai inconsistente com o que o usuario esta perguntando. Pra listas longas (dezenas de nomes), prefira gerar um arquivo (gerar_excel) em vez de escrever todos os nomes na propria mensagem de texto.',
+    description: 'Cruza os orcamentos de um periodo com a execucao clinica real de cada procedimento (o Clinicorp marca cada procedimento como executado ou nao dentro do proprio orcamento) - responde com precisao quantos orcamentos aprovados/abertos ja foram finalizados (todos os procedimentos executados), quantos estao em andamento (parte executada) e quantos ainda nao foram iniciados, alem do valor financeiro de cada grupo. Aceita qualquer periodo (quebra automaticamente em janelas de 31 dias, limite da API). Use "status" pra filtrar so aprovados (APPROVED) ou outro status especifico. Se o usuario pedir a lista de QUEM sao os pacientes de um grupo especifico (ex: "quem sao os 192 nao iniciados"), chame de novo passando "situacaoClinica" (nao_iniciado, em_andamento, finalizado) - a lista devolvida ja vem filtrada e com nome/telefone de cada paciente. IMPORTANTE: quando o usuario referenciar um numero que voce mesma deu antes ("esses 192", "os que voce contou"), use EXATAMENTE o mesmo "from"/"to" (e "status") da chamada anterior que gerou aquele numero - nunca invente um periodo novo/menor. Pra listas longas (mais de ~15-20 nomes), NUNCA escreva a lista inteira na mensagem nem chame gerar_excel manualmente (teria que retypar cada linha, o que estoura o limite de tokens da resposta e faz voce "anunciar" o arquivo sem nunca gerar de verdade) - em vez disso, chame ESSA MESMA ferramenta de novo com "exportarExcel": true, que gera a planilha direto com os dados que voce ja tem, sem precisar escrever nenhuma linha.',
     input_schema: {
       type: 'object',
       properties: {
@@ -645,6 +645,7 @@ const tools = [
         to: { type: 'string', description: 'Data final YYYY-MM-DD' },
         status: { type: 'string', description: 'Filtra por status do orcamento (ex: APPROVED) - opcional, sem filtro traz todos' },
         situacaoClinica: { type: 'string', description: 'Filtra a lista de orcamentos devolvida por situacao clinica: nao_iniciado, em_andamento ou finalizado - opcional, use quando o usuario quiser saber QUEM sao os pacientes de um grupo especifico' },
+        exportarExcel: { type: 'boolean', description: 'Se true, gera e devolve uma planilha Excel pra download com a lista filtrada (from/to/status/situacaoClinica), em vez de devolver os dados como texto/JSON - use pra listas longas' },
       },
       required: ['from', 'to'],
     },
@@ -1243,15 +1244,27 @@ const toolHandlers = {
   clinicorp_organizacao: handleClinicorpOrganizacao,
   clinicorp_paciente_extra: handleClinicorpPacienteExtra,
   clinicorp_orcamento_detalhe: ({ treatmentId }) => clinicorp.getEstimateDetail({ treatmentId }),
-  clinicorp_orcamentos_execucao: async ({ from, to, status, situacaoClinica }) => {
+  clinicorp_orcamentos_execucao: async ({ from, to, status, situacaoClinica, exportarExcel }) => {
     const { resumo, orcamentos } = await clinicorp.getEstimatesExecutionSummary({ from, to, status, situacaoClinica });
+    const campos = ['id', 'paciente', 'telefone', 'profissional', 'valor', 'status', 'data', 'totalProcedimentos', 'procedimentosExecutados', 'situacaoClinica'];
+
+    // exportarExcel: gera a planilha DIRETO com os dados que a gente mesmo ja buscou, sem
+    // pedir pro modelo retypar linha por linha no proprio tool_use (isso sozinho ja consome
+    // milhares de tokens de saida pra uma lista de ~200 itens, e foi exatamente o que fez a
+    // resposta ser cortada no meio - "vou gerar a lista em excel" sem nunca chegar a gerar).
+    if (exportarExcel) {
+      const colunas = ['Paciente', 'Telefone', 'Profissional', 'Valor', 'Status', 'Data', 'Procedimentos', 'Executados', 'Situacao'];
+      const linhas = orcamentos.map((o) => [o.paciente, o.telefone || '', o.profissional || '', o.valor, o.status, (o.data || '').slice(0, 10), o.totalProcedimentos, o.procedimentosExecutados, o.situacaoClinica]);
+      const titulo = `Orcamentos ${situacaoClinica || status || 'todos'} ${from} a ${to}`;
+      return handleGerarExcel({ titulo, colunas, linhas });
+    }
+
     // o resumo (contagens/valores exatos) sempre vai completo - e a resposta precisa que o
     // usuario pediu. A lista individual so corta se vier SEM filtro de situacao (potencialmente
     // centenas de orcamentos misturados, so serve de amostra ali); quando o usuario pede um
     // grupo especifico (ex: "quem sao os nao iniciados"), o filtro ja reduz bastante o volume e
     // a resposta precisa E a lista completa desse grupo - cortar de novo aqui reintroduziria o
     // mesmo problema que causou a Lumia dizer "nao terminei de formular a resposta".
-    const campos = ['id', 'paciente', 'telefone', 'profissional', 'valor', 'status', 'data', 'totalProcedimentos', 'procedimentosExecutados', 'situacaoClinica'];
     return { resumo, orcamentos: resumirLista(orcamentos, campos, situacaoClinica ? 400 : 40) };
   },
 };
