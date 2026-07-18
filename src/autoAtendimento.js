@@ -380,11 +380,18 @@ async function salvarSessao(numero, history, contagem) {
 // vai ser falada ou lida, da pra avisar a IA de forma inequivoca em vez de deixar ela adivinhar
 const AVISO_RESPOSTA_EM_AUDIO = `\n\nATENCAO - ESTA RESPOSTA ESPECIFICA VAI SER CONVERTIDA EM AUDIO E OUVIDA EM VOZ ALTA (nao lida como texto). Isso PREVALECE sobre qualquer instrucao anterior sobre emoji/formatacao: NUNCA use emoji (nem um so, mesmo que o prompt acima peca), NUNCA use asterisco, #, _, markdown ou qualquer simbolo de formatacao - escreva so texto corrido, como se estivesse falando naturalmente em voz alta. Fale horas por extenso (ex: "14 horas", "14 horas e 30", nunca "14h" ou "14:00h").`;
 
+// regra fixa no codigo (nao no prompt customizado do painel, que o usuario edita livremente) -
+// garante objetividade mesmo que o prompt configurado nao mencione isso, ou peca o contrario.
+// Contato de WhatsApp espera resposta rapida de ler/ouvir, nao um textao - especialmente em
+// audio, onde cada segundo a mais cansa muito mais que na leitura.
+const AVISO_OBJETIVIDADE = `\n\nSeja sempre objetiva e curta - va direto ao ponto na primeira frase, sem introducao nem enrolacao. Mantenha toda informacao util e necessaria, mas resuma de forma dinamica: entregue a conclusao/resposta direta primeiro, sem listar tudo em detalhe se nao for pedido. Respostas longas cansam quem esta lendo ou ouvindo no WhatsApp - poucas frases bem resolvidas valem mais que um paragrafo longo. So se estenda se o contato pedir mais detalhe explicitamente.`;
+
 function systemPromptComHoje(promptCustom, vaiSerAudio) {
   const agora = new Date();
   const hoje = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' });
   const agoraHora = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' });
   let prompt = `${promptCustom}\n\nAgora sao ${agoraHora} de ${hoje} (fuso horario de Maceio/Brasil, UTC-03:00). Use isso pra calcular qualquer data/hora de agendamento - nunca chute.\n\nVoce pode receber do contato texto, audio (chega ja transcrito), imagem (voce ve de verdade) ou video (voce so sabe que recebeu, ainda nao consegue assistir).`;
+  prompt += AVISO_OBJETIVIDADE;
   if (vaiSerAudio) prompt += AVISO_RESPOSTA_EM_AUDIO;
   return prompt;
 }
