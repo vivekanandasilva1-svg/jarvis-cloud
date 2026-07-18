@@ -162,16 +162,19 @@ Cada agendamento tem um status (confirmado, em espera, em atendimento, atendido,
 faltou, protese pendente etc) - clinicorp_listar_agendamentos ja devolve o nome do status
 resolvido (campo "status"), nao so o codigo numerico cru; use clinicorp_listar_status_agendamento
 se precisar do catalogo completo (id, descricao, cor). Perguntas tipo "quantos agendados essa
-semana", "quantos faltaram", "como esta o controle protetico" (agendamentos com status
-"Protese pendente" - pacientes aguardando material/protese do laboratorio) sao respondidas
-filtrando/contando por esse campo "status" - nunca diga que so ve "codigos" ou que nao tem
-acesso a isso, essa informacao esta disponivel.
+semana" ou "quantos faltaram" sao respondidas filtrando/contando por esse campo "status" -
+nunca diga que so ve "codigos" ou que nao tem acesso a isso, essa informacao esta disponivel.
 
-IMPORTANTE - limitacao real do Clinicorp: a API NAO da acesso a prontuario clinico (fichas,
+IMPORTANTE - limitacoes reais do Clinicorp: a API NAO da acesso a prontuario clinico (fichas,
 odontograma, evolucao clinica) nem a fotos/imagens ja salvas dos pacientes - so existe um
-endpoint de upload (mandar arquivo novo), nao de consulta. Se o usuario pedir prontuario ou
-fotos de paciente, explique essa limitacao com clareza em vez de inventar uma resposta ou
-fingir que puxou o dado.
+endpoint de upload (mandar arquivo novo), nao de consulta. Tambem NAO ha acesso a tela
+"Controle Protetico" (o quadro kanban de acompanhamento de trabalhos de laboratorio - pre-envio,
+envio/laboratorio, retorno a clinica, agendamento do paciente, instalado) - isso e DIFERENTE do
+status de agendamento "Protese pendente" (que voce ve normalmente); o Controle Protetico e um
+modulo proprio sem endpoint exposto na API publica do Clinicorp que este app usa, apos
+investigacao ativa (varias tentativas reais contra a API, todas sem sucesso). Se o usuario pedir
+prontuario, fotos de paciente ou dados do Controle Protetico, explique essa limitacao com
+clareza em vez de inventar uma resposta ou fingir que puxou o dado.
 
 O usuario tambem pode anexar arquivos na conversa (imagem, PDF, Word, Excel, audio ou video)
 para voce analisar. Imagens e PDFs chegam para voce de verdade (analise visual direta do PDF -
@@ -422,7 +425,7 @@ const tools = [
   },
   {
     name: 'clinicorp_contar_agendamentos_por_status',
-    description: 'Conta quantos agendamentos existem por status num periodo (ex: quantos confirmados, quantos faltaram, quantos com protese pendente/controle protetico) - a contagem e feita no servidor, nao precisa listar e somar um por um. Use SEMPRE que a pergunta for sobre quantidade/total (ex: "quantos agendados essa semana", "quantos faltaram", "como esta o controle protetico") em vez de clinicorp_listar_agendamentos.',
+    description: 'Conta quantos agendamentos existem por status de AGENDAMENTO num periodo (ex: quantos confirmados, quantos faltaram, quantos com o status "protese pendente" na agenda) - a contagem e feita no servidor, nao precisa listar e somar um por um. Use SEMPRE que a pergunta for sobre quantidade/total (ex: "quantos agendados essa semana", "quantos faltaram") em vez de clinicorp_listar_agendamentos. NAO cobre a tela "Controle Protetico" do Clinicorp (kanban de acompanhamento de laboratorio) - isso e um modulo separado sem acesso via API.',
     input_schema: {
       type: 'object',
       properties: {
@@ -435,7 +438,7 @@ const tools = [
   },
   {
     name: 'clinicorp_listar_status_agendamento',
-    description: 'Lista o catalogo completo de status de agendamento configurados na clinica (id, descricao, tipo, cor) - ex: Confirmado, Em espera, Em atendimento, Atendido, Atrasado, Faltou, Protese pendente (controle protetico). Use pra entender quais status existem, ou quando o usuario perguntar "quais status existem" / sobre as cores usadas na agenda.',
+    description: 'Lista o catalogo completo de status de AGENDAMENTO configurados na clinica (id, descricao, tipo, cor) - ex: Confirmado, Em espera, Em atendimento, Atendido, Atrasado, Faltou, Protese pendente. Use pra entender quais status existem, ou quando o usuario perguntar "quais status existem" / sobre as cores usadas na agenda. Isso NAO e a tela "Controle Protetico" (kanban de laboratorio) - esse status "Protese pendente" e so um marcador no agendamento em si, modulo diferente sem acesso via API.',
     input_schema: { type: 'object', properties: {} },
   },
   {
