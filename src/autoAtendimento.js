@@ -121,19 +121,31 @@ const TOOL_CLINICORP_CONSULTAR_AGENDA = {
 
 const TOOL_VERIFICAR_COMPARECIMENTO = {
   name: 'verificar_comparecimento',
-  description: 'Verifica os agendamentos do contato num periodo (agenda interna e/ou Clinicorp, conforme o que estiver ativo), incluindo status de cancelamento quando disponivel no Clinicorp. Use sempre que o contato mencionar uma data/agendamento que ja passou, ou quando voce perceber que ele tinha algo marcado numa data ja passada - antes de marcar algo novo ou seguir a conversa, confira se ele compareceu. Se o resultado nao deixar claro se ele foi ou faltou (o Clinicorp so mostra cancelamento explicito, nao confirma presenca por si so), pergunte diretamente pro contato em vez de supor.',
+  description: 'Lista os agendamentos do contato num periodo (agenda interna e/ou Clinicorp, conforme o que estiver ativo) - passados OU futuros, dependendo do periodo pedido. Cada agendamento vem com "id" (necessario pra cancelar_agendamento) e status de cancelamento quando disponivel no Clinicorp. Use pra: (1) checar comparecimento quando o contato mencionar uma data/agendamento que ja passou - se nao ficar claro se ele foi ou faltou, pergunte diretamente em vez de supor; (2) achar o id de um agendamento FUTURO que o contato quer cancelar ou remarcar (passe um periodo que cubra a data futura em from/to).',
   input_schema: {
     type: 'object',
     properties: {
       from: { type: 'string', description: 'Inicio do periodo a checar, formato AAAA-MM-DD (opcional, padrao 60 dias atras)' },
-      to: { type: 'string', description: 'Fim do periodo a checar, formato AAAA-MM-DD (opcional, padrao hoje)' },
+      to: { type: 'string', description: 'Fim do periodo a checar, formato AAAA-MM-DD (opcional, padrao hoje - informe uma data futura aqui se estiver procurando um agendamento marcado pra frente)' },
+    },
+  },
+};
+
+const TOOL_CANCELAR_AGENDAMENTO = {
+  name: 'cancelar_agendamento',
+  description: 'Cancela um agendamento DE VERDADE (chamada real na API - Clinicorp e/ou agenda interna, conforme configurado), removendo-o de vez da agenda. Use os ids que vieram de verificar_comparecimento (campo "id" de cada agendamento) - ache o agendamento certo primeiro com verificar_comparecimento antes de cancelar. Se o contato tiver mais de um agendamento proximo, confirme qual exatamente antes de cancelar. So diga pro contato que foi cancelado DEPOIS de ver ok:true no resultado - nunca diga "vou sinalizar pra equipe" ou finja que cancelou, voce tem essa ferramenta de verdade.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      clinicorpId: { type: 'string', description: 'Id do agendamento no Clinicorp (campo "id" retornado por verificar_comparecimento), se aplicavel' },
+      agendaInternaId: { type: 'integer', description: 'Id do evento na agenda interna (campo "id" retornado por verificar_comparecimento), se aplicavel' },
     },
   },
 };
 
 const TOOL_CLINICORP_BUSCAR_PACIENTE = {
   name: 'clinicorp_buscar_paciente',
-  description: 'Busca se o contato ja tem cadastro de paciente no Clinicorp, pelo telefone (padrao: o proprio numero de WhatsApp da conversa) e/ou nome. Use SEMPRE antes de marcar um agendamento no Clinicorp com um contato que voce ainda nao confirmou que ja e paciente cadastrado - nunca cadastre de novo sem checar antes, pra nao duplicar.',
+  description: 'Busca se o contato ja tem cadastro de paciente no Clinicorp, pelo telefone (padrao: o proprio numero de WhatsApp da conversa) e/ou nome. IMPORTANTE: a busca por nome exige o nome EXATO como esta cadastrado - um nome parecido mas nao identico nao aparece, entao "nao encontrado" nao prova que e paciente novo. Use SEMPRE antes de cadastrar (clinicorp_cadastrar_paciente), mas se nao achar nada, pergunte ao contato se ele ja e paciente antes de assumir que e novo - nunca cadastre de novo sem essa confirmacao, pra nao duplicar.',
   input_schema: {
     type: 'object',
     properties: {
@@ -282,7 +294,9 @@ async function runTool(name, input, contexto) {
       if (contexto.config.agendarAgendaInterna) {
         try {
           const eventos = await agenda.listarEventos(from, to);
-          resultado.agendaInterna = eventos.map((e) => ({ titulo: e.titulo, inicio: e.inicio, fim: e.fim }));
+          // id incluido de proposito - e o que cancelar_agendamento precisa pra cancelar esse
+          // evento especifico depois
+          resultado.agendaInterna = eventos.map((e) => ({ id: e.id, titulo: e.titulo, inicio: e.inicio, fim: e.fim }));
         } catch (err) {
           resultado.agendaInterna = { erro: err.message };
         }
@@ -303,6 +317,9 @@ async function runTool(name, input, contexto) {
             ]);
             const statusPorId = new Map(statusList.map((s) => [String(s.id), s.Description]));
             resultado.clinicorp = agendamentos.map((a) => ({
+              // id incluido de proposito - e o que cancelar_agendamento precisa pra cancelar
+              // esse agendamento especifico depois, sem confundir com outro do mesmo contato
+              id: a.id,
               data: a.date?.slice(0, 10),
               de: a.fromTime,
               ate: a.toTime,
@@ -319,6 +336,30 @@ async function runTool(name, input, contexto) {
         }
       }
 
+      return resultado;
+    }
+
+    if (name === 'cancelar_agendamento') {
+      if (!input.clinicorpId && !input.agendaInternaId) {
+        return { erro: 'Nao foi informado nenhum id de agendamento pra cancelar - use verificar_comparecimento primeiro pra achar o id certo.' };
+      }
+      const resultado = {};
+      if (input.clinicorpId) {
+        try {
+          await clinicorp.cancelAppointment({ id: input.clinicorpId });
+          resultado.clinicorp = { ok: true };
+        } catch (err) {
+          resultado.clinicorp = { ok: false, erro: err.message };
+        }
+      }
+      if (input.agendaInternaId) {
+        try {
+          await agenda.cancelarEvento(input.agendaInternaId);
+          resultado.agendaInterna = { ok: true };
+        } catch (err) {
+          resultado.agendaInterna = { ok: false, erro: err.message };
+        }
+      }
       return resultado;
     }
 
@@ -534,7 +575,11 @@ const AVISO_OBJETIVIDADE = `\n\nSeja sempre objetiva e curta - va direto ao pont
 // passado, ou pior, tratar aquela data velha como se ainda fosse marcavel.
 const AVISO_DATAS_PASSADAS = `\n\nSobre datas/agendamentos: nunca confirme ou trate como valido um agendamento numa data/hora que ja passou - o sistema rejeita automaticamente qualquer tentativa de marcar no passado, entao se o contato pedir isso, explique que precisa ser uma data futura e ja sugira alternativas. Alem disso, sempre que o contato mencionar uma data ou agendamento que ja passou, ou quando voce perceber (pelo contexto da conversa ou ao consultar a agenda) que ele tinha algo marcado numa data que ja passou, use a ferramenta verificar_comparecimento pra checar a agenda interna e o Clinicorp antes de continuar. Se dessa checagem nao ficar claro se ele compareceu ou faltou, pergunte diretamente pro contato ("voce chegou a comparecer nessa consulta?"). Se ele confirmar que faltou, ou se a falta parecer provavel, direcione a conversa pra oferecer um novo horario - nunca deixe barato nem ignore uma falta.
 
-REGRA CRITICA sobre confirmar agendamento: so diga pro contato que o agendamento esta confirmado/marcado DEPOIS de chamar criar_agendamento e ver no resultado que o destino configurado voltou com "ok: true" - nunca diga "confirmado" ou "marcado" so porque decidiu marcar ou porque a conversa chegou nesse ponto, isso seria inventar um agendamento que nao existe de verdade. Se o resultado vier com erro, NUNCA finja sucesso pro contato - explique o problema (outro horario, tente de novo) ou avise que precisa verificar manualmente. Se o contato ainda nao tem cadastro de paciente no Clinicorp (confira com clinicorp_buscar_paciente antes de marcar pela primeira vez), pergunte nome completo e data de nascimento e cadastre de verdade com clinicorp_cadastrar_paciente antes de criar o agendamento - nunca deixe o cadastro incompleto ou pule essa etapa.`;
+REGRA CRITICA sobre confirmar agendamento: so diga pro contato que o agendamento esta confirmado/marcado DEPOIS de chamar criar_agendamento e ver no resultado que o destino configurado voltou com "ok: true" - nunca diga "confirmado" ou "marcado" so porque decidiu marcar ou porque a conversa chegou nesse ponto, isso seria inventar um agendamento que nao existe de verdade. Se o resultado vier com erro, NUNCA finja sucesso pro contato - explique o problema (outro horario, tente de novo) ou avise que precisa verificar manualmente. Se o contato ainda nao tem cadastro de paciente no Clinicorp (confira com clinicorp_buscar_paciente antes de marcar pela primeira vez), pergunte nome completo e data de nascimento e cadastre de verdade com clinicorp_cadastrar_paciente antes de criar o agendamento - nunca deixe o cadastro incompleto ou pule essa etapa.
+
+REGRA CRITICA sobre cancelar agendamento: quando o contato pedir pra cancelar/remover um agendamento, voce TEM a ferramenta cancelar_agendamento pra fazer isso de verdade - nunca diga que "nao tem como excluir por aqui" ou que vai "sinalizar pra equipe cancelar manualmente", isso e falso, voce pode cancelar direto. Fluxo: use verificar_comparecimento (com o periodo cobrindo a data do agendamento, que pode ser futura) pra achar o id certo, confirme com o contato qual agendamento exatamente se houver mais de um, chame cancelar_agendamento com esse id, e so confirme o cancelamento pro contato depois de ver ok:true no resultado.
+
+REGRA CRITICA sobre evitar cadastro de paciente duplicado: a busca do Clinicorp por nome (clinicorp_buscar_paciente) exige o nome EXATO como esta cadastrado - um nome parecido mas nao identico (ex: contato diz "Vivekananda Silva" mas o cadastro real e "Vivekananda Francisco da Silva Filho") NAO aparece na busca, entao "nao encontrado" nao significa necessariamente que o contato e paciente novo. Por isso, antes de cadastrar um paciente novo (clinicorp_cadastrar_paciente), SEMPRE pergunte diretamente pro contato "voce ja e paciente da clinica ou seria seu primeiro cadastro?" - se ele disser que ja e paciente, peça o nome completo EXATO (ou telefone que costuma usar) e tente a busca de novo antes de criar um cadastro novo. So cadastre quando o contato confirmar que e cliente/paciente novo.`;
 
 function systemPromptComHoje(promptCustom, vaiSerAudio, temAgenda) {
   const agora = new Date();
@@ -627,6 +672,7 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
   if (config.agendarClinicorp || config.agendarAgendaInterna) {
     TOOLS.push(toolCriarAgendamento(config));
     TOOLS.push(TOOL_VERIFICAR_COMPARECIMENTO);
+    TOOLS.push(TOOL_CANCELAR_AGENDAMENTO);
   }
   TOOLS.push(toolEnviarArquivo(listaArquivos));
   const contexto = { instancia, numero, config };
