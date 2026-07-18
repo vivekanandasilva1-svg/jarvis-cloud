@@ -1779,20 +1779,47 @@ async function consultarAnexosLidos(sessionId, termo) {
 const MAX_TOOL_ROUNDS = 10;
 const MAX_HISTORY = 40;
 
-// a API da Anthropic exige que todo tool_result tenha o tool_use correspondente na mensagem
-// anterior - um tool_use e o(s) tool_result(s) dele sao sempre pushados como mensagens
-// adjacentes no historico (ver rodarLoopDeFerramentas/continuarAcaoLocal), mas SEPARADAS (uma
-// e 'assistant', a outra e 'user'). Se algo cortar o historico entre essas duas mensagens - o
-// corte por tamanho de aparaHistorico() e o principal suspeito, mas uma sessao ja salva assim
-// no Postgres (de antes desse fix, ou de uma interrupcao) tambem serve - sobra um tool_result
-// orfao como resultado, e a proxima chamada pra API quebra com 400 pra sempre nessa sessao.
-// Essa funcao varre o historico e descarta qualquer bloco tool_result cujo tool_use_id nao
-// esteja "aberto" (tool_use visto antes e ainda nao fechado); se a mensagem ficar sem nenhum
-// bloco depois disso, ela e descartada inteira.
+// a API da Anthropic exige que todo tool_use tenha o(s) tool_result(s) correspondente(s) na
+// mensagem IMEDIATAMENTE seguinte - isso pode quebrar de dois jeitos, e os dois ja aconteceram
+// de verdade em producao:
+//   1) um tool_result "orfao" (sem o tool_use que deveria abri-lo antes) - normalmente por causa
+//      do corte de tamanho em aparaHistorico(), que pode cortar bem no meio de um par.
+//   2) um tool_use "orfao" (sem tool_result nenhum depois) - acontece quando o processo e
+//      interrompido (erro, timeout) DEPOIS de empurrar o tool_use pro historico mas ANTES de
+//      empurrar o(s) tool_result(s) dele. A proxima mensagem do usuario emenda logo depois desse
+//      tool_use pendurado, e a API rejeita com 400 pra sempre nessa sessao.
+// Repara os dois casos. IMPORTANTE: isso precisa rodar em toda chamada (nao so quando a sessao
+// e carregada do zero do Postgres) - uma sessao corrompida em RAM (o caso mais comum do tipo 2,
+// que nunca chega a ser salvo no banco por ter dado erro no meio) ficava quebrada pra sempre
+// enquanto o processo do servidor continuasse de pe, porque o cache em memoria (sessionsCache)
+// nunca passava de novo por aqui.
 function repararHistorico(history) {
+  // passada 1: descarta tool_use sem tool_result completo na mensagem seguinte
+  const semToolUseOrfao = [];
+  for (let i = 0; i < history.length; i++) {
+    const msg = history[i];
+    if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+      const idsToolUse = msg.content.filter((b) => b.type === 'tool_use').map((b) => b.id);
+      if (idsToolUse.length) {
+        const proxima = history[i + 1];
+        const idsResolvidos = new Set(
+          proxima && proxima.role === 'user' && Array.isArray(proxima.content)
+            ? proxima.content.filter((b) => b.type === 'tool_result').map((b) => b.tool_use_id)
+            : [],
+        );
+        const tudoResolvido = idsToolUse.every((id) => idsResolvidos.has(id));
+        if (!tudoResolvido) continue; // descarta a mensagem inteira - turno incompleto, sem como fechar
+      }
+    }
+    semToolUseOrfao.push(msg);
+  }
+
+  // passada 2: descarta tool_result cujo tool_use_id nao esteja "aberto" (tool_use visto antes
+  // e ainda nao fechado) - cobre tanto o corte de aparaHistorico() quanto os tool_result que
+  // ficaram sem par depois que a passada 1 removeu o assistant que os teria aberto
   const abertos = new Set();
   const reparado = [];
-  for (const msg of history) {
+  for (const msg of semToolUseOrfao) {
     if (msg.role === 'assistant') {
       reparado.push(msg);
       if (Array.isArray(msg.content)) {
@@ -1835,6 +1862,11 @@ function aparaHistorico(session, indiceProtegido = 0) {
 // NAO precisa de confirmacao pausa sem resolver o tool_use - so devolve pro chamador o que
 // precisa rodar no navegador do usuario, que reporta o resultado depois via continuarAcaoLocal.
 async function rodarLoopDeFerramentas(session, sessionId, indiceProtegido = session.history.length) {
+  // roda o reparo do historico SEMPRE aqui, nao so quando a sessao e carregada do zero do
+  // Postgres - uma sessao que corrompeu em RAM (erro/timeout no meio de um turno anterior,
+  // nunca chegou a ser salva assim no banco) ficava quebrada pra sempre enquanto o processo do
+  // servidor continuasse de pe, repetindo o mesmo 400 da Anthropic em toda mensagem nova.
+  session.history = repararHistorico(session.history);
   definirStatus(sessionId, 'pensando', 'Pensando na resposta...');
   let response = await callClaude(session.history, sessionId);
   let rounds = 0;
