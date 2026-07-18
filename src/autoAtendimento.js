@@ -316,18 +316,57 @@ async function entenderMidiaRecebida(instancia, mensagemBruta, tipo) {
 
 // ---------- historico + contador de mensagens por contato ----------
 
+// a API da Anthropic exige que todo tool_result tenha o tool_use correspondente na mensagem
+// anterior - o corte por tamanho abaixo (slice por contagem) podia cortar bem no meio de um
+// par tool_use/tool_result (mensagens adjacentes mas separadas: uma 'assistant', outra
+// 'user'), deixando um tool_result orfao. A proxima chamada pra API entao quebrava com 400
+// pra sempre nesse contato (mesmo bug ja corrigido no chat pessoal, ver cloudAgent.js). Essa
+// funcao descarta qualquer tool_result cujo tool_use correspondente nao esteja mais no
+// historico; se a mensagem ficar sem nenhum bloco depois disso, ela e descartada inteira.
+function repararHistorico(history) {
+  const abertos = new Set();
+  const reparado = [];
+  for (const msg of history) {
+    if (msg.role === 'assistant') {
+      reparado.push(msg);
+      if (Array.isArray(msg.content)) {
+        for (const b of msg.content) {
+          if (b.type === 'tool_use') abertos.add(b.id);
+        }
+      }
+      continue;
+    }
+    if (msg.role === 'user' && Array.isArray(msg.content)) {
+      const blocosValidos = msg.content.filter((b) => {
+        if (b.type !== 'tool_result') return true;
+        const valido = abertos.has(b.tool_use_id);
+        if (valido) abertos.delete(b.tool_use_id);
+        return valido;
+      });
+      if (!blocosValidos.length) continue;
+      reparado.push(blocosValidos.length === msg.content.length ? msg : { ...msg, content: blocosValidos });
+      continue;
+    }
+    reparado.push(msg);
+  }
+  return reparado;
+}
+
 async function obterSessao(numero) {
   if (!pool) return { history: [], contagem: 0 };
   await tabelasProntas;
   const { rows } = await pool.query('SELECT history, contagem_mensagens FROM auto_atendimento_sessions WHERE numero = $1', [numero]);
   if (!rows.length) return { history: [], contagem: 0 };
-  return { history: rows[0].history || [], contagem: rows[0].contagem_mensagens || 0 };
+  // repara aqui tambem: contatos que ja ficaram com um tool_result orfao salvo no banco (de
+  // antes desse fix, ou de uma interrupcao a meio do loop) precisam disso pra sair do estado
+  // quebrado, senao toda mensagem seguinte volta a falhar do mesmo jeito, pra sempre.
+  return { history: repararHistorico(rows[0].history || []), contagem: rows[0].contagem_mensagens || 0 };
 }
 
 const MAX_HISTORICO = 30;
 async function salvarSessao(numero, history, contagem) {
   if (!pool) return;
-  const cortado = history.length > MAX_HISTORICO ? history.slice(history.length - MAX_HISTORICO) : history;
+  const cortado = repararHistorico(history.length > MAX_HISTORICO ? history.slice(history.length - MAX_HISTORICO) : history);
   await pool.query(
     `INSERT INTO auto_atendimento_sessions (numero, history, contagem_mensagens, updated_at) VALUES ($1, $2, $3, now())
      ON CONFLICT (numero) DO UPDATE SET history = $2, contagem_mensagens = $3, updated_at = now()`,
@@ -428,7 +467,7 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
   const contexto = { instancia, numero, config };
   const system = systemPromptComHoje(config.prompt, vaiSerAudio);
 
-  let response = await anthropic.messages.create({ model: 'claude-sonnet-5', max_tokens: 1000, system, tools: TOOLS, messages: history });
+  let response = await anthropic.messages.create({ model: 'claude-sonnet-5', max_tokens: 2048, system, tools: TOOLS, messages: history });
   let rounds = 0;
   while (response.stop_reason === 'tool_use' && rounds < MAX_RODADAS_FERRAMENTA) {
     history.push({ role: 'assistant', content: response.content });
@@ -438,7 +477,7 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
       toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
     }
     history.push({ role: 'user', content: toolResults });
-    response = await anthropic.messages.create({ model: 'claude-sonnet-5', max_tokens: 1000, system, tools: TOOLS, messages: history });
+    response = await anthropic.messages.create({ model: 'claude-sonnet-5', max_tokens: 2048, system, tools: TOOLS, messages: history });
     rounds += 1;
   }
 
