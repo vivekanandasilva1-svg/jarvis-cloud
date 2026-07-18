@@ -82,6 +82,23 @@ function normalizeAccountId(accountId) {
   return accountId.startsWith('act_') ? accountId : `act_${accountId}`;
 }
 
+// pra conta pre-paga (a maioria no Brasil - is_prepay_account true), o Meta nao devolve um
+// campo unico de "saldo restante": spend_cap (quanto ja foi carregado/autorizado na conta) e
+// amount_spent (quanto ja foi gasto) sao ambos em centavos, e a diferenca entre os dois E o
+// saldo disponivel de verdade - confirmado batendo com o funding_source_details.display_string
+// ("Saldo disponivel (R$X)") que o proprio Meta mostra pro usuario. Pra conta pos-paga (fatura),
+// isso nao se aplica - o campo "balance" e que representa o que esta em aberto pra pagar.
+function calcularSaldo(acc) {
+  if (acc.is_prepay_account && acc.spend_cap != null) {
+    const saldoCentavos = Number(acc.spend_cap) - Number(acc.amount_spent || 0);
+    return { tipoConta: 'prepago', saldoDisponivel: saldoCentavos / 100 };
+  }
+  if (acc.balance != null) {
+    return { tipoConta: 'pos-pago (fatura)', valorEmAberto: Number(acc.balance) / 100 };
+  }
+  return { tipoConta: 'desconhecido' };
+}
+
 export async function listAdAccounts() {
   const sets = tokenSets();
   if (sets.length === 0) throw new Error('Nenhum token configurado em META_ADS_TOKENS no .env');
@@ -89,14 +106,23 @@ export async function listAdAccounts() {
   const all = [];
   for (const set of sets) {
     let path = '/me/adaccounts';
-    let query = { fields: 'name,account_id,account_status,currency,amount_spent,business_name', limit: 100 };
+    let query = {
+      fields: 'name,account_id,account_status,currency,amount_spent,business_name,spend_cap,balance,is_prepay_account,funding_source_details{display_string}',
+      limit: 100,
+    };
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
       const data = await callWithToken(set.token, 'GET', path, { query });
       for (const acc of data.data) {
         accountTokenCache.set(acc.id, set.token);
-        all.push({ ...acc, empresa: set.label });
+        all.push({
+          ...acc,
+          empresa: set.label,
+          amountSpentReais: Number(acc.amount_spent || 0) / 100,
+          ...calcularSaldo(acc),
+          saldoTexto: acc.funding_source_details?.display_string || null,
+        });
       }
       if (!data.paging?.next) break;
       const nextUrl = new URL(data.paging.next);
@@ -147,6 +173,38 @@ export async function getInsights({ objectId, objectType = 'account', level, sin
 
   const data = await requestForId(cache, id, 'GET', `/${id}/insights`, { query });
   return data.data;
+}
+
+// relatorio de gasto por dia ou por mes, de UMA conta (accountId informado) ou de TODAS as
+// contas que a Lumia tem acesso (accountId omitido) - usa time_increment do Meta pra ja
+// devolver o gasto quebrado por periodo direto da API, sem precisar somar manualmente.
+export async function getSpendReport({ accountId, since, until, timeIncrement = '1' } = {}) {
+  const contasAlvo = accountId
+    ? [{ id: normalizeAccountId(accountId), name: null, empresa: null }]
+    : await listAdAccounts();
+
+  const resultado = [];
+  for (const conta of contasAlvo) {
+    try {
+      const data = await requestForId(accountTokenCache, conta.id, 'GET', `/${conta.id}/insights`, {
+        query: {
+          fields: 'spend',
+          time_increment: timeIncrement,
+          time_range: JSON.stringify({ since, until }),
+          limit: 500,
+        },
+      });
+      resultado.push({
+        contaId: conta.id,
+        nome: conta.name,
+        empresa: conta.empresa,
+        porPeriodo: data.data.map((d) => ({ inicio: d.date_start, fim: d.date_stop, gasto: Number(d.spend || 0) })),
+      });
+    } catch (err) {
+      resultado.push({ contaId: conta.id, nome: conta.name, empresa: conta.empresa, erro: err.message });
+    }
+  }
+  return resultado;
 }
 
 export async function createCampaign({ accountId, name, objective, status = 'PAUSED' } = {}) {

@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chat, continuarAcaoLocal, limparConversa, iniciarSchedulerLembretes, obterStatusAoVivo } from './cloudAgent.js';
+import { chat, continuarAcaoLocal, limparConversa, iniciarSchedulerLembretes, iniciarSchedulerSaldoAnuncios, obterStatusAoVivo } from './cloudAgent.js';
 import { synthesizeSpeechWithTimestamps, transcribeAudio } from './gemini.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
 import { transcribeAudioWhisper } from './whisper.js';
@@ -733,6 +733,7 @@ app.post('/api/agenda/google/desconectar', async (req, res) => {
 });
 
 iniciarSchedulerLembretes();
+iniciarSchedulerSaldoAnuncios();
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {

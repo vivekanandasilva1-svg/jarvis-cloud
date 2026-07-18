@@ -143,6 +143,16 @@ e metricas livremente. Quando pedirem analise ou diagnostico de campanha, use
 ads_diagnostico_campanha e de uma leitura profissional dos resultados (o que pausar, ajustar ou
 testar), nao so liste numeros.
 
+Tambem tem acesso total ao lado financeiro das contas de anuncio: ads_listar_contas ja devolve
+o saldo de cada uma (saldoDisponivel pra conta prepaga, valorEmAberto pra conta pos-paga/fatura,
+e o texto exato "saldoTexto" que aparece no gerenciador), alem do total gasto acumulado. Use
+ads_relatorio_gastos pra "quanto gastei essa semana/mes", gasto diario ou mensal de uma conta
+ou de todas somadas - a soma por periodo ja vem pronta, nao precisa somar na mao. Alem de
+responder quando perguntado, o sistema tambem MONITORA sozinho em segundo plano (a cada poucas
+horas) e manda um aviso automatico no WhatsApp do usuario quando alguma conta prepaga esgota ou
+fica com saldo baixo - se o usuario perguntar como funciona esse alerta, explique que ja esta
+ativo e roda sozinho, sem precisar ele pedir toda vez.
+
 Ferramentas de anuncio que envolvem gastar dinheiro real (ativar campanha, mudar orcamento,
 criar campanha) NAO executam na hora - elas ficam pendentes de confirmacao e o proprio sistema
 vai perguntar "sim ou nao" pro usuario. So chame essas ferramentas quando o pedido do usuario ja
@@ -305,8 +315,22 @@ async function systemPromptBlocos() {
 const tools = [
   {
     name: 'ads_listar_contas',
-    description: 'Lista todas as contas de anuncio da Meta (Facebook/Instagram Ads) que o usuario gerencia, com nome, id e cliente.',
+    description: 'Lista todas as contas de anuncio da Meta (Facebook/Instagram Ads) que o usuario gerencia, com nome, id, cliente/empresa e dados financeiros: amountSpentReais (total gasto acumulado), tipoConta ("prepago" ou "pos-pago (fatura)"), saldoDisponivel (so pra conta prepaga - quanto ainda tem pra gastar, em reais; 0 ou negativo = saldo esgotado), valorEmAberto (so pra conta pos-paga - quanto esta em aberto pra pagar na fatura), saldoTexto (o mesmo texto que aparece no gerenciador de anuncios). Use isso pra responder sobre saldo/quanto falta gastar, sem precisar de outra ferramenta.',
     input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'ads_relatorio_gastos',
+    description: 'Relatorio de gasto por dia ou por mes - de uma conta especifica ou de TODAS as contas de anuncio somadas, num periodo. Use pra responder "quanto gastei essa semana/mes", "gasto diario", "relatorio mensal" etc. Se accountId nao for informado, soma/lista todas as contas.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        accountId: { type: 'string', description: 'Id da conta (ex: act_123456) - opcional, se omitido pega todas as contas' },
+        from: { type: 'string', description: 'Data inicial YYYY-MM-DD' },
+        to: { type: 'string', description: 'Data final YYYY-MM-DD' },
+        agrupar: { type: 'string', enum: ['dia', 'mes'], description: 'Agrupar gasto por dia ou por mes (default: dia)' },
+      },
+      required: ['from', 'to'],
+    },
   },
   {
     name: 'ads_listar_campanhas',
@@ -1093,6 +1117,25 @@ const toolHandlers = {
   agenda_listar_eventos: ({ from, to }) => agenda.listarEventos(from, to),
   agenda_cancelar_evento: async ({ id }) => { await agenda.cancelarEvento(id); return { ok: true, mensagem: 'Evento removido da agenda.' }; },
   ads_listar_contas: () => metaAds.listAdAccounts(),
+  ads_relatorio_gastos: async ({ accountId, from, to, agrupar }) => {
+    const timeIncrement = agrupar === 'mes' ? 'monthly' : '1';
+    const contas = await metaAds.getSpendReport({ accountId, since: from, until: to, timeIncrement });
+    // soma o total geral (todas as contas, todo o periodo) e o total por periodo (todas as
+    // contas somadas em cada dia/mes) - a IA nao precisa somar isso na mao
+    let totalGeral = 0;
+    const totalPorPeriodo = new Map();
+    for (const conta of contas) {
+      for (const p of conta.porPeriodo || []) {
+        totalGeral += p.gasto;
+        totalPorPeriodo.set(p.inicio, (totalPorPeriodo.get(p.inicio) || 0) + p.gasto);
+      }
+    }
+    return {
+      totalGeral,
+      totalPorPeriodo: Array.from(totalPorPeriodo.entries()).map(([data, gasto]) => ({ data, gasto })).sort((a, b) => a.data.localeCompare(b.data)),
+      porConta: contas,
+    };
+  },
   ads_listar_campanhas: ({ accountId, status }) => metaAds.listCampaigns({ accountId, status }),
   ads_listar_adsets: ({ campaignId }) => metaAds.listAdSets({ campaignId }),
   ads_consultar_metricas: ({ objectId, objectType, since, until, datePreset }) => metaAds.getInsights({ objectId, objectType, since, until, datePreset }),
@@ -1522,6 +1565,55 @@ export function iniciarSchedulerLembretes() {
 
 export async function limparConversa(sessionId) {
   await limparSessao(sessionId);
+}
+
+// ---------- Monitoramento de saldo das contas de anuncio (Meta Ads) ----------
+// so em RAM (nao precisa sobreviver reinicio) - guarda quando cada conta foi alertada pela
+// ultima vez, pra nao mandar o mesmo aviso de novo a cada checagem (evita spam no WhatsApp)
+const ultimoAlertaSaldoPorConta = new Map();
+const HORAS_ENTRE_ALERTAS_REPETIDOS = 20;
+// abaixo disso (em reais) considera "quase acabando" mesmo que ainda nao tenha zerado -
+// ajustavel via env var, sem precisar mexer no codigo se o usuario achar o limite errado
+const LIMITE_SALDO_BAIXO_REAIS = Number(process.env.META_ADS_LIMITE_SALDO_BAIXO_REAIS) || 100;
+
+// roda em segundo plano no processo do servidor - a cada 6h confere o saldo de todas as
+// contas de anuncio (Meta) e manda um aviso pro WhatsApp do dono quando alguma estiver com
+// saldo esgotado ou baixo. So chamado uma vez, no boot do server.js.
+export function iniciarSchedulerSaldoAnuncios() {
+  const numeroAdmin = process.env.LUMIA_WHATSAPP_ADMIN;
+  if (!numeroAdmin) return; // sem numero configurado, nao ha pra onde mandar o aviso
+
+  const checar = async () => {
+    try {
+      const contas = await metaAds.listAdAccounts();
+      for (const conta of contas) {
+        if (conta.tipoConta !== 'prepago' || conta.saldoDisponivel == null) continue;
+        const esgotado = conta.saldoDisponivel <= 0;
+        const baixo = conta.saldoDisponivel > 0 && conta.saldoDisponivel <= LIMITE_SALDO_BAIXO_REAIS;
+        if (!esgotado && !baixo) continue;
+
+        const ultimoAlerta = ultimoAlertaSaldoPorConta.get(conta.id) || 0;
+        if (Date.now() - ultimoAlerta < HORAS_ENTRE_ALERTAS_REPETIDOS * 60 * 60 * 1000) continue;
+
+        const saldoFormatado = conta.saldoDisponivel.toLocaleString('pt-BR', { style: 'currency', currency: conta.currency || 'BRL' });
+        const texto = esgotado
+          ? `🔴 Saldo ESGOTADO na conta de anuncio "${conta.name}" (${conta.empresa}) - os anuncios podem parar de rodar. Saldo atual: ${saldoFormatado}.`
+          : `🟡 Saldo baixo na conta de anuncio "${conta.name}" (${conta.empresa}): ${saldoFormatado} restantes - recarregue logo pra nao parar de veicular.`;
+
+        try {
+          await enviarMensagemTexto(numeroAdmin, texto);
+          ultimoAlertaSaldoPorConta.set(conta.id, Date.now());
+        } catch (err) {
+          console.error(`Erro mandando alerta de saldo da conta ${conta.id}:`, err.message);
+        }
+      }
+    } catch (err) {
+      console.error('Erro checando saldo das contas de anuncio:', err.message);
+    }
+  };
+
+  checar(); // uma checagem logo no boot, nao so daqui a 6h
+  setInterval(checar, 6 * 60 * 60 * 1000).unref();
 }
 
 // ---------- Status "ao vivo" do que a Lumia esta fazendo agora ----------
