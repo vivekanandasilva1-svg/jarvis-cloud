@@ -205,6 +205,68 @@ export async function getEstimateDetail({ treatmentId } = {}) {
   return request('GET', '/estimates/get', { query: { subscriber_id: subscriberId(), treatment_id: treatmentId } });
 }
 
+// /estimates/list rejeita periodos com mais de 31 dias - quebra o periodo pedido em pedacos de
+// ate 31 dias e junta os resultados, pra poder consultar um trimestre/ano inteiro de uma vez
+function dividirEmJanelasDe31Dias(from, to) {
+  const janelas = [];
+  let inicio = new Date(`${from}T00:00:00Z`);
+  const fim = new Date(`${to}T00:00:00Z`);
+  while (inicio <= fim) {
+    const fimJanela = new Date(Math.min(inicio.getTime() + 30 * 24 * 60 * 60 * 1000, fim.getTime()));
+    janelas.push({ from: inicio.toISOString().slice(0, 10), to: fimJanela.toISOString().slice(0, 10) });
+    inicio = new Date(fimJanela.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return janelas;
+}
+
+// resposta real do Clinicorp: cada orcamento (treatment) tem uma lista de procedimentos
+// (ProcedureList), e cada procedimento tem "Executed" ("X" = ja foi executado clinicamente,
+// "" = ainda nao) - e' o unico jeito de saber, pela API, se um orcamento aprovado ja foi
+// finalizado na pratica ou ainda esta em andamento (nao existe endpoint separado de prontuario/
+// execucao clinica, mas esse dado ja vem embutido aqui)
+export async function getEstimatesExecutionSummary({ from, to, status } = {}) {
+  const janelas = dividirEmJanelasDe31Dias(from, to);
+  const todos = [];
+  for (const janela of janelas) {
+    const pedaco = await listEstimates({ from: janela.from, to: janela.to });
+    todos.push(...pedaco);
+  }
+
+  // um mesmo orcamento pode aparecer em mais de uma janela se a busca original cruzar meses -
+  // dedup pelo id do orcamento (TreatmentId/PaymentPlanId, aqui exposto como "id")
+  const vistos = new Set();
+  const orcamentos = [];
+  for (const o of todos) {
+    if (vistos.has(o.id)) continue;
+    vistos.add(o.id);
+    if (status && o.Status !== status) continue;
+    const procedimentos = o.ProcedureList || [];
+    const executados = procedimentos.filter((p) => p.Executed === 'X').length;
+    const total = procedimentos.length;
+    orcamentos.push({
+      id: o.id,
+      paciente: o.PatientName,
+      profissional: o.ProfessionalName,
+      valor: o.Amount,
+      status: o.Status,
+      data: o.Date,
+      totalProcedimentos: total,
+      procedimentosExecutados: executados,
+      situacaoClinica: total === 0 ? 'sem_procedimentos' : executados === 0 ? 'nao_iniciado' : executados === total ? 'finalizado' : 'em_andamento',
+    });
+  }
+
+  const resumo = { totalOrcamentos: orcamentos.length, finalizados: 0, emAndamento: 0, naoIniciados: 0, semProcedimentos: 0, valorFinalizado: 0, valorNaoFinalizado: 0 };
+  for (const o of orcamentos) {
+    if (o.situacaoClinica === 'finalizado') { resumo.finalizados++; resumo.valorFinalizado += o.valor; }
+    else if (o.situacaoClinica === 'em_andamento') { resumo.emAndamento++; resumo.valorNaoFinalizado += o.valor; }
+    else if (o.situacaoClinica === 'nao_iniciado') { resumo.naoIniciados++; resumo.valorNaoFinalizado += o.valor; }
+    else resumo.semProcedimentos++;
+  }
+
+  return { resumo, orcamentos };
+}
+
 export async function listProcedures() {
   return request('GET', '/procedures/list', { query: { subscriber_id: subscriberId() } });
 }

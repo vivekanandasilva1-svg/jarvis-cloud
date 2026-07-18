@@ -162,11 +162,19 @@ Voce tambem tem acesso amplo ao sistema Clinicorp da clinica: agenda, pacientes,
 detalhado (notas fiscais, recibos, fluxo de caixa, pagamentos, parcelamento medio, glosas de
 convenio), relatorios comerciais (conversao de orcamentos, receita por especialidade, metas de
 vendas/faltas, analitico geral), estatisticas de agenda (ocupacao, info geral), catalogo de
-procedimentos e especialidades, dados organizacionais (clinicas, unidades, usuarios, cadeiras)
-e extras de paciente (aniversariantes, resumo de orcamentos). O usuario ja autorizou usar tudo
-isso livremente, incluindo criar/cancelar agendamentos e cadastrar pacientes, sem precisar
-confirmar cada chamada - execute direto quando o pedido for claro. So avise (sem bloquear) se
-for algo de volume/impacto incomum, como cancelar varios agendamentos de uma vez.
+procedimentos e especialidades, dados organizacionais (clinicas, unidades, usuarios, cadeiras),
+extras de paciente (aniversariantes, resumo de orcamentos) e execucao clinica real dos
+orcamentos (clinicorp_orcamentos_execucao) - o Clinicorp marca, dentro de cada orcamento, quais
+procedimentos ja foram efetivamente executados (campo "Executed" de cada procedimento), entao
+da pra responder com precisao real quantos orcamentos aprovados/abertos ja foram TOTALMENTE
+finalizados clinicamente, quantos estao parcialmente em andamento e quantos ainda nem comecaram
+- sempre use essa ferramenta quando o usuario perguntar sobre orcamentos "em aberto x
+finalizados", "quantos ja terminaram" ou algo parecido, em vez de supor ou usar so a contagem
+de aprovacao financeira (que NAO e a mesma coisa que execucao clinica concluida). O usuario ja
+autorizou usar tudo isso livremente, incluindo criar/cancelar agendamentos e cadastrar
+pacientes, sem precisar confirmar cada chamada - execute direto quando o pedido for claro. So
+avise (sem bloquear) se for algo de volume/impacto incomum, como cancelar varios agendamentos
+de uma vez.
 
 Cada agendamento tem um status (confirmado, em espera, em atendimento, atendido, atrasado,
 faltou, protese pendente etc) - clinicorp_listar_agendamentos ja devolve o nome do status
@@ -625,6 +633,19 @@ const tools = [
       type: 'object',
       properties: { treatmentId: { type: 'integer', description: 'Id do tratamento/orcamento' } },
       required: ['treatmentId'],
+    },
+  },
+  {
+    name: 'clinicorp_orcamentos_execucao',
+    description: 'Cruza os orcamentos de um periodo com a execucao clinica real de cada procedimento (o Clinicorp marca cada procedimento como executado ou nao dentro do proprio orcamento) - responde com precisao quantos orcamentos aprovados/abertos ja foram finalizados (todos os procedimentos executados), quantos estao em andamento (parte executada) e quantos ainda nao foram iniciados, alem do valor financeiro de cada grupo. Aceita qualquer periodo (quebra automaticamente em janelas de 31 dias, limite da API). Use "status" pra filtrar so aprovados (APPROVED) ou outro status especifico.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'Data inicial YYYY-MM-DD' },
+        to: { type: 'string', description: 'Data final YYYY-MM-DD' },
+        status: { type: 'string', description: 'Filtra por status do orcamento (ex: APPROVED) - opcional, sem filtro traz todos' },
+      },
+      required: ['from', 'to'],
     },
   },
   // ---------- Controle do computador do usuario ----------
@@ -1211,6 +1232,13 @@ const toolHandlers = {
   clinicorp_organizacao: handleClinicorpOrganizacao,
   clinicorp_paciente_extra: handleClinicorpPacienteExtra,
   clinicorp_orcamento_detalhe: ({ treatmentId }) => clinicorp.getEstimateDetail({ treatmentId }),
+  clinicorp_orcamentos_execucao: async ({ from, to, status }) => {
+    const { resumo, orcamentos } = await clinicorp.getEstimatesExecutionSummary({ from, to, status });
+    // o resumo (contagens/valores exatos) sempre vai completo - e a resposta precisa que o
+    // usuario pediu. A lista individual de orcamentos so serve de exemplo/drill-down, entao
+    // essa sim corta se for grande (mesmo motivo do resumirLista: nao estourar tokens)
+    return { resumo, orcamentos: resumirLista(orcamentos, ['id', 'paciente', 'profissional', 'valor', 'status', 'data', 'totalProcedimentos', 'procedimentosExecutados', 'situacaoClinica']) };
+  },
 };
 
 async function runTool(name, input, session, sessionId) {
