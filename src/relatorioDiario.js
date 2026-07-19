@@ -103,7 +103,7 @@ export async function gerarRelatorioDiario({ diasClinicorp = 30 } = {}) {
   ]);
   const lucroBruto = (fin.TotalSales || 0) - (fin.TotalExpenses || 0);
   const taxaFaltas = infoAgenda.ScheduledTotal
-    ? ((infoAgenda.MissedAppointmentTotal / infoAgenda.ScheduledTotal) * 100).toFixed(1)
+    ? ((infoAgenda.MissedAppointmentTotal / infoAgenda.ScheduledTotal) * 100).toFixed(1).replace('.', ',')
     : '0,0';
 
   linhas.push(`🏥 2. RESUMO CLINICORP (Últimos ${diasClinicorp} dias — ${formatarDataBR(desde)} a ${formatarDataBR(ate)})`);
