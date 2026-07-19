@@ -20,6 +20,22 @@ const NOME_TIPO = {
 
 const DIAS_POR_FREQUENCIA = { diario: 1, semanal: 7, quinzenal: 14, mensal: 30, semestral: 182, anual: 365 };
 
+// data (AAAA-MM-DD) no fuso de Maceio de um instante - usado pra comparar "quantos DIAS DE
+// CALENDARIO se passaram" em vez de milissegundos exatos. Isso importa porque um envio manual
+// ("Enviar agora") pode acontecer fora da janela do horario configurado (ex: as 22h de um
+// relatorio configurado pras 07h) - se a checagem fosse por horas exatas (ultimoEnvio + 24h),
+// o proximo vencimento cairia sempre as 22h tambem, nunca mais alinhando com a janela das 07h,
+// e o envio automatico parava de disparar pra sempre. Comparando por dia de calendario, "ontem
+// (qualquer hora)" + frequencia diaria ja conta como vencido hoje de manha, na janela certa.
+function dataMaceioISO(date) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+function diasCalendarioEntre(dataIsoAntiga, dataIsoNova) {
+  const a = new Date(`${dataIsoAntiga}T00:00:00Z`);
+  const b = new Date(`${dataIsoNova}T00:00:00Z`);
+  return Math.round((b - a) / (24 * 60 * 60 * 1000));
+}
+
 async function garantirTabelas() {
   if (!pool) return;
   await pool.query(`
@@ -140,7 +156,10 @@ function formatarDataHoraBR() {
 // ---------- 1. Meta Ads - Financeiro Completo ----------
 
 export async function gerarRelatorioAdsFinanceiroCompleto() {
-  const contas = await metaAds.listAdAccounts();
+  const todasContas = await metaAds.listAdAccounts();
+  // account_status 1 = ACTIVE (Meta) - o usuario pediu pra so entrar conta ativa nesse
+  // relatorio, deixando de fora conta desabilitada/fechada/em revisao etc
+  const contas = todasContas.filter((c) => c.account_status === 1);
   const hoje = new Date();
   const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const ontem = hoje.toISOString().slice(0, 10);
@@ -148,7 +167,7 @@ export async function gerarRelatorioAdsFinanceiroCompleto() {
   const linhas = [];
   linhas.push('💳 RELATÓRIO FINANCEIRO COMPLETO - META ADS 💳');
   linhas.push(`Gerado em: ${formatarDataHoraBR()}`);
-  linhas.push(`Contas gerenciadas: ${contas.length}`);
+  linhas.push(`Contas ativas: ${contas.length} (de ${todasContas.length} contas no total)`);
   linhas.push('');
 
   let saldoTotalDisponivel = 0;
@@ -241,7 +260,14 @@ export async function gerarRelatorioAdsMetricasCompleto() {
 
       for (const a of analise.anuncios) {
         totalAnalisados++;
-        const linhaAnuncio = [`* ${camp.name} / ${a.nome}: gasto ${formatarReais(a.gasto)}, CTR ${formatarPct(a.ctr)}%, CPC ${formatarReais(a.cpc)}, resultados: ${a.resultados}${a.custoPorResultado ? ` (custo/resultado: ${formatarReais(a.custoPorResultado)})` : ''}`];
+        const linhaAnuncio = [
+          `* ${camp.name} / ${a.nome}`,
+          `  Valor usado: ${formatarReais(a.gasto)} | Alcance: ${a.alcance} | Impressoes: ${a.impressoes} | Cliques no link: ${a.cliquesLink} | CTR: ${formatarPct(a.ctr)}% | CPC: ${formatarReais(a.cpc)}`,
+          `  Conversas/resultado: ${a.resultados}${a.custoPorResultado ? ` (custo por resultado: ${formatarReais(a.custoPorResultado)})` : ''}`,
+        ];
+        if (a.taxaVideo50 || a.taxaVideo75 || a.taxaVideo100) {
+          linhaAnuncio.push(`  Retencao de video (sobre impressoes): 50% = ${formatarPct(a.taxaVideo50)}% | 75% = ${formatarPct(a.taxaVideo75)}% | 100% = ${formatarPct(a.taxaVideo100)}%`);
+        }
         if (a.alertas.length) {
           totalComAlerta++;
           for (const alerta of a.alertas) {
@@ -452,10 +478,10 @@ export function iniciarSchedulerRelatoriosProgramados() {
         if (horaCfgH !== horaAtualH) continue; // nao e a hora configurada desse relatorio
 
         const diasIntervalo = DIAS_POR_FREQUENCIA[cfg.frequencia] || 1;
-        const venceEm = cfg.ultimoEnvioEm
-          ? new Date(cfg.ultimoEnvioEm).getTime() + diasIntervalo * 24 * 60 * 60 * 1000
-          : 0; // nunca enviado - vence na hora
-        if (Date.now() < venceEm) continue;
+        if (cfg.ultimoEnvioEm) {
+          const diasPassados = diasCalendarioEntre(dataMaceioISO(new Date(cfg.ultimoEnvioEm)), dataMaceioISO(agora));
+          if (diasPassados < diasIntervalo) continue;
+        } // nunca enviado - vence na hora, nao precisa checar dias
 
         try {
           await enviarRelatorioAgora(cfg.tipo);

@@ -159,7 +159,10 @@ export async function getInsights({ objectId, objectType = 'account', level, sin
   const cache = CACHE_BY_TYPE[objectType] || accountTokenCache;
   const breakdownLevel = level || objectType;
 
-  const fields = ['spend', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'reach', 'actions', 'cost_per_action_type'];
+  const fields = [
+    'spend', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'reach', 'actions', 'cost_per_action_type',
+    'inline_link_clicks', 'video_p50_watched_actions', 'video_p75_watched_actions', 'video_p100_watched_actions',
+  ];
   if (breakdownLevel === 'ad') fields.push('ad_id', 'ad_name', 'adset_id', 'adset_name');
   else if (breakdownLevel === 'adset') fields.push('adset_id', 'adset_name');
   else if (breakdownLevel === 'campaign') fields.push('campaign_id', 'campaign_name');
@@ -274,19 +277,34 @@ export async function analyzeCampaignAds({ campaignId, since, until, datePreset 
     return { anuncios: [], resumo: 'Sem dados de performance no periodo (sem gasto/impressoes).' };
   }
 
+  // acao de video vem como lista [{action_type, value}] igual "actions" - so tem 1 item
+  // relevante aqui, mas o formato da API e sempre lista
+  const extrairValorVideo = (campo) => (Array.isArray(campo) && campo.length ? Number(campo[0].value || 0) : 0);
+
   const anuncios = rows.map((r) => {
     const { tipo, resultados, custoPorResultado } = extractResultsAndCPA(r);
+    const impressoes = Number(r.impressions || 0);
+    const videoViews50 = extrairValorVideo(r.video_p50_watched_actions);
+    const videoViews75 = extrairValorVideo(r.video_p75_watched_actions);
+    const videoViews100 = extrairValorVideo(r.video_p100_watched_actions);
     return {
       adId: r.ad_id,
       nome: r.ad_name,
       gasto: Number(r.spend || 0),
-      impressoes: Number(r.impressions || 0),
+      impressoes,
+      alcance: Number(r.reach || 0),
       cliques: Number(r.clicks || 0),
+      cliquesLink: Number(r.inline_link_clicks || 0),
       ctr: Number(r.ctr || 0),
       cpc: Number(r.cpc || 0),
       tipoResultado: tipo,
       resultados,
       custoPorResultado,
+      // taxa de retencao de video, relativa as impressoes do anuncio (so faz sentido pra
+      // anuncio em video - fica 0 pra anuncio estatico, o que e o esperado)
+      taxaVideo50: impressoes ? (videoViews50 / impressoes) * 100 : 0,
+      taxaVideo75: impressoes ? (videoViews75 / impressoes) * 100 : 0,
+      taxaVideo100: impressoes ? (videoViews100 / impressoes) * 100 : 0,
     };
   });
 
