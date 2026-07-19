@@ -833,8 +833,13 @@ app.post('/api/agenda/google/desconectar', async (req, res) => {
 
 iniciarSchedulerLembretes();
 iniciarSchedulerSaldoAnuncios();
-iniciarSchedulerRelatorioDiario();
-relatoriosProgramados.iniciarSchedulerRelatoriosProgramados();
+// Os dois schedulers de relatorio automatico (o antigo por env var LUMIA_WHATSAPP_ADMIN e o
+// novo por destinatarios cadastrados em relatorio_destinatarios) foram desativados a pedido do
+// usuario - relatorios estavam indo pra um numero errado. Os relatorios continuam disponiveis
+// sob demanda: gerarRelatorioDiario() no chat da Lumia, e o botao "Enviar agora" da aba
+// Relatorios no dashboard (endpoints em relatoriosProgramados.js).
+// iniciarSchedulerRelatorioDiario();
+// relatoriosProgramados.iniciarSchedulerRelatoriosProgramados();
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
