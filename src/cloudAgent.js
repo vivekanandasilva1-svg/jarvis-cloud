@@ -1505,9 +1505,11 @@ async function callClaude(history, sessionId) {
     // adaptive+medium o stop_reason vira end_turn e thinking_tokens fica em 0 (nao compete
     // mais pelo espaco do texto de verdade). Mas numa sessao com historico MUITO grande (varias
     // dezenas de milhares de tokens de contexto, cheio de tool_results antigos nao aparados),
-    // o modelo ainda consegue gastar o teto inteiro pensando - baixou de medium pra low e o
-    // teto subiu mais uma vez, dando mais folga real.
-    max_tokens: 24000,
+    // o modelo ainda consegue gastar o teto inteiro pensando - baixou de medium pra low pra
+    // reduzir isso. NAO sobe max_tokens alem de 16000: o proprio SDK da Anthropic recusa
+    // chamada sem streaming ("Streaming is required for operations that may take longer than
+    // 10 minutes") quando max_tokens fica alto demais - 24000 disparou esse erro em producao.
+    max_tokens: 16000,
     thinking: { type: 'adaptive' },
     output_config: { effort: 'low' },
     system: await systemPromptBlocos(),
