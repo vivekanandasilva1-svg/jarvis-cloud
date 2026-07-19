@@ -64,11 +64,13 @@ const tabBtnAgenda = document.getElementById('tabBtnAgenda');
 const tabBtnWhatsapp = document.getElementById('tabBtnWhatsapp');
 const tabBtnCrm = document.getElementById('tabBtnCrm');
 const tabBtnAuto = document.getElementById('tabBtnAuto');
+const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
 const tabPainel = document.getElementById('tabPainel');
 const tabAgenda = document.getElementById('tabAgenda');
 const tabWhatsapp = document.getElementById('tabWhatsapp');
 const tabCrm = document.getElementById('tabCrm');
 const tabAuto = document.getElementById('tabAuto');
+const tabRelatorios = document.getElementById('tabRelatorios');
 const agendaGoogleStatus = document.getElementById('agendaGoogleStatus');
 const agendaGoogleBtn = document.getElementById('agendaGoogleBtn');
 const agendaForm = document.getElementById('agendaForm');
@@ -130,6 +132,13 @@ const autoArquivoNome = document.getElementById('autoArquivoNome');
 const autoArquivoDescricao = document.getElementById('autoArquivoDescricao');
 const autoArquivoEnviar = document.getElementById('autoArquivoEnviar');
 const autoArquivosLista = document.getElementById('autoArquivosLista');
+
+// ---------- Relatorios: elementos ----------
+const relatorioNumeroInput = document.getElementById('relatorioNumeroInput');
+const relatorioNumeroAdicionar = document.getElementById('relatorioNumeroAdicionar');
+const relatorioNumeroErro = document.getElementById('relatorioNumeroErro');
+const relatorioDestinatariosLista = document.getElementById('relatorioDestinatariosLista');
+const relatorioConfigsLista = document.getElementById('relatorioConfigsLista');
 
 let sessionId = localStorage.getItem('jarvis_session_id');
 if (!sessionId) {
@@ -1535,11 +1544,13 @@ function mudarAba(aba) {
   tabWhatsapp.hidden = aba !== 'whatsapp';
   tabCrm.hidden = aba !== 'crm';
   tabAuto.hidden = aba !== 'auto';
+  tabRelatorios.hidden = aba !== 'relatorios';
   tabBtnPainel.classList.toggle('active', aba === 'painel');
   tabBtnAgenda.classList.toggle('active', aba === 'agenda');
   tabBtnWhatsapp.classList.toggle('active', aba === 'whatsapp');
   tabBtnCrm.classList.toggle('active', aba === 'crm');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
+  tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
   if (aba === 'agenda') {
     carregarStatusGoogleAgenda();
     carregarEventosAgenda();
@@ -1550,6 +1561,9 @@ function mudarAba(aba) {
     carregarCrm();
   } else if (aba === 'auto') {
     carregarConfigAutoAtendimento();
+  } else if (aba === 'relatorios') {
+    carregarDestinatariosRelatorios();
+    carregarConfigsRelatorios();
   }
   // o polling do CRM (contatos + conversa aberta) so deve rodar com a aba visivel, senao fica
   // batendo na API/banco a toa em segundo plano pra sempre
@@ -1560,6 +1574,7 @@ tabBtnPainel.addEventListener('click', () => mudarAba('painel'));
 tabBtnAgenda.addEventListener('click', () => mudarAba('agenda'));
 tabBtnWhatsapp.addEventListener('click', () => mudarAba('whatsapp'));
 tabBtnCrm.addEventListener('click', () => mudarAba('crm'));
+tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
 
 // ---------- Agenda: Google Agenda (conectar/desconectar) ----------
@@ -2478,3 +2493,215 @@ autoArquivoEnviar.addEventListener('click', async () => {
     autoArquivoEnviar.disabled = false;
   }
 });
+
+// ---------- Relatorios programados ----------
+
+const RELATORIO_FREQUENCIAS = [
+  { valor: 'diario', rotulo: 'Diário' },
+  { valor: 'semanal', rotulo: 'Semanal' },
+  { valor: 'quinzenal', rotulo: 'Quinzenal' },
+  { valor: 'mensal', rotulo: 'Mensal' },
+  { valor: 'semestral', rotulo: 'Semestral' },
+  { valor: 'anual', rotulo: 'Anual' },
+];
+
+async function carregarDestinatariosRelatorios() {
+  relatorioDestinatariosLista.textContent = '';
+  const carregando = document.createElement('p');
+  carregando.className = 'agenda-vazia';
+  carregando.textContent = 'Carregando...';
+  relatorioDestinatariosLista.appendChild(carregando);
+
+  try {
+    const res = await fetch('/api/relatorios/destinatarios', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+
+    relatorioDestinatariosLista.textContent = '';
+    const lista = data.destinatarios || [];
+    if (!lista.length) {
+      const vazio = document.createElement('p');
+      vazio.className = 'agenda-vazia';
+      vazio.textContent = 'Nenhum numero cadastrado ainda - os relatorios nao tem pra onde ir.';
+      relatorioDestinatariosLista.appendChild(vazio);
+      return;
+    }
+
+    for (const dest of lista) {
+      const item = document.createElement('div');
+      item.className = 'auto-arquivo-item';
+
+      const info = document.createElement('div');
+      info.className = 'auto-arquivo-info';
+      const nome = document.createElement('div');
+      nome.className = 'auto-arquivo-nome';
+      nome.textContent = dest.numero;
+      info.appendChild(nome);
+      item.appendChild(info);
+
+      const apagarBtn = document.createElement('button');
+      apagarBtn.type = 'button';
+      apagarBtn.className = 'agenda-evento-cancelar';
+      apagarBtn.textContent = '✕';
+      apagarBtn.title = 'Remover numero';
+      apagarBtn.addEventListener('click', async () => {
+        if (!confirm(`Remover ${dest.numero} dos destinatarios de relatorio?`)) return;
+        try {
+          await fetch(`/api/relatorios/destinatarios/${dest.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+          carregarDestinatariosRelatorios();
+        } catch (err) {
+          addBubble(`Erro removendo numero: ${err.message}`, 'system');
+        }
+      });
+      item.appendChild(apagarBtn);
+
+      relatorioDestinatariosLista.appendChild(item);
+    }
+  } catch (err) {
+    relatorioDestinatariosLista.textContent = '';
+    const erro = document.createElement('p');
+    erro.className = 'agenda-vazia';
+    erro.textContent = `Nao consegui carregar os destinatarios: ${err.message}`;
+    relatorioDestinatariosLista.appendChild(erro);
+  }
+}
+
+relatorioNumeroAdicionar.addEventListener('click', async () => {
+  const numero = relatorioNumeroInput.value.trim();
+  relatorioNumeroErro.hidden = true;
+  if (!numero) return;
+  try {
+    const res = await fetch('/api/relatorios/destinatarios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ numero }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    relatorioNumeroInput.value = '';
+    carregarDestinatariosRelatorios();
+  } catch (err) {
+    relatorioNumeroErro.textContent = err.message;
+    relatorioNumeroErro.hidden = false;
+  }
+});
+
+function formatarUltimoEnvio(iso) {
+  if (!iso) return 'Nunca enviado ainda';
+  const data = new Date(iso);
+  return `Ultimo envio: ${data.toLocaleDateString('pt-BR')} ${data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+async function carregarConfigsRelatorios() {
+  relatorioConfigsLista.textContent = '';
+  const carregando = document.createElement('p');
+  carregando.className = 'agenda-vazia';
+  carregando.textContent = 'Carregando...';
+  relatorioConfigsLista.appendChild(carregando);
+
+  try {
+    const res = await fetch('/api/relatorios/configs', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+
+    relatorioConfigsLista.textContent = '';
+    for (const cfg of data.configs || []) {
+      relatorioConfigsLista.appendChild(criarCardConfigRelatorio(cfg));
+    }
+  } catch (err) {
+    relatorioConfigsLista.textContent = '';
+    const erro = document.createElement('p');
+    erro.className = 'agenda-vazia';
+    erro.textContent = `Nao consegui carregar os relatorios: ${err.message}`;
+    relatorioConfigsLista.appendChild(erro);
+  }
+}
+
+function criarCardConfigRelatorio(cfg) {
+  const card = document.createElement('div');
+  card.className = 'auto-aviso relatorio-config-card';
+
+  const titulo = document.createElement('div');
+  titulo.className = 'relatorio-config-titulo';
+  titulo.textContent = cfg.nome;
+  card.appendChild(titulo);
+
+  const toggleRow = document.createElement('div');
+  toggleRow.className = 'auto-toggle-row';
+  const switchLabel = document.createElement('label');
+  switchLabel.className = 'auto-switch';
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = !!cfg.ativo;
+  const track = document.createElement('span');
+  track.className = 'auto-switch-track';
+  const thumb = document.createElement('span');
+  thumb.className = 'auto-switch-thumb';
+  track.appendChild(thumb);
+  switchLabel.appendChild(checkbox);
+  switchLabel.appendChild(track);
+  toggleRow.appendChild(switchLabel);
+  const statusLabel = document.createElement('span');
+  statusLabel.textContent = cfg.ativo ? 'Ativado' : 'Desativado';
+  toggleRow.appendChild(statusLabel);
+  card.appendChild(toggleRow);
+
+  const selectFrequencia = document.createElement('select');
+  selectFrequencia.className = 'relatorio-config-select';
+  for (const f of RELATORIO_FREQUENCIAS) {
+    const opt = document.createElement('option');
+    opt.value = f.valor;
+    opt.textContent = f.rotulo;
+    if (f.valor === cfg.frequencia) opt.selected = true;
+    selectFrequencia.appendChild(opt);
+  }
+  card.appendChild(selectFrequencia);
+
+  const salvar = async () => {
+    try {
+      await fetch(`/api/relatorios/configs/${cfg.tipo}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ ativo: checkbox.checked, frequencia: selectFrequencia.value }),
+      });
+      statusLabel.textContent = checkbox.checked ? 'Ativado' : 'Desativado';
+    } catch (err) {
+      addBubble(`Erro salvando configuracao do relatorio: ${err.message}`, 'system');
+    }
+  };
+  checkbox.addEventListener('change', salvar);
+  selectFrequencia.addEventListener('change', salvar);
+
+  const ultimoEnvio = document.createElement('p');
+  ultimoEnvio.className = 'agenda-vazia';
+  ultimoEnvio.style.margin = '0';
+  ultimoEnvio.textContent = formatarUltimoEnvio(cfg.ultimoEnvioEm);
+  card.appendChild(ultimoEnvio);
+
+  const enviarBtn = document.createElement('button');
+  enviarBtn.type = 'button';
+  enviarBtn.className = 'relatorio-config-enviar';
+  enviarBtn.textContent = 'Enviar agora';
+  enviarBtn.addEventListener('click', async () => {
+    enviarBtn.disabled = true;
+    enviarBtn.textContent = 'Enviando...';
+    try {
+      const res = await fetch(`/api/relatorios/enviar-agora/${cfg.tipo}`, {
+        method: 'POST',
+        headers: { 'x-app-password': appPassword },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+      enviarBtn.textContent = 'Enviado ✓';
+      carregarConfigsRelatorios();
+    } catch (err) {
+      addBubble(`Erro enviando relatorio: ${err.message}`, 'system');
+      enviarBtn.textContent = 'Enviar agora';
+    } finally {
+      enviarBtn.disabled = false;
+    }
+  });
+  card.appendChild(enviarBtn);
+
+  return card;
+}

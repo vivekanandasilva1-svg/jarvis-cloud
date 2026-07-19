@@ -20,6 +20,7 @@ import * as whatsappInstances from './whatsappInstances.js';
 import * as autoAtendimento from './autoAtendimento.js';
 import * as autoArquivos from './autoAtendimentoArquivos.js';
 import * as crm from './crm.js';
+import * as relatoriosProgramados from './relatoriosProgramados.js';
 
 const execAsync = promisify(exec);
 
@@ -647,6 +648,65 @@ app.delete('/api/auto-atendimento/arquivos/:id', async (req, res) => {
   }
 });
 
+// ---------- Relatorios programados (aba "Relatorios") ----------
+
+app.get('/api/relatorios/destinatarios', async (req, res) => {
+  try {
+    res.json({ destinatarios: await relatoriosProgramados.listarDestinatarios() });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/relatorios/destinatarios', async (req, res) => {
+  const { numero } = req.body || {};
+  if (!numero) return res.status(400).json({ erro: 'numero obrigatorio' });
+  try {
+    const id = await relatoriosProgramados.adicionarDestinatario(numero);
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/relatorios/destinatarios/:id', async (req, res) => {
+  try {
+    await relatoriosProgramados.removerDestinatario(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/relatorios/configs', async (req, res) => {
+  try {
+    res.json({ configs: await relatoriosProgramados.obterConfigs() });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/relatorios/configs/:tipo', async (req, res) => {
+  const { ativo, frequencia } = req.body || {};
+  try {
+    await relatoriosProgramados.salvarConfig(req.params.tipo, { ativo, frequencia });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// manda o relatorio na hora, pra todos os destinatarios cadastrados - usado pelo botao
+// "Enviar agora" da aba, sem esperar a data programada
+app.post('/api/relatorios/enviar-agora/:tipo', async (req, res) => {
+  try {
+    const resultado = await relatoriosProgramados.enviarRelatorioAgora(req.params.tipo);
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 // ---------- CRM estilo Kanban (espelho das conversas do WhatsApp por etapa do funil) ----------
 
 app.get('/api/crm/contatos', async (req, res) => {
@@ -774,6 +834,7 @@ app.post('/api/agenda/google/desconectar', async (req, res) => {
 iniciarSchedulerLembretes();
 iniciarSchedulerSaldoAnuncios();
 iniciarSchedulerRelatorioDiario();
+relatoriosProgramados.iniciarSchedulerRelatoriosProgramados();
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {

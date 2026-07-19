@@ -71,6 +71,7 @@
       <button type="button" class="tab-btn" id="tabBtnWhatsapp" data-tab="whatsapp">WhatsApp</button>
       <button type="button" class="tab-btn" id="tabBtnCrm" data-tab="crm">CRM</button>
       <button type="button" class="tab-btn" id="tabBtnAuto" data-tab="auto">Auto Atendimento</button>
+      <button type="button" class="tab-btn" id="tabBtnRelatorios" data-tab="relatorios">Relatórios</button>
     </div>
 
     <div class="agent-panel" id="agentPanel" hidden>
@@ -435,6 +436,30 @@
       <div class="auto-coluna-dir">
         <label class="auto-label">Prompt de treinamento (como ela deve atender esses contatos)</label>
         <textarea id="autoPrompt" placeholder="Ex: Voce e a recepcionista virtual da Clinica X. Seja cordial, colete nome e motivo do contato, e ofereça horarios disponiveis pra agendar consulta quando pedido..."></textarea>
+      </div>
+    </div>
+
+    <div class="window-body tab-auto" id="tabRelatorios" hidden>
+      <div class="auto-coluna-esq">
+        <div class="auto-aviso">
+          Cadastre aqui os numeros de WhatsApp que devem receber os relatórios ativos abaixo.
+          Cada relatório pode ser ligado/desligado e ter sua própria frequência - quando estiver
+          na hora, a Lumia manda automaticamente pra todos os números cadastrados.
+        </div>
+
+        <label class="auto-label">Números de WhatsApp destinatários</label>
+        <div class="auto-upload-row">
+          <input type="text" id="relatorioNumeroInput" placeholder="Ex: 5582999998888" />
+          <button type="button" id="relatorioNumeroAdicionar">Adicionar</button>
+        </div>
+        <p class="agenda-erro" id="relatorioNumeroErro" hidden></p>
+        <div class="auto-arquivos-lista" id="relatorioDestinatariosLista">
+          <p class="agenda-vazia">Carregando...</p>
+        </div>
+      </div>
+
+      <div class="auto-coluna-dir" id="relatorioConfigsLista">
+        <p class="agenda-vazia">Carregando...</p>
       </div>
     </div>
   </div>

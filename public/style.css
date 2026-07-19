@@ -1334,6 +1334,36 @@ html, body {
   font-weight: 600;
   cursor: pointer;
 }
+.relatorio-config-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.relatorio-config-titulo { font-weight: 600; color: var(--text); font-size: 13px; }
+.relatorio-config-select {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 12.5px;
+  outline: none;
+  align-self: flex-start;
+}
+.relatorio-config-select:focus { border-color: var(--gold); }
+.relatorio-config-enviar {
+  align-self: flex-start;
+  border: 1px solid rgba(212, 175, 55, 0.5);
+  background: rgba(212, 175, 55, 0.16);
+  color: var(--gold-bright);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .auto-arquivos-lista { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
 .auto-arquivo-item {
   display: flex;
