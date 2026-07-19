@@ -690,9 +690,9 @@ app.get('/api/relatorios/configs', async (req, res) => {
 });
 
 app.post('/api/relatorios/configs/:tipo', async (req, res) => {
-  const { ativo, frequencia } = req.body || {};
+  const { ativo, frequencia, horaEnvio } = req.body || {};
   try {
-    await relatoriosProgramados.salvarConfig(req.params.tipo, { ativo, frequencia });
+    await relatoriosProgramados.salvarConfig(req.params.tipo, { ativo, frequencia, horaEnvio });
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });

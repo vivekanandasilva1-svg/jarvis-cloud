@@ -2709,6 +2709,15 @@ function criarCardConfigRelatorio(cfg) {
   toggleRow.appendChild(statusLabel);
   card.appendChild(toggleRow);
 
+  const linhaConfig = document.createElement('div');
+  linhaConfig.className = 'relatorio-config-linha';
+
+  const blocoFrequencia = document.createElement('div');
+  blocoFrequencia.className = 'relatorio-config-bloco';
+  const rotuloFrequencia = document.createElement('label');
+  rotuloFrequencia.className = 'auto-label';
+  rotuloFrequencia.textContent = 'De quanto em quanto tempo';
+  blocoFrequencia.appendChild(rotuloFrequencia);
   const selectFrequencia = document.createElement('select');
   selectFrequencia.className = 'relatorio-config-select';
   for (const f of RELATORIO_FREQUENCIAS) {
@@ -2718,14 +2727,30 @@ function criarCardConfigRelatorio(cfg) {
     if (f.valor === cfg.frequencia) opt.selected = true;
     selectFrequencia.appendChild(opt);
   }
-  card.appendChild(selectFrequencia);
+  blocoFrequencia.appendChild(selectFrequencia);
+  linhaConfig.appendChild(blocoFrequencia);
+
+  const blocoHora = document.createElement('div');
+  blocoHora.className = 'relatorio-config-bloco';
+  const rotuloHora = document.createElement('label');
+  rotuloHora.className = 'auto-label';
+  rotuloHora.textContent = 'Horario do envio';
+  blocoHora.appendChild(rotuloHora);
+  const inputHora = document.createElement('input');
+  inputHora.type = 'time';
+  inputHora.className = 'relatorio-config-select';
+  inputHora.value = cfg.horaEnvio || '07:00';
+  blocoHora.appendChild(inputHora);
+  linhaConfig.appendChild(blocoHora);
+
+  card.appendChild(linhaConfig);
 
   const salvar = async () => {
     try {
       await fetch(`/api/relatorios/configs/${cfg.tipo}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-        body: JSON.stringify({ ativo: checkbox.checked, frequencia: selectFrequencia.value }),
+        body: JSON.stringify({ ativo: checkbox.checked, frequencia: selectFrequencia.value, horaEnvio: inputHora.value }),
       });
       statusLabel.textContent = checkbox.checked ? 'Ativado' : 'Desativado';
     } catch (err) {
@@ -2734,6 +2759,7 @@ function criarCardConfigRelatorio(cfg) {
   };
   checkbox.addEventListener('change', salvar);
   selectFrequencia.addEventListener('change', salvar);
+  inputHora.addEventListener('change', salvar);
 
   const ultimoEnvio = document.createElement('p');
   ultimoEnvio.className = 'agenda-vazia';

@@ -34,10 +34,14 @@ async function garantirTabelas() {
       tipo TEXT PRIMARY KEY,
       ativo BOOLEAN NOT NULL DEFAULT false,
       frequencia TEXT NOT NULL DEFAULT 'diario',
+      hora_envio TEXT NOT NULL DEFAULT '07:00',
       ultimo_envio_em TIMESTAMPTZ,
       atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // coluna nova (horario configuravel de envio) - IF NOT EXISTS pra nao quebrar instalacoes
+  // que ja tinham essa tabela antes dessa funcionalidade existir
+  await pool.query(`ALTER TABLE relatorio_configs ADD COLUMN IF NOT EXISTS hora_envio TEXT NOT NULL DEFAULT '07:00';`);
   // garante que as 4 linhas de config sempre existam (mais facil de consultar/atualizar do
   // que checar existencia toda vez)
   for (const tipo of TIPOS_RELATORIO) {
@@ -81,9 +85,9 @@ export async function removerDestinatario(id) {
 // ---------- configs (quais relatorios estao ativos e com que frequencia) ----------
 
 export async function obterConfigs() {
-  if (!pool) return TIPOS_RELATORIO.map((tipo) => ({ tipo, nome: NOME_TIPO[tipo], ativo: false, frequencia: 'diario', ultimoEnvioEm: null }));
+  if (!pool) return TIPOS_RELATORIO.map((tipo) => ({ tipo, nome: NOME_TIPO[tipo], ativo: false, frequencia: 'diario', horaEnvio: '07:00', ultimoEnvioEm: null }));
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT tipo, ativo, frequencia, ultimo_envio_em FROM relatorio_configs');
+  const { rows } = await pool.query('SELECT tipo, ativo, frequencia, hora_envio, ultimo_envio_em FROM relatorio_configs');
   return TIPOS_RELATORIO.map((tipo) => {
     const r = rows.find((x) => x.tipo === tipo);
     return {
@@ -91,20 +95,28 @@ export async function obterConfigs() {
       nome: NOME_TIPO[tipo],
       ativo: r?.ativo || false,
       frequencia: r?.frequencia || 'diario',
+      horaEnvio: r?.hora_envio || '07:00',
       ultimoEnvioEm: r?.ultimo_envio_em || null,
     };
   });
 }
 
-export async function salvarConfig(tipo, { ativo, frequencia }) {
+function validarHoraEnvio(hora) {
+  if (!hora) return '07:00';
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) throw new Error(`Horario invalido: "${hora}" (use o formato HH:MM)`);
+  return hora;
+}
+
+export async function salvarConfig(tipo, { ativo, frequencia, horaEnvio }) {
   if (!TIPOS_RELATORIO.includes(tipo)) throw new Error(`Tipo de relatorio desconhecido: ${tipo}`);
   if (frequencia && !FREQUENCIAS.includes(frequencia)) throw new Error(`Frequencia desconhecida: ${frequencia}`);
+  const horaValidada = validarHoraEnvio(horaEnvio);
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
   await pool.query(
-    `INSERT INTO relatorio_configs (tipo, ativo, frequencia, atualizado_em) VALUES ($1, $2, $3, now())
-     ON CONFLICT (tipo) DO UPDATE SET ativo = $2, frequencia = $3, atualizado_em = now()`,
-    [tipo, !!ativo, frequencia || 'diario'],
+    `INSERT INTO relatorio_configs (tipo, ativo, frequencia, hora_envio, atualizado_em) VALUES ($1, $2, $3, $4, now())
+     ON CONFLICT (tipo) DO UPDATE SET ativo = $2, frequencia = $3, hora_envio = $4, atualizado_em = now()`,
+    [tipo, !!ativo, frequencia || 'diario', horaValidada],
   );
 }
 
@@ -416,8 +428,9 @@ export async function enviarRelatorioAgora(tipo) {
   return { destinatarios: destinatarios.length };
 }
 
-// roda em segundo plano - checa 1x por dia se algum relatorio configurado esta "vencido"
-// (passou o intervalo da frequencia escolhida desde o ultimo envio) e manda pros destinatarios
+// roda em segundo plano - checa a cada 5min (fuso Maceio) se algum relatorio configurado esta
+// dentro da janela do SEU horario de envio (hora_envio, primeiros 5min dessa hora) E ja passou
+// o intervalo da frequencia escolhida desde o ultimo envio - se sim, manda pros destinatarios
 // cadastrados. So chamado uma vez, no boot do server.js.
 export function iniciarSchedulerRelatoriosProgramados() {
   const checar = async () => {
@@ -427,9 +440,17 @@ export function iniciarSchedulerRelatoriosProgramados() {
       const destinatarios = await listarDestinatarios();
       if (!destinatarios.length) return; // nada a fazer sem ninguem pra receber
 
+      const agora = new Date();
+      const horaAtual = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit', hour12: false });
+      const [horaAtualH, horaAtualM] = horaAtual.split(':').map(Number);
+      if (horaAtualM >= 5) return; // so dispara nos primeiros 5min de cada hora configurada
+
       const configs = await obterConfigs();
       for (const cfg of configs) {
         if (!cfg.ativo) continue;
+        const [horaCfgH] = (cfg.horaEnvio || '07:00').split(':').map(Number);
+        if (horaCfgH !== horaAtualH) continue; // nao e a hora configurada desse relatorio
+
         const diasIntervalo = DIAS_POR_FREQUENCIA[cfg.frequencia] || 1;
         const venceEm = cfg.ultimoEnvioEm
           ? new Date(cfg.ultimoEnvioEm).getTime() + diasIntervalo * 24 * 60 * 60 * 1000
@@ -447,7 +468,7 @@ export function iniciarSchedulerRelatoriosProgramados() {
     }
   };
 
-  // checa a cada 15min - so dispara de fato quando algo realmente vence (checagem de datas
-  // acima), entao rodar com frequencia nao manda nada duplicado
-  setInterval(checar, 15 * 60 * 1000).unref();
+  // checa a cada 5min - precisa ser <= a janela de 5min da hora configurada (senao pode pular
+  // a janela inteira de algum relatorio); so dispara de fato quando a hora bate e algo vence
+  setInterval(checar, 5 * 60 * 1000).unref();
 }
