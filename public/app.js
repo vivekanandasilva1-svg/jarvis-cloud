@@ -114,6 +114,8 @@ const crmConversaForm = document.getElementById('crmConversaForm');
 const crmConversaInput = document.getElementById('crmConversaInput');
 const crmConversaFechar = document.getElementById('crmConversaFechar');
 const crmConversaErro = document.getElementById('crmConversaErro');
+const crmConversaPausar = document.getElementById('crmConversaPausar');
+const crmConversaApagar = document.getElementById('crmConversaApagar');
 
 // ---------- Auto Atendimento: elementos ----------
 const autoAtivo = document.getElementById('autoAtivo');
@@ -2084,6 +2086,13 @@ function crmCriarCard(contato) {
   const nome = document.createElement('div');
   nome.className = 'crm-card-nome';
   nome.textContent = contato.nome || contato.numero;
+  if (contato.auto_pausado) {
+    const badge = document.createElement('span');
+    badge.className = 'crm-card-pausado';
+    badge.title = 'Auto-atendimento pausado nesta conversa';
+    badge.textContent = '⏸';
+    nome.appendChild(badge);
+  }
   card.appendChild(nome);
 
   const numero = document.createElement('div');
@@ -2234,12 +2243,19 @@ async function carregarMensagensCrm() {
   }
 }
 
+function crmAtualizarBotaoPausar() {
+  const pausado = !!crmContatoAberto?.auto_pausado;
+  crmConversaPausar.textContent = pausado ? 'Retomar auto-atendimento' : 'Pausar auto-atendimento';
+  crmConversaPausar.classList.toggle('crm-btn-ativo', pausado);
+}
+
 function abrirConversaCrm(contato) {
   crmContatoAberto = contato;
   crmConversaNome.textContent = contato.nome || contato.numero;
   crmConversaNumero.textContent = `${contato.numero} · ${contato.instancia}`;
   crmConversaErro.hidden = true;
   crmConversa.hidden = false;
+  crmAtualizarBotaoPausar();
   carregarMensagensCrm();
   pararPollingConversaCrm();
   crmPollingConversa = setInterval(carregarMensagensCrm, 5000);
@@ -2249,6 +2265,53 @@ crmConversaFechar.addEventListener('click', () => {
   crmConversa.hidden = true;
   crmContatoAberto = null;
   pararPollingConversaCrm();
+});
+
+crmConversaPausar.addEventListener('click', async () => {
+  if (!crmContatoAberto) return;
+  const novoPausado = !crmContatoAberto.auto_pausado;
+  crmConversaPausar.disabled = true;
+  try {
+    const res = await fetch(`/api/crm/contatos/${crmContatoAberto.id}/auto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ pausado: novoPausado }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    crmContatoAberto.auto_pausado = novoPausado;
+    crmAtualizarBotaoPausar();
+    carregarCrm();
+  } catch (err) {
+    crmConversaErro.textContent = `Nao consegui atualizar: ${err.message}`;
+    crmConversaErro.hidden = false;
+  } finally {
+    crmConversaPausar.disabled = false;
+  }
+});
+
+crmConversaApagar.addEventListener('click', async () => {
+  if (!crmContatoAberto) return;
+  const nomeOuNumero = crmContatoAberto.nome || crmContatoAberto.numero;
+  if (!confirm(`Apagar a conversa com ${nomeOuNumero}? Isso remove o card e todo o historico de mensagens do CRM - nao da pra desfazer.`)) return;
+  crmConversaApagar.disabled = true;
+  try {
+    const res = await fetch(`/api/crm/contatos/${crmContatoAberto.id}`, {
+      method: 'DELETE',
+      headers: { 'x-app-password': appPassword },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    crmConversa.hidden = true;
+    crmContatoAberto = null;
+    pararPollingConversaCrm();
+    carregarCrm();
+  } catch (err) {
+    crmConversaErro.textContent = `Nao consegui apagar: ${err.message}`;
+    crmConversaErro.hidden = false;
+  } finally {
+    crmConversaApagar.disabled = false;
+  }
 });
 
 crmConversaForm.addEventListener('submit', async (e) => {

@@ -866,6 +866,7 @@ html, body {
 }
 .crm-conversa-header strong { font-size: 14px; color: var(--text); }
 .crm-conversa-sub { margin: 2px 0 0; font-size: 11.5px; color: var(--text-dim); }
+.crm-conversa-acoes { display: flex; align-items: center; gap: 8px; }
 #crmConversaFechar {
   border: 1px solid var(--border);
   background: none;
@@ -876,6 +877,24 @@ html, body {
   cursor: pointer;
 }
 #crmConversaFechar:hover { color: var(--gold-bright); border-color: var(--gold); }
+
+.crm-btn-secundario, .crm-btn-perigo {
+  border: 1px solid var(--border);
+  background: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.crm-btn-secundario { color: var(--text-dim); }
+.crm-btn-secundario:hover { color: var(--gold-bright); border-color: var(--gold); }
+.crm-btn-secundario.crm-btn-ativo { color: var(--gold-bright); border-color: var(--gold); }
+.crm-btn-perigo { color: #e8836b; border-color: rgba(232, 131, 107, 0.4); }
+.crm-btn-perigo:hover { color: #e8836b; border-color: #e8836b; background: rgba(232, 131, 107, 0.08); }
+.crm-btn-secundario:disabled, .crm-btn-perigo:disabled { opacity: 0.5; cursor: default; }
+
+.crm-card-pausado { margin-left: 6px; font-size: 11px; opacity: 0.85; }
 
 .crm-conversa-log {
   flex: 1 1 auto;

@@ -446,6 +446,9 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   // proprios), nunca a conversa pessoal da Lumia
   const configAuto = await autoAtendimento.obterConfig();
   if (!configAuto.ativo || configAuto.instancia !== instanciaDoWebhook) return;
+  // pausa pontual por conversa (aba CRM) - tem prioridade sobre a config global estar ativa;
+  // a mensagem do contato ja foi registrada no CRM acima, so nao gera resposta automatica
+  if (await crm.estaPausado(numero, instanciaDoWebhook).catch(() => false)) return;
 
   // "digitando..."/"gravando audio..." no WhatsApp expira sozinho depois de poucos segundos
   // (o app do contato esconde o indicador se nao renovar) - como pensar a resposta (chamar a
@@ -743,6 +746,25 @@ app.post('/api/crm/contatos/:id/etapa', async (req, res) => {
   if (!etapa) return res.status(400).json({ erro: 'etapa e obrigatoria' });
   try {
     await crm.moverEtapa(Number(req.params.id), etapa);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/contatos/:id/auto', async (req, res) => {
+  const { pausado } = req.body || {};
+  try {
+    await crm.alternarAutoAtendimento(Number(req.params.id), !!pausado);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/crm/contatos/:id', async (req, res) => {
+  try {
+    await crm.apagarContato(Number(req.params.id));
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });

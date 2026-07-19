@@ -42,6 +42,9 @@ async function garantirTabelas() {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS crm_mensagens_contato_idx ON crm_mensagens (numero, instancia, criado_em);`);
+  // coluna nova (pausar auto-atendimento so pra essa conversa) - IF NOT EXISTS pra nao quebrar
+  // instalacoes que ja tinham essa tabela antes dessa funcionalidade existir
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS auto_pausado BOOLEAN NOT NULL DEFAULT false;`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas do CRM:', err.message);
@@ -92,10 +95,44 @@ export async function listarContatos() {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em
+    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado
      FROM crm_contatos ORDER BY ultima_mensagem_em DESC NULLS LAST`,
   );
   return rows;
+}
+
+// liga/desliga o auto-atendimento so pra essa conversa especifica - nao mexe na config global
+// (auto_atendimento_config.ativo), so cria uma excecao pontual pra esse numero
+export async function alternarAutoAtendimento(id, pausado) {
+  if (!pool) return;
+  await tabelasProntas;
+  await pool.query(`UPDATE crm_contatos SET auto_pausado = $1 WHERE id = $2`, [!!pausado, id]);
+}
+
+// consultado pelo auto-atendimento (autoAtendimento.js/server.js) antes de gerar qualquer
+// resposta automatica - contato/instancia sem card ainda (primeira mensagem) nunca esta pausado
+export async function estaPausado(numero, instancia) {
+  if (!pool) return false;
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT auto_pausado FROM crm_contatos WHERE numero = $1 AND instancia = $2`,
+    [numero, instancia],
+  );
+  return rows[0]?.auto_pausado || false;
+}
+
+// apaga a conversa inteira (card + historico de mensagens do CRM) - irreversivel, usado pelo
+// botao "Apagar conversa" do app. Nao mexe na sessao/historico do auto-atendimento
+// (auto_atendimento_sessions em autoAtendimento.js) de proposito: apagar do CRM e so limpeza
+// visual do funil, nao deve resetar a memoria da conversa com o contato caso ele volte a falar.
+export async function apagarContato(id) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const { rows } = await pool.query(`SELECT numero, instancia FROM crm_contatos WHERE id = $1`, [id]);
+  if (!rows.length) return;
+  const { numero, instancia } = rows[0];
+  await pool.query(`DELETE FROM crm_mensagens WHERE numero = $1 AND instancia = $2`, [numero, instancia]);
+  await pool.query(`DELETE FROM crm_contatos WHERE id = $1`, [id]);
 }
 
 export async function listarMensagens(numero, instancia) {
