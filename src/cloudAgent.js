@@ -1993,9 +1993,14 @@ async function rodarLoopDeFerramentas(session, sessionId, indiceProtegido = sess
     // no historico salvo - so serve pra essa chamada extra, o historico real so recebe o
     // texto final (de verdade ou o aviso de erro) alguns passos abaixo.
     console.error(`[callClaude] resposta sem texto - stop_reason=${response.stop_reason}, blocos=${response.content.map((b) => b.type).join(',')}`);
+    // NUNCA reaproveita response.content aqui - se o corte por max_tokens aconteceu no meio de
+    // um tool_use (nao so no "pensando"), esse bloco fica incompleto/sem tool_result nenhum, e
+    // empurrar ele seguido de uma mensagem de texto puro e EXATAMENTE a estrutura invalida que
+    // a Anthropic rejeita ("tool_use sem tool_result imediatamente depois") - foi isso que
+    // causou um novo 400 na hora de tentar consertar o problema anterior. A retentativa parte
+    // do ultimo estado valido conhecido (session.history), sem incluir a resposta truncada.
     const historicoComNudge = [
       ...session.history,
-      { role: 'assistant', content: response.content },
       { role: 'user', content: 'Responda de forma direta e objetiva com o resultado que voce ja tem - sem pensar mais, so o texto final da resposta.' },
     ];
     textoReal = extractText(await callClaude(historicoComNudge, sessionId));
