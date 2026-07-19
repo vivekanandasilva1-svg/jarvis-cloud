@@ -1448,6 +1448,17 @@ async function buildUserContent(userMessage, attachments) {
 // so "pensando") - sem essa protecao, o anexo seria apagado do historico no mesmo turno em
 // que falhou em ser realmente lido, e o usuario perderia o arquivo pra sempre so por ter
 // pedido de novo.
+// tool_result de texto grande (ex: relatorio do Clinicorp com centenas de itens) - so encolhe
+// se o resultado ainda estiver no historico QUANDO NAO E MAIS O TURNO ATUAL (protegido por
+// indiceProtegido, igual imagem/PDF). Um relatorio ja respondido nao precisa continuar ocupando
+// dezenas de milhares de tokens de contexto pra sempre - isso sozinho estava inflando sessoes
+// longas a ponto do modelo gastar o proprio limite de "pensar" so digerindo contexto velho.
+const LIMITE_TOOL_RESULT_ANTIGO = 2000;
+function encolherTextoGrande(conteudo) {
+  if (typeof conteudo !== 'string' || conteudo.length <= LIMITE_TOOL_RESULT_ANTIGO) return conteudo;
+  return `[resultado de ferramenta anterior, ja usado na resposta - dados completos omitidos aqui pra nao inflar o contexto (tinha ${conteudo.length} caracteres)]`;
+}
+
 function apagarImagensAntigas(history, indiceProtegido = history.length) {
   for (let i = 0; i < Math.min(indiceProtegido, history.length); i++) {
     const turn = history[i];
@@ -1459,6 +1470,9 @@ function apagarImagensAntigas(history, indiceProtegido = history.length) {
         // fica sendo reenviada (e recobrada) pra sempre nas chamadas seguintes
         if (b.type === 'tool_result' && Array.isArray(b.content) && b.content.some((c) => c.type === 'image')) {
           return { ...b, content: '[imagem capturada pela camera, ja analisada]' };
+        }
+        if (b.type === 'tool_result' && typeof b.content === 'string') {
+          return { ...b, content: encolherTextoGrande(b.content) };
         }
         return b;
       });
@@ -1489,10 +1503,13 @@ async function callClaude(history, sessionId) {
     // output_config.effort) - o antigo (enabled/budget_tokens) da 400 "nao suportado nesse
     // modelo". Testado ao vivo contra o caso real que travava (lista de 192 pacientes): com
     // adaptive+medium o stop_reason vira end_turn e thinking_tokens fica em 0 (nao compete
-    // mais pelo espaco do texto de verdade).
-    max_tokens: 16000,
+    // mais pelo espaco do texto de verdade). Mas numa sessao com historico MUITO grande (varias
+    // dezenas de milhares de tokens de contexto, cheio de tool_results antigos nao aparados),
+    // o modelo ainda consegue gastar o teto inteiro pensando - baixou de medium pra low e o
+    // teto subiu mais uma vez, dando mais folga real.
+    max_tokens: 24000,
     thinking: { type: 'adaptive' },
-    output_config: { effort: 'medium' },
+    output_config: { effort: 'low' },
     system: await systemPromptBlocos(),
     tools: ehWhatsapp ? TOOLS_SEM_CONTROLE_PC : tools,
     messages: history,
