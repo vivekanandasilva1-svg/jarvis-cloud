@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as metaAds from './metaads.js';
 import * as clinicorp from './clinicorp.js';
-import { transcribeAudio, generateImageGemini } from './gemini.js';
+import { generateImageGemini } from './gemini.js';
+import { transcrever } from './whisper.js';
 import { gerarPdf, gerarWord, gerarExcel, gerarGraficoSvg } from './geradorDocumentos.js';
 import { extrairTextoWord, extrairTextoExcel } from './leitorDocumentos.js';
 import { guardarArquivo } from './arquivosGerados.js';
@@ -1403,7 +1404,7 @@ async function buildUserContent(userMessage, attachments) {
     } else if (att.kind === 'audio') {
       try {
         const buffer = Buffer.from(att.base64, 'base64');
-        const texto = await transcribeAudio(buffer, att.mediaType || 'audio/mpeg');
+        const texto = await transcrever(buffer, att.mediaType || 'audio/mpeg');
         extras += `\n\n[Audio enviado pelo usuario - transcricao]: "${texto || '(sem fala reconhecida)'}"`;
       } catch (err) {
         extras += `\n\n[Audio enviado pelo usuario - falha ao transcrever: ${err.message}]`;

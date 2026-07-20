@@ -10,8 +10,7 @@ import * as evolutionApi from './evolutionApi.js';
 import * as arquivos from './autoAtendimentoArquivos.js';
 import * as clinicorp from './clinicorp.js';
 import * as crm from './crm.js';
-import { transcribeAudio } from './gemini.js';
-import { transcribeAudioWhisper } from './whisper.js';
+import { transcrever } from './whisper.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -486,9 +485,7 @@ async function entenderMidiaRecebida(instancia, mensagemBruta, tipo) {
     return { imagem: { data: base64, mediaType: mimetype || 'image/jpeg' } };
   }
   if (tipo === 'audio') {
-    const texto = process.env.WHISPER_URL
-      ? await transcribeAudioWhisper(buffer, mimetype || 'audio/ogg')
-      : await transcribeAudio(buffer, mimetype || 'audio/ogg');
+    const texto = await transcrever(buffer, mimetype || 'audio/ogg');
     return { textoExtra: `\n\n[Audio do contato - transcricao]: "${texto || '(sem fala reconhecida)'}"` };
   }
   // video: sem extracao de quadro por enquanto - avisa a IA da limitacao em vez de fingir que viu
