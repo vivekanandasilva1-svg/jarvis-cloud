@@ -1156,12 +1156,14 @@ function blobParaBase64(blob) {
 
 async function transcreverAudio(blob, mimeType) {
   const base64 = await blobParaBase64(blob);
-  // sem limite de tempo aqui, uma trava no servidor (cold start do Render, rede ruim etc)
+  // sem limite de tempo aqui, uma trava no servidor (Whisper sobrecarregado, rede ruim etc)
   // deixava o modo conversa parado pra sempre em "transcrevendo..." sem nunca dar erro nem
-  // voltar a ouvir - o servidor ja tem seu proprio limite mais curto, isso aqui e so uma
-  // rede de seguranca com folga a mais pro tempo de rede/deploy gratuito acordando
+  // voltar a ouvir - o servidor (Whisper auto-hospedado) ja tem seu proprio timeout de 30s
+  // (ver WHISPER_TIMEOUT_MS em whisper.js), esse aqui tem que ser MAIOR que aquele - senao o
+  // frontend desiste primeiro e mostra "demorou demais" mesmo quando o servidor teria
+  // respondido poucos segundos depois (bug real: era 25s aqui, menor que os 30s do servidor).
   const controlador = new AbortController();
-  const timer = setTimeout(() => controlador.abort(), 25000);
+  const timer = setTimeout(() => controlador.abort(), 45000);
   let res;
   try {
     res = await fetch('/api/transcribe', {
