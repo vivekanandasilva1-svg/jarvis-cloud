@@ -690,9 +690,9 @@ app.get('/api/relatorios/configs', async (req, res) => {
 });
 
 app.post('/api/relatorios/configs/:tipo', async (req, res) => {
-  const { ativo, frequencia, horaEnvio } = req.body || {};
+  const { ativo, frequencia, horaEnvio, instancia } = req.body || {};
   try {
-    await relatoriosProgramados.salvarConfig(req.params.tipo, { ativo, frequencia, horaEnvio });
+    await relatoriosProgramados.salvarConfig(req.params.tipo, { ativo, frequencia, horaEnvio, instancia });
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });
@@ -854,14 +854,19 @@ app.post('/api/agenda/google/desconectar', async (req, res) => {
 });
 
 iniciarSchedulerLembretes();
-iniciarSchedulerSaldoAnuncios();
-// Os dois schedulers de relatorio automatico (o antigo por env var LUMIA_WHATSAPP_ADMIN e o
-// novo por destinatarios cadastrados em relatorio_destinatarios) foram desativados a pedido do
-// usuario - relatorios estavam indo pra um numero errado. Os relatorios continuam disponiveis
-// sob demanda: gerarRelatorioDiario() no chat da Lumia, e o botao "Enviar agora" da aba
-// Relatorios no dashboard (endpoints em relatoriosProgramados.js).
+// O alerta de saldo baixo fixo (env var LUMIA_WHATSAPP_ADMIN, sem configuracao de
+// instancia/destinatarios) foi substituido pelo tipo "ads_saldo_baixo" na aba Relatorios -
+// mesma logica, agora configuravel (instancia de envio, destinatarios, frequencia de checagem,
+// "enviar agora"), e so alerta contas com campanha ativa (ver gerarAlertaSaldoBaixo).
+// iniciarSchedulerSaldoAnuncios();
+// O relatorio diario automatico antigo (por env var LUMIA_WHATSAPP_ADMIN) foi desativado a
+// pedido do usuario - estava indo pra um numero errado. Continua disponivel sob demanda via
+// gerarRelatorioDiario() no chat da Lumia.
 // iniciarSchedulerRelatorioDiario();
-// relatoriosProgramados.iniciarSchedulerRelatoriosProgramados();
+// Scheduler dos relatorios configuraveis da aba Relatorios (inclui o alerta de saldo baixo
+// acima) - cada tipo so e enviado automaticamente se estiver "Ativado" na aba; por padrao vem
+// desativado, entao reativar esse scheduler geral e seguro.
+relatoriosProgramados.iniciarSchedulerRelatoriosProgramados();
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {

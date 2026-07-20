@@ -6,19 +6,33 @@
 import { pool } from './db.js';
 import * as metaAds from './metaads.js';
 import * as clinicorp from './clinicorp.js';
-import { enviarMensagemTexto } from './evolutionApi.js';
+import { enviarMensagemTexto, enviarMensagemTextoPor } from './evolutionApi.js';
 
-export const TIPOS_RELATORIO = ['ads_financeiro', 'ads_metricas', 'clinica_financeiro', 'clinica_agendamentos'];
-export const FREQUENCIAS = ['diario', 'semanal', 'quinzenal', 'mensal', 'semestral', 'anual'];
+export const TIPOS_RELATORIO = ['ads_financeiro', 'ads_metricas', 'clinica_financeiro', 'clinica_agendamentos', 'ads_saldo_baixo'];
+// as duas primeiras (X_horas) existem so pra fazer sentido no alerta de saldo baixo (precisa
+// checar bem mais seguido que "diario") - nada impede escolher pros outros tipos tambem, so nao
+// costuma fazer sentido pra um relatorio de metricas/financeiro mandar a cada 6h. Frequencias
+// sub-diarias ignoram hora_envio (ver iniciarSchedulerRelatoriosProgramados) - nao tem uma
+// "hora do dia" fixa, o intervalo e sempre relativo ao ultimo envio.
+export const FREQUENCIAS = ['6_horas', '12_horas', 'diario', 'semanal', 'quinzenal', 'mensal', 'semestral', 'anual'];
 
 const NOME_TIPO = {
   ads_financeiro: 'Meta Ads - Financeiro Completo',
   ads_metricas: 'Meta Ads - Todas as Metricas das Campanhas',
   clinica_financeiro: 'Clinica - Relatorio Financeiro Geral',
   clinica_agendamentos: 'Clinica - Relatorio de Agendamentos Completo',
+  ads_saldo_baixo: 'Meta Ads - Alerta de Saldo Baixo',
 };
 
-const DIAS_POR_FREQUENCIA = { diario: 1, semanal: 7, quinzenal: 14, mensal: 30, semestral: 182, anual: 365 };
+const DIAS_POR_FREQUENCIA = {
+  '6_horas': 0.25, '12_horas': 0.5,
+  diario: 1, semanal: 7, quinzenal: 14, mensal: 30, semestral: 182, anual: 365,
+};
+
+// tipo -> frequencia inicial (quando a linha de config e criada pela primeira vez) - o alerta
+// de saldo baixo precisa checar bem mais seguido que um relatorio normal, senao uma conta pode
+// ficar horas parada por falta de saldo antes do dono ser avisado
+const FREQUENCIA_PADRAO_POR_TIPO = { ads_saldo_baixo: '6_horas' };
 
 // data (AAAA-MM-DD) no fuso de Maceio de um instante - usado pra comparar "quantos DIAS DE
 // CALENDARIO se passaram" em vez de milissegundos exatos. Isso importa porque um envio manual
@@ -55,15 +69,18 @@ async function garantirTabelas() {
       atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
-  // coluna nova (horario configuravel de envio) - IF NOT EXISTS pra nao quebrar instalacoes
-  // que ja tinham essa tabela antes dessa funcionalidade existir
+  // colunas novas - IF NOT EXISTS pra nao quebrar instalacoes que ja tinham essa tabela antes
+  // dessas funcionalidades existirem
   await pool.query(`ALTER TABLE relatorio_configs ADD COLUMN IF NOT EXISTS hora_envio TEXT NOT NULL DEFAULT '07:00';`);
-  // garante que as 4 linhas de config sempre existam (mais facil de consultar/atualizar do
-  // que checar existencia toda vez)
+  // qual instancia/numero de WhatsApp usar pra ENVIAR cada tipo de relatorio - null = usa a
+  // instancia ativa padrao (o mesmo numero que a Lumia usa no dia a dia)
+  await pool.query(`ALTER TABLE relatorio_configs ADD COLUMN IF NOT EXISTS instancia TEXT;`);
+  // garante que as linhas de config de todos os tipos sempre existam (mais facil de
+  // consultar/atualizar do que checar existencia toda vez)
   for (const tipo of TIPOS_RELATORIO) {
     await pool.query(
-      'INSERT INTO relatorio_configs (tipo) VALUES ($1) ON CONFLICT (tipo) DO NOTHING',
-      [tipo],
+      'INSERT INTO relatorio_configs (tipo, frequencia) VALUES ($1, $2) ON CONFLICT (tipo) DO NOTHING',
+      [tipo, FREQUENCIA_PADRAO_POR_TIPO[tipo] || 'diario'],
     );
   }
 }
@@ -101,20 +118,26 @@ export async function removerDestinatario(id) {
 // ---------- configs (quais relatorios estao ativos e com que frequencia) ----------
 
 export async function obterConfigs() {
-  if (!pool) return TIPOS_RELATORIO.map((tipo) => ({ tipo, nome: NOME_TIPO[tipo], ativo: false, frequencia: 'diario', horaEnvio: '07:00', ultimoEnvioEm: null }));
+  if (!pool) return TIPOS_RELATORIO.map((tipo) => ({ tipo, nome: NOME_TIPO[tipo], ativo: false, frequencia: FREQUENCIA_PADRAO_POR_TIPO[tipo] || 'diario', horaEnvio: '07:00', ultimoEnvioEm: null, instancia: null }));
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT tipo, ativo, frequencia, hora_envio, ultimo_envio_em FROM relatorio_configs');
+  const { rows } = await pool.query('SELECT tipo, ativo, frequencia, hora_envio, ultimo_envio_em, instancia FROM relatorio_configs');
   return TIPOS_RELATORIO.map((tipo) => {
     const r = rows.find((x) => x.tipo === tipo);
     return {
       tipo,
       nome: NOME_TIPO[tipo],
       ativo: r?.ativo || false,
-      frequencia: r?.frequencia || 'diario',
+      frequencia: r?.frequencia || FREQUENCIA_PADRAO_POR_TIPO[tipo] || 'diario',
       horaEnvio: r?.hora_envio || '07:00',
       ultimoEnvioEm: r?.ultimo_envio_em || null,
+      instancia: r?.instancia || null,
     };
   });
+}
+
+async function obterConfigPorTipo(tipo) {
+  const configs = await obterConfigs();
+  return configs.find((c) => c.tipo === tipo);
 }
 
 function validarHoraEnvio(hora) {
@@ -123,16 +146,16 @@ function validarHoraEnvio(hora) {
   return hora;
 }
 
-export async function salvarConfig(tipo, { ativo, frequencia, horaEnvio }) {
+export async function salvarConfig(tipo, { ativo, frequencia, horaEnvio, instancia }) {
   if (!TIPOS_RELATORIO.includes(tipo)) throw new Error(`Tipo de relatorio desconhecido: ${tipo}`);
   if (frequencia && !FREQUENCIAS.includes(frequencia)) throw new Error(`Frequencia desconhecida: ${frequencia}`);
   const horaValidada = validarHoraEnvio(horaEnvio);
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
   await pool.query(
-    `INSERT INTO relatorio_configs (tipo, ativo, frequencia, hora_envio, atualizado_em) VALUES ($1, $2, $3, $4, now())
-     ON CONFLICT (tipo) DO UPDATE SET ativo = $2, frequencia = $3, hora_envio = $4, atualizado_em = now()`,
-    [tipo, !!ativo, frequencia || 'diario', horaValidada],
+    `INSERT INTO relatorio_configs (tipo, ativo, frequencia, hora_envio, instancia, atualizado_em) VALUES ($1, $2, $3, $4, $5, now())
+     ON CONFLICT (tipo) DO UPDATE SET ativo = $2, frequencia = $3, hora_envio = $4, instancia = $5, atualizado_em = now()`,
+    [tipo, !!ativo, frequencia || FREQUENCIA_PADRAO_POR_TIPO[tipo] || 'diario', horaValidada, instancia || null],
   );
 }
 
@@ -430,11 +453,59 @@ export async function gerarRelatorioClinicaAgendamentosCompleto({ dias = 30 } = 
   return linhas.join('\n');
 }
 
+// ---------- 5. Meta Ads - Alerta de Saldo Baixo ----------
+
+// mesmo limite usado no antigo scheduler fixo (cloudAgent.js) - ajustavel via env var
+const LIMITE_SALDO_BAIXO_REAIS = Number(process.env.META_ADS_LIMITE_SALDO_BAIXO_REAIS) || 100;
+
+// diferente dos outros 4 geradores, esse pode devolver null (nada pra reportar) - e
+// interpretado por enviarRelatorioAgora/o scheduler como "nao manda nada dessa vez". So
+// considera contas PREPAGAS com saldo baixo/esgotado E que tem pelo menos 1 campanha em
+// effective_status ACTIVE - mesmo criterio de "conta ativa" usado em
+// gerarRelatorioAdsFinanceiroCompleto (conta sem nenhum anuncio rodando fica de fora, saldo
+// baixo la nao e urgente e so geraria ruido no WhatsApp).
+export async function gerarAlertaSaldoBaixo() {
+  const contas = await metaAds.listAdAccounts();
+  const linhas = [];
+
+  for (const c of contas) {
+    if (c.tipoConta !== 'prepago' || c.saldoDisponivel == null) continue;
+    const esgotado = c.saldoDisponivel <= 0;
+    const baixo = c.saldoDisponivel > 0 && c.saldoDisponivel <= LIMITE_SALDO_BAIXO_REAIS;
+    if (!esgotado && !baixo) continue;
+
+    let ativas = 0;
+    try {
+      const campanhas = await metaAds.listCampaigns({ accountId: c.id, status: 'ACTIVE' });
+      ativas = campanhas.length;
+    } catch { continue; } // erro pontual na conta - nao arrisca alertar sem confirmar que tem campanha ativa
+
+    if (ativas === 0) continue; // sem campanha ativa, saldo baixo aqui nao e urgente
+
+    const saldoFormatado = formatarReais(c.saldoDisponivel);
+    linhas.push(
+      esgotado
+        ? `🔴 Saldo ESGOTADO na conta "${c.name}" (${c.empresa}) - ${ativas} campanha(s) ativa(s) parada(s) por falta de saldo. Saldo atual: ${saldoFormatado}.`
+        : `🟡 Saldo baixo na conta "${c.name}" (${c.empresa}): ${saldoFormatado} restantes, ${ativas} campanha(s) ativa(s) - recarregue logo pra nao parar de veicular.`,
+    );
+  }
+
+  if (!linhas.length) return null;
+
+  return [
+    '💰 ALERTA DE SALDO BAIXO - META ADS 💰',
+    `Verificado em: ${formatarDataHoraBR()}`,
+    '',
+    ...linhas,
+  ].join('\n');
+}
+
 const GERADORES = {
   ads_financeiro: gerarRelatorioAdsFinanceiroCompleto,
   ads_metricas: gerarRelatorioAdsMetricasCompleto,
   clinica_financeiro: gerarRelatorioClinicaFinanceiroGeral,
   clinica_agendamentos: gerarRelatorioClinicaAgendamentosCompleto,
+  ads_saldo_baixo: gerarAlertaSaldoBaixo,
 };
 
 export async function gerarRelatorioPorTipo(tipo) {
@@ -444,13 +515,24 @@ export async function gerarRelatorioPorTipo(tipo) {
 }
 
 // manda um relatorio pra todos os destinatarios cadastrados - usado tanto pelo envio manual
-// ("enviar agora" na aba) quanto pelo scheduler automatico
+// ("enviar agora" na aba) quanto pelo scheduler automatico. Alguns tipos (ads_saldo_baixo) so
+// geram texto quando ha algo pra reportar - nesse caso nao manda nada e nao marca como
+// enviado, pra o scheduler continuar checando no proximo ciclo em vez de esperar a frequencia
+// inteira de novo.
 export async function enviarRelatorioAgora(tipo) {
   const texto = await gerarRelatorioPorTipo(tipo);
+  if (!texto) return { destinatarios: 0, semNadaAReportar: true };
+
   const destinatarios = await listarDestinatarios();
   if (!destinatarios.length) throw new Error('Nenhum destinatario cadastrado pra receber relatorios.');
+
+  const cfg = await obterConfigPorTipo(tipo);
+  const enviar = cfg?.instancia
+    ? (numero, msg) => enviarMensagemTextoPor(cfg.instancia, numero, msg)
+    : enviarMensagemTexto;
+
   for (const d of destinatarios) {
-    await enviarMensagemTexto(d.numero, texto).catch((err) => {
+    await enviar(d.numero, texto).catch((err) => {
       console.error(`Erro mandando relatorio "${tipo}" pro numero ${d.numero}:`, err.message);
     });
   }
@@ -461,7 +543,10 @@ export async function enviarRelatorioAgora(tipo) {
 // roda em segundo plano - checa a cada 5min (fuso Maceio) se algum relatorio configurado esta
 // dentro da janela do SEU horario de envio (hora_envio, primeiros 5min dessa hora) E ja passou
 // o intervalo da frequencia escolhida desde o ultimo envio - se sim, manda pros destinatarios
-// cadastrados. So chamado uma vez, no boot do server.js.
+// cadastrados. Frequencias sub-diarias (6_horas/12_horas, ex: alerta de saldo baixo) nao tem
+// "hora do dia" fixa - ignoram a janela de hora_envio e vencem por tempo absoluto decorrido
+// desde o ultimo envio, checado em toda rodada (nao so nos primeiros 5min de uma hora
+// especifica). So chamado uma vez, no boot do server.js.
 export function iniciarSchedulerRelatoriosProgramados() {
   const checar = async () => {
     try {
@@ -473,19 +558,25 @@ export function iniciarSchedulerRelatoriosProgramados() {
       const agora = new Date();
       const horaAtual = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit', hour12: false });
       const [horaAtualH, horaAtualM] = horaAtual.split(':').map(Number);
-      if (horaAtualM >= 5) return; // so dispara nos primeiros 5min de cada hora configurada
+      const dentroDaJanelaDeHora = horaAtualM < 5; // primeiros 5min de cada hora
 
       const configs = await obterConfigs();
       for (const cfg of configs) {
         if (!cfg.ativo) continue;
-        const [horaCfgH] = (cfg.horaEnvio || '07:00').split(':').map(Number);
-        if (horaCfgH !== horaAtualH) continue; // nao e a hora configurada desse relatorio
-
         const diasIntervalo = DIAS_POR_FREQUENCIA[cfg.frequencia] || 1;
-        if (cfg.ultimoEnvioEm) {
-          const diasPassados = diasCalendarioEntre(dataMaceioISO(new Date(cfg.ultimoEnvioEm)), dataMaceioISO(agora));
-          if (diasPassados < diasIntervalo) continue;
-        } // nunca enviado - vence na hora, nao precisa checar dias
+        const subDiaria = diasIntervalo < 1;
+
+        let venceu;
+        if (subDiaria) {
+          // sem hora fixa - so importa quanto tempo passou desde o ultimo envio
+          venceu = !cfg.ultimoEnvioEm || (Date.now() - new Date(cfg.ultimoEnvioEm).getTime()) >= diasIntervalo * 24 * 60 * 60 * 1000;
+        } else {
+          if (!dentroDaJanelaDeHora) continue; // so dispara nos primeiros 5min de cada hora
+          const [horaCfgH] = (cfg.horaEnvio || '07:00').split(':').map(Number);
+          if (horaCfgH !== horaAtualH) continue; // nao e a hora configurada desse relatorio
+          venceu = !cfg.ultimoEnvioEm || diasCalendarioEntre(dataMaceioISO(new Date(cfg.ultimoEnvioEm)), dataMaceioISO(agora)) >= diasIntervalo;
+        }
+        if (!venceu) continue;
 
         try {
           await enviarRelatorioAgora(cfg.tipo);
@@ -499,6 +590,6 @@ export function iniciarSchedulerRelatoriosProgramados() {
   };
 
   // checa a cada 5min - precisa ser <= a janela de 5min da hora configurada (senao pode pular
-  // a janela inteira de algum relatorio); so dispara de fato quando a hora bate e algo vence
+  // a janela inteira de algum relatorio); so dispara de fato quando algo vence
   setInterval(checar, 5 * 60 * 1000).unref();
 }

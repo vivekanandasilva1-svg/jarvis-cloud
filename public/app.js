@@ -2560,6 +2560,8 @@ autoArquivoEnviar.addEventListener('click', async () => {
 // ---------- Relatorios programados ----------
 
 const RELATORIO_FREQUENCIAS = [
+  { valor: '6_horas', rotulo: 'A cada 6 horas' },
+  { valor: '12_horas', rotulo: 'A cada 12 horas' },
   { valor: 'diario', rotulo: 'Diário' },
   { valor: 'semanal', rotulo: 'Semanal' },
   { valor: 'quinzenal', rotulo: 'Quinzenal' },
@@ -2567,6 +2569,9 @@ const RELATORIO_FREQUENCIAS = [
   { valor: 'semestral', rotulo: 'Semestral' },
   { valor: 'anual', rotulo: 'Anual' },
 ];
+// frequencias sem "hora do dia" fixa (o alerta de saldo baixo, por ex, roda relativo ao ultimo
+// envio) - o campo de horario some da UI pra essas, ja que o backend ignora ele mesmo assim
+const FREQUENCIAS_SUB_DIARIAS = new Set(['6_horas', '12_horas']);
 
 async function carregarDestinatariosRelatorios() {
   relatorioDestinatariosLista.textContent = '';
@@ -2663,13 +2668,18 @@ async function carregarConfigsRelatorios() {
   relatorioConfigsLista.appendChild(carregando);
 
   try {
-    const res = await fetch('/api/relatorios/configs', { headers: { 'x-app-password': appPassword } });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    const [resConfigs, resInstancias] = await Promise.all([
+      fetch('/api/relatorios/configs', { headers: { 'x-app-password': appPassword } }),
+      fetch('/api/whatsapp/instancias', { headers: { 'x-app-password': appPassword } }),
+    ]);
+    const data = await resConfigs.json();
+    if (!resConfigs.ok) throw new Error(data.erro || 'erro desconhecido');
+    const dataInstancias = await resInstancias.json().catch(() => ({}));
+    const instancias = resInstancias.ok ? (dataInstancias.instancias || []) : [];
 
     relatorioConfigsLista.textContent = '';
     for (const cfg of data.configs || []) {
-      relatorioConfigsLista.appendChild(criarCardConfigRelatorio(cfg));
+      relatorioConfigsLista.appendChild(criarCardConfigRelatorio(cfg, instancias));
     }
   } catch (err) {
     relatorioConfigsLista.textContent = '';
@@ -2680,7 +2690,7 @@ async function carregarConfigsRelatorios() {
   }
 }
 
-function criarCardConfigRelatorio(cfg) {
+function criarCardConfigRelatorio(cfg, instancias) {
   const card = document.createElement('div');
   card.className = 'auto-aviso relatorio-config-card';
 
@@ -2743,6 +2753,36 @@ function criarCardConfigRelatorio(cfg) {
   blocoHora.appendChild(inputHora);
   linhaConfig.appendChild(blocoHora);
 
+  // frequencias sub-diarias (alerta de saldo baixo, por ex) nao tem "hora do dia" - o campo
+  // some pra nao confundir, ja que o backend ignora ele mesmo assim nesse caso
+  const atualizarVisibilidadeHora = () => {
+    blocoHora.hidden = FREQUENCIAS_SUB_DIARIAS.has(selectFrequencia.value);
+  };
+  atualizarVisibilidadeHora();
+
+  const blocoInstancia = document.createElement('div');
+  blocoInstancia.className = 'relatorio-config-bloco';
+  const rotuloInstancia = document.createElement('label');
+  rotuloInstancia.className = 'auto-label';
+  rotuloInstancia.textContent = 'Instância de envio';
+  blocoInstancia.appendChild(rotuloInstancia);
+  const selectInstancia = document.createElement('select');
+  selectInstancia.className = 'relatorio-config-select';
+  const optPadrao = document.createElement('option');
+  optPadrao.value = '';
+  optPadrao.textContent = 'Padrão (ativa)';
+  if (!cfg.instancia) optPadrao.selected = true;
+  selectInstancia.appendChild(optPadrao);
+  for (const inst of instancias || []) {
+    const opt = document.createElement('option');
+    opt.value = inst.nome;
+    opt.textContent = inst.numero ? `${inst.nome} (${inst.numero})` : inst.nome;
+    if (inst.nome === cfg.instancia) opt.selected = true;
+    selectInstancia.appendChild(opt);
+  }
+  blocoInstancia.appendChild(selectInstancia);
+  linhaConfig.appendChild(blocoInstancia);
+
   card.appendChild(linhaConfig);
 
   const salvar = async () => {
@@ -2750,7 +2790,12 @@ function criarCardConfigRelatorio(cfg) {
       await fetch(`/api/relatorios/configs/${cfg.tipo}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-        body: JSON.stringify({ ativo: checkbox.checked, frequencia: selectFrequencia.value, horaEnvio: inputHora.value }),
+        body: JSON.stringify({
+          ativo: checkbox.checked,
+          frequencia: selectFrequencia.value,
+          horaEnvio: inputHora.value,
+          instancia: selectInstancia.value || null,
+        }),
       });
       statusLabel.textContent = checkbox.checked ? 'Ativado' : 'Desativado';
     } catch (err) {
@@ -2758,8 +2803,9 @@ function criarCardConfigRelatorio(cfg) {
     }
   };
   checkbox.addEventListener('change', salvar);
-  selectFrequencia.addEventListener('change', salvar);
+  selectFrequencia.addEventListener('change', () => { atualizarVisibilidadeHora(); salvar(); });
   inputHora.addEventListener('change', salvar);
+  selectInstancia.addEventListener('change', salvar);
 
   const ultimoEnvio = document.createElement('p');
   ultimoEnvio.className = 'agenda-vazia';
@@ -2781,7 +2827,7 @@ function criarCardConfigRelatorio(cfg) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
-      enviarBtn.textContent = 'Enviado ✓';
+      enviarBtn.textContent = data.semNadaAReportar ? 'Nada a reportar agora' : 'Enviado ✓';
       carregarConfigsRelatorios();
     } catch (err) {
       addBubble(`Erro enviando relatorio: ${err.message}`, 'system');
