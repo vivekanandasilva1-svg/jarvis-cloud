@@ -160,8 +160,9 @@ export async function getInsights({ objectId, objectType = 'account', level, sin
   const breakdownLevel = level || objectType;
 
   const fields = [
-    'spend', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'reach', 'actions', 'cost_per_action_type',
-    'inline_link_clicks', 'video_p50_watched_actions', 'video_p75_watched_actions', 'video_p100_watched_actions',
+    'spend', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'reach', 'frequency', 'actions', 'cost_per_action_type',
+    'inline_link_clicks', 'video_play_actions',
+    'video_p50_watched_actions', 'video_p75_watched_actions', 'video_p95_watched_actions',
   ];
   if (breakdownLevel === 'ad') fields.push('ad_id', 'ad_name', 'adset_id', 'adset_name');
   else if (breakdownLevel === 'adset') fields.push('adset_id', 'adset_name');
@@ -253,7 +254,7 @@ export async function listAds({ adSetId } = {}) {
   return data.data;
 }
 
-function extractResultsAndCPA(insightRow) {
+export function extractResultsAndCPA(insightRow) {
   const actions = insightRow.actions || [];
   const costPerAction = insightRow.cost_per_action_type || [];
   // prioriza resultados de lead/conversao, cai para link_click se nao tiver
@@ -309,7 +310,7 @@ export async function analyzeCampaignAds({ campaignId, since, until, datePreset 
     const impressoes = Number(r.impressions || 0);
     const videoViews50 = extrairValorVideo(r.video_p50_watched_actions);
     const videoViews75 = extrairValorVideo(r.video_p75_watched_actions);
-    const videoViews100 = extrairValorVideo(r.video_p100_watched_actions);
+    const videoViews95 = extrairValorVideo(r.video_p95_watched_actions);
     return {
       adId: r.ad_id,
       nome: r.ad_name,
@@ -327,7 +328,7 @@ export async function analyzeCampaignAds({ campaignId, since, until, datePreset 
       // anuncio em video - fica 0 pra anuncio estatico, o que e o esperado)
       taxaVideo50: impressoes ? (videoViews50 / impressoes) * 100 : 0,
       taxaVideo75: impressoes ? (videoViews75 / impressoes) * 100 : 0,
-      taxaVideo100: impressoes ? (videoViews100 / impressoes) * 100 : 0,
+      taxaVideo95: impressoes ? (videoViews95 / impressoes) * 100 : 0,
     };
   });
 

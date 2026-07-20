@@ -249,26 +249,102 @@ export async function gerarRelatorioAdsFinanceiroCompleto() {
 
 // ---------- 2. Meta Ads - Todas as Metricas das Campanhas ----------
 
-const SUGESTAO_POR_ALERTA = {
-  'CTR bem abaixo da media do grupo (possivel criativo cansado)': 'teste um criativo novo, esse pode estar saturado.',
-  'CPC bem acima da media do grupo': 'revise segmentacao/criativo, o custo por clique esta alto pro grupo.',
-  'Custo por resultado bem acima da media do grupo': 'considere pausar ou ajustar - custo por resultado desproporcional.',
-  'Teve impressoes relevantes mas nenhum resultado': 'revise pagina de destino/oferta - tem alcance mas nao esta convertendo.',
+const LABEL_FREQUENCIA = {
+  '6_horas': 'DIARIO', '12_horas': 'DIARIO',
+  diario: 'DIARIO', semanal: 'SEMANAL', quinzenal: 'QUINZENAL', mensal: 'MENSAL', semestral: 'SEMESTRAL', anual: 'ANUAL',
 };
 
-export async function gerarRelatorioAdsMetricasCompleto() {
+function formatarDataBR(isoDate) {
+  const [ano, mes, dia] = isoDate.split('-');
+  return `${dia}/${mes}/${ano}`;
+}
+
+// janela de datas (fuso Maceio) pro periodo do relatorio - pedido explicito do usuario:
+// relatorio diario tem que medir de 00h ate 23h59 do dia de calendario, nao "ultimas 24h"
+// corridas a partir do momento exato do envio.
+function periodoDiasCalendario(frequencia) {
+  const hoje = dataMaceioISO(new Date());
+  // frequencias sub-diarias (6_horas/12_horas) nao fazem sentido pra janela de dia de
+  // calendario - trata como diario (00h-23h59 de hoje) nesse caso
+  const dias = Math.max(1, Math.round(DIAS_POR_FREQUENCIA[frequencia] || 1));
+  const desdeDate = new Date(`${hoje}T00:00:00Z`);
+  desdeDate.setUTCDate(desdeDate.getUTCDate() - (dias - 1));
+  return { since: desdeDate.toISOString().slice(0, 10), until: hoje, hoje };
+}
+
+function extrairValorAcao(campo) {
+  return Array.isArray(campo) && campo.length ? Number(campo[0].value || 0) : 0;
+}
+
+// dica de analise gerada por regra fixa (sem IA) - pedido explicito do usuario de nao
+// depender da Claude pra relatorio agendado, pra sempre sair identico e nao falhar se a
+// API da Anthropic estiver fora do ar na hora do envio automatico.
+function gerarDicaAnalise({ freqAnuncio, resultados, gasto, videoViews50, videoViews95 }) {
+  if (freqAnuncio >= 3.5) {
+    return `frequencia esta em ${freqAnuncio.toFixed(2)} - o publico ja viu o anuncio varias vezes, o criativo pode estar cansando. Vale testar uma variacao nova.`;
+  }
+  if (gasto > 0 && resultados === 0) {
+    return 'teve gasto no periodo mas nenhum resultado registrado - revise a oferta/pagina de destino ou o publico segmentado.';
+  }
+  if (videoViews50 > 0 && videoViews95 / videoViews50 < 0.15) {
+    return 'boa parte de quem comeca o video sai antes da metade - os primeiros segundos do criativo podem nao estar prendendo atencao.';
+  }
+  return 'sem alerta relevante no periodo - campanha performando dentro do esperado.';
+}
+
+function montarBlocoCampanha({ conta, campanha, row, frequencia, hoje }) {
+  const { resultados, custoPorResultado } = metaAds.extractResultsAndCPA(row);
+  const cliquesLink = Number(row.inline_link_clicks || 0);
+  const gasto = Number(row.spend || 0);
+  const custoPorMilCliques = cliquesLink ? (gasto / cliquesLink) * 1000 : 0;
+  const alcance = Number(row.reach || 0);
+  const impressoes = Number(row.impressions || 0);
+  const freqAnuncio = Number(row.frequency || 0);
+  const visualizacoesTotais = extrairValorAcao(row.video_play_actions);
+  const videoViews50 = extrairValorAcao(row.video_p50_watched_actions);
+  const videoViews75 = extrairValorAcao(row.video_p75_watched_actions);
+  const videoViews95 = extrairValorAcao(row.video_p95_watched_actions);
+  const dica = gerarDicaAnalise({ freqAnuncio, resultados, gasto, videoViews50, videoViews95 });
+
+  return [
+    '📱 RELATÓRIO DE MÉTRICAS: META ADS 📱',
+    `Campanha: ${campanha.name} (${conta.empresa || conta.name})`,
+    `Data: ${formatarDataBR(hoje)} DAS 00H AS 23:59 Período de Análise: ${LABEL_FREQUENCIA[frequencia] || frequencia.toUpperCase()}`,
+    '',
+    '📥 1. FUNIL DE CONVERSÃO & VENDAS',
+    'Métricas principais focadas em trazer clientes para o WhatsApp.',
+    '',
+    `* 💬 Conversas Iniciadas: ${resultados} resultados`,
+    `* 💰 Custo por Conversa (CPR): ${formatarReais(custoPorResultado || 0)}`,
+    `* 🖱️ Cliques no Link: ${cliquesLink} interesses diretos`,
+    `* 💳 Custo por Mil Cliques (CPM/CPC adaptado): ${formatarReais(custoPorMilCliques)}`,
+    '',
+    '👁️ 2. ALCANCE & ENTREGA DO ANÚNCIO',
+    'Como o algoritmo está distribuindo as suas campanhas.',
+    '',
+    `* 👥 Alcance: ${alcance} (pessoas únicas que viram)`,
+    `* 🔄 Impressões: ${impressoes} (total de vezes que o anúncio apareceu)`,
+    `* 🔁 Frequência: ${freqAnuncio.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (quantas vezes a mesma pessoa viu o anúncio, ex: 1.45)`,
+    `* 📈 Visualizações Totais: ${visualizacoesTotais}`,
+    '',
+    '🎬 3. RETENÇÃO & ENGAJAMENTO DE VÍDEO (Vídeo Views)',
+    'Comportamento do público assistindo aos seus criativos.',
+    '',
+    `* 🍿 Reproduções de 50% do Vídeo: ${videoViews50} pessoas`,
+    `* ⏳ Reproduções de 75% do Vídeo: ${videoViews75} pessoas (público quente)`,
+    `* 🔥 Reproduções de 95% do Vídeo: ${videoViews95} pessoas (público ultra-interessado)`,
+    '',
+    '🕵️‍♂️ ANÁLISE DO AGENTE DE IA',
+    `💡 Dica de análise: ${dica}`,
+    '',
+    '🤖 Relatório de Métricas Avançadas gerado pela sua IA.',
+  ].join('\n');
+}
+
+export async function gerarRelatorioAdsMetricasCompleto({ frequencia = 'diario' } = {}) {
+  const { since, until, hoje } = periodoDiasCalendario(frequencia);
   const contas = await metaAds.listAdAccounts();
-  const hoje = new Date().toISOString().slice(0, 10);
-  const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-
-  const linhas = [];
-  linhas.push('📈 RELATÓRIO DE MÉTRICAS DAS CAMPANHAS - META ADS 📈');
-  linhas.push(`Gerado em: ${formatarDataHoraBR()}`);
-  linhas.push('Periodo analisado: ultimos 7 dias, campanhas ativas');
-  linhas.push('');
-
-  let totalAnalisados = 0;
-  let totalComAlerta = 0;
+  const blocos = [];
 
   for (const c of contas) {
     let campanhas;
@@ -277,45 +353,39 @@ export async function gerarRelatorioAdsMetricasCompleto() {
     } catch { continue; }
     if (!campanhas.length) continue;
 
-    const blocosConta = [];
     for (const camp of campanhas) {
+      // so entra no relatorio campanha que tem PELO MENOS 1 anuncio REALMENTE ativo agora
+      // (effective_status ACTIVE) com dado no periodo - campanha marcada ACTIVE mas com todos
+      // os anuncios pausados/parados ha mais de 1 dia fica de fora, pedido explicito do usuario.
       let analise;
       try {
-        analise = await metaAds.analyzeCampaignAds({ campaignId: camp.id, since: seteDiasAtras, until: hoje });
+        analise = await metaAds.analyzeCampaignAds({ campaignId: camp.id, since, until });
       } catch { continue; }
       if (!analise.anuncios.length) continue;
 
-      for (const a of analise.anuncios) {
-        totalAnalisados++;
-        const linhaAnuncio = [
-          `* ${camp.name} / ${a.nome}`,
-          `  Valor usado: ${formatarReais(a.gasto)} | Alcance: ${a.alcance} | Impressoes: ${a.impressoes} | Cliques no link: ${a.cliquesLink} | CTR: ${formatarPct(a.ctr)}% | CPC: ${formatarReais(a.cpc)}`,
-          `  Conversas/resultado: ${a.resultados}${a.custoPorResultado ? ` (custo por resultado: ${formatarReais(a.custoPorResultado)})` : ''}`,
-        ];
-        if (a.taxaVideo50 || a.taxaVideo75 || a.taxaVideo100) {
-          linhaAnuncio.push(`  Retencao de video (sobre impressoes): 50% = ${formatarPct(a.taxaVideo50)}% | 75% = ${formatarPct(a.taxaVideo75)}% | 100% = ${formatarPct(a.taxaVideo100)}%`);
-        }
-        if (a.alertas.length) {
-          totalComAlerta++;
-          for (const alerta of a.alertas) {
-            const sugestao = SUGESTAO_POR_ALERTA[alerta] || 'vale revisar esse anuncio.';
-            linhaAnuncio.push(`  ⚠️ Sugestao: ${sugestao}`);
-          }
-        }
-        blocosConta.push(linhaAnuncio.join('\n'));
-      }
-    }
-    if (blocosConta.length) {
-      linhas.push(`--- ${c.name} (${c.empresa}) ---`);
-      linhas.push(...blocosConta);
-      linhas.push('');
+      // alcance/frequencia nao podem ser somados por anuncio (sobreposicao de publico) - pega
+      // o agregado direto no nivel de campanha, que ja vem deduplicado pela Meta.
+      let rows;
+      try {
+        rows = await metaAds.getInsights({ objectId: camp.id, objectType: 'campaign', level: 'campaign', since, until });
+      } catch { continue; }
+      const row = rows[0];
+      if (!row || !(Number(row.spend) > 0 || Number(row.impressions) > 0)) continue;
+
+      blocos.push(montarBlocoCampanha({ conta: c, campanha: camp, row, frequencia, hoje }));
     }
   }
 
-  linhas.push('');
-  linhas.push(`RESUMO: ${totalAnalisados} anuncio(s) com dados no periodo, ${totalComAlerta} com alerta de atencao.`);
+  if (!blocos.length) {
+    return [
+      '📱 RELATÓRIO DE MÉTRICAS: META ADS 📱',
+      `Data: ${formatarDataBR(hoje)} DAS 00H AS 23:59 Período de Análise: ${LABEL_FREQUENCIA[frequencia] || frequencia.toUpperCase()}`,
+      '',
+      'Nenhuma campanha com anuncio realmente ativo (rodando agora) e entrega no periodo. Campanhas pausadas/paradas ha mais de 1 dia nao entram nesse relatorio.',
+    ].join('\n');
+  }
 
-  return linhas.join('\n');
+  return blocos.join('\n\n═══════════════════════\n\n');
 }
 
 // ---------- 3. Clinica - Relatorio Financeiro Geral ----------
@@ -508,10 +578,10 @@ const GERADORES = {
   ads_saldo_baixo: gerarAlertaSaldoBaixo,
 };
 
-export async function gerarRelatorioPorTipo(tipo) {
+export async function gerarRelatorioPorTipo(tipo, opts = {}) {
   const gerador = GERADORES[tipo];
   if (!gerador) throw new Error(`Tipo de relatorio desconhecido: ${tipo}`);
-  return gerador();
+  return gerador(opts);
 }
 
 // manda um relatorio pra todos os destinatarios cadastrados - usado tanto pelo envio manual
@@ -520,13 +590,13 @@ export async function gerarRelatorioPorTipo(tipo) {
 // enviado, pra o scheduler continuar checando no proximo ciclo em vez de esperar a frequencia
 // inteira de novo.
 export async function enviarRelatorioAgora(tipo) {
-  const texto = await gerarRelatorioPorTipo(tipo);
+  const cfg = await obterConfigPorTipo(tipo);
+  const texto = await gerarRelatorioPorTipo(tipo, { frequencia: cfg?.frequencia || 'diario' });
   if (!texto) return { destinatarios: 0, semNadaAReportar: true };
 
   const destinatarios = await listarDestinatarios();
   if (!destinatarios.length) throw new Error('Nenhum destinatario cadastrado pra receber relatorios.');
 
-  const cfg = await obterConfigPorTipo(tipo);
   const enviar = cfg?.instancia
     ? (numero, msg) => enviarMensagemTextoPor(cfg.instancia, numero, msg)
     : enviarMensagemTexto;
