@@ -239,6 +239,69 @@ async function iniciar() {
     }
   });
 
+  // abre uma URL como aba NOVA no Chrome ja aberto (mesma exigencia de depuracao remota do
+  // /abas acima) - diferente de pc_abrir_app, que so usa "start" do Windows e pode abrir num
+  // navegador diferente do que esta sendo controlado
+  app.post('/abrir-aba', async (req, res) => {
+    const { url } = req.body || {};
+    if (!url) return res.status(400).json({ erro: 'url obrigatoria' });
+    try {
+      const controlador = new AbortController();
+      const timer = setTimeout(() => controlador.abort(), 5000);
+      const resp = await fetch(`http://localhost:9222/json/new?${encodeURIComponent(url)}`, { method: 'PUT', signal: controlador.signal });
+      clearTimeout(timer);
+      if (!resp.ok) throw new Error(`Chrome DevTools respondeu ${resp.status}`);
+      const aba = await resp.json();
+      res.json({ ok: true, mensagem: `Abri uma aba nova com ${url}.`, titulo: aba.title, url: aba.url });
+    } catch {
+      res.status(503).json({
+        erro: 'Nao consegui abrir a aba - o Chrome precisa estar rodando com depuracao remota ligada (--remote-debugging-port=9222).',
+      });
+    }
+  });
+
+  // muda o foco pra uma aba JA ABERTA que bata com um termo (parte do titulo ou da URL) - se
+  // achar mais de uma, devolve as opcoes em vez de adivinhar qual o usuario quis dizer
+  app.post('/mudar-aba', async (req, res) => {
+    const { termo } = req.body || {};
+    if (!termo) return res.status(400).json({ erro: 'termo obrigatorio (parte do titulo ou da URL da aba)' });
+
+    let abas;
+    try {
+      const controlador = new AbortController();
+      const timer = setTimeout(() => controlador.abort(), 3000);
+      const resp = await fetch('http://localhost:9222/json', { signal: controlador.signal });
+      clearTimeout(timer);
+      if (!resp.ok) throw new Error(`Chrome DevTools respondeu ${resp.status}`);
+      abas = (await resp.json()).filter((a) => a.type === 'page');
+    } catch {
+      return res.status(503).json({
+        erro: 'Nao consegui ver as abas abertas - o Chrome precisa estar rodando com depuracao remota ligada (--remote-debugging-port=9222).',
+      });
+    }
+
+    const termoLower = termo.toLowerCase();
+    const encontradas = abas.filter((a) => (a.title || '').toLowerCase().includes(termoLower) || (a.url || '').toLowerCase().includes(termoLower));
+    if (encontradas.length === 0) {
+      return res.status(404).json({ erro: `Nenhuma aba aberta bate com "${termo}".`, abas: abas.map((a) => ({ titulo: a.title, url: a.url })) });
+    }
+    if (encontradas.length > 1) {
+      return res.status(409).json({
+        erro: `Mais de uma aba bate com "${termo}" - seja mais especifico.`,
+        opcoes: encontradas.map((a) => ({ titulo: a.title, url: a.url })),
+      });
+    }
+
+    const alvo = encontradas[0];
+    try {
+      const ativarResp = await fetch(`http://localhost:9222/json/activate/${alvo.id}`, { method: 'PUT' });
+      if (!ativarResp.ok) throw new Error(`Chrome DevTools respondeu ${ativarResp.status}`);
+      res.json({ ok: true, mensagem: `Mudei pra aba "${alvo.title}".`, titulo: alvo.title, url: alvo.url });
+    } catch (err) {
+      res.status(500).json({ erro: `Achei a aba mas nao consegui ativar: ${err.message}` });
+    }
+  });
+
   app.get('/ping', (req, res) => res.json({ ok: true }));
 
   app.listen(PORT, '127.0.0.1', () => {

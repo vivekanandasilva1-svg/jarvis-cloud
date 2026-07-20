@@ -89,6 +89,20 @@
         <button type="button" id="agentSaveBtn">Salvar</button>
       </div>
       <p class="agent-status" id="agentStatus">Nao conectado.</p>
+
+      <div class="agent-panel-divisor"></div>
+      <div class="auto-toggle-row">
+        <label class="auto-switch">
+          <input type="checkbox" id="controleAbasToggle" />
+          <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+        </label>
+        <span>Controle de abas do navegador</span>
+      </div>
+      <p class="agent-status">
+        Quando ativado, a Lumia pode abrir aba nova e mudar de aba no Chrome quando voce pedir
+        (precisa do Chrome aberto com <code>--remote-debugging-port=9222</code>). Desativado por
+        padrao - liga so quando quiser.
+      </p>
     </div>
 
     <div class="window-body" id="tabPainel">

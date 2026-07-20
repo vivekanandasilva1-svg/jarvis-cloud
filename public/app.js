@@ -19,6 +19,7 @@ const agentPanelClose = document.getElementById('agentPanelClose');
 const agentTokenInput = document.getElementById('agentTokenInput');
 const agentSaveBtn = document.getElementById('agentSaveBtn');
 const agentStatus = document.getElementById('agentStatus');
+const controleAbasToggle = document.getElementById('controleAbasToggle');
 const clearBtn = document.getElementById('clearBtn');
 const extractBtn = document.getElementById('extractBtn');
 const attachBtn = document.getElementById('attachBtn');
@@ -844,6 +845,14 @@ function obterTokenAgenteLocal() {
   return localStorage.getItem('lumia_agent_token') || '';
 }
 
+// controle de abas (abrir aba nova, mudar de aba) fica desligado por padrao, mesmo com o
+// agente local conectado - o usuario pediu um botao a parte pra ligar/desligar isso quando
+// quiser, sem depender so de estar/nao estar com o agente rodando
+const TOOLS_CONTROLE_ABAS = new Set(['pc_abrir_aba', 'pc_mudar_aba']);
+function controleAbasAtivado() {
+  return localStorage.getItem('lumia_controle_abas') === '1';
+}
+
 const PC_ENDPOINTS = {
   pc_abrir_app: { path: '/abrir-app', montar: (i) => ({ nome: i.nome }) },
   pc_fechar_app: { path: '/fechar-app', montar: (i) => ({ nome: i.nome }) },
@@ -855,6 +864,8 @@ const PC_ENDPOINTS = {
   pc_apagar_arquivo: { path: '/apagar-arquivo', montar: (i) => ({ caminho: i.caminho }) },
   pc_listar_favoritos: { path: '/favoritos', montar: () => ({}) },
   pc_listar_abas_navegador: { path: '/abas', montar: () => ({}) },
+  pc_abrir_aba: { path: '/abrir-aba', montar: (i) => ({ url: i.url }) },
+  pc_mudar_aba: { path: '/mudar-aba', montar: (i) => ({ termo: i.termo }) },
 };
 
 async function executarAcaoLocal(tool, input) {
@@ -867,6 +878,10 @@ async function executarAcaoLocal(tool, input) {
     } catch (err) {
       return { erro: `Nao consegui acessar a camera: ${err.message}` };
     }
+  }
+
+  if (TOOLS_CONTROLE_ABAS.has(tool) && !controleAbasAtivado()) {
+    return { erro: 'Controle de abas do navegador esta desativado. Ative o botao "Controle de abas do navegador" no painel do agente (icone de computador) se quiser que eu faca isso.' };
   }
 
   const token = obterTokenAgenteLocal();
@@ -922,7 +937,11 @@ agentBtn.addEventListener('click', () => {
   if (!agentPanel.hidden) {
     agentTokenInput.value = obterTokenAgenteLocal();
     testarConexaoAgenteLocal();
+    controleAbasToggle.checked = controleAbasAtivado();
   }
+});
+controleAbasToggle.addEventListener('change', () => {
+  localStorage.setItem('lumia_controle_abas', controleAbasToggle.checked ? '1' : '0');
 });
 agentPanelClose.addEventListener('click', () => { agentPanel.hidden = true; });
 agentSaveBtn.addEventListener('click', () => {

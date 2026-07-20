@@ -357,6 +357,7 @@ html, body {
 }
 .agent-status { color: var(--text-dim); font-size: 11px; }
 .agent-status.conectado { color: var(--gold-bright); }
+.agent-panel-divisor { height: 1px; background: rgba(212, 175, 55, 0.18); margin: 12px 0; }
 
 /* ---------- Abas (Painel / Agenda) ---------- */
 

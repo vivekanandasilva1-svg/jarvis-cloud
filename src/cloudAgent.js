@@ -263,10 +263,15 @@ instalados e mexer em arquivos, nao instalar nada novo (por seguranca).
 
 Voce tambem consegue ver os favoritos salvos no navegador do usuario (pc_listar_favoritos, com
 pastas e subpastas) e pode abrir qualquer um deles com pc_abrir_app passando a URL. Abas abertas
-AGORA no Chrome (pc_listar_abas_navegador) so funcionam se o usuario tiver aberto o Chrome com
-depuracao remota ligada - se der erro nessa ferramenta, explique que precisa fechar todo o
-Chrome e abrir de novo com a flag --remote-debugging-port=9222, em vez de insistir tentando de
-novo sozinho.
+AGORA no Chrome (pc_listar_abas_navegador), abrir aba nova (pc_abrir_aba) e mudar de aba
+(pc_mudar_aba) so funcionam se o usuario tiver aberto o Chrome com depuracao remota ligada - se
+der erro nessa ferramenta, explique que precisa fechar todo o Chrome e abrir de novo com a flag
+--remote-debugging-port=9222, em vez de insistir tentando de novo sozinho. Essas ferramentas de
+aba tambem so funcionam se o usuario tiver ativado o botao "controle de abas" no painel do
+agente local - se vier um erro dizendo que esta desativado, explique isso, nao insista.
+Pc_mudar_aba muda o foco pra uma aba JA aberta que bata com um termo (parte do titulo ou da
+URL) - se a resposta trouxer mais de uma opcao encontrada, pergunte ao usuario qual delas antes
+de tentar de novo.
 
 Voce tambem consegue enxergar pela camera do dispositivo do usuario, usando ver_camera - ela liga
 a camera (se estiver desligada) e captura uma imagem do que esta sendo filmado. Use sempre que o
@@ -759,6 +764,24 @@ const tools = [
     input_schema: { type: 'object', properties: {} },
   },
   {
+    name: 'pc_abrir_aba',
+    description: 'Abre uma URL como aba NOVA no Chrome do usuario que ja esta aberto (diferente de pc_abrir_app, que so abre no navegador padrao do sistema). So funciona se o usuario tiver o Chrome com depuracao remota ligada E o controle de abas ativado no painel do agente.',
+    input_schema: {
+      type: 'object',
+      properties: { url: { type: 'string', description: 'URL completa a abrir, comecando com http:// ou https://' } },
+      required: ['url'],
+    },
+  },
+  {
+    name: 'pc_mudar_aba',
+    description: 'Muda o foco pra uma aba JA ABERTA no Chrome do usuario que bata com um termo (parte do titulo ou da URL) - use pc_listar_abas_navegador antes se precisar ver as opcoes disponiveis. So funciona se o usuario tiver o Chrome com depuracao remota ligada E o controle de abas ativado no painel do agente.',
+    input_schema: {
+      type: 'object',
+      properties: { termo: { type: 'string', description: 'Parte do titulo ou da URL da aba pra qual mudar' } },
+      required: ['termo'],
+    },
+  },
+  {
     name: 'ver_camera',
     description: 'Liga a camera do dispositivo do usuario (se estiver desligada) e captura uma imagem do que esta sendo filmado agora, pra voce enxergar e comentar. Use quando o usuario pedir pra voce "ver", "olhar", "abrir os olhos" pela camera - frases como "Lumia abra os olhos", "veja isso aqui", "veja quem esta aqui", "olha o que eu tô segurando" etc, seja por texto, audio ou no modo conversa. Precisa de permissao de camera do navegador - se o usuario negar, explique isso.',
     input_schema: { type: 'object', properties: {} },
@@ -971,7 +994,7 @@ async function executeConfirmedAction(name, input) {
 const PC_TOOLS = new Set([
   'pc_abrir_app', 'pc_fechar_app', 'pc_abrir_arquivo', 'pc_ler_arquivo',
   'pc_listar_pasta', 'pc_criar_arquivo', 'pc_editar_arquivo', 'pc_apagar_arquivo',
-  'pc_listar_favoritos', 'pc_listar_abas_navegador', 'ver_camera',
+  'pc_listar_favoritos', 'pc_listar_abas_navegador', 'pc_abrir_aba', 'pc_mudar_aba', 'ver_camera',
 ]);
 // so pedem confirmacao as que perdem trabalho nao salvo ou sao dificeis/impossiveis de
 // desfazer - abrir, ler, listar e criar (nunca sobrescreve) rodam direto
