@@ -11,7 +11,10 @@ export async function synthesizeSpeechKokoro(text) {
   if (!url) throw new Error('KOKORO_URL nao configurado');
 
   const controlador = new AbortController();
-  const timer = setTimeout(() => controlador.abort(), 25000);
+  // reduzido de 25s pra 10s - a VPS pode ficar com a CPU disputada (steal time do host) e
+  // fazer o Kokoro demorar demais; e melhor falhar rapido e cair pro texto do que deixar o
+  // usuario parado vendo "pensando" por quase 1 minuto (2 tentativas x 25s) esperando a voz
+  const timer = setTimeout(() => controlador.abort(), 10000);
   let res;
   try {
     res = await fetch(`${url}/v1/audio/speech`, {

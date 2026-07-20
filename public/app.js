@@ -809,7 +809,7 @@ async function falar(texto, bubbleEl) {
       // ficar so em texto dessa vez a soar diferente dela mesma.
       console.warn('Voz da Kokoro falhou na 1a tentativa, tentando de novo:', err);
       try {
-        await new Promise((r) => setTimeout(r, 1200));
+        await new Promise((r) => setTimeout(r, 500));
         await falarComVozNatural(texto, bubbleEl);
       } catch (err2) {
         console.warn('Voz da Kokoro falhou de novo, ficando so em texto (sem cair pra voz robotica):', err2);
