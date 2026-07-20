@@ -10,10 +10,12 @@ export async function synthesizeSpeechKokoro(text) {
   const url = process.env.KOKORO_URL;
   if (!url) throw new Error('KOKORO_URL nao configurado');
 
+  // reduzido de 25s pra 10s - diagnostico ao vivo achou a VPS com 48% de CPU steal time
+  // (roubada pelo host) e load 2.55 em so 2 nucleos, fazendo o Kokoro (sem NNPACK, CPU pura)
+  // levar ate 20s pra sintetizar uma unica palavra sob essas condicoes. O frontend tenta ATE
+  // 2 VEZES (ver falar() em app.js) - e melhor falhar rapido e cair pro texto do que deixar o
+  // usuario parado quase 1 minuto (2 tentativas x 25s) esperando a voz.
   const controlador = new AbortController();
-  // reduzido de 25s pra 10s - a VPS pode ficar com a CPU disputada (steal time do host) e
-  // fazer o Kokoro demorar demais; e melhor falhar rapido e cair pro texto do que deixar o
-  // usuario parado vendo "pensando" por quase 1 minuto (2 tentativas x 25s) esperando a voz
   const timer = setTimeout(() => controlador.abort(), 10000);
   let res;
   try {

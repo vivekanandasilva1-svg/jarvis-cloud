@@ -744,11 +744,20 @@ function pararLegenda(bubbleEl, textoCompleto) {
 }
 
 async function falarComVozNatural(texto, bubbleEl) {
-  const res = await fetch('/api/tts', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-    body: JSON.stringify({ text: texto }),
-  });
+  // sem isso, o intervalo entre a resposta chegar (bolha "pensando" ja some antes daqui) e o
+  // audio comecar a tocar ficava com a tela parada, sem feedback nenhum - parecia travado
+  // mesmo quando o Kokoro so estava demorando um pouco (VPS sob carga)
+  mostrarBolhaStatus('gerando_audio', 'Gerando audio...');
+  let res;
+  try {
+    res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ text: texto }),
+    });
+  } finally {
+    removerBolhaStatus();
+  }
   if (!res.ok) throw new Error('tts indisponivel');
   const data = await res.json();
   if (!data.audio || !data.alignment) throw new Error('tts sem alinhamento');
@@ -936,6 +945,7 @@ const ICONES_STATUS = {
   transcrevendo: '🎙️',
   lendo_arquivo: '📄',
   gerando_arquivo: '📄',
+  gerando_audio: '🔊',
 };
 
 function mostrarBolhaStatus(estado, detalhe) {
