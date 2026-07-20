@@ -157,26 +157,18 @@ function formatarDataHoraBR() {
 
 export async function gerarRelatorioAdsFinanceiroCompleto() {
   const todasContas = await metaAds.listAdAccounts();
-  // account_status 1 = ACTIVE (Meta) - o usuario pediu pra so entrar conta ativa nesse
-  // relatorio, deixando de fora conta desabilitada/fechada/em revisao etc
-  const contas = todasContas.filter((c) => c.account_status === 1);
   const hoje = new Date();
   const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const ontem = hoje.toISOString().slice(0, 10);
 
-  const linhas = [];
-  linhas.push('💳 RELATÓRIO FINANCEIRO COMPLETO - META ADS 💳');
-  linhas.push(`Gerado em: ${formatarDataHoraBR()}`);
-  linhas.push(`Contas ativas: ${contas.length} (de ${todasContas.length} contas no total)`);
-  linhas.push('');
-
+  const linhasContas = [];
   let saldoTotalDisponivel = 0;
   let faturaTotalAberta = 0;
   let campanhasAtivasTotal = 0;
   let campanhasPausadasTotal = 0;
   let gastoMedioDiarioTotal = 0;
 
-  for (const c of contas) {
+  for (const c of todasContas) {
     let ativas = 0;
     let pausadas = 0;
     try {
@@ -185,7 +177,13 @@ export async function gerarRelatorioAdsFinanceiroCompleto() {
         if (camp.effective_status === 'ACTIVE') ativas++;
         else pausadas++;
       }
-    } catch { /* conta sem permissao/erro pontual - segue sem contagem de campanha */ }
+    } catch { /* conta sem permissao/erro pontual - trata como sem campanha ativa, fica de fora */ }
+
+    // "conta ativa" aqui significa TEM ANUNCIO RODANDO DE VERDADE (pelo menos 1 campanha com
+    // effective_status ACTIVE) - nao e o status administrativo da conta na Meta. Pedido
+    // explicito do usuario: conta sem nenhum anuncio ativo fica de fora pra nao gastar
+    // chamada de API a toa nem poluir o relatorio/WhatsApp com conta parada.
+    if (ativas === 0) continue;
 
     let gastoMedioDiario = null;
     try {
@@ -200,7 +198,7 @@ export async function gerarRelatorioAdsFinanceiroCompleto() {
         ? `Fatura pendente: ${formatarReais(c.valorEmAberto)}`
         : 'Saldo: indisponivel';
 
-    linhas.push(`* ${c.name} (${c.empresa}) — ${saldoLinha} | Campanhas ativas: ${ativas} | Pausadas: ${pausadas}${gastoMedioDiario != null ? ` | Gasto medio diario (7d): ${formatarReais(gastoMedioDiario)}` : ''}`);
+    linhasContas.push(`* ${c.name} (${c.empresa}) — ${saldoLinha} | Campanhas ativas: ${ativas} | Pausadas: ${pausadas}${gastoMedioDiario != null ? ` | Gasto medio diario (7d): ${formatarReais(gastoMedioDiario)}` : ''}`);
 
     if (c.tipoConta === 'prepago') saldoTotalDisponivel += c.saldoDisponivel || 0;
     if (c.tipoConta === 'pos-pago (fatura)') faturaTotalAberta += c.valorEmAberto || 0;
@@ -209,6 +207,12 @@ export async function gerarRelatorioAdsFinanceiroCompleto() {
     if (gastoMedioDiario != null) gastoMedioDiarioTotal += gastoMedioDiario;
   }
 
+  const linhas = [];
+  linhas.push('💳 RELATÓRIO FINANCEIRO COMPLETO - META ADS 💳');
+  linhas.push(`Gerado em: ${formatarDataHoraBR()}`);
+  linhas.push(`Contas com anuncio ativo rodando: ${linhasContas.length} (de ${todasContas.length} contas no total - as demais estao sem nenhuma campanha ativa e ficaram de fora)`);
+  linhas.push('');
+  linhas.push(...linhasContas);
   linhas.push('');
   linhas.push('RESUMO GERAL:');
   linhas.push(`* 💰 Saldo total disponivel (contas prepagas): ${formatarReais(saldoTotalDisponivel)}`);
