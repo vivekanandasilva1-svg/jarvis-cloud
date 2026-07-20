@@ -296,7 +296,6 @@ function montarBlocoCampanha({ conta, campanha, row, frequencia, hoje }) {
   const { resultados, custoPorResultado } = metaAds.extractResultsAndCPA(row);
   const cliquesLink = Number(row.inline_link_clicks || 0);
   const gasto = Number(row.spend || 0);
-  const custoPorMilCliques = cliquesLink ? (gasto / cliquesLink) * 1000 : 0;
   const alcance = Number(row.reach || 0);
   const impressoes = Number(row.impressions || 0);
   const freqAnuncio = Number(row.frequency || 0);
@@ -317,7 +316,6 @@ function montarBlocoCampanha({ conta, campanha, row, frequencia, hoje }) {
     `* 💬 Conversas Iniciadas: ${resultados} resultados`,
     `* 💰 Custo por Conversa (CPR): ${formatarReais(custoPorResultado || 0)}`,
     `* 🖱️ Cliques no Link: ${cliquesLink} interesses diretos`,
-    `* 💳 Custo por Mil Cliques (CPM/CPC adaptado): ${formatarReais(custoPorMilCliques)}`,
     '',
     '👁️ 2. ALCANCE & ENTREGA DO ANÚNCIO',
     'Como o algoritmo está distribuindo as suas campanhas.',
