@@ -277,11 +277,34 @@ export async function analyzeCampaignAds({ campaignId, since, until, datePreset 
     return { anuncios: [], resumo: 'Sem dados de performance no periodo (sem gasto/impressoes).' };
   }
 
+  // insights e dado HISTORICO - um anuncio que gastou/teve resultado no periodo mas ja foi
+  // pausado/arquivado depois ainda aparece aqui normalmente. Pedido explicito do usuario: so
+  // quer anuncio que esta ATIVO DE VERDADE agora, entao confere o effective_status atual de
+  // cada anuncio (chamada em lote, 1 so requisicao pra todos os ids) e filtra por isso.
+  const adIds = [...new Set(rows.map((r) => r.ad_id).filter(Boolean))];
+  const token = adTokenCache.get(adIds[0]) || campaignTokenCache.get(campaignId);
+  let statusPorAd = null;
+  if (token && adIds.length) {
+    try {
+      const data = await callWithToken(token, 'GET', '/', { query: { ids: adIds.join(','), fields: 'effective_status' } });
+      statusPorAd = {};
+      for (const id of adIds) {
+        statusPorAd[id] = data[id]?.effective_status || null;
+        adTokenCache.set(id, token);
+      }
+    } catch { /* se a checagem de status falhar, segue sem filtrar - melhor mostrar de mais que travar o relatorio inteiro */ }
+  }
+  const rowsAtivos = statusPorAd ? rows.filter((r) => statusPorAd[r.ad_id] === 'ACTIVE') : rows;
+
+  if (rowsAtivos.length === 0) {
+    return { anuncios: [], resumo: 'Nenhum anuncio ativo (todos pausados/arquivados) com dados de performance no periodo.' };
+  }
+
   // acao de video vem como lista [{action_type, value}] igual "actions" - so tem 1 item
   // relevante aqui, mas o formato da API e sempre lista
   const extrairValorVideo = (campo) => (Array.isArray(campo) && campo.length ? Number(campo[0].value || 0) : 0);
 
-  const anuncios = rows.map((r) => {
+  const anuncios = rowsAtivos.map((r) => {
     const { tipo, resultados, custoPorResultado } = extractResultsAndCPA(r);
     const impressoes = Number(r.impressions || 0);
     const videoViews50 = extrairValorVideo(r.video_p50_watched_actions);
