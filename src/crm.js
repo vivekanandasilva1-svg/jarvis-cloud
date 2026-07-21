@@ -3,8 +3,16 @@
 // mensagens (entrada/saida) pra abrir a conversa direto no app e responder por aqui, sem precisar
 // abrir o WhatsApp de verdade. Tudo em Postgres, permanente ate o dono apagar/mover manualmente -
 // mesma politica de persistencia da agenda.
+import { EventEmitter } from 'node:events';
 import { pool } from './db.js';
 import * as evolutionApi from './evolutionApi.js';
+
+// avisa quem estiver ouvindo (endpoint SSE em server.js) sempre que uma mensagem nova entra ou
+// sai de alguma conversa - e o que da o "tempo real" da aba CRM, sem precisar de polling
+// agressivo. So um emissor em memoria (best-effort, nao sobrevive a reinicio do processo, mas
+// nao precisa: quem reconecta busca o estado atual via /api/crm/contatos e /api/crm/mensagens).
+export const eventosCrm = new EventEmitter();
+eventosCrm.setMaxListeners(50); // cada aba do painel aberta conta como 1 listener
 
 export const ETAPAS = [
   { id: 'novo_lead', nome: 'Novo Lead' },
@@ -45,6 +53,9 @@ async function garantirTabelas() {
   // coluna nova (pausar auto-atendimento so pra essa conversa) - IF NOT EXISTS pra nao quebrar
   // instalacoes que ja tinham essa tabela antes dessa funcionalidade existir
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS auto_pausado BOOLEAN NOT NULL DEFAULT false;`);
+  // oculto = o dono escolheu manualmente esconder essa conversa do funil (ex: numero pessoal
+  // de um fornecedor, engano, spam) - nao apaga nada, so tira da visualizacao padrao
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS oculto BOOLEAN NOT NULL DEFAULT false;`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas do CRM:', err.message);
@@ -72,10 +83,13 @@ export async function registrarMensagem({ numero, instancia, direcao, tipo = 'te
     [numero, instancia, nome || null, preview, direcao],
   );
 
-  await pool.query(
-    `INSERT INTO crm_mensagens (numero, instancia, direcao, tipo, texto) VALUES ($1, $2, $3, $4, $5)`,
+  const { rows: msgRows } = await pool.query(
+    `INSERT INTO crm_mensagens (numero, instancia, direcao, tipo, texto) VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, direcao, tipo, texto, criado_em`,
     [numero, instancia, direcao, tipo, texto || ''],
   );
+
+  eventosCrm.emit('mensagem', { contatoId: rows[0]?.id, numero, instancia, mensagem: msgRows[0] });
 
   return rows[0]?.id;
 }
@@ -91,14 +105,35 @@ export async function marcarAgendado(numero, instancia) {
   );
 }
 
+// so os NAO ocultos - o padrao do board (ver listarContatosOcultos pra tela de gerenciar)
 export async function listarContatos() {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
     `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado
-     FROM crm_contatos ORDER BY ultima_mensagem_em DESC NULLS LAST`,
+     FROM crm_contatos WHERE oculto = false ORDER BY ultima_mensagem_em DESC NULLS LAST`,
   );
   return rows;
+}
+
+export async function listarContatosOcultos() {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado
+     FROM crm_contatos WHERE oculto = true ORDER BY ultima_mensagem_em DESC NULLS LAST`,
+  );
+  return rows;
+}
+
+// esconde/reexibe uma conversa do funil manualmente (pedido explicito do usuario: "conversas
+// trancadas" que ele quer marcar pra nao aparecer) - nao apaga nada, so tira da visualizacao
+// padrao do board; listarContatosOcultos() deixa gerenciar/desfazer depois
+export async function alternarOcultar(id, oculto) {
+  if (!pool) return;
+  await tabelasProntas;
+  await pool.query(`UPDATE crm_contatos SET oculto = $1 WHERE id = $2`, [!!oculto, id]);
+  eventosCrm.emit('contato-atualizado', { contatoId: id });
 }
 
 // liga/desliga o auto-atendimento so pra essa conversa especifica - nao mexe na config global
@@ -107,6 +142,7 @@ export async function alternarAutoAtendimento(id, pausado) {
   if (!pool) return;
   await tabelasProntas;
   await pool.query(`UPDATE crm_contatos SET auto_pausado = $1 WHERE id = $2`, [!!pausado, id]);
+  eventosCrm.emit('contato-atualizado', { contatoId: id });
 }
 
 // consultado pelo auto-atendimento (autoAtendimento.js/server.js) antes de gerar qualquer
@@ -133,6 +169,7 @@ export async function apagarContato(id) {
   const { numero, instancia } = rows[0];
   await pool.query(`DELETE FROM crm_mensagens WHERE numero = $1 AND instancia = $2`, [numero, instancia]);
   await pool.query(`DELETE FROM crm_contatos WHERE id = $1`, [id]);
+  eventosCrm.emit('contato-atualizado', { contatoId: id, apagado: true });
 }
 
 export async function listarMensagens(numero, instancia) {
@@ -151,6 +188,7 @@ export async function moverEtapa(id, etapa) {
   if (!pool) return;
   await tabelasProntas;
   await pool.query(`UPDATE crm_contatos SET etapa = $1 WHERE id = $2`, [etapa, id]);
+  eventosCrm.emit('contato-atualizado', { contatoId: id });
 }
 
 // manda uma mensagem de texto pro contato direto pelo CRM (usa a mesma instancia que o card

@@ -57,7 +57,10 @@ app.use((req, res, next) => {
     req.path === '/webhook/whatsapp' ||
     req.path === '/api/whatsapp-evolution/webhook' ||
     req.path === '/api/agenda/google/conectar' ||
-    req.path === '/api/agenda/google/callback'
+    req.path === '/api/agenda/google/callback' ||
+    // EventSource nativo do browser nao manda headers customizados - a senha vai por query
+    // string aqui, e o proprio handler da rota confere ela antes de abrir o stream
+    req.path === '/api/crm/eventos'
   ) return next();
 
   const provided = req.header('x-app-password');
@@ -399,13 +402,21 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   const ehNumeroAdmin = numeroAdmin && mesmoNumero(numero, numeroAdmin);
 
   if (fromMe) {
-    // eco confirmado de algo que a propria Lumia mandou - ignora sempre
+    // eco confirmado de algo que a propria Lumia mandou (painel CRM ou auto-atendimento) -
+    // esses dois caminhos ja registram a mensagem 'saida' no CRM no proprio ponto de envio,
+    // entao so ignora aqui pra nao duplicar
     if (id && idsEnviadosPorNos.has(id)) { idsEnviadosPorNos.delete(id); return; }
-    // fromMe sem ser eco rastreado: so processa se for exatamente o numero do dono (chat
-    // "Mensagem para voce mesmo" - o dono digitando de verdade pra Lumia, nao um eco dela).
-    // Qualquer outro fromMe (ex: o dono mandando mensagem de outro dispositivo pra um
-    // paciente) continua ignorado, igual sempre foi.
-    if (!ehNumeroAdmin) return;
+    // fromMe sem ser eco rastreado, PRA UM CONTATO (nao o numero do dono): e o dono
+    // respondendo manualmente pelo proprio WhatsApp de verdade (celular/WhatsApp Web), sem
+    // passar pela Lumia nem pelo painel - registra no CRM como 'saida' pra a conversa la
+    // ficar identica a conversa real (senao essas respostas manuais nunca apareciam no CRM).
+    if (!ehNumeroAdmin) {
+      crm.registrarMensagem({ numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo, texto, nome: data?.pushName })
+        .catch((err) => console.error('Erro registrando mensagem manual (fromMe) no CRM:', err.message));
+      return;
+    }
+    // fromMe pro proprio numero do dono (chat "Mensagem para voce mesmo") - continua nao
+    // sendo uma conversa de CRM, e a conversa pessoal do dono com a Lumia
   }
   if (tipo === 'text' && !texto) return;
 
@@ -764,6 +775,60 @@ app.delete('/api/crm/contatos/:id', async (req, res) => {
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
+});
+
+// esconde/reexibe manualmente uma conversa do funil ("conversas trancadas" que o dono quer
+// tirar de vista - nao ha como detectar chat/contato bloqueado de verdade via Evolution API,
+// esse dado de privacidade do WhatsApp oficial nao e sincronizado pro Baileys)
+app.post('/api/crm/contatos/:id/ocultar', async (req, res) => {
+  const { oculto } = req.body || {};
+  try {
+    await crm.alternarOcultar(Number(req.params.id), !!oculto);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/crm/contatos-ocultos', async (req, res) => {
+  try {
+    res.json({ etapas: crm.ETAPAS, contatos: await crm.listarContatosOcultos() });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// tempo real da aba CRM via Server-Sent Events - EventSource nativo do browser nao manda
+// headers customizados, entao o frontend usa fetch() + leitura manual do stream (mesmo
+// x-app-password de sempre, so que como query string aqui, unico jeito de autenticar essa
+// rota especifica sem mudar todo o esquema de auth do app)
+app.get('/api/crm/eventos', (req, res) => {
+  if (APP_PASSWORD && req.query.senha !== APP_PASSWORD) return res.status(401).end();
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no', // desliga buffering do Traefik/nginx na frente, senao o evento fica preso no proxy
+  });
+  res.write('\n');
+
+  const mandar = (tipo, payload) => res.write(`data: ${JSON.stringify({ tipo, ...payload })}\n\n`);
+  const onMensagem = (payload) => mandar('mensagem', payload);
+  const onContatoAtualizado = (payload) => mandar('contato-atualizado', payload);
+  crm.eventosCrm.on('mensagem', onMensagem);
+  crm.eventosCrm.on('contato-atualizado', onContatoAtualizado);
+
+  // sem isso a conexao fica "ociosa" e proxies na frente (Traefik) derrubam depois de um
+  // tempo sem trafego nenhum - um comentario SSE (linha comecando com ":") a cada 20s mantem
+  // viva sem gerar evento nenhum pro frontend processar
+  const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 20000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    crm.eventosCrm.off('mensagem', onMensagem);
+    crm.eventosCrm.off('contato-atualizado', onContatoAtualizado);
+  });
 });
 
 // ---------- Agenda interna + sincronizacao opcional com o Google Agenda ----------

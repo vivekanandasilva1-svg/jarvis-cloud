@@ -861,13 +861,34 @@ html, body {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
 }
 .crm-conversa-header strong { font-size: 14px; color: var(--text); }
 .crm-conversa-sub { margin: 2px 0 0; font-size: 11.5px; color: var(--text-dim); }
-.crm-conversa-acoes { display: flex; align-items: center; gap: 8px; }
+.crm-conversa-titulo { flex: 1 1 auto; min-width: 0; }
+.crm-conversa-titulo strong, .crm-conversa-titulo p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm-conversa-acoes { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+
+.crm-conversa-avatar {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: rgba(212, 175, 55, 0.16);
+}
+.crm-conversa-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold-bright);
+  font-weight: 700;
+  font-size: 15px;
+  text-transform: uppercase;
+}
 #crmConversaFechar {
   border: 1px solid var(--border);
   background: none;
@@ -904,8 +925,97 @@ html, body {
   padding: 18px 22px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
+
+/* fundo "papel de parede" no estilo do WhatsApp - so um tom solido diferenciado do resto do
+   app (escuro, consistente com o tema geral), sem depender de imagem externa */
+.crm-whatsapp-fundo {
+  background-color: #0b141a;
+  background-image:
+    radial-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 26px 26px;
+  background-position: 0 0, 13px 13px;
+}
+
+/* bolhas de mensagem no estilo classico do WhatsApp (verde pra enviada/direita, cinza pra
+   recebida/esquerda) - deliberadamente diferentes das bolhas douradas do chat principal da
+   Lumia, pra essa aba parecer "a conversa de verdade" */
+.crm-msg {
+  max-width: 72%;
+  padding: 6px 9px 8px 9px;
+  border-radius: 8px;
+  font-size: 14.2px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  position: relative;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
+}
+.crm-msg-entrada { align-self: flex-start; background: #202c33; color: #e9edef; border-top-left-radius: 2px; }
+.crm-msg-saida { align-self: flex-end; background: #005c4b; color: #e9edef; border-top-right-radius: 2px; }
+.crm-msg-corpo { margin-right: 52px; }
+.crm-msg-meta {
+  position: absolute;
+  bottom: 5px;
+  right: 9px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  color: rgba(233, 237, 239, 0.6);
+  white-space: nowrap;
+}
+.crm-msg-check { color: #53bdeb; font-size: 12.5px; line-height: 1; }
+.crm-msg-midia { display: flex; align-items: center; gap: 6px; opacity: 0.9; }
+.crm-msg-data-separador {
+  align-self: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cfd7db;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  margin: 6px 0;
+}
+
+.crm-ocultas-modal {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.crm-ocultas-caixa {
+  width: min(420px, 90%);
+  max-height: 70%;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.crm-ocultas-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.crm-ocultas-header button {
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-dim);
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+}
+.crm-ocultas-lista { overflow-y: auto; padding: 8px 16px; }
 
 .crm-conversa-form {
   flex: 0 0 auto;

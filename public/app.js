@@ -117,6 +117,13 @@ const crmConversaFechar = document.getElementById('crmConversaFechar');
 const crmConversaErro = document.getElementById('crmConversaErro');
 const crmConversaPausar = document.getElementById('crmConversaPausar');
 const crmConversaApagar = document.getElementById('crmConversaApagar');
+const crmConversaOcultar = document.getElementById('crmConversaOcultar');
+const crmConversaAvatar = document.getElementById('crmConversaAvatar');
+const crmConversaAvatarFallback = document.getElementById('crmConversaAvatarFallback');
+const crmVerOcultas = document.getElementById('crmVerOcultas');
+const crmOcultasModal = document.getElementById('crmOcultasModal');
+const crmOcultasFechar = document.getElementById('crmOcultasFechar');
+const crmOcultasLista = document.getElementById('crmOcultasLista');
 
 // ---------- Auto Atendimento: elementos ----------
 const autoAtivo = document.getElementById('autoAtivo');
@@ -2236,10 +2243,45 @@ crmRefresh.addEventListener('click', carregarCrm);
 crmScrollEsq.addEventListener('click', () => crmBoard.scrollBy({ left: -260, behavior: 'smooth' }));
 crmScrollDir.addEventListener('click', () => crmBoard.scrollBy({ left: 260, behavior: 'smooth' }));
 
+// tempo real via SSE (ver /api/crm/eventos no server) - o board e a conversa aberta atualizam
+// na hora que uma mensagem chega/sai, sem esperar polling. O polling abaixo vira so uma rede
+// de seguranca bem mais espacada, pro caso raro do SSE cair e nao reconectar sozinho.
+let crmEventSource = null;
+
+function conectarEventosCrm() {
+  if (crmEventSource) return;
+  crmEventSource = new EventSource(`/api/crm/eventos?senha=${encodeURIComponent(appPassword)}`);
+  crmEventSource.onmessage = (ev) => {
+    let data;
+    try { data = JSON.parse(ev.data); } catch { return; }
+    if (data.tipo === 'mensagem') {
+      carregarCrm(); // preview/ordem dos cards muda a cada mensagem nova
+      if (crmContatoAberto && data.numero === crmContatoAberto.numero && data.instancia === crmContatoAberto.instancia) {
+        carregarMensagensCrm();
+      }
+    } else if (data.tipo === 'contato-atualizado') {
+      carregarCrm();
+      if (data.apagado && crmContatoAberto?.id === data.contatoId) {
+        crmConversa.hidden = true;
+        crmContatoAberto = null;
+      }
+    }
+  };
+  // EventSource reconecta sozinho quando a conexao cai - so evita barulho no console
+  crmEventSource.onerror = () => {};
+}
+
+function desconectarEventosCrm() {
+  if (crmEventSource) { crmEventSource.close(); crmEventSource = null; }
+}
+
 function iniciarPollingCrm() {
-  crmPollingContatos = setInterval(carregarCrm, 8000);
+  conectarEventosCrm();
+  // rede de seguranca (nao a fonte principal de atualizacao) - 20s em vez dos 8s de antes
+  crmPollingContatos = setInterval(carregarCrm, 20000);
 }
 function pararPollingCrm() {
+  desconectarEventosCrm();
   if (crmPollingContatos) { clearInterval(crmPollingContatos); crmPollingContatos = null; }
   pararPollingConversaCrm();
 }
@@ -2247,14 +2289,71 @@ function pararPollingConversaCrm() {
   if (crmPollingConversa) { clearInterval(crmPollingConversa); crmPollingConversa = null; }
 }
 
+const CRM_ICONE_MIDIA = { image: '🖼️', audio: '🎤', video: '🎥' };
+
+function crmFormatarHora(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' });
+}
+
+function crmFormatarSeparadorData(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const hoje = new Date();
+  const ontem = new Date(hoje.getTime() - 24 * 60 * 60 * 1000);
+  const mesmaData = (a, b) => a.toDateString() === b.toDateString();
+  if (mesmaData(d, hoje)) return 'Hoje';
+  if (mesmaData(d, ontem)) return 'Ontem';
+  return d.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// visual proposital diferente do chat principal da Lumia - bolhas verde/cinza no estilo
+// classico do WhatsApp (ver .crm-msg no CSS), com separador de data e timestamp+check em cada
+// mensagem, pra essa aba parecer "a conversa de verdade" em vez do tema dourado do resto do app
 function crmRenderizarMensagens(mensagens) {
   crmConversaLog.textContent = '';
+  let ultimaDataSeparador = null;
+
   for (const m of mensagens) {
+    const separador = crmFormatarSeparadorData(m.criado_em);
+    if (separador && separador !== ultimaDataSeparador) {
+      const sep = document.createElement('div');
+      sep.className = 'crm-msg-data-separador';
+      sep.textContent = separador;
+      crmConversaLog.appendChild(sep);
+      ultimaDataSeparador = separador;
+    }
+
+    const saida = m.direcao !== 'entrada';
     const bubble = document.createElement('div');
-    // "entrada" = o contato mandou (fica a esquerda, como as respostas da Lumia no chat
-    // principal); "saida" = a gente/Lumia mandou (fica a direita, como as mensagens do usuario)
-    bubble.className = m.direcao === 'entrada' ? 'bubble assistant' : 'bubble user';
-    bubble.textContent = m.texto || (m.tipo !== 'text' ? `[${m.tipo}]` : '');
+    bubble.className = `crm-msg ${saida ? 'crm-msg-saida' : 'crm-msg-entrada'}`;
+
+    const corpo = document.createElement('div');
+    corpo.className = 'crm-msg-corpo';
+    if (m.tipo && m.tipo !== 'text') {
+      const midia = document.createElement('div');
+      midia.className = 'crm-msg-midia';
+      midia.textContent = `${CRM_ICONE_MIDIA[m.tipo] || '📎'} ${m.texto || `[${m.tipo}]`}`;
+      corpo.appendChild(midia);
+    } else {
+      corpo.textContent = m.texto || '';
+    }
+    bubble.appendChild(corpo);
+
+    const meta = document.createElement('span');
+    meta.className = 'crm-msg-meta';
+    meta.textContent = crmFormatarHora(m.criado_em);
+    if (saida) {
+      const check = document.createElement('span');
+      check.className = 'crm-msg-check';
+      // sem status de entrega/leitura de verdade guardado no historico - so confirma que foi
+      // enviada (nao finge "lido" sem esse dado real)
+      check.textContent = '✓';
+      meta.appendChild(check);
+    }
+    bubble.appendChild(meta);
+
     crmConversaLog.appendChild(bubble);
   }
   crmConversaLog.scrollTop = crmConversaLog.scrollHeight;
@@ -2280,16 +2379,33 @@ function crmAtualizarBotaoPausar() {
   crmConversaPausar.classList.toggle('crm-btn-ativo', pausado);
 }
 
+function crmAtualizarAvatar(contato) {
+  // sem foto de perfil guardada ainda - so a inicial do nome/numero como fallback, no mesmo
+  // estilo circular que uma foto real ocuparia
+  crmConversaAvatar.hidden = true;
+  crmConversaAvatarFallback.hidden = false;
+  const base = contato.nome || contato.numero || '?';
+  crmConversaAvatarFallback.textContent = base.trim().charAt(0) || '?';
+}
+
+function crmAtualizarBotaoOcultar() {
+  crmConversaOcultar.textContent = crmContatoAberto?.oculto ? 'Reexibir conversa' : 'Ocultar conversa';
+}
+
 function abrirConversaCrm(contato) {
   crmContatoAberto = contato;
   crmConversaNome.textContent = contato.nome || contato.numero;
   crmConversaNumero.textContent = `${contato.numero} · ${contato.instancia}`;
   crmConversaErro.hidden = true;
   crmConversa.hidden = false;
+  crmAtualizarAvatar(contato);
   crmAtualizarBotaoPausar();
+  crmAtualizarBotaoOcultar();
   carregarMensagensCrm();
   pararPollingConversaCrm();
-  crmPollingConversa = setInterval(carregarMensagensCrm, 5000);
+  // o SSE (conectarEventosCrm) e a fonte principal de atualizacao em tempo real - isso aqui e
+  // so uma rede de seguranca bem espacada, caso a conexao caia sem reconectar
+  crmPollingConversa = setInterval(carregarMensagensCrm, 20000);
 }
 
 crmConversaFechar.addEventListener('click', () => {
@@ -2344,6 +2460,106 @@ crmConversaApagar.addEventListener('click', async () => {
     crmConversaApagar.disabled = false;
   }
 });
+
+crmConversaOcultar.addEventListener('click', async () => {
+  if (!crmContatoAberto) return;
+  const novoOculto = !crmContatoAberto.oculto;
+  crmConversaOcultar.disabled = true;
+  try {
+    const res = await fetch(`/api/crm/contatos/${crmContatoAberto.id}/ocultar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ oculto: novoOculto }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    crmContatoAberto.oculto = novoOculto;
+    crmAtualizarBotaoOcultar();
+    // ocultar tira da lista padrao do board - fecha a conversa junto pra nao ficar olhando
+    // pra uma conversa que "sumiu" da lista de tras
+    if (novoOculto) {
+      crmConversa.hidden = true;
+      crmContatoAberto = null;
+      pararPollingConversaCrm();
+    }
+    carregarCrm();
+  } catch (err) {
+    crmConversaErro.textContent = `Nao consegui atualizar: ${err.message}`;
+    crmConversaErro.hidden = false;
+  } finally {
+    crmConversaOcultar.disabled = false;
+  }
+});
+
+// ---------- CRM: gerenciar conversas ocultas ----------
+async function carregarOcultasCrm() {
+  crmOcultasLista.textContent = '';
+  const carregando = document.createElement('p');
+  carregando.className = 'agenda-vazia';
+  carregando.textContent = 'Carregando...';
+  crmOcultasLista.appendChild(carregando);
+
+  try {
+    const res = await fetch('/api/crm/contatos-ocultos', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    const lista = data.contatos || [];
+
+    crmOcultasLista.textContent = '';
+    if (!lista.length) {
+      const vazio = document.createElement('p');
+      vazio.className = 'agenda-vazia';
+      vazio.textContent = 'Nenhuma conversa oculta.';
+      crmOcultasLista.appendChild(vazio);
+      return;
+    }
+    for (const contato of lista) {
+      const item = document.createElement('div');
+      item.className = 'auto-arquivo-item';
+      const info = document.createElement('div');
+      info.className = 'auto-arquivo-info';
+      const nome = document.createElement('div');
+      nome.className = 'auto-arquivo-nome';
+      nome.textContent = contato.nome || contato.numero;
+      info.appendChild(nome);
+      item.appendChild(info);
+
+      const reexibirBtn = document.createElement('button');
+      reexibirBtn.type = 'button';
+      reexibirBtn.className = 'agenda-evento-cancelar';
+      reexibirBtn.textContent = '↩';
+      reexibirBtn.title = 'Reexibir no funil';
+      reexibirBtn.addEventListener('click', async () => {
+        try {
+          await fetch(`/api/crm/contatos/${contato.id}/ocultar`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+            body: JSON.stringify({ oculto: false }),
+          });
+          carregarOcultasCrm();
+          carregarCrm();
+        } catch (err) {
+          addBubble(`Erro reexibindo conversa: ${err.message}`, 'system');
+        }
+      });
+      item.appendChild(reexibirBtn);
+
+      crmOcultasLista.appendChild(item);
+    }
+  } catch (err) {
+    crmOcultasLista.textContent = '';
+    const erro = document.createElement('p');
+    erro.className = 'agenda-vazia';
+    erro.textContent = `Nao consegui carregar: ${err.message}`;
+    crmOcultasLista.appendChild(erro);
+  }
+}
+
+crmVerOcultas.addEventListener('click', () => {
+  crmOcultasModal.hidden = false;
+  carregarOcultasCrm();
+});
+crmOcultasFechar.addEventListener('click', () => { crmOcultasModal.hidden = true; });
 
 crmConversaForm.addEventListener('submit', async (e) => {
   e.preventDefault();

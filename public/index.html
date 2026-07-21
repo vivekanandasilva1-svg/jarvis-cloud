@@ -348,6 +348,7 @@
           <div class="crm-board-nav">
             <button type="button" id="crmScrollEsq" title="Rolar pra esquerda">‹</button>
             <button type="button" id="crmScrollDir" title="Rolar pra direita">›</button>
+            <button type="button" id="crmVerOcultas">Ocultas</button>
             <button type="button" id="crmRefresh">Atualizar</button>
           </div>
         </div>
@@ -356,24 +357,37 @@
         </div>
       </div>
 
-      <div class="crm-conversa" id="crmConversa" hidden>
+      <div class="crm-conversa crm-conversa-whatsapp" id="crmConversa" hidden>
         <div class="crm-conversa-header">
-          <div>
+          <img class="crm-conversa-avatar" id="crmConversaAvatar" alt="" hidden />
+          <div class="crm-conversa-avatar crm-conversa-avatar-fallback" id="crmConversaAvatarFallback">?</div>
+          <div class="crm-conversa-titulo">
             <strong id="crmConversaNome">--</strong>
             <p class="crm-conversa-sub" id="crmConversaNumero">--</p>
           </div>
           <div class="crm-conversa-acoes">
             <button type="button" id="crmConversaPausar" class="crm-btn-secundario">Pausar auto-atendimento</button>
+            <button type="button" id="crmConversaOcultar" class="crm-btn-secundario">Ocultar conversa</button>
             <button type="button" id="crmConversaApagar" class="crm-btn-perigo">Apagar conversa</button>
             <button type="button" id="crmConversaFechar">✕</button>
           </div>
         </div>
-        <div class="crm-conversa-log" id="crmConversaLog"></div>
+        <div class="crm-conversa-log crm-whatsapp-fundo" id="crmConversaLog"></div>
         <form class="crm-conversa-form" id="crmConversaForm">
           <input type="text" id="crmConversaInput" placeholder="Escreva uma mensagem..." autocomplete="off" />
           <button type="submit">Enviar</button>
         </form>
         <p class="crm-conversa-erro" id="crmConversaErro" hidden></p>
+      </div>
+
+      <div class="crm-ocultas-modal" id="crmOcultasModal" hidden>
+        <div class="crm-ocultas-caixa">
+          <div class="crm-ocultas-header">
+            <strong>Conversas ocultas</strong>
+            <button type="button" id="crmOcultasFechar">✕</button>
+          </div>
+          <div class="crm-ocultas-lista" id="crmOcultasLista"></div>
+        </div>
       </div>
     </div>
 
