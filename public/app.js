@@ -546,10 +546,17 @@ function anexarBotaoDownload(bubbleEl, arquivo) {
 // Tem varios videos de "parada" (poses/movimentos diferentes) que revezam sozinhos de vez em
 // quando, e um video de fala. A troca entre qualquer um deles usa um crossfade (dissolve) em
 // vez de corte seco, pra disfarcar a mudanca de pose e parecer um movimento continuo.
-const videosIdle = [
-  document.getElementById('botSrcIdle1'),
-  document.getElementById('botSrcIdle2'),
-  document.getElementById('botSrcIdle3'),
+// duas instancias do MESMO clipe pra cada fase parada (neutro e gesto) - rodam fora de
+// sincronia uma da outra, entao alternar entre elas com dissolve (ver POOLS_COM_ANTICORTE)
+// evita o corte seco do <video loop> nativo quando uma fase fica em tela mais tempo que a
+// duracao natural do clipe (o neutro, por exemplo, fica ate 30s com um clipe de so ~5.7s)
+const poolIdleNeutro = [
+  document.getElementById('botSrcIdle1a'),
+  document.getElementById('botSrcIdle1b'),
+];
+const poolIdleGesto = [
+  document.getElementById('botSrcIdle2a'),
+  document.getElementById('botSrcIdle2b'),
 ];
 const videosTalk = [
   document.getElementById('botSrcTalk1'),
@@ -563,7 +570,7 @@ const botCtx = bot.getContext('2d', { willReadFrequently: true });
 const offCanvas = document.createElement('canvas');
 const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
 
-let videoAtivo = videosIdle[0];
+let videoAtivo = poolIdleNeutro[0];
 let transicao = null; // { de, inicio, duracao }
 let timerRevezamentoIdle = null;
 
@@ -666,33 +673,46 @@ function trocarAvatarComTransicao(novoVideo, duracaoMs = DURACAO_CROSSFADE_IDLE_
   videoAtivo = novoVideo;
 }
 
-let ultimoTalkEscolhido = null;
-function escolherVideoTalk() {
-  const opcoes = videosTalk.filter((v) => v !== ultimoTalkEscolhido);
-  const lista = opcoes.length ? opcoes : videosTalk;
-  const escolhido = lista[Math.floor(Math.random() * lista.length)];
-  ultimoTalkEscolhido = escolhido;
-  return escolhido;
+// pega o proximo video de um "pool" de 2 instancias do MESMO clipe, evitando repetir a
+// instancia que acabou de tocar - usado tanto pra variar entre clipes (fala) quanto pra
+// alternar entre copias do mesmo clipe fora de sincronia entre si (pensando, poses paradas),
+// que e o que da o dissolve suave em vez do corte seco do <video loop> nativo (ver
+// POOLS_COM_ANTICORTE/evitarCorteDoLoopNativo logo abaixo)
+function criarEscolhedorDePool(pool) {
+  let ultimoEscolhido = null;
+  return function escolher() {
+    const opcoes = pool.filter((v) => v !== ultimoEscolhido);
+    const lista = opcoes.length ? opcoes : pool;
+    const escolhido = lista[Math.floor(Math.random() * lista.length)];
+    ultimoEscolhido = escolhido;
+    return escolhido;
+  };
 }
+const escolherVideoTalk = criarEscolhedorDePool(videosTalk);
+const escolherVideoPensando = criarEscolhedorDePool(videosPensando);
+const escolherVideoIdleNeutro = criarEscolhedorDePool(poolIdleNeutro);
+const escolherVideoIdleGesto = criarEscolhedorDePool(poolIdleGesto);
 
-// mesma logica do "escolherVideoTalk" - as duas instancias de "pensando" sao o MESMO clipe
-// (so tem um video gravado pra esse estado), mas por rodarem soltas (fora de sincronia uma da
-// outra) cada uma esta num ponto diferente do loop de 10s no momento da troca. Alternar entre
-// elas com dissolve (em vez de deixar uma unica instancia reiniciar sozinha) evita o corte seco
-// do <video loop> nativo quando ela fica "pensando" por mais de 10s (ferramenta demorada etc)
-let ultimoPensandoEscolhido = null;
-function escolherVideoPensando() {
-  const opcoes = videosPensando.filter((v) => v !== ultimoPensandoEscolhido);
-  const lista = opcoes.length ? opcoes : videosPensando;
-  const escolhido = lista[Math.floor(Math.random() * lista.length)];
-  ultimoPensandoEscolhido = escolhido;
-  return escolhido;
-}
-
-// antecedencia com que troca pro outro video de fala ANTES do atual chegar no fim do loop -
-// sem isso, numa resposta longa (>10s de audio) o proprio <video> reiniciaria sozinho de
-// corte seco a cada volta. Trocando um pouco antes (com dissolve) some esse "salto" periodico.
+// antecedencia com que troca pra outra instancia do mesmo pool ANTES do video ativo chegar no
+// fim do proprio loop - sem isso, qualquer estado que fique em tela mais tempo que a duracao
+// natural do clipe (resposta falada longa, "pensando" demorado, ou so ficar parada por 30s com
+// um clipe de uns 6s) faria o proprio <video> reiniciar sozinho de corte seco a cada volta.
 const ANTECEDENCIA_LOOP_S = 0.5;
+
+// todo pool cujo video ativo precisa desse anti-corte - generico o bastante pra cobrir fala,
+// pensando e as duas fases da sequencia parada sem repetir a mesma logica pra cada uma
+const POOLS_COM_ANTICORTE = [
+  { pool: videosTalk, escolher: escolherVideoTalk, duracaoMs: DURACAO_CROSSFADE_LOOP_FALA_MS },
+  { pool: videosPensando, escolher: escolherVideoPensando, duracaoMs: DURACAO_CROSSFADE_LOOP_FALA_MS },
+  { pool: poolIdleNeutro, escolher: escolherVideoIdleNeutro, duracaoMs: DURACAO_CROSSFADE_IDLE_MS },
+  { pool: poolIdleGesto, escolher: escolherVideoIdleGesto, duracaoMs: DURACAO_CROSSFADE_IDLE_MS },
+];
+
+function evitarCorteDoLoopNativo() {
+  if (!videoAtivo.duration || (videoAtivo.duration - videoAtivo.currentTime) >= ANTECEDENCIA_LOOP_S) return;
+  const entrada = POOLS_COM_ANTICORTE.find((e) => e.pool.includes(videoAtivo));
+  if (entrada) trocarAvatarComTransicao(entrada.escolher(), entrada.duracaoMs);
+}
 
 // a chave de croma (remocao do fundo verde) e processada pixel a pixel via getImageData -
 // rodar isso a 60fps o tempo todo (mesmo com a Lumia parada, so respirando) e o maior peso
@@ -720,11 +740,7 @@ function renderizarQuadro(agora) {
       }
       if (t >= 1) transicao = null;
     } else {
-      if (estaFalando() && videoAtivo.duration && (videoAtivo.duration - videoAtivo.currentTime) < ANTECEDENCIA_LOOP_S) {
-        trocarAvatarComTransicao(escolherVideoTalk(), DURACAO_CROSSFADE_LOOP_FALA_MS);
-      } else if (estaPensando() && videoAtivo.duration && (videoAtivo.duration - videoAtivo.currentTime) < ANTECEDENCIA_LOOP_S) {
-        trocarAvatarComTransicao(escolherVideoPensando(), DURACAO_CROSSFADE_LOOP_FALA_MS);
-      }
+      evitarCorteDoLoopNativo();
       if (videoAtivo.readyState >= 2) {
         const quadro = obterQuadroTratado(botCtx, videoAtivo, w, h);
         if (quadro) botCtx.putImageData(quadro, 0, 0);
@@ -734,14 +750,16 @@ function renderizarQuadro(agora) {
 }
 requestAnimationFrame(renderizarQuadro);
 
-// enquanto ela nao esta falando, segue uma sequencia com tempos proprios (nao troca toda hora
-// de forma aleatoria) - fica mais tempo neutra, um tempo menor sorrindo bem sutil, e volta pro
-// neutro. Cada fase dura um tempo especifico (com uma pequena variacao aleatoria pra nao ficar
-// mecanico/previsivel demais). O video de gesto "apontando" (videosIdle[2]) foi removido da
-// rotacao a pedido do usuario - fica so em videosIdle caso volte a ser usado no futuro.
+// sequencia da Lumia parada (sem interacao) - pedido explicito do usuario, SO esses dois
+// movimentos, nessa ordem, sempre: fica parada/seria olhando pra frente por um bom tempo, faz
+// UM gesto (o clipe unico que sorri e olha de lado - e uma tomada continua, nao dois clipes
+// separados) e volta a ficar parada olhando pra frente. Nunca mais que isso (nada de gesto de
+// apontar - videosIdle3 continua fora da rotacao, como ja era antes). duracaoMs do gesto e
+// menor que a duracao natural do proprio clipe (~6.2s) de proposito: garante que ele sempre
+// toca so UMA vez, inteiro, antes de voltar pro neutro - nunca reinicia sozinho no meio.
 const SEQUENCIA_IDLE = [
-  { video: videosIdle[0], duracaoMs: 30000 }, // neutra, parada, pouco gesticulando
-  { video: videosIdle[1], duracaoMs: 20000 }, // sorriso sutil, olhando de lado
+  { pool: poolIdleNeutro, escolher: escolherVideoIdleNeutro, duracaoMs: 30000 }, // parada, seria, olhando pra frente
+  { pool: poolIdleGesto, escolher: escolherVideoIdleGesto, duracaoMs: 5000 }, // sorri e olha de lado, um play-through so
 ];
 let indiceSequenciaIdle = 0;
 
@@ -753,7 +771,7 @@ function agendarProximoRevezamentoIdle() {
     // esta falando ou pensando - tenta de novo depois, nao interrompe pra trocar de pose parada
     if (estaFalando() || estaPensando()) { agendarProximoRevezamentoIdle(); return; }
     indiceSequenciaIdle = (indiceSequenciaIdle + 1) % SEQUENCIA_IDLE.length;
-    trocarAvatarComTransicao(SEQUENCIA_IDLE[indiceSequenciaIdle].video);
+    trocarAvatarComTransicao(SEQUENCIA_IDLE[indiceSequenciaIdle].escolher());
     agendarProximoRevezamentoIdle();
   }, fase.duracaoMs * variacao);
 }
@@ -773,7 +791,7 @@ function iniciarFalaVisual() {
 // aleatoriamente), mantendo o ritmo previsivel
 function voltarParaIdleVisual() {
   clearTimeout(timerRevezamentoIdle);
-  trocarAvatarComTransicao(SEQUENCIA_IDLE[indiceSequenciaIdle].video);
+  trocarAvatarComTransicao(SEQUENCIA_IDLE[indiceSequenciaIdle].escolher());
   agendarProximoRevezamentoIdle();
 }
 
