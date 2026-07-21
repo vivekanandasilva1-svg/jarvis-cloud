@@ -599,13 +599,32 @@ export async function enviarRelatorioAgora(tipo) {
     ? (numero, msg) => enviarMensagemTextoPor(cfg.instancia, numero, msg)
     : enviarMensagemTexto;
 
+  // 1 retentativa depois de uma falha - a Evolution API roda auto-hospedada na mesma VPS
+  // disputada (CPU compartilhada com Kokoro/Whisper), entao um "fetch failed" passageiro e
+  // comum e nao deveria custar o relatorio inteiro do dia (foi exatamente o que aconteceu:
+  // 2 de 3 relatorios de uma mesma manha falharam por isso e nunca chegaram no WhatsApp)
+  let algumEnviado = false;
   for (const d of destinatarios) {
-    await enviar(d.numero, texto).catch((err) => {
-      console.error(`Erro mandando relatorio "${tipo}" pro numero ${d.numero}:`, err.message);
-    });
+    let ok = false;
+    for (let tentativa = 1; tentativa <= 2 && !ok; tentativa++) {
+      try {
+        await enviar(d.numero, texto);
+        ok = true;
+      } catch (err) {
+        if (tentativa === 1) {
+          await new Promise((r) => setTimeout(r, 3000));
+        } else {
+          console.error(`Erro mandando relatorio "${tipo}" pro numero ${d.numero}:`, err.message);
+        }
+      }
+    }
+    if (ok) algumEnviado = true;
   }
-  await marcarEnviado(tipo);
-  return { destinatarios: destinatarios.length };
+
+  // so marca como enviado se pelo menos 1 destinatario recebeu de verdade - senao o proximo
+  // "Enviar agora"/scheduler ficava achando que ja tinha mandado e nunca tentava de novo
+  if (algumEnviado) await marcarEnviado(tipo);
+  return { destinatarios: destinatarios.length, enviouAlgum: algumEnviado };
 }
 
 // roda em segundo plano - checa a cada 5min (fuso Maceio) se algum relatorio configurado esta
