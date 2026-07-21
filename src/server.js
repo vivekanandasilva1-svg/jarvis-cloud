@@ -60,7 +60,10 @@ app.use((req, res, next) => {
     req.path === '/api/agenda/google/callback' ||
     // EventSource nativo do browser nao manda headers customizados - a senha vai por query
     // string aqui, e o proprio handler da rota confere ela antes de abrir o stream
-    req.path === '/api/crm/eventos'
+    req.path === '/api/crm/eventos' ||
+    // <img src>/<audio src> tambem nao mandam headers customizados - mesma solucao (senha via
+    // query string, conferida dentro do proprio handler)
+    req.path.startsWith('/api/crm/midia/')
   ) return next();
 
   const provided = req.header('x-app-password');
@@ -396,6 +399,26 @@ function lembrarEnviada(resposta) {
   }
 }
 
+// baixa a midia (so imagem/audio - video fica de fora, arquivo grande e a aba CRM so mostra o
+// icone mesmo) e ja guarda junto no CRM, pra dar pra ver/ouvir dias depois na aba CRM sem
+// depender do WhatsApp/Evolution ainda ter o arquivo disponivel na hora que o dono for abrir.
+// "melhor esforco": se o download falhar, ainda registra a mensagem (so sem midia, cai no
+// icone de sempre) em vez de perder a mensagem inteira do historico do CRM.
+async function registrarMensagemComMidia({ numero, instancia, direcao, tipo, texto, nome, mensagemBruta }) {
+  let midiaBase64 = null;
+  let midiaMimetype = null;
+  if (tipo === 'image' || tipo === 'audio') {
+    try {
+      const midia = await evolutionApi.baixarMidiaMensagem(instancia, mensagemBruta);
+      midiaBase64 = midia?.base64 || null;
+      midiaMimetype = midia?.mimetype || null;
+    } catch (err) {
+      console.error('Erro baixando midia pro CRM:', err.message);
+    }
+  }
+  await crm.registrarMensagem({ numero, instancia, direcao, tipo, texto, nome, midiaBase64, midiaMimetype });
+}
+
 async function processarMensagemEvolution(instanciaDoWebhook, data) {
   const { numero, texto, tipo, fromMe, id } = extrairMensagemEvolution(data);
   const { instanciaAtiva, numeroAdmin } = await whatsappInstances.obterConfig();
@@ -411,7 +434,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
     // passar pela Lumia nem pelo painel - registra no CRM como 'saida' pra a conversa la
     // ficar identica a conversa real (senao essas respostas manuais nunca apareciam no CRM).
     if (!ehNumeroAdmin) {
-      crm.registrarMensagem({ numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo, texto, nome: data?.pushName })
+      registrarMensagemComMidia({ numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo, texto, nome: data?.pushName, mensagemBruta: data })
         .catch((err) => console.error('Erro registrando mensagem manual (fromMe) no CRM:', err.message));
       return;
     }
@@ -424,7 +447,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   // dono, em qualquer instancia conectada - "best-effort", nunca trava o fluxo principal (a
   // resposta da Lumia) se o CRM der erro
   if (!ehNumeroAdmin) {
-    crm.registrarMensagem({ numero, instancia: instanciaDoWebhook, direcao: 'entrada', tipo, texto, nome: data?.pushName })
+    registrarMensagemComMidia({ numero, instancia: instanciaDoWebhook, direcao: 'entrada', tipo, texto, nome: data?.pushName, mensagemBruta: data })
       .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
   }
 
@@ -798,6 +821,21 @@ app.get('/api/crm/contatos-ocultos', async (req, res) => {
     const ok = await crm.verificarSenhaOcultas(req.query.senha ? String(req.query.senha) : '');
     if (!ok) return res.status(401).json({ erro: 'senha incorreta' });
     res.json({ etapas: crm.ETAPAS, contatos: await crm.listarContatosOcultos() });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// serve a imagem/audio guardada de uma mensagem do CRM - autenticado por query string (senha)
+// porque e usado direto em <img src>/<audio src>, que nao mandam header customizado
+app.get('/api/crm/midia/:mensagemId', async (req, res) => {
+  if (APP_PASSWORD && req.query.senha !== APP_PASSWORD) return res.status(401).end();
+  try {
+    const midia = await crm.obterMidiaMensagem(Number(req.params.mensagemId));
+    if (!midia) return res.status(404).end();
+    res.set('Content-Type', midia.mimetype);
+    res.set('Cache-Control', 'private, max-age=31536000, immutable');
+    res.send(Buffer.from(midia.base64, 'base64'));
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }

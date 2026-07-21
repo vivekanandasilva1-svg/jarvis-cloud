@@ -2345,7 +2345,31 @@ function crmRenderizarMensagens(mensagens) {
 
     const corpo = document.createElement('div');
     corpo.className = 'crm-msg-corpo';
-    if (m.tipo && m.tipo !== 'text') {
+    if (m.tipo === 'image' && m.tem_midia) {
+      const midia = document.createElement('div');
+      midia.className = 'crm-msg-midia-imagem';
+      const img = document.createElement('img');
+      img.src = `/api/crm/midia/${m.id}?senha=${encodeURIComponent(appPassword)}`;
+      img.alt = 'Imagem enviada pelo WhatsApp';
+      img.loading = 'lazy';
+      midia.appendChild(img);
+      corpo.appendChild(midia);
+      if (m.texto) {
+        const legenda = document.createElement('div');
+        legenda.className = 'crm-msg-legenda';
+        legenda.textContent = m.texto;
+        corpo.appendChild(legenda);
+      }
+    } else if (m.tipo === 'audio' && m.tem_midia) {
+      const midia = document.createElement('div');
+      midia.className = 'crm-msg-midia-audio';
+      const audio = document.createElement('audio');
+      audio.controls = true;
+      audio.preload = 'none';
+      audio.src = `/api/crm/midia/${m.id}?senha=${encodeURIComponent(appPassword)}`;
+      midia.appendChild(audio);
+      corpo.appendChild(midia);
+    } else if (m.tipo && m.tipo !== 'text') {
       const midia = document.createElement('div');
       midia.className = 'crm-msg-midia';
       midia.textContent = `${CRM_ICONE_MIDIA[m.tipo] || '📎'} ${m.texto || `[${m.tipo}]`}`;

@@ -969,6 +969,15 @@ html, body {
 }
 .crm-msg-check { color: #53bdeb; font-size: 12.5px; line-height: 1; }
 .crm-msg-midia { display: flex; align-items: center; gap: 6px; opacity: 0.9; }
+.crm-msg-midia-imagem img {
+  display: block;
+  max-width: 240px;
+  max-height: 320px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.crm-msg-legenda { margin-top: 4px; }
+.crm-msg-midia-audio audio { max-width: 240px; height: 36px; }
 .crm-msg-data-separador {
   align-self: center;
   background: rgba(255, 255, 255, 0.08);

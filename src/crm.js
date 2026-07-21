@@ -50,6 +50,12 @@ async function garantirTabelas() {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS crm_mensagens_contato_idx ON crm_mensagens (numero, instancia, criado_em);`);
+  // guarda a midia (imagem/audio) recebida direto no Postgres em base64, baixada do Evolution
+  // API no momento em que a mensagem chega (ver server.js) - assim da pra ver/ouvir na aba CRM
+  // dias depois, sem depender do WhatsApp/Evolution ainda ter o arquivo disponivel. Video fica
+  // de fora de proposito (arquivo bem maior, e a aba CRM so mostra o icone mesmo, sem player).
+  await pool.query(`ALTER TABLE crm_mensagens ADD COLUMN IF NOT EXISTS midia_base64 TEXT;`);
+  await pool.query(`ALTER TABLE crm_mensagens ADD COLUMN IF NOT EXISTS midia_mimetype TEXT;`);
   // coluna nova (pausar auto-atendimento so pra essa conversa) - IF NOT EXISTS pra nao quebrar
   // instalacoes que ja tinham essa tabela antes dessa funcionalidade existir
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS auto_pausado BOOLEAN NOT NULL DEFAULT false;`);
@@ -75,7 +81,7 @@ const tabelasProntas = garantirTabelas().catch((err) => {
 // o contato tem um card - se for a primeira vez que esse numero fala nessa instancia, cria como
 // "novo_lead"; se o card ja existia como novo_lead e agora estamos respondendo (saida), passa
 // pra "em_atendimento" sozinho (o dono ainda pode mover manualmente pra qualquer etapa depois)
-export async function registrarMensagem({ numero, instancia, direcao, tipo = 'text', texto = '', nome }) {
+export async function registrarMensagem({ numero, instancia, direcao, tipo = 'text', texto = '', nome, midiaBase64, midiaMimetype }) {
   if (!pool) return;
   await tabelasProntas;
 
@@ -94,9 +100,10 @@ export async function registrarMensagem({ numero, instancia, direcao, tipo = 'te
   );
 
   const { rows: msgRows } = await pool.query(
-    `INSERT INTO crm_mensagens (numero, instancia, direcao, tipo, texto) VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, direcao, tipo, texto, criado_em`,
-    [numero, instancia, direcao, tipo, texto || ''],
+    `INSERT INTO crm_mensagens (numero, instancia, direcao, tipo, texto, midia_base64, midia_mimetype)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id, direcao, tipo, texto, criado_em, (midia_base64 IS NOT NULL) AS tem_midia`,
+    [numero, instancia, direcao, tipo, texto || '', midiaBase64 || null, midiaMimetype || null],
   );
 
   eventosCrm.emit('mensagem', { contatoId: rows[0]?.id, numero, instancia, mensagem: msgRows[0] });
@@ -211,12 +218,28 @@ export async function apagarContato(id) {
 export async function listarMensagens(numero, instancia) {
   if (!pool) return [];
   await tabelasProntas;
+  // nao traz midia_base64 aqui (a lista de mensagens ficaria pesada com todo audio/imagem
+  // embutido) - so avisa que existe midia (tem_midia), e o frontend busca o conteudo de fato
+  // sob demanda via /api/crm/midia/:id (ver obterMidiaMensagem), igual um <img>/<audio> normal
   const { rows } = await pool.query(
-    `SELECT id, direcao, tipo, texto, criado_em FROM crm_mensagens
+    `SELECT id, direcao, tipo, texto, criado_em, (midia_base64 IS NOT NULL) AS tem_midia FROM crm_mensagens
      WHERE numero = $1 AND instancia = $2 ORDER BY criado_em ASC`,
     [numero, instancia],
   );
   return rows;
+}
+
+// conteudo de fato (base64) de uma midia guardada - usado pela rota que serve pro <img>/<audio>
+export async function obterMidiaMensagem(mensagemId) {
+  if (!pool) return null;
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT midia_base64, midia_mimetype FROM crm_mensagens WHERE id = $1`,
+    [mensagemId],
+  );
+  const row = rows[0];
+  if (!row?.midia_base64) return null;
+  return { base64: row.midia_base64, mimetype: row.midia_mimetype || 'application/octet-stream' };
 }
 
 export async function moverEtapa(id, etapa) {
