@@ -12,6 +12,7 @@ import * as clinicorp from './clinicorp.js';
 import * as crm from './crm.js';
 import { transcrever } from './whisper.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
+import { moedaPorExtenso } from './numeroPorExtenso.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -556,7 +557,7 @@ async function salvarSessao(numero, history, contagem) {
 // do usuario pode ter instrucoes gerais tipo "use uns emojis" (pensando em texto) que colidem
 // com a regra de audio; como aqui a gente ja sabe ANTES de gerar se essa resposta especifica
 // vai ser falada ou lida, da pra avisar a IA de forma inequivoca em vez de deixar ela adivinhar
-const AVISO_RESPOSTA_EM_AUDIO = `\n\nATENCAO - ESTA RESPOSTA ESPECIFICA VAI SER CONVERTIDA EM AUDIO E OUVIDA EM VOZ ALTA (nao lida como texto). Isso PREVALECE sobre qualquer instrucao anterior sobre emoji/formatacao: NUNCA use emoji (nem um so, mesmo que o prompt acima peca), NUNCA use asterisco, #, _, markdown ou qualquer simbolo de formatacao - escreva so texto corrido, como se estivesse falando naturalmente em voz alta. Fale horas por extenso (ex: "14 horas", "14 horas e 30 minutos", nunca "14h" ou "14:00h"). Fale valores em reais como "Real" (nunca "real dolar" nem leia o cifrao separado) e valores em dolar como "Dolar" - nunca troque um pelo outro.`;
+const AVISO_RESPOSTA_EM_AUDIO = `\n\nATENCAO - ESTA RESPOSTA ESPECIFICA VAI SER CONVERTIDA EM AUDIO E OUVIDA EM VOZ ALTA (nao lida como texto). Isso PREVALECE sobre qualquer instrucao anterior sobre emoji/formatacao: NUNCA use emoji (nem um so, mesmo que o prompt acima peca), NUNCA use asterisco, #, _, markdown ou qualquer simbolo de formatacao - escreva so texto corrido, como se estivesse falando naturalmente em voz alta. Pode escrever hora ("14h", "14:30h") e valores em dinheiro ("R$ 1.500,00", "US$ 30,50") do jeito normal - o sistema ja converte tudo pra fala por extenso sozinho (ex: "14 horas e 30 minutos", "mil e quinhentos reais"), com "R$" sempre virando "reais" (nunca "real dolar") e "US$"/"$" sozinho virando "dolares".`;
 
 // regra fixa no codigo (nao no prompt customizado do painel, que o usuario edita livremente) -
 // garante objetividade mesmo que o prompt configurado nao mencione isso, ou peca o contrario.
@@ -593,14 +594,22 @@ function systemPromptComHoje(promptCustom, vaiSerAudio, temAgenda) {
 // garante que nenhum audio saia com emoji falado por extenso, simbolo de markdown lido em voz
 // alta, "14h"/"14:00h" sem converter, ou moeda ambigua ("R$"/"$" lidos junto como "real dolar")
 const REGEX_EMOJI = /[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{2190}-\u{21FF}️‍]/gu;
+// valor no formato BR: ate 3 digitos, grupos de milhar separados por ponto, virgula decimal
+// opcional - "247.011,90", "1.500,00", "50", "5,20" etc
+const REGEX_VALOR_BR = '-?\\d{1,3}(?:\\.\\d{3})*(?:,\\d{1,2})?';
 export function prepararTextoParaAudio(texto) {
   return texto
     .replace(REGEX_EMOJI, '')
     .replace(/\*\*|__|##+|`+/g, '')
-    // moeda: "R$" junto sempre vira so "Real" (nunca "real dolar"); "US$" ou "$" sozinho vira
-    // "Dolar" - a ordem importa, senao o "$" de "R$" seria pego pela regra generica do "$" antes.
-    // consome espaco existente depois do simbolo e sempre poe exatamente um de volta, senao
-    // valor colado tipo "R$100" virava "Real100" grudado
+    // moeda: "R$ 247.011,90" -> "duzentos e quarenta e sete mil e onze reais e noventa
+    // centavos" (por extenso, concordando singular/plural de real/reais e centavo/centavos) -
+    // a ordem importa (R$ antes de US$ antes do $ solto), senao o "$" de "R$"/"US$" seria pego
+    // pela regra generica do "$" sozinho antes de chegar na regra certa
+    .replace(new RegExp(`R\\$\\s*(${REGEX_VALOR_BR})`, 'gi'), (_, valor) => moedaPorExtenso(valor, 'real', 'reais'))
+    .replace(new RegExp(`US\\$\\s*(${REGEX_VALOR_BR})`, 'gi'), (_, valor) => moedaPorExtenso(valor, 'dólar', 'dólares'))
+    .replace(new RegExp(`\\$\\s*(${REGEX_VALOR_BR})`, 'g'), (_, valor) => moedaPorExtenso(valor, 'dólar', 'dólares'))
+    // "R$"/"US$"/"$" que sobrou sem numero valido na frente (raro) - ainda assim nunca deixa o
+    // simbolo cru: vira so a palavra da moeda
     .replace(/R\$\s*/gi, 'Real ')
     .replace(/US\$\s*/gi, 'Dolar ')
     .replace(/\$\s*/g, 'Dolar ')
