@@ -476,6 +476,19 @@ function setStatus(text, botState) {
   statusEl.textContent = text;
   bot.classList.remove('listening', 'thinking', 'speaking');
   if (botState) bot.classList.add(botState);
+
+  // centraliza a troca pro video de "pensando" aqui (ponto unico por onde passam TODOS os
+  // estados) em vez de espalhar chamadas em cada callsite que usa 'thinking' - assim nenhum
+  // lugar que precise mostrar "pensando" fica esquecido. "speaking" e de proposito ignorado
+  // aqui: quem liga a fala e iniciarFalaVisual() (chamado direto no audio.onplay), que faz o
+  // dissolve DIRETO do video de pensando pro de fala - se essa funcao tambem reagisse a
+  // 'speaking' voltando pro idle antes, criaria um flash de idle no meio (pensando -> idle ->
+  // fala) em vez da transicao unica e continua que foi pedida.
+  if (botState === 'thinking') {
+    iniciarPensamentoVisual();
+  } else if (botState !== 'speaking' && estaPensando()) {
+    pararPensamentoVisual();
+  }
 }
 
 function addBubble(text, kind) {
@@ -541,6 +554,10 @@ const videosIdle = [
 const videosTalk = [
   document.getElementById('botSrcTalk1'),
   document.getElementById('botSrcTalk2'),
+];
+const videosPensando = [
+  document.getElementById('botSrcPensando1'),
+  document.getElementById('botSrcPensando2'),
 ];
 const botCtx = bot.getContext('2d', { willReadFrequently: true });
 const offCanvas = document.createElement('canvas');
@@ -634,6 +651,10 @@ function estaFalando() {
   return videosTalk.includes(videoAtivo);
 }
 
+function estaPensando() {
+  return videosPensando.includes(videoAtivo);
+}
+
 // troca pra outro video (parado ou falando) com um dissolve suave em vez de corte seco -
 // disfarca a mudanca de pose entre clipes diferentes. A duracao e ajustavel: rapida quando
 // precisa sincronizar com audio (comeco da fala), mais lenta quando e so troca de pose parada.
@@ -651,6 +672,20 @@ function escolherVideoTalk() {
   const lista = opcoes.length ? opcoes : videosTalk;
   const escolhido = lista[Math.floor(Math.random() * lista.length)];
   ultimoTalkEscolhido = escolhido;
+  return escolhido;
+}
+
+// mesma logica do "escolherVideoTalk" - as duas instancias de "pensando" sao o MESMO clipe
+// (so tem um video gravado pra esse estado), mas por rodarem soltas (fora de sincronia uma da
+// outra) cada uma esta num ponto diferente do loop de 10s no momento da troca. Alternar entre
+// elas com dissolve (em vez de deixar uma unica instancia reiniciar sozinha) evita o corte seco
+// do <video loop> nativo quando ela fica "pensando" por mais de 10s (ferramenta demorada etc)
+let ultimoPensandoEscolhido = null;
+function escolherVideoPensando() {
+  const opcoes = videosPensando.filter((v) => v !== ultimoPensandoEscolhido);
+  const lista = opcoes.length ? opcoes : videosPensando;
+  const escolhido = lista[Math.floor(Math.random() * lista.length)];
+  ultimoPensandoEscolhido = escolhido;
   return escolhido;
 }
 
@@ -687,6 +722,8 @@ function renderizarQuadro(agora) {
     } else {
       if (estaFalando() && videoAtivo.duration && (videoAtivo.duration - videoAtivo.currentTime) < ANTECEDENCIA_LOOP_S) {
         trocarAvatarComTransicao(escolherVideoTalk(), DURACAO_CROSSFADE_LOOP_FALA_MS);
+      } else if (estaPensando() && videoAtivo.duration && (videoAtivo.duration - videoAtivo.currentTime) < ANTECEDENCIA_LOOP_S) {
+        trocarAvatarComTransicao(escolherVideoPensando(), DURACAO_CROSSFADE_LOOP_FALA_MS);
       }
       if (videoAtivo.readyState >= 2) {
         const quadro = obterQuadroTratado(botCtx, videoAtivo, w, h);
@@ -713,7 +750,8 @@ function agendarProximoRevezamentoIdle() {
   const fase = SEQUENCIA_IDLE[indiceSequenciaIdle];
   const variacao = 0.9 + Math.random() * 0.2; // +-10%, pra nao ficar cronometrado igual robo
   timerRevezamentoIdle = setTimeout(() => {
-    if (estaFalando()) { agendarProximoRevezamentoIdle(); return; } // esta falando, tenta de novo depois
+    // esta falando ou pensando - tenta de novo depois, nao interrompe pra trocar de pose parada
+    if (estaFalando() || estaPensando()) { agendarProximoRevezamentoIdle(); return; }
     indiceSequenciaIdle = (indiceSequenciaIdle + 1) % SEQUENCIA_IDLE.length;
     trocarAvatarComTransicao(SEQUENCIA_IDLE[indiceSequenciaIdle].video);
     agendarProximoRevezamentoIdle();
@@ -723,14 +761,33 @@ agendarProximoRevezamentoIdle();
 
 function iniciarFalaVisual() {
   clearTimeout(timerRevezamentoIdle);
-  // transicao rapida aqui - a boca precisa comecar a se mexer junto com o audio, nao depois
+  // transicao rapida aqui - a boca precisa comecar a se mexer junto com o audio, nao depois.
+  // se ela ja estava no video de "pensando", esse dissolve vai DIRETO de pensando pra fala
+  // (nunca passa pelo idle no meio), porque trocarAvatarComTransicao so olha pro video ativo
+  // agora, nao pro estado logico anterior
   trocarAvatarComTransicao(escolherVideoTalk(), DURACAO_CROSSFADE_INICIO_FALA_MS);
 }
 
-function pararFalaVisual() {
-  // volta pra fase atual da sequencia (nao pula aleatoriamente) - mantem o ritmo previsivel
+// usado tanto ao sair da fala quanto ao sair do "pensando" sem chegar a falar (resposta so em
+// texto, erro, voz desligada) - sempre volta pra fase atual da sequencia idle (nao pula
+// aleatoriamente), mantendo o ritmo previsivel
+function voltarParaIdleVisual() {
+  clearTimeout(timerRevezamentoIdle);
   trocarAvatarComTransicao(SEQUENCIA_IDLE[indiceSequenciaIdle].video);
   agendarProximoRevezamentoIdle();
+}
+
+function pararFalaVisual() {
+  voltarParaIdleVisual();
+}
+
+function iniciarPensamentoVisual() {
+  clearTimeout(timerRevezamentoIdle);
+  trocarAvatarComTransicao(escolherVideoPensando(), DURACAO_CROSSFADE_IDLE_MS);
+}
+
+function pararPensamentoVisual() {
+  voltarParaIdleVisual();
 }
 
 // so um audio por vez - qualquer fala nova cancela a anterior, pra nao atropelar
