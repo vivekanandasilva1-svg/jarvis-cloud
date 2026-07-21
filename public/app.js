@@ -647,9 +647,14 @@ function suavizar(t) { return t * t * (3 - 2 * t); }
 // dissolve lento (pose parada trocando de outra pose parada) - aqui nao tem pressa, o
 // importante e disfarcar a troca de pose, entao um fade mais longo fica mais natural
 const DURACAO_CROSSFADE_IDLE_MS = 650;
-// dissolve bem rapido ao COMECAR a falar - a boca precisa aparecer se mexendo junto com o
-// audio, nao 650ms depois. Um fade lento aqui faria o audio comecar antes da boca "acordar".
-const DURACAO_CROSSFADE_INICIO_FALA_MS = 120;
+// quase instantaneo ao COMECAR a falar - a boca precisa aparecer se mexendo NO MESMO frame que
+// o audio comeca, nao alguns quadros depois. 120ms parece pouco mas nos primeiros ~100ms desse
+// dissolve a tela ainda mostra majoritariamente a pose ANTERIOR (pensando/parada) misturada com
+// a de fala - ficava perceptivelmente fora de sincronia com o audio, que ja tinha comecado.
+// Com um valor bem menor que 1 quadro de render (~33ms a 30fps), o proprio "t" do dissolve ja
+// chega perto de 1 (video de fala quase puro) logo no primeiro quadro renderizado depois da
+// troca - dentro da margem de sincronia audio/video considerada imperceptivel (~40ms).
+const DURACAO_CROSSFADE_INICIO_FALA_MS = 40;
 // dissolve curto no meio de uma resposta longa (troca de um video de fala pro outro, antes
 // do loop nativo) - precisa ser rapido pra nao borrar a boca em movimento por muito tempo
 const DURACAO_CROSSFADE_LOOP_FALA_MS = 220;
