@@ -783,6 +783,10 @@ async function falarComVozNatural(texto, bubbleEl) {
   if (!res.ok) throw new Error('tts indisponivel');
   const data = await res.json();
   if (!data.audio || !data.alignment) throw new Error('tts sem alinhamento');
+  // texto normalizado (ex: "R$" -> "Real", "14h" -> "14 horas") que foi de fato falado - usa
+  // ele na legenda final tambem, senao ela mostraria isso durante a fala e "pularia" de volta
+  // pro texto original no instante em que o audio termina
+  const textoFalado = data.textoFalado || texto;
 
   if (audioAtual) { audioAtual.pause(); audioAtual = null; }
 
@@ -810,7 +814,7 @@ async function falarComVozNatural(texto, bubbleEl) {
     const finalizar = () => {
       clearTimeout(timeoutSeguranca);
       pararFalaVisual();
-      pararLegenda(bubbleEl, texto);
+      pararLegenda(bubbleEl, textoFalado);
       URL.revokeObjectURL(url);
       if (audioAtual === audio) audioAtual = null;
       resolve();

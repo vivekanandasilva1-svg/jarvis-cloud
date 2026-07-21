@@ -556,7 +556,7 @@ async function salvarSessao(numero, history, contagem) {
 // do usuario pode ter instrucoes gerais tipo "use uns emojis" (pensando em texto) que colidem
 // com a regra de audio; como aqui a gente ja sabe ANTES de gerar se essa resposta especifica
 // vai ser falada ou lida, da pra avisar a IA de forma inequivoca em vez de deixar ela adivinhar
-const AVISO_RESPOSTA_EM_AUDIO = `\n\nATENCAO - ESTA RESPOSTA ESPECIFICA VAI SER CONVERTIDA EM AUDIO E OUVIDA EM VOZ ALTA (nao lida como texto). Isso PREVALECE sobre qualquer instrucao anterior sobre emoji/formatacao: NUNCA use emoji (nem um so, mesmo que o prompt acima peca), NUNCA use asterisco, #, _, markdown ou qualquer simbolo de formatacao - escreva so texto corrido, como se estivesse falando naturalmente em voz alta. Fale horas por extenso (ex: "14 horas", "14 horas e 30", nunca "14h" ou "14:00h").`;
+const AVISO_RESPOSTA_EM_AUDIO = `\n\nATENCAO - ESTA RESPOSTA ESPECIFICA VAI SER CONVERTIDA EM AUDIO E OUVIDA EM VOZ ALTA (nao lida como texto). Isso PREVALECE sobre qualquer instrucao anterior sobre emoji/formatacao: NUNCA use emoji (nem um so, mesmo que o prompt acima peca), NUNCA use asterisco, #, _, markdown ou qualquer simbolo de formatacao - escreva so texto corrido, como se estivesse falando naturalmente em voz alta. Fale horas por extenso (ex: "14 horas", "14 horas e 30 minutos", nunca "14h" ou "14:00h"). Fale valores em reais como "Real" (nunca "real dolar" nem leia o cifrao separado) e valores em dolar como "Dolar" - nunca troque um pelo outro.`;
 
 // regra fixa no codigo (nao no prompt customizado do painel, que o usuario edita livremente) -
 // garante objetividade mesmo que o prompt configurado nao mencione isso, ou peca o contrario.
@@ -590,17 +590,27 @@ function systemPromptComHoje(promptCustom, vaiSerAudio, temAgenda) {
 }
 
 // rede de seguranca no CODIGO (nao so no prompt) - mesmo que a IA "esqueça" a instrucao, isso
-// garante que nenhum audio saia com emoji falado por extenso ou simbolo de markdown lido em
-// voz alta, e converte "14h"/"14:00h" pro formato falado que foi pedido
+// garante que nenhum audio saia com emoji falado por extenso, simbolo de markdown lido em voz
+// alta, "14h"/"14:00h" sem converter, ou moeda ambigua ("R$"/"$" lidos junto como "real dolar")
 const REGEX_EMOJI = /[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{2190}-\u{21FF}️‍]/gu;
 export function prepararTextoParaAudio(texto) {
   return texto
     .replace(REGEX_EMOJI, '')
     .replace(/\*\*|__|##+|`+/g, '')
+    // moeda: "R$" junto sempre vira so "Real" (nunca "real dolar"); "US$" ou "$" sozinho vira
+    // "Dolar" - a ordem importa, senao o "$" de "R$" seria pego pela regra generica do "$" antes.
+    // consome espaco existente depois do simbolo e sempre poe exatamente um de volta, senao
+    // valor colado tipo "R$100" virava "Real100" grudado
+    .replace(/R\$\s*/gi, 'Real ')
+    .replace(/US\$\s*/gi, 'Dolar ')
+    .replace(/\$\s*/g, 'Dolar ')
+    // hora: "8h", "08h", "8h30", "8h:30", "08:30h" etc - qualquer numero de 1-2 digitos junto de
+    // "h" (com ou sem ":") significa horas, e a segunda parte (se tiver) sao os minutos
     .replace(/(?<![:\d])\b(\d{1,2}):00h?\b/g, '$1 horas')
-    .replace(/(?<![:\d])\b(\d{1,2}):(\d{2})h?\b/g, '$1 horas e $2')
+    .replace(/(?<![:\d])\b(\d{1,2}):(\d{2})h?\b/g, '$1 horas e $2 minutos')
+    .replace(/(?<![:\d])\b(\d{1,2})h:(\d{2})\b/g, '$1 horas e $2 minutos')
     .replace(/(?<![:\d])\b(\d{1,2})h00\b/g, '$1 horas')
-    .replace(/(?<![:\d])\b(\d{1,2})h(\d{2})\b/g, '$1 horas e $2')
+    .replace(/(?<![:\d])\b(\d{1,2})h(\d{2})\b/g, '$1 horas e $2 minutos')
     .replace(/(?<![:\d])\b(\d{1,2})h\b/g, '$1 horas')
     .replace(/[ \t]{2,}/g, ' ')
     .trim();

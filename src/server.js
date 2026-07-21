@@ -226,13 +226,20 @@ app.post('/api/tts', async (req, res) => {
   if (!text) return res.status(400).json({ erro: 'text obrigatorio' });
 
   try {
+    // mesma normalizacao usada no audio do auto-atendimento (moeda "R$"/"$" e hora "14h"/
+    // "14:00h" faladas por extenso) - aqui ainda nao passava por nada antes, entao o Kokoro
+    // podia ler o cifrao literal e soar como "real dolar" junto
+    const textoFalado = autoAtendimento.prepararTextoParaAudio(text);
     // KOKORO_URL so existe nos ambientes com o Kokoro TTS auto-hospedado rodando ao lado (a
     // VPS) - voz fixa, sem cota nem custo por uso. Onde nao tem essa infra (ex: Render), cai
     // pro Gemini como estava antes.
     const { audioBase64, alignment } = process.env.KOKORO_URL
-      ? await synthesizeSpeechKokoro(text)
-      : await synthesizeSpeechWithTimestamps(text);
-    res.json({ audio: audioBase64, alignment });
+      ? await synthesizeSpeechKokoro(textoFalado)
+      : await synthesizeSpeechWithTimestamps(textoFalado);
+    // devolve o texto normalizado tambem - o frontend usa ele (nao o "text" original) na
+    // legenda final, senao a legenda mostraria "Real"/horas por extenso durante a fala e
+    // "pularia" de volta pro "R$"/"14h" original no instante em que o audio termina
+    res.json({ audio: audioBase64, alignment, textoFalado });
   } catch (err) {
     console.error('Erro no TTS:', err);
     res.status(500).json({ erro: err.message });
