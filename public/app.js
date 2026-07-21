@@ -124,6 +124,20 @@ const crmVerOcultas = document.getElementById('crmVerOcultas');
 const crmOcultasModal = document.getElementById('crmOcultasModal');
 const crmOcultasFechar = document.getElementById('crmOcultasFechar');
 const crmOcultasLista = document.getElementById('crmOcultasLista');
+const crmOcultasRodape = document.getElementById('crmOcultasRodape');
+const crmOcultasTrocarSenhaBtn = document.getElementById('crmOcultasTrocarSenhaBtn');
+const crmOcultasSenhaGate = document.getElementById('crmOcultasSenhaGate');
+const crmOcultasSenhaTexto = document.getElementById('crmOcultasSenhaTexto');
+const crmOcultasSenhaInput = document.getElementById('crmOcultasSenhaInput');
+const crmOcultasSenhaEntrar = document.getElementById('crmOcultasSenhaEntrar');
+const crmOcultasSenhaErro = document.getElementById('crmOcultasSenhaErro');
+const crmOcultasTrocarSenha = document.getElementById('crmOcultasTrocarSenha');
+const crmOcultasTrocarTexto = document.getElementById('crmOcultasTrocarTexto');
+const crmOcultasSenhaAtualInput = document.getElementById('crmOcultasSenhaAtualInput');
+const crmOcultasSenhaNovaInput = document.getElementById('crmOcultasSenhaNovaInput');
+const crmOcultasSenhaSalvar = document.getElementById('crmOcultasSenhaSalvar');
+const crmOcultasSenhaCancelar = document.getElementById('crmOcultasSenhaCancelar');
+const crmOcultasTrocarErro = document.getElementById('crmOcultasTrocarErro');
 
 // ---------- Auto Atendimento: elementos ----------
 const autoAtivo = document.getElementById('autoAtivo');
@@ -2491,8 +2505,81 @@ crmConversaOcultar.addEventListener('click', async () => {
   }
 });
 
-// ---------- CRM: gerenciar conversas ocultas ----------
-async function carregarOcultasCrm() {
+// ---------- CRM: gerenciar conversas ocultas (protegido por uma segunda senha, separada da
+// senha geral do app - pra um funcionario que usa o CRM no dia a dia nao conseguir ver as
+// conversas que o dono marcou pra ignorar so por ter a senha normal do painel) ----------
+
+// true/false conforme a ultima checagem de status - usado so pra escolher o texto certo do
+// botao "Trocar/remover senha" x "Definir senha"; a senha em si nunca fica guardada aqui, o
+// gate e sempre pedido de novo a cada vez que o modal abre
+let crmOcultasSenhaConfiguradaAtual = false;
+
+function crmOcultasMostrarSoLista() {
+  crmOcultasSenhaGate.hidden = true;
+  crmOcultasTrocarSenha.hidden = true;
+  crmOcultasLista.hidden = false;
+  crmOcultasRodape.hidden = false;
+  crmOcultasTrocarSenhaBtn.textContent = crmOcultasSenhaConfiguradaAtual ? 'Trocar/remover senha' : 'Definir senha';
+}
+
+function crmOcultasMostrarGate(mensagemErro) {
+  crmOcultasLista.hidden = true;
+  crmOcultasRodape.hidden = true;
+  crmOcultasTrocarSenha.hidden = true;
+  crmOcultasSenhaGate.hidden = false;
+  crmOcultasSenhaInput.value = '';
+  crmOcultasSenhaErro.hidden = !mensagemErro;
+  crmOcultasSenhaErro.textContent = mensagemErro || '';
+  crmOcultasSenhaInput.focus();
+}
+
+function crmOcultasRenderizarLista(lista) {
+  crmOcultasLista.textContent = '';
+  if (!lista.length) {
+    const vazio = document.createElement('p');
+    vazio.className = 'agenda-vazia';
+    vazio.textContent = 'Nenhuma conversa oculta.';
+    crmOcultasLista.appendChild(vazio);
+    return;
+  }
+  for (const contato of lista) {
+    const item = document.createElement('div');
+    item.className = 'auto-arquivo-item';
+    const info = document.createElement('div');
+    info.className = 'auto-arquivo-info';
+    const nome = document.createElement('div');
+    nome.className = 'auto-arquivo-nome';
+    nome.textContent = contato.nome || contato.numero;
+    info.appendChild(nome);
+    item.appendChild(info);
+
+    const reexibirBtn = document.createElement('button');
+    reexibirBtn.type = 'button';
+    reexibirBtn.className = 'agenda-evento-cancelar';
+    reexibirBtn.textContent = '↩';
+    reexibirBtn.title = 'Reexibir no funil';
+    reexibirBtn.addEventListener('click', async () => {
+      try {
+        await fetch(`/api/crm/contatos/${contato.id}/ocultar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+          body: JSON.stringify({ oculto: false }),
+        });
+        crmOcultasCarregarLista();
+        carregarCrm();
+      } catch (err) {
+        addBubble(`Erro reexibindo conversa: ${err.message}`, 'system');
+      }
+    });
+    item.appendChild(reexibirBtn);
+
+    crmOcultasLista.appendChild(item);
+  }
+}
+
+// busca a lista ja passando a senha (vazia se ainda nao ha protecao configurada) - o backend
+// e quem decide se aceita ou nao (verificarSenhaOcultas)
+async function crmOcultasCarregarLista(senha = '') {
   crmOcultasLista.textContent = '';
   const carregando = document.createElement('p');
   carregando.className = 'agenda-vazia';
@@ -2500,53 +2587,16 @@ async function carregarOcultasCrm() {
   crmOcultasLista.appendChild(carregando);
 
   try {
-    const res = await fetch('/api/crm/contatos-ocultos', { headers: { 'x-app-password': appPassword } });
+    const res = await fetch(`/api/crm/contatos-ocultos?senha=${encodeURIComponent(senha)}`, {
+      headers: { 'x-app-password': appPassword },
+    });
     const data = await res.json();
+    if (res.status === 401) { crmOcultasMostrarGate('Senha incorreta.'); return; }
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
-    const lista = data.contatos || [];
-
-    crmOcultasLista.textContent = '';
-    if (!lista.length) {
-      const vazio = document.createElement('p');
-      vazio.className = 'agenda-vazia';
-      vazio.textContent = 'Nenhuma conversa oculta.';
-      crmOcultasLista.appendChild(vazio);
-      return;
-    }
-    for (const contato of lista) {
-      const item = document.createElement('div');
-      item.className = 'auto-arquivo-item';
-      const info = document.createElement('div');
-      info.className = 'auto-arquivo-info';
-      const nome = document.createElement('div');
-      nome.className = 'auto-arquivo-nome';
-      nome.textContent = contato.nome || contato.numero;
-      info.appendChild(nome);
-      item.appendChild(info);
-
-      const reexibirBtn = document.createElement('button');
-      reexibirBtn.type = 'button';
-      reexibirBtn.className = 'agenda-evento-cancelar';
-      reexibirBtn.textContent = '↩';
-      reexibirBtn.title = 'Reexibir no funil';
-      reexibirBtn.addEventListener('click', async () => {
-        try {
-          await fetch(`/api/crm/contatos/${contato.id}/ocultar`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-            body: JSON.stringify({ oculto: false }),
-          });
-          carregarOcultasCrm();
-          carregarCrm();
-        } catch (err) {
-          addBubble(`Erro reexibindo conversa: ${err.message}`, 'system');
-        }
-      });
-      item.appendChild(reexibirBtn);
-
-      crmOcultasLista.appendChild(item);
-    }
+    crmOcultasMostrarSoLista();
+    crmOcultasRenderizarLista(data.contatos || []);
   } catch (err) {
+    crmOcultasMostrarSoLista();
     crmOcultasLista.textContent = '';
     const erro = document.createElement('p');
     erro.className = 'agenda-vazia';
@@ -2555,11 +2605,74 @@ async function carregarOcultasCrm() {
   }
 }
 
-crmVerOcultas.addEventListener('click', () => {
+crmVerOcultas.addEventListener('click', async () => {
   crmOcultasModal.hidden = false;
-  carregarOcultasCrm();
+  try {
+    const res = await fetch('/api/crm/ocultas/senha-status', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    crmOcultasSenhaConfiguradaAtual = !!data.configurada;
+  } catch {
+    crmOcultasSenhaConfiguradaAtual = false;
+  }
+  if (crmOcultasSenhaConfiguradaAtual) {
+    crmOcultasMostrarGate();
+  } else {
+    crmOcultasCarregarLista('');
+  }
 });
+
 crmOcultasFechar.addEventListener('click', () => { crmOcultasModal.hidden = true; });
+
+crmOcultasSenhaEntrar.addEventListener('click', () => {
+  const senha = crmOcultasSenhaInput.value;
+  if (!senha) { crmOcultasSenhaErro.hidden = false; crmOcultasSenhaErro.textContent = 'Digite a senha.'; return; }
+  crmOcultasCarregarLista(senha);
+});
+crmOcultasSenhaInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') crmOcultasSenhaEntrar.click();
+});
+
+crmOcultasTrocarSenhaBtn.addEventListener('click', () => {
+  crmOcultasLista.hidden = true;
+  crmOcultasRodape.hidden = true;
+  crmOcultasTrocarTexto.textContent = crmOcultasSenhaConfiguradaAtual
+    ? 'Trocar ou remover a senha das conversas ocultas.'
+    : 'Definir uma senha pra proteger as conversas ocultas.';
+  crmOcultasSenhaAtualInput.hidden = !crmOcultasSenhaConfiguradaAtual;
+  crmOcultasSenhaAtualInput.value = '';
+  crmOcultasSenhaNovaInput.value = '';
+  crmOcultasTrocarErro.hidden = true;
+  crmOcultasTrocarSenha.hidden = false;
+});
+
+crmOcultasSenhaCancelar.addEventListener('click', () => {
+  crmOcultasTrocarSenha.hidden = true;
+  crmOcultasLista.hidden = false;
+  crmOcultasRodape.hidden = false;
+});
+
+crmOcultasSenhaSalvar.addEventListener('click', async () => {
+  const senhaAtual = crmOcultasSenhaAtualInput.value;
+  const novaSenha = crmOcultasSenhaNovaInput.value;
+  try {
+    const res = await fetch('/api/crm/ocultas/senha', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ senhaAtual, novaSenha }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      crmOcultasTrocarErro.hidden = false;
+      crmOcultasTrocarErro.textContent = data.erro || 'erro desconhecido';
+      return;
+    }
+    crmOcultasSenhaConfiguradaAtual = !!novaSenha;
+    crmOcultasCarregarLista(novaSenha);
+  } catch (err) {
+    crmOcultasTrocarErro.hidden = false;
+    crmOcultasTrocarErro.textContent = err.message;
+  }
+});
 
 crmConversaForm.addEventListener('submit', async (e) => {
   e.preventDefault();

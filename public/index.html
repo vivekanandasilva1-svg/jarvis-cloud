@@ -386,7 +386,30 @@
             <strong>Conversas ocultas</strong>
             <button type="button" id="crmOcultasFechar">✕</button>
           </div>
-          <div class="crm-ocultas-lista" id="crmOcultasLista"></div>
+
+          <div class="crm-ocultas-senha-gate" id="crmOcultasSenhaGate" hidden>
+            <p id="crmOcultasSenhaTexto">Digite a senha para ver as conversas ocultas.</p>
+            <input type="password" id="crmOcultasSenhaInput" placeholder="Senha" autocomplete="off" />
+            <button type="button" id="crmOcultasSenhaEntrar">Entrar</button>
+            <p class="crm-ocultas-senha-erro" id="crmOcultasSenhaErro" hidden></p>
+          </div>
+
+          <div class="crm-ocultas-senha-gate" id="crmOcultasTrocarSenha" hidden>
+            <p id="crmOcultasTrocarTexto">Definir senha das conversas ocultas.</p>
+            <input type="password" id="crmOcultasSenhaAtualInput" placeholder="Senha atual" autocomplete="off" />
+            <input type="password" id="crmOcultasSenhaNovaInput" placeholder="Nova senha (deixe vazio pra remover)" autocomplete="off" />
+            <div class="crm-ocultas-senha-botoes">
+              <button type="button" id="crmOcultasSenhaSalvar">Salvar</button>
+              <button type="button" id="crmOcultasSenhaCancelar" class="crm-btn-secundario">Cancelar</button>
+            </div>
+            <p class="crm-ocultas-senha-erro" id="crmOcultasTrocarErro" hidden></p>
+          </div>
+
+          <div class="crm-ocultas-lista" id="crmOcultasLista" hidden></div>
+
+          <div class="crm-ocultas-rodape" id="crmOcultasRodape" hidden>
+            <button type="button" id="crmOcultasTrocarSenhaBtn" class="crm-btn-secundario">Trocar/remover senha</button>
+          </div>
         </div>
       </div>
     </div>

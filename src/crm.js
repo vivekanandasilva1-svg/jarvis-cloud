@@ -56,6 +56,16 @@ async function garantirTabelas() {
   // oculto = o dono escolheu manualmente esconder essa conversa do funil (ex: numero pessoal
   // de um fornecedor, engano, spam) - nao apaga nada, so tira da visualizacao padrao
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS oculto BOOLEAN NOT NULL DEFAULT false;`);
+  // senha extra (separada da senha geral do app) pra abrir a lista de conversas ocultas -
+  // linha unica (id sempre 1). Sem senha configurada ainda = qualquer um com acesso ao app
+  // ve a lista normalmente, ate o dono definir uma pela propria tela de "Ocultas".
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS crm_seguranca (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      senha_ocultas TEXT,
+      CHECK (id = 1)
+    );
+  `);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas do CRM:', err.message);
@@ -124,6 +134,32 @@ export async function listarContatosOcultos() {
      FROM crm_contatos WHERE oculto = true ORDER BY ultima_mensagem_em DESC NULLS LAST`,
   );
   return rows;
+}
+
+// ---------- senha extra pra ver a lista de conversas ocultas ----------
+
+export async function obterSenhaOcultas() {
+  if (!pool) return null;
+  await tabelasProntas;
+  const { rows } = await pool.query(`SELECT senha_ocultas FROM crm_seguranca WHERE id = 1`);
+  return rows[0]?.senha_ocultas || null;
+}
+
+// null/vazio = remove a protecao (volta a abrir direto, sem pedir senha)
+export async function definirSenhaOcultas(senha) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  await pool.query(
+    `INSERT INTO crm_seguranca (id, senha_ocultas) VALUES (1, $1)
+     ON CONFLICT (id) DO UPDATE SET senha_ocultas = $1`,
+    [senha || null],
+  );
+}
+
+export async function verificarSenhaOcultas(senha) {
+  const atual = await obterSenhaOcultas();
+  if (!atual) return true; // ninguem configurou senha ainda
+  return senha === atual;
 }
 
 // esconde/reexibe uma conversa do funil manualmente (pedido explicito do usuario: "conversas

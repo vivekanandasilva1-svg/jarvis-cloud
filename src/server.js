@@ -790,9 +790,36 @@ app.post('/api/crm/contatos/:id/ocultar', async (req, res) => {
   }
 });
 
+// senha extra (separada da senha geral do app) pra ver a lista de ocultas - protege contra
+// quem tem acesso normal ao painel (ex: funcionario que usa o CRM no dia a dia) mas nao deve
+// ver as conversas que o dono marcou pra ignorar/esconder
 app.get('/api/crm/contatos-ocultos', async (req, res) => {
   try {
+    const ok = await crm.verificarSenhaOcultas(req.query.senha ? String(req.query.senha) : '');
+    if (!ok) return res.status(401).json({ erro: 'senha incorreta' });
     res.json({ etapas: crm.ETAPAS, contatos: await crm.listarContatosOcultos() });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/crm/ocultas/senha-status', async (req, res) => {
+  try {
+    res.json({ configurada: !!(await crm.obterSenhaOcultas()) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// define/troca/remove a senha das ocultas - se ja existe uma, exige a atual pra trocar (mas o
+// acesso a essa rota ja exige a senha geral do app, ver middleware de x-app-password acima)
+app.post('/api/crm/ocultas/senha', async (req, res) => {
+  const { senhaAtual, novaSenha } = req.body || {};
+  try {
+    const atual = await crm.obterSenhaOcultas();
+    if (atual && senhaAtual !== atual) return res.status(401).json({ erro: 'senha atual incorreta' });
+    await crm.definirSenhaOcultas(novaSenha ? String(novaSenha) : null);
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
