@@ -1750,7 +1750,10 @@ html, body {
   width: 100%;
   height: 100%;
   display: block;
-  transition: filter 0.3s ease;
+  /* box-shadow entrava/saia sem transicao nenhuma (so o filter tinha) - o brilho ao redor do
+     avatar "sumia" de corte exatamente no instante em que ela parava de falar/ouvir/pensar,
+     por cima de qualquer suavidade que o crossfade do video ja tivesse */
+  transition: filter 0.3s ease, box-shadow 0.3s ease;
 }
 
 /* videos-fonte reais, nunca exibidos diretamente - o canvas #bot desenha os quadros deles

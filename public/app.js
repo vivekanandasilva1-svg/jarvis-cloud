@@ -662,11 +662,23 @@ function estaPensando() {
   return videosPensando.includes(videoAtivo);
 }
 
+// se chamarem trocarAvatarComTransicao de novo enquanto UMA JA esta rolando (ex: o anti-corte
+// do loop trocou de instancia de fala bem no instante em que o audio termina), guarda aqui pra
+// disparar assim que a atual terminar - em vez de interromper o dissolve no meio. Interromper
+// no meio causava exatamente o "corte sem transicao" reportado: o "de" da nova transicao virava
+// o video que AINDA nao tinha acabado de aparecer na tela (so parcialmente visivel no blend),
+// entao o proximo quadro pulava desse blend parcial direto pro video cheio, um salto visivel.
+let transicaoPendente = null;
+
 // troca pra outro video (parado ou falando) com um dissolve suave em vez de corte seco -
 // disfarca a mudanca de pose entre clipes diferentes. A duracao e ajustavel: rapida quando
 // precisa sincronizar com audio (comeco da fala), mais lenta quando e so troca de pose parada.
 function trocarAvatarComTransicao(novoVideo, duracaoMs = DURACAO_CROSSFADE_IDLE_MS) {
-  if (novoVideo === videoAtivo) return;
+  if (novoVideo === videoAtivo) { transicaoPendente = null; return; }
+  if (transicao) {
+    transicaoPendente = { novoVideo, duracaoMs };
+    return;
+  }
   transicao = { de: videoAtivo, inicio: performance.now(), duracaoMs };
   novoVideo.currentTime = 0;
   novoVideo.play().catch(() => {});
@@ -738,7 +750,16 @@ function renderizarQuadro(agora) {
       } else if (quadroPara) {
         botCtx.putImageData(quadroPara, 0, 0);
       }
-      if (t >= 1) transicao = null;
+      if (t >= 1) {
+        transicao = null;
+        // dissolve atual acabou de resolver limpo (video cheio, sem blend) - so agora e seguro
+        // comecar o proximo, se tiver algum esperando (ver transicaoPendente)
+        if (transicaoPendente) {
+          const { novoVideo, duracaoMs } = transicaoPendente;
+          transicaoPendente = null;
+          trocarAvatarComTransicao(novoVideo, duracaoMs);
+        }
+      }
     } else {
       evitarCorteDoLoopNativo();
       if (videoAtivo.readyState >= 2) {
