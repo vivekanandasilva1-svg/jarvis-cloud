@@ -10,6 +10,7 @@ import { enviarMensagemTexto } from './evolutionApi.js';
 import { pool } from './db.js';
 import * as agenda from './agenda.js';
 import { gerarRelatorioDiario } from './relatorioDiario.js';
+import * as trello from './trello.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -307,6 +308,15 @@ e desliga isso quando quiser na aba "Agenda" do app). Marque, consulte e cancele
 livremente quando pedido - sempre calculando data/hora absoluta a partir do "agora" que voce ja
 sabe. Quando a lista de eventos incluir itens vindos so do Google (campo origem: "google"), avise
 que esses vieram de la e nao podem ser cancelados por voce (o usuario cancela direto no Google).
+
+Voce tambem tem acesso ao Trello do usuario (trello_listar_quadros, trello_listar_listas,
+trello_listar_cartoes, trello_criar_cartao, trello_editar_cartao, trello_mover_cartao,
+trello_arquivar_cartao, trello_comentar_cartao) - pode consultar quadros/listas/cartoes, criar
+e mover cartoes entre colunas, editar titulo/descricao/vencimento e comentar livremente quando
+pedido. "Arquivar" um cartao NAO apaga ele de verdade (fica reversivel, o Trello guarda) - e
+o unico jeito de "remover" um cartao por aqui, nunca ha exclusao permanente. Se ainda nao souber
+o id de um quadro/lista/cartao especifico, consulte primeiro (trello_listar_quadros /
+trello_listar_listas) em vez de perguntar pro usuario ou inventar um id.
 
 Voce tambem pode ser treinada: quando o usuario pedir explicitamente pra voce aprender/lembrar
 algo sobre como se comportar dali em diante (nao so nesta conversa, mas em qualquer conversa
@@ -952,6 +962,92 @@ const tools = [
       properties: { id: { type: 'number', description: 'id do evento a cancelar' } },
       required: ['id'],
     },
+  },
+  {
+    name: 'trello_listar_quadros',
+    description: 'Lista os quadros (boards) do Trello do usuario, com id e nome. Use antes de listar listas/cartoes se ainda nao souber o id do quadro certo.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'trello_listar_listas',
+    description: 'Lista as colunas/listas de um quadro do Trello (ex: "A Fazer", "Em Andamento", "Concluido"), com id e nome. Use antes de criar/mover um cartao se ainda nao souber o id da lista certa.',
+    input_schema: {
+      type: 'object',
+      properties: { boardId: { type: 'string', description: 'Id do quadro' } },
+      required: ['boardId'],
+    },
+  },
+  {
+    name: 'trello_listar_cartoes',
+    description: 'Lista os cartoes de uma lista especifica ou de um quadro inteiro do Trello, com id, nome, descricao, vencimento e em qual lista cada um esta.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        listId: { type: 'string', description: 'Id da lista (opcional se boardId for informado)' },
+        boardId: { type: 'string', description: 'Id do quadro - traz cartoes de todas as listas (opcional se listId for informado)' },
+      },
+    },
+  },
+  {
+    name: 'trello_criar_cartao',
+    description: 'Cria um cartao novo numa lista do Trello.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        listId: { type: 'string', description: 'Id da lista onde o cartao vai entrar' },
+        nome: { type: 'string', description: 'Titulo do cartao' },
+        descricao: { type: 'string', description: 'Descricao/detalhes do cartao (opcional)' },
+        vencimento: { type: 'string', description: 'Data de vencimento ISO 8601 (opcional)' },
+      },
+      required: ['listId', 'nome'],
+    },
+  },
+  {
+    name: 'trello_editar_cartao',
+    description: 'Edita o titulo, descricao ou vencimento de um cartao do Trello ja existente.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cardId: { type: 'string', description: 'Id do cartao' },
+        nome: { type: 'string', description: 'Novo titulo (opcional)' },
+        descricao: { type: 'string', description: 'Nova descricao (opcional)' },
+        vencimento: { type: 'string', description: 'Nova data de vencimento ISO 8601 (opcional)' },
+      },
+      required: ['cardId'],
+    },
+  },
+  {
+    name: 'trello_mover_cartao',
+    description: 'Move um cartao do Trello de uma lista pra outra (ex: de "A Fazer" pra "Concluido").',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cardId: { type: 'string', description: 'Id do cartao a mover' },
+        listId: { type: 'string', description: 'Id da lista de destino' },
+      },
+      required: ['cardId', 'listId'],
+    },
+  },
+  {
+    name: 'trello_arquivar_cartao',
+    description: 'Arquiva um cartao do Trello (sai da visualizacao normal do quadro, mas nao apaga de verdade - pode ser restaurado pelo proprio Trello depois). Use isso pra "remover"/"apagar" um cartao a pedido do usuario, nunca ha exclusao permanente por aqui.',
+    input_schema: {
+      type: 'object',
+      properties: { cardId: { type: 'string', description: 'Id do cartao a arquivar' } },
+      required: ['cardId'],
+    },
+  },
+  {
+    name: 'trello_comentar_cartao',
+    description: 'Adiciona um comentario num cartao do Trello.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        cardId: { type: 'string', description: 'Id do cartao' },
+        texto: { type: 'string', description: 'Texto do comentario' },
+      },
+      required: ['cardId', 'texto'],
+    },
     // marca o fim do bloco de ferramentas como ponto de cache - a lista inteira (~30+
     // ferramentas) e grande e quase nunca muda, entao cache_control aqui faz a Anthropic
     // cobrar bem mais barato nela nas chamadas seguintes dentro da janela de cache
@@ -1199,6 +1295,14 @@ const toolHandlers = {
   agenda_criar_evento: (input) => agenda.criarEvento(input),
   agenda_listar_eventos: ({ from, to }) => agenda.listarEventos(from, to),
   agenda_cancelar_evento: async ({ id }) => { await agenda.cancelarEvento(id); return { ok: true, mensagem: 'Evento removido da agenda.' }; },
+  trello_listar_quadros: () => trello.listarQuadros(),
+  trello_listar_listas: ({ boardId }) => trello.listarListas(boardId),
+  trello_listar_cartoes: ({ listId, boardId }) => trello.listarCartoes({ listId, boardId }),
+  trello_criar_cartao: (input) => trello.criarCartao(input),
+  trello_editar_cartao: (input) => trello.editarCartao(input),
+  trello_mover_cartao: (input) => trello.moverCartao(input),
+  trello_arquivar_cartao: ({ cardId }) => trello.arquivarCartao(cardId),
+  trello_comentar_cartao: (input) => trello.comentarCartao(input),
   ads_listar_contas: () => metaAds.listAdAccounts(),
   ads_relatorio_gastos: async ({ accountId, from, to, agrupar }) => {
     const timeIncrement = agrupar === 'mes' ? 'monthly' : '1';
