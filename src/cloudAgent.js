@@ -11,6 +11,7 @@ import { pool } from './db.js';
 import * as agenda from './agenda.js';
 import { gerarRelatorioDiario } from './relatorioDiario.js';
 import * as trello from './trello.js';
+import * as googleSheets from './googleSheets.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -317,6 +318,17 @@ pedido. "Arquivar" um cartao NAO apaga ele de verdade (fica reversivel, o Trello
 o unico jeito de "remover" um cartao por aqui, nunca ha exclusao permanente. Se ainda nao souber
 o id de um quadro/lista/cartao especifico, consulte primeiro (trello_listar_quadros /
 trello_listar_listas) em vez de perguntar pro usuario ou inventar um id.
+
+Voce tambem tem acesso a planilhas do Google Sheets (sheets_listar_abas, sheets_ler_intervalo,
+sheets_escrever_intervalo, sheets_adicionar_linha) - por exemplo a planilha do laboratorio da
+clinica, com resultados/pedidos de exame. Isso usa a MESMA conexao Google da Agenda (se o
+usuario disser que nao esta funcionando, pode ser que precise reconectar o Google na aba Agenda
+do app pra conceder o acesso). Sempre que o usuario mencionar uma planilha, peca (ou use a que ja
+foi passada antes na conversa) a URL ou id dela - nunca invente um id. Antes de EDITAR algo,
+leia o intervalo primeiro (sheets_ler_intervalo) pra confirmar que esta no lugar certo e nao vai
+sobrescrever um dado errado por engano. Pra "cadastrar"/"lançar" um registro novo, use
+sheets_adicionar_linha (ela acha o fim da tabela sozinha); pra CORRIGIR um valor que ja existe
+numa posicao especifica, use sheets_escrever_intervalo.
 
 Voce tambem pode ser treinada: quando o usuario pedir explicitamente pra voce aprender/lembrar
 algo sobre como se comportar dali em diante (nao so nesta conversa, mas em qualquer conversa
@@ -1048,6 +1060,57 @@ const tools = [
       },
       required: ['cardId', 'texto'],
     },
+  },
+  {
+    name: 'sheets_listar_abas',
+    description: 'Lista as abas (paginas) de uma planilha do Google Sheets, com nome e tamanho (linhas/colunas). Use antes de ler/escrever um intervalo se ainda nao souber o nome certo da aba.',
+    input_schema: {
+      type: 'object',
+      properties: { planilha: { type: 'string', description: 'URL ou id da planilha (ex: a planilha do laboratorio da clinica)' } },
+      required: ['planilha'],
+    },
+  },
+  {
+    name: 'sheets_ler_intervalo',
+    description: 'Le os valores de um intervalo de celulas de uma planilha do Google Sheets (ex: "Laboratorio!A1:F50"). Devolve uma matriz de linhas/colunas. Use pra responder perguntas sobre os dados ou antes de editar algo, pra saber o que ja esta la.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        planilha: { type: 'string', description: 'URL ou id da planilha' },
+        intervalo: { type: 'string', description: 'Intervalo no formato do Google Sheets, ex: "Laboratorio!A1:F50" (com o nome da aba antes do "!") ou so "A1:F50" pra primeira aba' },
+      },
+      required: ['planilha', 'intervalo'],
+    },
+  },
+  {
+    name: 'sheets_escrever_intervalo',
+    description: 'Sobrescreve um intervalo de celulas de uma planilha do Google Sheets com os valores informados - use pra corrigir/ajustar dados ja existentes numa posicao especifica. Sempre leia o intervalo antes (sheets_ler_intervalo) pra confirmar que esta editando o lugar certo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        planilha: { type: 'string', description: 'URL ou id da planilha' },
+        intervalo: { type: 'string', description: 'Intervalo exato a sobrescrever, ex: "Laboratorio!C5:C5" ou "Laboratorio!A2:F2"' },
+        valores: {
+          type: 'array',
+          items: { type: 'array', items: { type: 'string' } },
+          description: 'Matriz de linhas/colunas com os valores novos, na mesma forma/tamanho do intervalo (ex: [["valor1","valor2"]] pra uma linha de 2 colunas)',
+        },
+      },
+      required: ['planilha', 'intervalo', 'valores'],
+    },
+  },
+  {
+    name: 'sheets_adicionar_linha',
+    description: 'Adiciona uma linha nova no fim da tabela de dados de uma aba do Google Sheets (nao precisa saber em qual numero de linha exato cai - o proprio Sheets acha o fim da tabela). Use pra "cadastrar"/"lancar" um novo registro (ex: um resultado de exame novo na planilha do laboratorio).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        planilha: { type: 'string', description: 'URL ou id da planilha' },
+        aba: { type: 'string', description: 'Nome da aba onde a linha vai entrar' },
+        valores: { type: 'array', items: { type: 'string' }, description: 'Valores da linha nova, na mesma ordem das colunas da tabela (ex: ["Nome do paciente","12/07/2026","Hemograma","Pendente"])' },
+      },
+      required: ['planilha', 'aba', 'valores'],
+    },
     // marca o fim do bloco de ferramentas como ponto de cache - a lista inteira (~30+
     // ferramentas) e grande e quase nunca muda, entao cache_control aqui faz a Anthropic
     // cobrar bem mais barato nela nas chamadas seguintes dentro da janela de cache
@@ -1303,6 +1366,10 @@ const toolHandlers = {
   trello_mover_cartao: (input) => trello.moverCartao(input),
   trello_arquivar_cartao: ({ cardId }) => trello.arquivarCartao(cardId),
   trello_comentar_cartao: (input) => trello.comentarCartao(input),
+  sheets_listar_abas: ({ planilha }) => googleSheets.listarAbas(planilha),
+  sheets_ler_intervalo: (input) => googleSheets.lerIntervalo(input),
+  sheets_escrever_intervalo: (input) => googleSheets.escreverIntervalo(input),
+  sheets_adicionar_linha: (input) => googleSheets.adicionarLinha(input),
   ads_listar_contas: () => metaAds.listAdAccounts(),
   ads_relatorio_gastos: async ({ accountId, from, to, agrupar }) => {
     const timeIncrement = agrupar === 'mes' ? 'monthly' : '1';
