@@ -133,17 +133,23 @@ async function main() {
   console.log('');
 
   // ---------- 4. instancia de WhatsApp ativa + numero admin ----------
+  // instalacao que ja tem uso real (schema antigo "id INT PK DEFAULT 1") JA TEM uma linha
+  // aqui com os valores reais de producao - nao faz sentido sobrescrever com o valor da env
+  // var (que pode nem bater mais). So insere do zero se a tabela estiver genuinamente vazia
+  // (instalacao nova); senao so deixa o backfill do passo 5 preencher o tenant_id dessa linha.
   const instanciaAtiva = process.env.EVOLUTION_INSTANCE || 'Lumia';
   const numeroAdmin = process.env.LUMIA_WHATSAPP_ADMIN || null;
-  console.log(`Vou configurar whatsapp_config do tenant ${tenantId}: instancia_ativa="${instanciaAtiva}", numero_admin="${numeroAdmin || '(nenhum)'}"`);
-  if (!DRY_RUN) {
-    await pool.query(
-      `INSERT INTO whatsapp_config (tenant_id, instancia_ativa, numero_admin, atualizado_em) VALUES ($1,$2,$3,now())
-       ON CONFLICT (tenant_id) DO UPDATE SET
-         instancia_ativa = COALESCE(whatsapp_config.instancia_ativa, $2),
-         numero_admin = COALESCE(whatsapp_config.numero_admin, $3)`,
-      [tenantId, instanciaAtiva, numeroAdmin],
-    );
+  const { rows: whatsappConfigExistente } = await pool.query('SELECT 1 FROM whatsapp_config LIMIT 1');
+  if (whatsappConfigExistente.length) {
+    console.log(`whatsapp_config ja tem uma linha (dado real de producao) - o backfill do passo 5 so vai preencher o tenant_id dela, sem mexer em instancia_ativa/numero_admin ja configurados.`);
+  } else {
+    console.log(`whatsapp_config esta vazia - vou criar a linha do tenant ${tenantId} com instancia_ativa="${instanciaAtiva}", numero_admin="${numeroAdmin || '(nenhum)'}" (valores das env vars atuais).`);
+    if (!DRY_RUN) {
+      await pool.query(
+        `INSERT INTO whatsapp_config (tenant_id, instancia_ativa, numero_admin, atualizado_em) VALUES ($1,$2,$3,now())`,
+        [tenantId, instanciaAtiva, numeroAdmin],
+      );
+    }
   }
   console.log(`Vou mapear a instancia "${instanciaAtiva}" pro tenant ${tenantId} (roteamento do webhook do WhatsApp).`);
   if (!DRY_RUN) await tenants.mapearInstanciaParaTenant(instanciaAtiva, tenantId);
