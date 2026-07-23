@@ -55,6 +55,24 @@ async function garantirTabelas() {
       criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // senha extra (separada do login) pra abrir a lista de conversas ocultas - 1 linha POR
+  // TENANT (nao mais singleton global). Sem senha configurada ainda = qualquer um com acesso
+  // aquele tenant ve a lista normalmente, ate o dono definir uma pela propria tela de "Ocultas".
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS crm_seguranca (
+      tenant_id INT PRIMARY KEY REFERENCES tenants(id),
+      senha_ocultas TEXT
+    );
+  `);
+
+  // instalacao que ja tinha essas tabelas ANTES da conversao multi-tenant (sem tenant_id, com
+  // UNIQUE so em numero+instancia, crm_seguranca com "id INT PK DEFAULT 1") - os CREATE TABLE
+  // acima sao no-op nesse caso. Adiciona as colunas de tenant_id ANTES de qualquer indice/query
+  // que dependa delas (senao "column tenant_id does not exist" numa instalacao antiga).
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
+  await pool.query(`ALTER TABLE crm_mensagens ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
+  await pool.query(`ALTER TABLE crm_seguranca ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
+
   await pool.query(`CREATE INDEX IF NOT EXISTS crm_mensagens_contato_idx ON crm_mensagens (tenant_id, numero, instancia, criado_em);`);
   // guarda a midia (imagem/audio) recebida direto no Postgres em base64, baixada do Evolution
   // API no momento em que a mensagem chega (ver server.js) - assim da pra ver/ouvir na aba CRM
@@ -68,25 +86,9 @@ async function garantirTabelas() {
   // oculto = o dono escolheu manualmente esconder essa conversa do funil (ex: numero pessoal
   // de um fornecedor, engano, spam) - nao apaga nada, so tira da visualizacao padrao
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS oculto BOOLEAN NOT NULL DEFAULT false;`);
-  // senha extra (separada do login) pra abrir a lista de conversas ocultas - 1 linha POR
-  // TENANT (nao mais singleton global). Sem senha configurada ainda = qualquer um com acesso
-  // aquele tenant ve a lista normalmente, ate o dono definir uma pela propria tela de "Ocultas".
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS crm_seguranca (
-      tenant_id INT PRIMARY KEY REFERENCES tenants(id),
-      senha_ocultas TEXT
-    );
-  `);
 
-  // instalacao que ja tinha essas tabelas ANTES da conversao multi-tenant (sem tenant_id, com
-  // UNIQUE so em numero+instancia, crm_seguranca com "id INT PK DEFAULT 1") - os CREATE TABLE
-  // acima sao no-op nesse caso. Adiciona as colunas e recria os indices unicos ja incluindo
-  // tenant_id, exigidos pelos ON CONFLICT/UNIQUE usados neste arquivo.
-  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
   await pool.query(`ALTER TABLE crm_contatos DROP CONSTRAINT IF EXISTS crm_contatos_numero_instancia_key;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS crm_contatos_tenant_numero_instancia_idx ON crm_contatos (tenant_id, numero, instancia);`);
-  await pool.query(`ALTER TABLE crm_mensagens ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
-  await pool.query(`ALTER TABLE crm_seguranca ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS crm_seguranca_tenant_idx ON crm_seguranca (tenant_id);`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
