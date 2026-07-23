@@ -1,8 +1,8 @@
 // relatorios configuraveis (aba "Relatorios" do app): 1+ numeros de WhatsApp destinatarios,
-// e 4 tipos de relatorio que podem ser ligados/desligados independentemente, cada um com sua
-// propria frequencia de envio automatico. Cada gerador de relatorio monta o texto inteiro em
-// codigo (nao pela Claude) - mesmo raciocinio do relatorioDiario.js: sai sempre identico,
-// sem depender da IA estar disponivel pro envio automatico funcionar.
+// e 4 tipos de relatorio que podem ser ligados/desligados independentemente POR TENANT, cada
+// um com sua propria frequencia de envio automatico. Cada gerador de relatorio monta o texto
+// inteiro em codigo (nao pela Claude) - mesmo raciocinio do relatorioDiario.js: sai sempre
+// identico, sem depender da IA estar disponivel pro envio automatico funcionar.
 import { pool } from './db.js';
 import * as metaAds from './metaads.js';
 import * as clinicorp from './clinicorp.js';
@@ -55,72 +55,91 @@ async function garantirTabelas() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS relatorio_destinatarios (
       id SERIAL PRIMARY KEY,
-      numero TEXT NOT NULL UNIQUE,
-      criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      numero TEXT NOT NULL,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (tenant_id, numero)
     );
   `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS relatorio_configs (
-      tipo TEXT PRIMARY KEY,
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      tipo TEXT NOT NULL,
       ativo BOOLEAN NOT NULL DEFAULT false,
       frequencia TEXT NOT NULL DEFAULT 'diario',
       hora_envio TEXT NOT NULL DEFAULT '07:00',
       ultimo_envio_em TIMESTAMPTZ,
-      atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+      atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (tenant_id, tipo)
     );
   `);
   // colunas novas - IF NOT EXISTS pra nao quebrar instalacoes que ja tinham essa tabela antes
   // dessas funcionalidades existirem
   await pool.query(`ALTER TABLE relatorio_configs ADD COLUMN IF NOT EXISTS hora_envio TEXT NOT NULL DEFAULT '07:00';`);
   // qual instancia/numero de WhatsApp usar pra ENVIAR cada tipo de relatorio - null = usa a
-  // instancia ativa padrao (o mesmo numero que a Lumia usa no dia a dia)
+  // instancia ativa padrao do tenant
   await pool.query(`ALTER TABLE relatorio_configs ADD COLUMN IF NOT EXISTS instancia TEXT;`);
-  // garante que as linhas de config de todos os tipos sempre existam (mais facil de
-  // consultar/atualizar do que checar existencia toda vez)
-  for (const tipo of TIPOS_RELATORIO) {
-    await pool.query(
-      'INSERT INTO relatorio_configs (tipo, frequencia) VALUES ($1, $2) ON CONFLICT (tipo) DO NOTHING',
-      [tipo, FREQUENCIA_PADRAO_POR_TIPO[tipo] || 'diario'],
-    );
-  }
+
+  // instalacao que ja tinha essas tabelas ANTES da conversao multi-tenant (relatorio_configs
+  // com PK so em "tipo", relatorio_destinatarios com UNIQUE so em "numero") - os CREATE TABLE
+  // acima sao no-op nesse caso. Adiciona tenant_id (nullable ate o backfill) e os indices
+  // unicos compostos exigidos pelos ON CONFLICT (tenant_id, ...) usados abaixo.
+  await pool.query(`ALTER TABLE relatorio_destinatarios ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
+  await pool.query(`ALTER TABLE relatorio_destinatarios DROP CONSTRAINT IF EXISTS relatorio_destinatarios_numero_key;`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS relatorio_destinatarios_tenant_numero_idx ON relatorio_destinatarios (tenant_id, numero);`);
+
+  await pool.query(`ALTER TABLE relatorio_configs ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS relatorio_configs_tenant_tipo_idx ON relatorio_configs (tenant_id, tipo);`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas de relatorios programados:', err.message);
 });
 
+// garante que as linhas de config de todos os tipos existam pra esse tenant especifico - so
+// chamado sob demanda (nao mais no boot, ja que agora sao N tenants, nao 1 fixo)
+async function garantirConfigsDoTenant(tenantId) {
+  await tabelasProntas;
+  for (const tipo of TIPOS_RELATORIO) {
+    await pool.query(
+      'INSERT INTO relatorio_configs (tenant_id, tipo, frequencia) VALUES ($1, $2, $3) ON CONFLICT (tenant_id, tipo) DO NOTHING',
+      [tenantId, tipo, FREQUENCIA_PADRAO_POR_TIPO[tipo] || 'diario'],
+    );
+  }
+}
+
 // ---------- destinatarios (numeros de WhatsApp que recebem os relatorios ativos) ----------
 
-export async function listarDestinatarios() {
+export async function listarDestinatarios(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT id, numero FROM relatorio_destinatarios ORDER BY criado_em ASC');
+  const { rows } = await pool.query('SELECT id, numero FROM relatorio_destinatarios WHERE tenant_id = $1 ORDER BY criado_em ASC', [tenantId]);
   return rows;
 }
 
-export async function adicionarDestinatario(numero) {
+export async function adicionarDestinatario(tenantId, numero) {
   if (!pool) throw new Error('Precisa do Postgres configurado (DATABASE_URL) pra guardar isso.');
   const limpo = (numero || '').replace(/\D/g, '');
   if (!limpo) throw new Error('Numero invalido.');
   await tabelasProntas;
   const { rows } = await pool.query(
-    'INSERT INTO relatorio_destinatarios (numero) VALUES ($1) ON CONFLICT (numero) DO NOTHING RETURNING id',
-    [limpo],
+    'INSERT INTO relatorio_destinatarios (tenant_id, numero) VALUES ($1, $2) ON CONFLICT (tenant_id, numero) DO NOTHING RETURNING id',
+    [tenantId, limpo],
   );
   return rows[0]?.id || null;
 }
 
-export async function removerDestinatario(id) {
+export async function removerDestinatario(tenantId, id) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
-  await pool.query('DELETE FROM relatorio_destinatarios WHERE id = $1', [id]);
+  await pool.query('DELETE FROM relatorio_destinatarios WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
 }
 
 // ---------- configs (quais relatorios estao ativos e com que frequencia) ----------
 
-export async function obterConfigs() {
+export async function obterConfigs(tenantId) {
   if (!pool) return TIPOS_RELATORIO.map((tipo) => ({ tipo, nome: NOME_TIPO[tipo], ativo: false, frequencia: FREQUENCIA_PADRAO_POR_TIPO[tipo] || 'diario', horaEnvio: '07:00', ultimoEnvioEm: null, instancia: null }));
-  await tabelasProntas;
-  const { rows } = await pool.query('SELECT tipo, ativo, frequencia, hora_envio, ultimo_envio_em, instancia FROM relatorio_configs');
+  await garantirConfigsDoTenant(tenantId);
+  const { rows } = await pool.query('SELECT tipo, ativo, frequencia, hora_envio, ultimo_envio_em, instancia FROM relatorio_configs WHERE tenant_id = $1', [tenantId]);
   return TIPOS_RELATORIO.map((tipo) => {
     const r = rows.find((x) => x.tipo === tipo);
     return {
@@ -135,8 +154,8 @@ export async function obterConfigs() {
   });
 }
 
-async function obterConfigPorTipo(tipo) {
-  const configs = await obterConfigs();
+async function obterConfigPorTipo(tenantId, tipo) {
+  const configs = await obterConfigs(tenantId);
   return configs.find((c) => c.tipo === tipo);
 }
 
@@ -146,22 +165,22 @@ function validarHoraEnvio(hora) {
   return hora;
 }
 
-export async function salvarConfig(tipo, { ativo, frequencia, horaEnvio, instancia }) {
+export async function salvarConfig(tenantId, tipo, { ativo, frequencia, horaEnvio, instancia }) {
   if (!TIPOS_RELATORIO.includes(tipo)) throw new Error(`Tipo de relatorio desconhecido: ${tipo}`);
   if (frequencia && !FREQUENCIAS.includes(frequencia)) throw new Error(`Frequencia desconhecida: ${frequencia}`);
   const horaValidada = validarHoraEnvio(horaEnvio);
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
   await pool.query(
-    `INSERT INTO relatorio_configs (tipo, ativo, frequencia, hora_envio, instancia, atualizado_em) VALUES ($1, $2, $3, $4, $5, now())
-     ON CONFLICT (tipo) DO UPDATE SET ativo = $2, frequencia = $3, hora_envio = $4, instancia = $5, atualizado_em = now()`,
-    [tipo, !!ativo, frequencia || FREQUENCIA_PADRAO_POR_TIPO[tipo] || 'diario', horaValidada, instancia || null],
+    `INSERT INTO relatorio_configs (tenant_id, tipo, ativo, frequencia, hora_envio, instancia, atualizado_em) VALUES ($1, $2, $3, $4, $5, $6, now())
+     ON CONFLICT (tenant_id, tipo) DO UPDATE SET ativo = $3, frequencia = $4, hora_envio = $5, instancia = $6, atualizado_em = now()`,
+    [tenantId, tipo, !!ativo, frequencia || FREQUENCIA_PADRAO_POR_TIPO[tipo] || 'diario', horaValidada, instancia || null],
   );
 }
 
-async function marcarEnviado(tipo) {
+async function marcarEnviado(tenantId, tipo) {
   if (!pool) return;
-  await pool.query('UPDATE relatorio_configs SET ultimo_envio_em = now() WHERE tipo = $1', [tipo]);
+  await pool.query('UPDATE relatorio_configs SET ultimo_envio_em = now() WHERE tenant_id = $1 AND tipo = $2', [tenantId, tipo]);
 }
 
 // ---------- helpers de formatacao ----------
@@ -178,8 +197,8 @@ function formatarDataHoraBR() {
 
 // ---------- 1. Meta Ads - Financeiro Completo ----------
 
-export async function gerarRelatorioAdsFinanceiroCompleto() {
-  const todasContas = await metaAds.listAdAccounts();
+export async function gerarRelatorioAdsFinanceiroCompleto(tenantId) {
+  const todasContas = await metaAds.listAdAccounts(tenantId);
   const hoje = new Date();
   const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const ontem = hoje.toISOString().slice(0, 10);
@@ -195,7 +214,7 @@ export async function gerarRelatorioAdsFinanceiroCompleto() {
     let ativas = 0;
     let pausadas = 0;
     try {
-      const campanhas = await metaAds.listCampaigns({ accountId: c.id });
+      const campanhas = await metaAds.listCampaigns(tenantId, { accountId: c.id });
       for (const camp of campanhas) {
         if (camp.effective_status === 'ACTIVE') ativas++;
         else pausadas++;
@@ -210,7 +229,7 @@ export async function gerarRelatorioAdsFinanceiroCompleto() {
 
     let gastoMedioDiario = null;
     try {
-      const relatorio = await metaAds.getSpendReport({ accountId: c.id, since: seteDiasAtras, until: ontem, timeIncrement: '1' });
+      const relatorio = await metaAds.getSpendReport(tenantId, { accountId: c.id, since: seteDiasAtras, until: ontem, timeIncrement: '1' });
       const dias = relatorio[0]?.porPeriodo || [];
       if (dias.length) gastoMedioDiario = dias.reduce((s, d) => s + d.gasto, 0) / dias.length;
     } catch { /* segue sem media se der erro */ }
@@ -339,15 +358,15 @@ function montarBlocoCampanha({ conta, campanha, row, frequencia, hoje }) {
   ].join('\n');
 }
 
-export async function gerarRelatorioAdsMetricasCompleto({ frequencia = 'diario' } = {}) {
+export async function gerarRelatorioAdsMetricasCompleto(tenantId, { frequencia = 'diario' } = {}) {
   const { since, until, hoje } = periodoDiasCalendario(frequencia);
-  const contas = await metaAds.listAdAccounts();
+  const contas = await metaAds.listAdAccounts(tenantId);
   const blocos = [];
 
   for (const c of contas) {
     let campanhas;
     try {
-      campanhas = await metaAds.listCampaigns({ accountId: c.id, status: 'ACTIVE' });
+      campanhas = await metaAds.listCampaigns(tenantId, { accountId: c.id, status: 'ACTIVE' });
     } catch { continue; }
     if (!campanhas.length) continue;
 
@@ -357,7 +376,7 @@ export async function gerarRelatorioAdsMetricasCompleto({ frequencia = 'diario' 
       // os anuncios pausados/parados ha mais de 1 dia fica de fora, pedido explicito do usuario.
       let analise;
       try {
-        analise = await metaAds.analyzeCampaignAds({ campaignId: camp.id, since, until });
+        analise = await metaAds.analyzeCampaignAds(tenantId, { campaignId: camp.id, since, until });
       } catch { continue; }
       if (!analise.anuncios.length) continue;
 
@@ -365,7 +384,7 @@ export async function gerarRelatorioAdsMetricasCompleto({ frequencia = 'diario' 
       // o agregado direto no nivel de campanha, que ja vem deduplicado pela Meta.
       let rows;
       try {
-        rows = await metaAds.getInsights({ objectId: camp.id, objectType: 'campaign', level: 'campaign', since, until });
+        rows = await metaAds.getInsights(tenantId, { objectId: camp.id, objectType: 'campaign', level: 'campaign', since, until });
       } catch { continue; }
       const row = rows[0];
       if (!row || !(Number(row.spend) > 0 || Number(row.impressions) > 0)) continue;
@@ -388,18 +407,18 @@ export async function gerarRelatorioAdsMetricasCompleto({ frequencia = 'diario' 
 
 // ---------- 3. Clinica - Relatorio Financeiro Geral ----------
 
-export async function gerarRelatorioClinicaFinanceiroGeral({ dias = 30 } = {}) {
+export async function gerarRelatorioClinicaFinanceiroGeral(tenantId, { dias = 30 } = {}) {
   const hoje = new Date();
   const desde = new Date(hoje.getTime() - dias * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const ate = hoje.toISOString().slice(0, 10);
 
   const [resumo, conversao, receitaEspecialidade, metasVendas, metasFaltas, parcelamento] = await Promise.all([
-    clinicorp.getFinancialSummary({ from: desde, to: ate }),
-    clinicorp.getSalesConversion({ from: desde, to: ate }).catch(() => null),
-    clinicorp.getExpertiseRevenue({ from: desde, to: ate }).catch(() => null),
-    clinicorp.listSalesGoals({ from: desde, to: ate }).catch(() => null),
-    clinicorp.listMissesGoals({ from: desde, to: ate }).catch(() => null),
-    clinicorp.getAverageInstallments({ from: desde, to: ate }).catch(() => null),
+    clinicorp.getFinancialSummary(tenantId, { from: desde, to: ate }),
+    clinicorp.getSalesConversion(tenantId, { from: desde, to: ate }).catch(() => null),
+    clinicorp.getExpertiseRevenue(tenantId, { from: desde, to: ate }).catch(() => null),
+    clinicorp.listSalesGoals(tenantId, { from: desde, to: ate }).catch(() => null),
+    clinicorp.listMissesGoals(tenantId, { from: desde, to: ate }).catch(() => null),
+    clinicorp.getAverageInstallments(tenantId, { from: desde, to: ate }).catch(() => null),
   ]);
 
   const linhas = [];
@@ -463,15 +482,15 @@ export async function gerarRelatorioClinicaFinanceiroGeral({ dias = 30 } = {}) {
 
 // ---------- 4. Clinica - Relatorio de Agendamentos Completo (por profissional) ----------
 
-export async function gerarRelatorioClinicaAgendamentosCompleto({ dias = 30 } = {}) {
+export async function gerarRelatorioClinicaAgendamentosCompleto(tenantId, { dias = 30 } = {}) {
   const hoje = new Date();
   const desde = new Date(hoje.getTime() - dias * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const ate = hoje.toISOString().slice(0, 10);
 
   const [agendamentos, statusList, profissionais] = await Promise.all([
-    clinicorp.listAppointments({ from: desde, to: ate, includeCanceled: 'X' }),
-    clinicorp.getAppointmentStatusList(),
-    clinicorp.listProfessionals(),
+    clinicorp.listAppointments(tenantId, { from: desde, to: ate, includeCanceled: 'X' }),
+    clinicorp.getAppointmentStatusList(tenantId),
+    clinicorp.listProfessionals(tenantId),
   ]);
 
   const statusPorId = new Map(statusList.map((s) => [String(s.id), s.Description]));
@@ -532,8 +551,8 @@ const LIMITE_SALDO_BAIXO_REAIS = Number(process.env.META_ADS_LIMITE_SALDO_BAIXO_
 // effective_status ACTIVE - mesmo criterio de "conta ativa" usado em
 // gerarRelatorioAdsFinanceiroCompleto (conta sem nenhum anuncio rodando fica de fora, saldo
 // baixo la nao e urgente e so geraria ruido no WhatsApp).
-export async function gerarAlertaSaldoBaixo() {
-  const contas = await metaAds.listAdAccounts();
+export async function gerarAlertaSaldoBaixo(tenantId) {
+  const contas = await metaAds.listAdAccounts(tenantId);
   const linhas = [];
 
   for (const c of contas) {
@@ -544,7 +563,7 @@ export async function gerarAlertaSaldoBaixo() {
 
     let ativas = 0;
     try {
-      const campanhas = await metaAds.listCampaigns({ accountId: c.id, status: 'ACTIVE' });
+      const campanhas = await metaAds.listCampaigns(tenantId, { accountId: c.id, status: 'ACTIVE' });
       ativas = campanhas.length;
     } catch { continue; } // erro pontual na conta - nao arrisca alertar sem confirmar que tem campanha ativa
 
@@ -576,28 +595,28 @@ const GERADORES = {
   ads_saldo_baixo: gerarAlertaSaldoBaixo,
 };
 
-export async function gerarRelatorioPorTipo(tipo, opts = {}) {
+export async function gerarRelatorioPorTipo(tenantId, tipo, opts = {}) {
   const gerador = GERADORES[tipo];
   if (!gerador) throw new Error(`Tipo de relatorio desconhecido: ${tipo}`);
-  return gerador(opts);
+  return gerador(tenantId, opts);
 }
 
-// manda um relatorio pra todos os destinatarios cadastrados - usado tanto pelo envio manual
-// ("enviar agora" na aba) quanto pelo scheduler automatico. Alguns tipos (ads_saldo_baixo) so
-// geram texto quando ha algo pra reportar - nesse caso nao manda nada e nao marca como
-// enviado, pra o scheduler continuar checando no proximo ciclo em vez de esperar a frequencia
-// inteira de novo.
-export async function enviarRelatorioAgora(tipo) {
-  const cfg = await obterConfigPorTipo(tipo);
-  const texto = await gerarRelatorioPorTipo(tipo, { frequencia: cfg?.frequencia || 'diario' });
+// manda um relatorio pra todos os destinatarios cadastrados DESSE TENANT - usado tanto pelo
+// envio manual ("enviar agora" na aba) quanto pelo scheduler automatico. Alguns tipos
+// (ads_saldo_baixo) so geram texto quando ha algo pra reportar - nesse caso nao manda nada e
+// nao marca como enviado, pra o scheduler continuar checando no proximo ciclo em vez de esperar
+// a frequencia inteira de novo.
+export async function enviarRelatorioAgora(tenantId, tipo) {
+  const cfg = await obterConfigPorTipo(tenantId, tipo);
+  const texto = await gerarRelatorioPorTipo(tenantId, tipo, { frequencia: cfg?.frequencia || 'diario' });
   if (!texto) return { destinatarios: 0, semNadaAReportar: true };
 
-  const destinatarios = await listarDestinatarios();
+  const destinatarios = await listarDestinatarios(tenantId);
   if (!destinatarios.length) throw new Error('Nenhum destinatario cadastrado pra receber relatorios.');
 
   const enviar = cfg?.instancia
     ? (numero, msg) => enviarMensagemTextoPor(cfg.instancia, numero, msg)
-    : enviarMensagemTexto;
+    : (numero, msg) => enviarMensagemTexto(tenantId, numero, msg);
 
   // 1 retentativa depois de uma falha - a Evolution API roda auto-hospedada na mesma VPS
   // disputada (CPU compartilhada com Kokoro/Whisper), entao um "fetch failed" passageiro e
@@ -623,52 +642,60 @@ export async function enviarRelatorioAgora(tipo) {
 
   // so marca como enviado se pelo menos 1 destinatario recebeu de verdade - senao o proximo
   // "Enviar agora"/scheduler ficava achando que ja tinha mandado e nunca tentava de novo
-  if (algumEnviado) await marcarEnviado(tipo);
+  if (algumEnviado) await marcarEnviado(tenantId, tipo);
   return { destinatarios: destinatarios.length, enviouAlgum: algumEnviado };
 }
 
-// roda em segundo plano - checa a cada 5min (fuso Maceio) se algum relatorio configurado esta
-// dentro da janela do SEU horario de envio (hora_envio, primeiros 5min dessa hora) E ja passou
-// o intervalo da frequencia escolhida desde o ultimo envio - se sim, manda pros destinatarios
-// cadastrados. Frequencias sub-diarias (6_horas/12_horas, ex: alerta de saldo baixo) nao tem
-// "hora do dia" fixa - ignoram a janela de hora_envio e vencem por tempo absoluto decorrido
-// desde o ultimo envio, checado em toda rodada (nao so nos primeiros 5min de uma hora
-// especifica). So chamado uma vez, no boot do server.js.
+// roda em segundo plano - checa a cada 5min (fuso Maceio), PRA CADA TENANT com destinatario
+// cadastrado, se algum relatorio configurado esta dentro da janela do SEU horario de envio
+// (hora_envio, primeiros 5min dessa hora) E ja passou o intervalo da frequencia escolhida desde
+// o ultimo envio - se sim, manda pros destinatarios cadastrados DESSE TENANT. Frequencias
+// sub-diarias (6_horas/12_horas, ex: alerta de saldo baixo) nao tem "hora do dia" fixa -
+// ignoram a janela de hora_envio e vencem por tempo absoluto decorrido desde o ultimo envio,
+// checado em toda rodada (nao so nos primeiros 5min de uma hora especifica). So chamado uma
+// vez, no boot do server.js.
 export function iniciarSchedulerRelatoriosProgramados() {
   const checar = async () => {
     try {
       if (!pool) return;
       await tabelasProntas;
-      const destinatarios = await listarDestinatarios();
-      if (!destinatarios.length) return; // nada a fazer sem ninguem pra receber
+
+      // 1 linha por tenant que tem PELO MENOS 1 destinatario cadastrado - nao vale a pena
+      // checar config de tenant nenhum que nunca vai receber nada mesmo
+      const { rows: tenantsComDestinatario } = await pool.query(
+        'SELECT DISTINCT tenant_id FROM relatorio_destinatarios',
+      );
+      if (!tenantsComDestinatario.length) return;
 
       const agora = new Date();
       const horaAtual = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit', hour12: false });
       const [horaAtualH, horaAtualM] = horaAtual.split(':').map(Number);
       const dentroDaJanelaDeHora = horaAtualM < 5; // primeiros 5min de cada hora
 
-      const configs = await obterConfigs();
-      for (const cfg of configs) {
-        if (!cfg.ativo) continue;
-        const diasIntervalo = DIAS_POR_FREQUENCIA[cfg.frequencia] || 1;
-        const subDiaria = diasIntervalo < 1;
+      for (const { tenant_id: tenantId } of tenantsComDestinatario) {
+        const configs = await obterConfigs(tenantId);
+        for (const cfg of configs) {
+          if (!cfg.ativo) continue;
+          const diasIntervalo = DIAS_POR_FREQUENCIA[cfg.frequencia] || 1;
+          const subDiaria = diasIntervalo < 1;
 
-        let venceu;
-        if (subDiaria) {
-          // sem hora fixa - so importa quanto tempo passou desde o ultimo envio
-          venceu = !cfg.ultimoEnvioEm || (Date.now() - new Date(cfg.ultimoEnvioEm).getTime()) >= diasIntervalo * 24 * 60 * 60 * 1000;
-        } else {
-          if (!dentroDaJanelaDeHora) continue; // so dispara nos primeiros 5min de cada hora
-          const [horaCfgH] = (cfg.horaEnvio || '07:00').split(':').map(Number);
-          if (horaCfgH !== horaAtualH) continue; // nao e a hora configurada desse relatorio
-          venceu = !cfg.ultimoEnvioEm || diasCalendarioEntre(dataMaceioISO(new Date(cfg.ultimoEnvioEm)), dataMaceioISO(agora)) >= diasIntervalo;
-        }
-        if (!venceu) continue;
+          let venceu;
+          if (subDiaria) {
+            // sem hora fixa - so importa quanto tempo passou desde o ultimo envio
+            venceu = !cfg.ultimoEnvioEm || (Date.now() - new Date(cfg.ultimoEnvioEm).getTime()) >= diasIntervalo * 24 * 60 * 60 * 1000;
+          } else {
+            if (!dentroDaJanelaDeHora) continue; // so dispara nos primeiros 5min de cada hora
+            const [horaCfgH] = (cfg.horaEnvio || '07:00').split(':').map(Number);
+            if (horaCfgH !== horaAtualH) continue; // nao e a hora configurada desse relatorio
+            venceu = !cfg.ultimoEnvioEm || diasCalendarioEntre(dataMaceioISO(new Date(cfg.ultimoEnvioEm)), dataMaceioISO(agora)) >= diasIntervalo;
+          }
+          if (!venceu) continue;
 
-        try {
-          await enviarRelatorioAgora(cfg.tipo);
-        } catch (err) {
-          console.error(`Erro no envio automatico do relatorio "${cfg.tipo}":`, err.message);
+          try {
+            await enviarRelatorioAgora(tenantId, cfg.tipo);
+          } catch (err) {
+            console.error(`Erro no envio automatico do relatorio "${cfg.tipo}" (tenant ${tenantId}):`, err.message);
+          }
         }
       }
     } catch (err) {

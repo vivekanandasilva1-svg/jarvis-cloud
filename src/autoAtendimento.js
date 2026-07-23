@@ -20,12 +20,11 @@ async function garantirTabelas() {
   if (!pool) return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS auto_atendimento_config (
-      id INT PRIMARY KEY DEFAULT 1,
+      tenant_id INT PRIMARY KEY REFERENCES tenants(id),
       ativo BOOLEAN NOT NULL DEFAULT false,
       instancia TEXT,
       prompt TEXT,
-      atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
-      CHECK (id = 1)
+      atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
   // colunas novas (cadencia de resposta em audio) - IF NOT EXISTS pra nao quebrar instalacoes
@@ -36,21 +35,33 @@ async function garantirTabelas() {
   // mesmo tempo (cria nos dois lugares)
   await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS agendar_clinicorp BOOLEAN NOT NULL DEFAULT false;`);
   await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS agendar_agenda_interna BOOLEAN NOT NULL DEFAULT true;`);
+  // instalacao que ja tinha essa tabela ANTES da conversao multi-tenant (schema antigo: "id
+  // INT PK DEFAULT 1") - o CREATE TABLE acima e no-op nesse caso. Indice unico exigido pelo
+  // ON CONFLICT (tenant_id) em salvarConfig.
+  await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS auto_atendimento_config_tenant_idx ON auto_atendimento_config (tenant_id);`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS auto_atendimento_sessions (
-      numero TEXT PRIMARY KEY,
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      numero TEXT NOT NULL,
       history JSONB NOT NULL DEFAULT '[]'::jsonb,
       contagem_mensagens INT NOT NULL DEFAULT 0,
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (tenant_id, numero)
     );
   `);
   await pool.query(`ALTER TABLE auto_atendimento_sessions ADD COLUMN IF NOT EXISTS contagem_mensagens INT NOT NULL DEFAULT 0;`);
+  // instalacao antiga: PK era so "numero" - adiciona tenant_id (nullable ate o backfill) e um
+  // indice unico composto, exigido pelo ON CONFLICT (tenant_id, numero) em salvarSessao
+  await pool.query(`ALTER TABLE auto_atendimento_sessions ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS auto_atendimento_sessions_tenant_numero_idx ON auto_atendimento_sessions (tenant_id, numero);`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas de auto-atendimento:', err.message);
 });
 
-export async function obterConfig() {
+export async function obterConfig(tenantId) {
   const vazio = {
     ativo: false, instancia: null, prompt: '', frequenciaAudio: 0, audioSeReceberAudio: false,
     agendarClinicorp: false, agendarAgendaInterna: true,
@@ -58,7 +69,8 @@ export async function obterConfig() {
   if (!pool) return vazio;
   await tabelasProntas;
   const { rows } = await pool.query(
-    'SELECT ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna FROM auto_atendimento_config WHERE id = 1',
+    'SELECT ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna FROM auto_atendimento_config WHERE tenant_id = $1',
+    [tenantId],
   );
   if (!rows.length) return vazio;
   return {
@@ -72,17 +84,17 @@ export async function obterConfig() {
   };
 }
 
-export async function salvarConfig({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna }) {
+export async function salvarConfig(tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna }) {
   if (!pool) throw new Error('Precisa do Postgres configurado (DATABASE_URL) pra guardar essa configuracao.');
   await tabelasProntas;
 
   await pool.query(
-    `INSERT INTO auto_atendimento_config (id, ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, atualizado_em)
-     VALUES (1, $1, $2, $3, $4, $5, $6, $7, now())
-     ON CONFLICT (id) DO UPDATE SET
-       ativo = $1, instancia = $2, prompt = $3, frequencia_audio = $4, audio_se_receber_audio = $5,
-       agendar_clinicorp = $6, agendar_agenda_interna = $7, atualizado_em = now()`,
-    [!!ativo, instancia || null, prompt || '', Number(frequenciaAudio) || 0, !!audioSeReceberAudio, !!agendarClinicorp, !!agendarAgendaInterna],
+    `INSERT INTO auto_atendimento_config (tenant_id, ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, atualizado_em)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+     ON CONFLICT (tenant_id) DO UPDATE SET
+       ativo = $2, instancia = $3, prompt = $4, frequencia_audio = $5, audio_se_receber_audio = $6,
+       agendar_clinicorp = $7, agendar_agenda_interna = $8, atualizado_em = now()`,
+    [tenantId, !!ativo, instancia || null, prompt || '', Number(frequenciaAudio) || 0, !!audioSeReceberAudio, !!agendarClinicorp, !!agendarAgendaInterna],
   );
   // NAO chama mais /settings/set aqui - ver nota grande em evolutionApi.js sobre o porque
   // (causou pelo menos uma desconexao real por "conflict/device_removed" logo depois de
@@ -214,8 +226,8 @@ function toolEnviarArquivo(listaDisponiveis) {
 function normalizarNome(s) {
   return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/^dr\.?a?\.?\s+/, '').trim();
 }
-async function resolverMedico(nomeFalado) {
-  const profissionais = await clinicorp.listProfessionals();
+async function resolverMedico(tenantId, nomeFalado) {
+  const profissionais = await clinicorp.listProfessionals(tenantId);
   const alvo = normalizarNome(nomeFalado);
   const achado = profissionais.find((p) => normalizarNome(p.name).includes(alvo) || alvo.includes(normalizarNome(p.name)));
   if (!achado) throw new Error(`Nao encontrei nenhum dentista chamado "${nomeFalado}" no Clinicorp.`);
@@ -223,26 +235,25 @@ async function resolverMedico(nomeFalado) {
 }
 
 // cache leve do catalogo de status de agendamento (Confirmado, Faltou, Protese pendente etc) -
-// raramente muda, evita bater na API do Clinicorp de novo a cada checagem de comparecimento
-let statusAgendamentoCache = null;
-let statusAgendamentoCacheEm = 0;
-async function obterStatusAgendamento() {
-  if (statusAgendamentoCache && Date.now() - statusAgendamentoCacheEm < 10 * 60 * 1000) {
-    return statusAgendamentoCache;
-  }
-  const lista = await clinicorp.getAppointmentStatusList();
-  statusAgendamentoCache = lista;
-  statusAgendamentoCacheEm = Date.now();
+// raramente muda, evita bater na API do Clinicorp de novo a cada checagem de comparecimento.
+// 1 entrada por tenant (Map), nunca compartilhado entre clinicas diferentes.
+const statusAgendamentoCache = new Map();
+async function obterStatusAgendamento(tenantId) {
+  const cache = statusAgendamentoCache.get(tenantId);
+  if (cache && Date.now() - cache.em < 10 * 60 * 1000) return cache.lista;
+  const lista = await clinicorp.getAppointmentStatusList(tenantId);
+  statusAgendamentoCache.set(tenantId, { lista, em: Date.now() });
   return lista;
 }
 
 async function runTool(name, input, contexto) {
+  const tenantId = contexto.tenantId;
   try {
-    if (name === 'agenda_listar_eventos') return await agenda.listarEventos(input.from, input.to);
+    if (name === 'agenda_listar_eventos') return await agenda.listarEventos(tenantId, input.from, input.to);
 
     if (name === 'clinicorp_consultar_agenda_medico') {
-      const medico = await resolverMedico(input.medico);
-      const todos = await clinicorp.listAppointments({ from: input.from, to: input.to });
+      const medico = await resolverMedico(tenantId, input.medico);
+      const todos = await clinicorp.listAppointments(tenantId, { from: input.from, to: input.to });
       const doMedico = todos
         .filter((a) => String(a.Dentist_PersonId) === String(medico.id))
         .map((a) => ({ paciente: a.PatientName, data: a.date?.slice(0, 10), de: a.fromTime, ate: a.toTime }));
@@ -255,14 +266,14 @@ async function runTool(name, input, contexto) {
       // falha na busca como "nao encontrado" em vez de propagar erro, pra IA seguir o fluxo
       // normal de "nao achei, vou cadastrar" em vez de travar
       try {
-        const porTelefone = await clinicorp.findPatient({ phone: telefone });
+        const porTelefone = await clinicorp.findPatient(tenantId, { phone: telefone });
         const idTelefone = porTelefone?.Id ?? porTelefone?.PersonId ?? porTelefone?.PatientId ?? porTelefone?.id;
         if (idTelefone) return { encontrado: true, patientId: idTelefone, paciente: porTelefone };
       } catch { /* segue pra tentar por nome, se informado */ }
 
       if (input.nome) {
         try {
-          const porNome = await clinicorp.findPatient({ name: input.nome });
+          const porNome = await clinicorp.findPatient(tenantId, { name: input.nome });
           const idNome = porNome?.Id ?? porNome?.PersonId ?? porNome?.PatientId ?? porNome?.id;
           if (idNome) return { encontrado: true, patientId: idNome, paciente: porNome };
         } catch { /* nao achou por nome tambem */ }
@@ -272,7 +283,7 @@ async function runTool(name, input, contexto) {
 
     if (name === 'clinicorp_cadastrar_paciente') {
       try {
-        const paciente = await clinicorp.createPatient({
+        const paciente = await clinicorp.createPatient(tenantId, {
           name: input.nome,
           birthDate: input.nascimento,
           mobilePhone: input.telefone || contexto.numero,
@@ -293,7 +304,7 @@ async function runTool(name, input, contexto) {
 
       if (contexto.config.agendarAgendaInterna) {
         try {
-          const eventos = await agenda.listarEventos(from, to);
+          const eventos = await agenda.listarEventos(tenantId, from, to);
           // id incluido de proposito - e o que cancelar_agendamento precisa pra cancelar esse
           // evento especifico depois
           resultado.agendaInterna = eventos.map((e) => ({ id: e.id, titulo: e.titulo, inicio: e.inicio, fim: e.fim }));
@@ -304,7 +315,7 @@ async function runTool(name, input, contexto) {
 
       if (contexto.config.agendarClinicorp) {
         try {
-          const paciente = await clinicorp.findPatient({ phone: contexto.numero });
+          const paciente = await clinicorp.findPatient(tenantId, { phone: contexto.numero });
           // o campo do id do paciente varia (Id/PersonId/PatientId, conforme a config da
           // clinica) - tenta os nomes conhecidos em vez de travar num so
           const patientId = paciente?.Id ?? paciente?.PersonId ?? paciente?.PatientId ?? paciente?.id;
@@ -312,8 +323,8 @@ async function runTool(name, input, contexto) {
             resultado.clinicorp = { mensagem: 'Nenhum paciente encontrado no Clinicorp com esse telefone - nao da pra checar historico la.' };
           } else {
             const [agendamentos, statusList] = await Promise.all([
-              clinicorp.listAppointments({ patientId, from, to, includeCanceled: 'X' }),
-              obterStatusAgendamento(),
+              clinicorp.listAppointments(tenantId, { patientId, from, to, includeCanceled: 'X' }),
+              obterStatusAgendamento(tenantId),
             ]);
             const statusPorId = new Map(statusList.map((s) => [String(s.id), s.Description]));
             resultado.clinicorp = agendamentos.map((a) => ({
@@ -346,7 +357,7 @@ async function runTool(name, input, contexto) {
       const resultado = {};
       if (input.clinicorpId) {
         try {
-          await clinicorp.cancelAppointment({ id: input.clinicorpId });
+          await clinicorp.cancelAppointment(tenantId, { id: input.clinicorpId });
           resultado.clinicorp = { ok: true };
         } catch (err) {
           resultado.clinicorp = { ok: false, erro: err.message };
@@ -354,7 +365,7 @@ async function runTool(name, input, contexto) {
       }
       if (input.agendaInternaId) {
         try {
-          await agenda.cancelarEvento(input.agendaInternaId);
+          await agenda.cancelarEvento(tenantId, input.agendaInternaId);
           resultado.agendaInterna = { ok: true };
         } catch (err) {
           resultado.agendaInterna = { ok: false, erro: err.message };
@@ -378,14 +389,14 @@ async function runTool(name, input, contexto) {
 
       if (config.agendarClinicorp) {
         try {
-          const medico = await resolverMedico(input.medico);
+          const medico = await resolverMedico(tenantId, input.medico);
           const data = input.inicio.slice(0, 10);
           const de = input.inicio.slice(11, 16);
           const ate = input.fim.slice(11, 16);
 
           // olha quem ja esta marcado com esse medico nesse dia, pra checar duplicidade e o
           // limite de 2 pessoas diferentes no mesmo horario antes de tentar criar de verdade
-          const doDia = await clinicorp.listAppointments({ from: data, to: data });
+          const doDia = await clinicorp.listAppointments(tenantId, { from: data, to: data });
           const domedico = doDia.filter((a) => String(a.Dentist_PersonId) === String(medico.id));
           const mesmoHorario = domedico.filter((a) => a.fromTime === de);
           const nomeNovoPaciente = normalizarNome(input.pacienteNome);
@@ -398,7 +409,7 @@ async function runTool(name, input, contexto) {
             if (pacientesDiferentes.size >= 2) {
               resultado.clinicorp = { erro: `Esse horario com ${medico.name} ja tem 2 pessoas diferentes marcadas - escolha outro horario.` };
             } else {
-              await clinicorp.createAppointment({
+              await clinicorp.createAppointment(tenantId, {
                 patientId: input.patientId || undefined,
                 patientName: input.pacienteNome,
                 mobilePhone: input.pacienteTelefone || contexto.numero,
@@ -421,13 +432,13 @@ async function runTool(name, input, contexto) {
         try {
           // agenda interna e de uso pessoal (1 coisa de cada vez) - nunca sobrepoe outro
           // compromisso ja marcado, ao contrario do Clinicorp que aceita ate 2 pessoas
-          const existentes = await agenda.listarEventos(input.inicio, input.fim);
+          const existentes = await agenda.listarEventos(tenantId, input.inicio, input.fim);
           const fimData = new Date(input.fim);
           const sobrepoe = existentes.some((e) => new Date(e.inicio) < fimData && new Date(e.fim) > inicioData);
           if (sobrepoe) {
             resultado.agendaInterna = { erro: 'Ja existe outro compromisso nesse horario na agenda interna - escolha outro horario.' };
           } else {
-            const r = await agenda.criarEvento({
+            const r = await agenda.criarEvento(tenantId, {
               titulo: `${input.pacienteNome}${input.medico ? ` - ${input.medico}` : ''}`,
               descricao: input.resumo,
               inicio: input.inicio,
@@ -443,14 +454,14 @@ async function runTool(name, input, contexto) {
       // pula o card do contato pro "Agendado" no CRM se qualquer um dos dois destinos deu certo
       // - best-effort, nunca deve quebrar a resposta pro contato se o CRM falhar
       if (resultado.clinicorp?.ok || resultado.agendaInterna?.ok) {
-        crm.marcarAgendado(contexto.numero, contexto.instancia).catch((err) => console.error('Erro movendo card no CRM:', err.message));
+        crm.marcarAgendado(tenantId, contexto.numero, contexto.instancia).catch((err) => console.error('Erro movendo card no CRM:', err.message));
       }
 
       return resultado;
     }
 
     if (name === 'enviar_arquivo_referencia') {
-      const arq = await arquivos.obterArquivo(input.id);
+      const arq = await arquivos.obterArquivo(tenantId, input.id);
       if (!arq) return { erro: `arquivo com id ${input.id} nao encontrado` };
       await enviarArquivoParaContato(contexto.instancia, contexto.numero, arq);
       return { ok: true, mensagem: `Arquivo "${arq.nome_arquivo}" enviado.` };
@@ -531,10 +542,10 @@ function repararHistorico(history) {
   return reparado;
 }
 
-async function obterSessao(numero) {
+async function obterSessao(tenantId, numero) {
   if (!pool) return { history: [], contagem: 0 };
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT history, contagem_mensagens FROM auto_atendimento_sessions WHERE numero = $1', [numero]);
+  const { rows } = await pool.query('SELECT history, contagem_mensagens FROM auto_atendimento_sessions WHERE tenant_id = $1 AND numero = $2', [tenantId, numero]);
   if (!rows.length) return { history: [], contagem: 0 };
   // repara aqui tambem: contatos que ja ficaram com um tool_result orfao salvo no banco (de
   // antes desse fix, ou de uma interrupcao a meio do loop) precisam disso pra sair do estado
@@ -543,13 +554,13 @@ async function obterSessao(numero) {
 }
 
 const MAX_HISTORICO = 30;
-async function salvarSessao(numero, history, contagem) {
+async function salvarSessao(tenantId, numero, history, contagem) {
   if (!pool) return;
   const cortado = repararHistorico(history.length > MAX_HISTORICO ? history.slice(history.length - MAX_HISTORICO) : history);
   await pool.query(
-    `INSERT INTO auto_atendimento_sessions (numero, history, contagem_mensagens, updated_at) VALUES ($1, $2, $3, now())
-     ON CONFLICT (numero) DO UPDATE SET history = $2, contagem_mensagens = $3, updated_at = now()`,
-    [numero, JSON.stringify(cortado), contagem],
+    `INSERT INTO auto_atendimento_sessions (tenant_id, numero, history, contagem_mensagens, updated_at) VALUES ($1, $2, $3, $4, now())
+     ON CONFLICT (tenant_id, numero) DO UPDATE SET history = $3, contagem_mensagens = $4, updated_at = now()`,
+    [tenantId, numero, JSON.stringify(cortado), contagem],
   );
 }
 
@@ -637,16 +648,16 @@ function decidirSeAudio(config, novaContagem, tipo) {
 // consulta rapida (sem gerar nada) pra saber com antecedencia se a PROXIMA resposta desse
 // contato vai ser audio ou texto - usada pelo servidor pra ja mostrar o indicador de presenca
 // certo ("digitando" ou "gravando audio") antes mesmo de comecar a pensar na resposta
-export async function preverVaiSerAudio(numero, tipo) {
-  const config = await obterConfig();
+export async function preverVaiSerAudio(tenantId, numero, tipo) {
+  const config = await obterConfig(tenantId);
   if (!config.ativo) return false;
-  const { contagem } = await obterSessao(numero);
+  const { contagem } = await obterSessao(tenantId, numero);
   return decidirSeAudio(config, contagem + 1, tipo);
 }
 
 // tipo: 'text' | 'image' | 'audio' | 'video' (o que o CONTATO mandou, se nao for so texto)
-export async function processarMensagem(numero, instancia, { texto, tipo, mensagemBruta }) {
-  const config = await obterConfig();
+export async function processarMensagem(tenantId, numero, instancia, { texto, tipo, mensagemBruta }) {
+  const config = await obterConfig(tenantId);
   if (!config.ativo || !config.prompt) throw new Error('Auto atendimento nao esta ativo.');
 
   let imagemRecebida = null;
@@ -662,7 +673,7 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
   }
   if (!textoFinal.trim() && !imagemRecebida) return null;
 
-  const { history, contagem } = await obterSessao(numero);
+  const { history, contagem } = await obterSessao(tenantId, numero);
   const conteudoUsuario = imagemRecebida
     ? [
         ...(textoFinal.trim() ? [{ type: 'text', text: textoFinal.trim() }] : []),
@@ -677,7 +688,7 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
   const novaContagem = contagem + 1;
   const vaiSerAudio = decidirSeAudio(config, novaContagem, tipo);
 
-  const listaArquivos = await arquivos.listarArquivos();
+  const listaArquivos = await arquivos.listarArquivos(tenantId);
   const TOOLS = [];
   if (config.agendarAgendaInterna) TOOLS.push(TOOL_AGENDA_LISTAR_INTERNA);
   if (config.agendarClinicorp) {
@@ -691,7 +702,7 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
     TOOLS.push(TOOL_CANCELAR_AGENDAMENTO);
   }
   TOOLS.push(toolEnviarArquivo(listaArquivos));
-  const contexto = { instancia, numero, config };
+  const contexto = { tenantId, instancia, numero, config };
   const system = systemPromptComHoje(config.prompt, vaiSerAudio, config.agendarClinicorp || config.agendarAgendaInterna);
 
   // thinking adaptive + effort medio: sem isso, o modelo as vezes gasta o max_tokens inteiro
@@ -717,7 +728,7 @@ export async function processarMensagem(numero, instancia, { texto, tipo, mensag
     || 'Desculpa, nao consegui formular uma resposta agora - pode repetir de outro jeito?';
   history.push({ role: 'assistant', content: respostaTexto });
 
-  await salvarSessao(numero, history, novaContagem);
+  await salvarSessao(tenantId, numero, history, novaContagem);
 
   return { texto: respostaTexto, respondeComAudio: vaiSerAudio };
 }

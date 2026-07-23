@@ -12,6 +12,7 @@ import * as agenda from './agenda.js';
 import { gerarRelatorioDiario } from './relatorioDiario.js';
 import * as trello from './trello.js';
 import * as googleSheets from './googleSheets.js';
+import * as whatsappInstances from './whatsappInstances.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -20,22 +21,33 @@ async function garantirTabelas() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sessions (
       session_id TEXT PRIMARY KEY,
+      tenant_id INT NOT NULL REFERENCES tenants(id),
       history JSONB NOT NULL DEFAULT '[]'::jsonb,
       pending_action JSONB,
       pending_local_action JSONB,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // session_id ja vem prefixado com o tenant no proprio call site (ex: "t3:sess-...",
+  // "t3:whatsapp-evo:5582...") entao continua globalmente unico como PK sem precisar de chave
+  // composta - tenant_id fica como coluna simples pra filtro/index. Instalacao que ja tinha
+  // essa tabela ANTES da conversao multi-tenant nao ganha a coluna pelo CREATE TABLE acima (e
+  // no-op nesse caso) - por isso o ADD COLUMN por fora, nullable ate o backfill.
+  await pool.query(`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS sessions_tenant_idx ON sessions (tenant_id);`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS learned_instructions (
       id SERIAL PRIMARY KEY,
+      tenant_id INT NOT NULL REFERENCES tenants(id),
       texto TEXT NOT NULL,
       criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  await pool.query(`ALTER TABLE learned_instructions ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS lembretes (
       id SERIAL PRIMARY KEY,
+      tenant_id INT NOT NULL REFERENCES tenants(id),
       telefone TEXT NOT NULL,
       mensagem TEXT NOT NULL,
       quando TIMESTAMPTZ NOT NULL,
@@ -43,6 +55,7 @@ async function garantirTabelas() {
       criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  await pool.query(`ALTER TABLE lembretes ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
   // registro do que a Lumia ja leu (PDF, imagem, video, audio) nesta conversa - sobrevive ao
   // "esquecimento" do anexo no historico (apagarImagensAntigas) e ao corte por tamanho
   // (MAX_HISTORY), pra ela conseguir responder "o que tinha naquele PDF que te mandei" mesmo
@@ -50,6 +63,7 @@ async function garantirTabelas() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS anexos_lidos (
       id SERIAL PRIMARY KEY,
+      tenant_id INT NOT NULL REFERENCES tenants(id),
       session_id TEXT NOT NULL,
       tipo TEXT NOT NULL,
       nome_arquivo TEXT,
@@ -57,6 +71,7 @@ async function garantirTabelas() {
       criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  await pool.query(`ALTER TABLE anexos_lidos ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas no Postgres - memoria de conversa vai ficar so em RAM ate isso ser resolvido:', err.message);
@@ -342,7 +357,7 @@ voce e. Se o usuario pedir pra esquecer o que te ensinou, use esquecer_instrucoe
 // chamadas seguintes que reusarem o mesmo prefixo - e a MESMA resposta, mesmo modelo, so mais
 // barato. A data de hoje e as instrucoes aprendidas (que mudam) ficam num segundo bloco, sem
 // cache, depois do ponto de corte - assim elas nao "quebram" o cache do bloco grande de cima.
-async function systemPromptBlocos() {
+async function systemPromptBlocos(tenantId) {
   const agora = new Date();
   const hoje = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' });
   // hora:minuto de verdade (nao so a data) - sem isso, qualquer pedido relativo ("me lembra
@@ -352,7 +367,7 @@ async function systemPromptBlocos() {
   const agoraHora = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' });
   let dinamico = `Agora sao ${agoraHora} de ${hoje} (fuso horario de Maceio/Brasil, UTC-03:00). Use isso pra calcular "hoje", "ontem", "essa semana", "daqui a X minutos/horas" etc sem precisar perguntar ao usuario - qualquer data/hora que voce gerar pra uma ferramenta (ex: lembretes) tem que ser calculada a partir desse horario real, nunca chutada.`;
 
-  const instrucoes = await listarInstrucoesAprendidas();
+  const instrucoes = await listarInstrucoesAprendidas(tenantId);
   if (instrucoes.length) {
     dinamico += `\n\nINSTRUCOES QUE O USUARIO JA TE ENSINOU (siga todas, valem permanentemente ate ele pedir pra esquecer):\n${instrucoes.map((i, idx) => `${idx + 1}. ${i}`).join('\n')}`;
   }
@@ -1133,14 +1148,14 @@ function describePendingAction(name, input) {
   }
 }
 
-async function executeConfirmedAction(name, input) {
+async function executeConfirmedAction(tenantId, name, input) {
   switch (name) {
     case 'ads_criar_campanha':
-      return metaAds.createCampaign(input);
+      return metaAds.createCampaign(tenantId, input);
     case 'ads_alterar_status_campanha':
-      return metaAds.updateCampaignStatus(input);
+      return metaAds.updateCampaignStatus(tenantId, input);
     case 'ads_alterar_orcamento_adset':
-      return metaAds.updateAdSetBudget({ adSetId: input.adSetId, dailyBudgetCents: Math.round(input.dailyBudgetReais * 100) });
+      return metaAds.updateAdSetBudget(tenantId, { adSetId: input.adSetId, dailyBudgetCents: Math.round(input.dailyBudgetReais * 100) });
     default:
       throw new Error(`Acao desconhecida: ${name}`);
   }
@@ -1213,32 +1228,32 @@ function resumirProcedimentos(dadosPorTabela, busca) {
   return { totalGeral: todos.length, totalEncontrado: filtrados.length, itens: filtrados.slice(0, 40) };
 }
 
-async function handleClinicorpProcedimentos({ tipo, busca }) {
-  if (tipo === 'especialidades') return clinicorp.listSpecialties();
-  const dados = await clinicorp.listProcedures();
+async function handleClinicorpProcedimentos({ tipo, busca }, tenantId) {
+  if (tipo === 'especialidades') return clinicorp.listSpecialties(tenantId);
+  const dados = await clinicorp.listProcedures(tenantId);
   return resumirProcedimentos(dados, busca);
 }
 
-async function handleClinicorpFinanceiro({ tipo, from, to, groupByMonth, statusGlosa }) {
+async function handleClinicorpFinanceiro({ tipo, from, to, groupByMonth, statusGlosa }, tenantId) {
   switch (tipo) {
     case 'notas_fiscais':
-      return resumirLista(await clinicorp.listInvoices({ from, to }), ['PatientName', 'Amount', 'Status', 'Date']);
+      return resumirLista(await clinicorp.listInvoices(tenantId, { from, to }), ['PatientName', 'Amount', 'Status', 'Date']);
     case 'recibos':
-      return resumirLista(await clinicorp.listReceipts({ from, to }), ['PatientName', 'Amount', 'Description', 'Date']);
+      return resumirLista(await clinicorp.listReceipts(tenantId, { from, to }), ['PatientName', 'Amount', 'Description', 'Date']);
     case 'fluxo_caixa':
-      return clinicorp.listCashFlow({ from, to });
+      return clinicorp.listCashFlow(tenantId, { from, to });
     case 'pagamentos_financeiro':
-      return resumirLista(await clinicorp.listFinancialPayments({ from, to }), ['PatientName', 'Amount', 'Type', 'Date']);
+      return resumirLista(await clinicorp.listFinancialPayments(tenantId, { from, to }), ['PatientName', 'Amount', 'Type', 'Date']);
     case 'parcelamento_medio':
-      return clinicorp.getAverageInstallments({ from, to, groupByMonth });
+      return clinicorp.getAverageInstallments(tenantId, { from, to, groupByMonth });
     case 'pagamentos':
       return resumirLista(
-        await clinicorp.listPayments({ from, to }),
+        await clinicorp.listPayments(tenantId, { from, to }),
         ['PatientId', 'Amount', 'Type', 'PaymentDate', 'CheckOutDate', 'InstallmentNumber', 'InstallmentsCount', 'Canceled'],
       );
     case 'glosas_convenio':
       return resumirLista(
-        await clinicorp.listPaymentReconcileClaim({ from, to, type: statusGlosa || 'ALL' }),
+        await clinicorp.listPaymentReconcileClaim(tenantId, { from, to, type: statusGlosa || 'ALL' }),
         ['PatientName', 'Amount', 'Status', 'Date'],
       );
     default:
@@ -1246,46 +1261,46 @@ async function handleClinicorpFinanceiro({ tipo, from, to, groupByMonth, statusG
   }
 }
 
-async function handleClinicorpComercial({ tipo, from, to, groupByMonth }) {
+async function handleClinicorpComercial({ tipo, from, to, groupByMonth }, tenantId) {
   switch (tipo) {
     case 'conversao_orcamentos':
-      return clinicorp.getSalesConversion({ from, to, groupByMonth });
+      return clinicorp.getSalesConversion(tenantId, { from, to, groupByMonth });
     case 'receita_especialidade':
-      return clinicorp.getExpertiseRevenue({ from, to });
+      return clinicorp.getExpertiseRevenue(tenantId, { from, to });
     case 'metas_vendas':
-      return clinicorp.listSalesGoals({ from, to });
+      return clinicorp.listSalesGoals(tenantId, { from, to });
     case 'metas_faltas':
-      return clinicorp.listMissesGoals({ from, to });
+      return clinicorp.listMissesGoals(tenantId, { from, to });
     case 'analitico_geral':
-      return clinicorp.getAnalyticsResults({ from, to });
+      return clinicorp.getAnalyticsResults(tenantId, { from, to });
     default:
       return { erro: `tipo desconhecido: ${tipo}` };
   }
 }
 
-async function handleClinicorpAgenda({ tipo, from, to, groupByMonth }) {
-  if (tipo === 'ocupacao') return clinicorp.getScheduleOccupation({ from, to, groupByMonth });
-  return clinicorp.getAppointmentInfo({ from, to, groupByMonth });
+async function handleClinicorpAgenda({ tipo, from, to, groupByMonth }, tenantId) {
+  if (tipo === 'ocupacao') return clinicorp.getScheduleOccupation(tenantId, { from, to, groupByMonth });
+  return clinicorp.getAppointmentInfo(tenantId, { from, to, groupByMonth });
 }
 
-async function handleClinicorpOrganizacao({ tipo }) {
+async function handleClinicorpOrganizacao({ tipo }, tenantId) {
   switch (tipo) {
     case 'clinicas_assinante':
-      return clinicorp.listSubscribersClinics();
+      return clinicorp.listSubscribersClinics(tenantId);
     case 'unidades_franquia':
-      return clinicorp.listSubscribers();
+      return clinicorp.listSubscribers(tenantId);
     case 'usuarios':
-      return clinicorp.listUsers();
+      return clinicorp.listUsers(tenantId);
     case 'cadeiras':
-      return clinicorp.listChairs();
+      return clinicorp.listChairs(tenantId);
     default:
       return { erro: `tipo desconhecido: ${tipo}` };
   }
 }
 
-async function handleClinicorpPacienteExtra({ tipo, date, from, to }) {
-  if (tipo === 'aniversariantes') return clinicorp.getPatientBirthdays({ date });
-  return clinicorp.getPatientEstimatesSum({ from, to });
+async function handleClinicorpPacienteExtra({ tipo, date, from, to }, tenantId) {
+  if (tipo === 'aniversariantes') return clinicorp.getPatientBirthdays(tenantId, { date });
+  return clinicorp.getPatientEstimatesSum(tenantId, { from, to });
 }
 
 function nomeArquivoSeguro(titulo, extensao) {
@@ -1336,44 +1351,41 @@ async function handleGerarImagemIA({ descricao }) {
 // cache leve do catalogo de status de agendamento (Confirmado, Faltou, Protese pendente etc) -
 // raramente muda, entao evita bater na API do Clinicorp de novo a cada pergunta sobre
 // agendados/faltosos/controle protetico dentro da mesma janela de 10 minutos
-let statusAgendamentoCache = null;
-let statusAgendamentoCacheEm = 0;
-async function obterStatusAgendamento() {
-  if (statusAgendamentoCache && Date.now() - statusAgendamentoCacheEm < 10 * 60 * 1000) {
-    return statusAgendamentoCache;
-  }
-  const lista = await clinicorp.getAppointmentStatusList();
-  statusAgendamentoCache = lista;
-  statusAgendamentoCacheEm = Date.now();
+const statusAgendamentoCache = new Map();
+async function obterStatusAgendamento(tenantId) {
+  const cache = statusAgendamentoCache.get(tenantId);
+  if (cache && Date.now() - cache.em < 10 * 60 * 1000) return cache.lista;
+  const lista = await clinicorp.getAppointmentStatusList(tenantId);
+  statusAgendamentoCache.set(tenantId, { lista, em: Date.now() });
   return lista;
 }
 
 const toolHandlers = {
-  gerar_relatorio_diario: ({ diasClinicorp }) => gerarRelatorioDiario({ diasClinicorp }),
+  gerar_relatorio_diario: ({ diasClinicorp }, tenantId) => gerarRelatorioDiario(tenantId, { diasClinicorp }),
   gerar_pdf: handleGerarPdf,
   gerar_word: handleGerarWord,
   gerar_excel: handleGerarExcel,
   gerar_grafico: handleGerarGrafico,
   gerar_imagem_ia: handleGerarImagemIA,
-  agenda_criar_evento: (input) => agenda.criarEvento(input),
-  agenda_listar_eventos: ({ from, to }) => agenda.listarEventos(from, to),
-  agenda_cancelar_evento: async ({ id }) => { await agenda.cancelarEvento(id); return { ok: true, mensagem: 'Evento removido da agenda.' }; },
-  trello_listar_quadros: () => trello.listarQuadros(),
-  trello_listar_listas: ({ boardId }) => trello.listarListas(boardId),
-  trello_listar_cartoes: ({ listId, boardId }) => trello.listarCartoes({ listId, boardId }),
-  trello_criar_cartao: (input) => trello.criarCartao(input),
-  trello_editar_cartao: (input) => trello.editarCartao(input),
-  trello_mover_cartao: (input) => trello.moverCartao(input),
-  trello_arquivar_cartao: ({ cardId }) => trello.arquivarCartao(cardId),
-  trello_comentar_cartao: (input) => trello.comentarCartao(input),
-  sheets_listar_abas: ({ planilha }) => googleSheets.listarAbas(planilha),
-  sheets_ler_intervalo: (input) => googleSheets.lerIntervalo(input),
-  sheets_escrever_intervalo: (input) => googleSheets.escreverIntervalo(input),
-  sheets_adicionar_linha: (input) => googleSheets.adicionarLinha(input),
-  ads_listar_contas: () => metaAds.listAdAccounts(),
-  ads_relatorio_gastos: async ({ accountId, from, to, agrupar }) => {
+  agenda_criar_evento: (input, tenantId) => agenda.criarEvento(tenantId, input),
+  agenda_listar_eventos: ({ from, to }, tenantId) => agenda.listarEventos(tenantId, from, to),
+  agenda_cancelar_evento: async ({ id }, tenantId) => { await agenda.cancelarEvento(tenantId, id); return { ok: true, mensagem: 'Evento removido da agenda.' }; },
+  trello_listar_quadros: (input, tenantId) => trello.listarQuadros(tenantId),
+  trello_listar_listas: ({ boardId }, tenantId) => trello.listarListas(tenantId, boardId),
+  trello_listar_cartoes: ({ listId, boardId }, tenantId) => trello.listarCartoes(tenantId, { listId, boardId }),
+  trello_criar_cartao: (input, tenantId) => trello.criarCartao(tenantId, input),
+  trello_editar_cartao: (input, tenantId) => trello.editarCartao(tenantId, input),
+  trello_mover_cartao: (input, tenantId) => trello.moverCartao(tenantId, input),
+  trello_arquivar_cartao: ({ cardId }, tenantId) => trello.arquivarCartao(tenantId, cardId),
+  trello_comentar_cartao: (input, tenantId) => trello.comentarCartao(tenantId, input),
+  sheets_listar_abas: ({ planilha }, tenantId) => googleSheets.listarAbas(tenantId, planilha),
+  sheets_ler_intervalo: (input, tenantId) => googleSheets.lerIntervalo(tenantId, input),
+  sheets_escrever_intervalo: (input, tenantId) => googleSheets.escreverIntervalo(tenantId, input),
+  sheets_adicionar_linha: (input, tenantId) => googleSheets.adicionarLinha(tenantId, input),
+  ads_listar_contas: (input, tenantId) => metaAds.listAdAccounts(tenantId),
+  ads_relatorio_gastos: async ({ accountId, from, to, agrupar }, tenantId) => {
     const timeIncrement = agrupar === 'mes' ? 'monthly' : '1';
-    const contas = await metaAds.getSpendReport({ accountId, since: from, until: to, timeIncrement });
+    const contas = await metaAds.getSpendReport(tenantId, { accountId, since: from, until: to, timeIncrement });
     // soma o total geral (todas as contas, todo o periodo) e o total por periodo (todas as
     // contas somadas em cada dia/mes) - a IA nao precisa somar isso na mao
     let totalGeral = 0;
@@ -1390,20 +1402,20 @@ const toolHandlers = {
       porConta: contas,
     };
   },
-  ads_listar_campanhas: ({ accountId, status }) => metaAds.listCampaigns({ accountId, status }),
-  ads_listar_adsets: ({ campaignId }) => metaAds.listAdSets({ campaignId }),
-  ads_consultar_metricas: ({ objectId, objectType, since, until, datePreset }) => metaAds.getInsights({ objectId, objectType, since, until, datePreset }),
-  ads_listar_anuncios: ({ adSetId }) => metaAds.listAds({ adSetId }),
-  ads_diagnostico_campanha: ({ campaignId, since, until, datePreset }) => metaAds.analyzeCampaignAds({ campaignId, since, until, datePreset }),
-  clinicorp_listar_profissionais: () => clinicorp.listProfessionals(),
-  clinicorp_listar_status_agendamento: async () => {
-    const lista = await obterStatusAgendamento();
+  ads_listar_campanhas: ({ accountId, status }, tenantId) => metaAds.listCampaigns(tenantId, { accountId, status }),
+  ads_listar_adsets: ({ campaignId }, tenantId) => metaAds.listAdSets(tenantId, { campaignId }),
+  ads_consultar_metricas: ({ objectId, objectType, since, until, datePreset }, tenantId) => metaAds.getInsights(tenantId, { objectId, objectType, since, until, datePreset }),
+  ads_listar_anuncios: ({ adSetId }, tenantId) => metaAds.listAds(tenantId, { adSetId }),
+  ads_diagnostico_campanha: ({ campaignId, since, until, datePreset }, tenantId) => metaAds.analyzeCampaignAds(tenantId, { campaignId, since, until, datePreset }),
+  clinicorp_listar_profissionais: (input, tenantId) => clinicorp.listProfessionals(tenantId),
+  clinicorp_listar_status_agendamento: async (input, tenantId) => {
+    const lista = await obterStatusAgendamento(tenantId);
     return lista.map((s) => ({ id: s.id, descricao: s.Description, tipo: s.Type, cor: s.Color }));
   },
-  clinicorp_contar_agendamentos_por_status: async ({ from, to, includeCanceled }) => {
+  clinicorp_contar_agendamentos_por_status: async ({ from, to, includeCanceled }, tenantId) => {
     const [appointments, statusList] = await Promise.all([
-      clinicorp.listAppointments({ from, to, includeCanceled: includeCanceled ? 'X' : undefined }),
-      obterStatusAgendamento(),
+      clinicorp.listAppointments(tenantId, { from, to, includeCanceled: includeCanceled ? 'X' : undefined }),
+      obterStatusAgendamento(tenantId),
     ]);
     const statusPorId = new Map(statusList.map((s) => [String(s.id), s.Description]));
     // contagem feita aqui no codigo, nao pela IA lendo um por um - uma semana cheia pode ter
@@ -1416,10 +1428,10 @@ const toolHandlers = {
     }
     return { total: appointments.length, porStatus };
   },
-  clinicorp_listar_agendamentos: async ({ from, to, patientId, includeCanceled }) => {
+  clinicorp_listar_agendamentos: async ({ from, to, patientId, includeCanceled }, tenantId) => {
     const [appointments, statusList] = await Promise.all([
-      clinicorp.listAppointments({ from, to, patientId, includeCanceled: includeCanceled ? 'X' : undefined }),
-      obterStatusAgendamento(),
+      clinicorp.listAppointments(tenantId, { from, to, patientId, includeCanceled: includeCanceled ? 'X' : undefined }),
+      obterStatusAgendamento(tenantId),
     ]);
     const statusPorId = new Map(statusList.map((s) => [String(s.id), s]));
     // a API devolve registros enormes (notas longas, dezenas de campos internos) - resume
@@ -1442,13 +1454,13 @@ const toolHandlers = {
       })),
     };
   },
-  clinicorp_buscar_paciente: ({ phone, name, document, email }) => clinicorp.findPatient({ phone, name, document, email }),
-  clinicorp_criar_paciente: ({ name, mobilePhone, email, birthDate, document }) =>
-    clinicorp.createPatient({ name, mobilePhone, email, birthDate, otherDocumentId: document }),
-  clinicorp_criar_agendamento: (input) => clinicorp.createAppointment(input),
-  clinicorp_cancelar_agendamento: ({ id }) => clinicorp.cancelAppointment({ id }),
-  clinicorp_faturamento: async ({ from, to }) => {
-    const resumo = await clinicorp.getFinancialSummary({ from, to });
+  clinicorp_buscar_paciente: ({ phone, name, document, email }, tenantId) => clinicorp.findPatient(tenantId, { phone, name, document, email }),
+  clinicorp_criar_paciente: ({ name, mobilePhone, email, birthDate, document }, tenantId) =>
+    clinicorp.createPatient(tenantId, { name, mobilePhone, email, birthDate, otherDocumentId: document }),
+  clinicorp_criar_agendamento: (input, tenantId) => clinicorp.createAppointment(tenantId, input),
+  clinicorp_cancelar_agendamento: ({ id }, tenantId) => clinicorp.cancelAppointment(tenantId, { id }),
+  clinicorp_faturamento: async ({ from, to }, tenantId) => {
+    const resumo = await clinicorp.getFinancialSummary(tenantId, { from, to });
     // so os totais - o detalhamento linha a linha e enorme e nao cabe no limite de tokens
     return {
       de: resumo.From,
@@ -1464,9 +1476,9 @@ const toolHandlers = {
   clinicorp_agenda_estatisticas: handleClinicorpAgenda,
   clinicorp_organizacao: handleClinicorpOrganizacao,
   clinicorp_paciente_extra: handleClinicorpPacienteExtra,
-  clinicorp_orcamento_detalhe: ({ treatmentId }) => clinicorp.getEstimateDetail({ treatmentId }),
-  clinicorp_orcamentos_execucao: async ({ from, to, status, situacaoClinica, exportarExcel }) => {
-    const { resumo, orcamentos } = await clinicorp.getEstimatesExecutionSummary({ from, to, status, situacaoClinica });
+  clinicorp_orcamento_detalhe: ({ treatmentId }, tenantId) => clinicorp.getEstimateDetail(tenantId, { treatmentId }),
+  clinicorp_orcamentos_execucao: async ({ from, to, status, situacaoClinica, exportarExcel }, tenantId) => {
+    const { resumo, orcamentos } = await clinicorp.getEstimatesExecutionSummary(tenantId, { from, to, status, situacaoClinica });
     const campos = ['id', 'paciente', 'telefone', 'profissional', 'valor', 'status', 'data', 'totalProcedimentos', 'procedimentosExecutados', 'situacaoClinica'];
 
     // exportarExcel: gera a planilha DIRETO com os dados que a gente mesmo ja buscou, sem
@@ -1500,7 +1512,7 @@ async function runTool(name, input, session, sessionId) {
   }
   if (name === 'aprender_instrucao') {
     try {
-      await salvarInstrucaoAprendida(input.instrucao);
+      await salvarInstrucaoAprendida(session.tenantId, input.instrucao);
       return { ok: true, mensagem: 'Instrucao guardada - vai valer em toda conversa futura, ate ser apagada.' };
     } catch (err) {
       return { erro: err.message };
@@ -1508,19 +1520,19 @@ async function runTool(name, input, session, sessionId) {
   }
   if (name === 'esquecer_instrucoes_aprendidas') {
     try {
-      await esquecerInstrucoesAprendidas();
+      await esquecerInstrucoesAprendidas(session.tenantId);
       return { ok: true, mensagem: 'Todas as instrucoes que voce me ensinou foram apagadas.' };
     } catch (err) {
       return { erro: err.message };
     }
   }
   if (name === 'consultar_anexos_lidos') {
-    return consultarAnexosLidos(sessionId, input?.termo);
+    return consultarAnexosLidos(session.tenantId, sessionId, input?.termo);
   }
   if (name === 'whatsapp_criar_lembrete') {
     try {
-      const telefone = telefoneParaLembrete(sessionId);
-      const { id, quando } = await criarLembrete(telefone, input.mensagem, input.quando);
+      const telefone = await telefoneParaLembrete(session.tenantId, sessionId);
+      const { id, quando } = await criarLembrete(session.tenantId, telefone, input.mensagem, input.quando);
       return { ok: true, id, quando, mensagem: 'Lembrete criado, vou mandar no WhatsApp na hora certa.' };
     } catch (err) {
       return { erro: err.message };
@@ -1528,8 +1540,8 @@ async function runTool(name, input, session, sessionId) {
   }
   if (name === 'whatsapp_listar_lembretes') {
     try {
-      const telefone = telefoneParaLembrete(sessionId);
-      const lembretes = await listarLembretesPendentes(telefone);
+      const telefone = await telefoneParaLembrete(session.tenantId, sessionId);
+      const lembretes = await listarLembretesPendentes(session.tenantId, telefone);
       return { lembretes };
     } catch (err) {
       return { erro: err.message };
@@ -1537,8 +1549,8 @@ async function runTool(name, input, session, sessionId) {
   }
   if (name === 'whatsapp_cancelar_lembrete') {
     try {
-      const telefone = telefoneParaLembrete(sessionId);
-      await cancelarLembrete(input.id, telefone);
+      const telefone = await telefoneParaLembrete(session.tenantId, sessionId);
+      await cancelarLembrete(session.tenantId, input.id, telefone);
       return { ok: true, mensagem: 'Lembrete cancelado.' };
     } catch (err) {
       return { erro: err.message };
@@ -1570,7 +1582,7 @@ async function runTool(name, input, session, sessionId) {
   const handler = toolHandlers[name];
   if (!handler) return { erro: `Ferramenta desconhecida: ${name}` };
   try {
-    return await handler(input);
+    return await handler(input, session.tenantId);
   } catch (err) {
     return { erro: err.message };
   }
@@ -1679,10 +1691,12 @@ function extractText(response) {
   return response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
 }
 
-async function callClaude(history, sessionId) {
+async function callClaude(tenantId, history, sessionId) {
   // sessao do WhatsApp (ver processarMensagemEvolution em server.js) - ver comentario em
-  // TOOLS_SEM_CONTROLE_PC pra entender por que ela nao pode ver as ferramentas de PC
-  const ehWhatsapp = sessionId?.startsWith('whatsapp-evo:');
+  // TOOLS_SEM_CONTROLE_PC pra entender por que ela nao pode ver as ferramentas de PC. Usa
+  // includes (nao startsWith) porque o sessionId agora vem prefixado com o tenant
+  // ("t3:whatsapp-evo:5582...")
+  const ehWhatsapp = sessionId?.includes('whatsapp-evo:') || sessionId?.includes(':whatsapp:');
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-5',
     // 1500 era curto demais pra analise de anexo pesado (PDF/foto com bastante conteudo) -
@@ -1707,7 +1721,7 @@ async function callClaude(history, sessionId) {
     max_tokens: 16000,
     thinking: { type: 'adaptive' },
     output_config: { effort: 'low' },
-    system: await systemPromptBlocos(),
+    system: await systemPromptBlocos(tenantId),
     tools: ehWhatsapp ? TOOLS_SEM_CONTROLE_PC : tools,
     messages: history,
   });
@@ -1724,19 +1738,20 @@ async function callClaude(history, sessionId) {
 // isso aqui e so um acelerador que se reconstroi sozinho se o processo reiniciar
 const sessionsCache = new Map();
 
-async function getSession(sessionId) {
+async function getSession(tenantId, sessionId) {
   if (sessionsCache.has(sessionId)) return sessionsCache.get(sessionId);
 
-  let session = { history: [], pendingAction: null, pendingLocalAction: null };
+  let session = { tenantId, history: [], pendingAction: null, pendingLocalAction: null };
   await tabelasProntas;
   if (pool) {
     try {
       const { rows } = await pool.query(
-        'SELECT history, pending_action, pending_local_action FROM sessions WHERE session_id = $1',
-        [sessionId],
+        'SELECT history, pending_action, pending_local_action FROM sessions WHERE session_id = $1 AND tenant_id = $2',
+        [sessionId, tenantId],
       );
       if (rows.length) {
         session = {
+          tenantId,
           // repara aqui tambem: sessoes que ja ficaram com um tool_result orfao salvo no banco
           // (de antes desse fix, ou de uma interrupcao a meio do loop) precisam disso pra sair
           // do estado quebrado, senao toda mensagem nessa sessao volta a falhar pra sempre.
@@ -1758,12 +1773,13 @@ async function salvarSessao(sessionId, session) {
   if (!pool) return;
   try {
     await pool.query(
-      `INSERT INTO sessions (session_id, history, pending_action, pending_local_action, updated_at)
-       VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb, now())
+      `INSERT INTO sessions (session_id, tenant_id, history, pending_action, pending_local_action, updated_at)
+       VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, now())
        ON CONFLICT (session_id) DO UPDATE
-       SET history = $2::jsonb, pending_action = $3::jsonb, pending_local_action = $4::jsonb, updated_at = now()`,
+       SET history = $3::jsonb, pending_action = $4::jsonb, pending_local_action = $5::jsonb, updated_at = now()`,
       [
         sessionId,
+        session.tenantId,
         JSON.stringify(session.history),
         session.pendingAction ? JSON.stringify(session.pendingAction) : null,
         session.pendingLocalAction ? JSON.stringify(session.pendingLocalAction) : null,
@@ -1786,17 +1802,17 @@ async function limparSessao(sessionId) {
   }
 }
 
-async function salvarInstrucaoAprendida(texto) {
+async function salvarInstrucaoAprendida(tenantId, texto) {
   if (!pool) return;
   await tabelasProntas;
-  await pool.query('INSERT INTO learned_instructions (texto) VALUES ($1)', [texto]);
+  await pool.query('INSERT INTO learned_instructions (tenant_id, texto) VALUES ($1, $2)', [tenantId, texto]);
 }
 
-async function listarInstrucoesAprendidas() {
+async function listarInstrucoesAprendidas(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   try {
-    const { rows } = await pool.query('SELECT texto FROM learned_instructions ORDER BY criado_em ASC');
+    const { rows } = await pool.query('SELECT texto FROM learned_instructions WHERE tenant_id = $1 ORDER BY criado_em ASC', [tenantId]);
     return rows.map((r) => r.texto);
   } catch (err) {
     console.error('Erro lendo instrucoes aprendidas do Postgres:', err.message);
@@ -1804,65 +1820,70 @@ async function listarInstrucoesAprendidas() {
   }
 }
 
-async function esquecerInstrucoesAprendidas() {
+async function esquecerInstrucoesAprendidas(tenantId) {
   if (!pool) return;
-  await pool.query('DELETE FROM learned_instructions');
+  await pool.query('DELETE FROM learned_instructions WHERE tenant_id = $1', [tenantId]);
 }
 
 // ---------- Lembretes por WhatsApp ----------
-// se o pedido veio de uma conversa no WhatsApp (sessionId no formato "whatsapp-evo:<numero>"),
-// o lembrete vai pro mesmo numero de quem pediu; se veio do app web (sem numero de WhatsApp
-// associado), cai no numero admin configurado - assim "me lembra de X" funciona nos dois canais
-function telefoneParaLembrete(sessionId) {
-  if (sessionId?.startsWith('whatsapp-evo:')) return sessionId.slice('whatsapp-evo:'.length);
-  return process.env.LUMIA_WHATSAPP_ADMIN || null;
+// se o pedido veio de uma conversa no WhatsApp (sessionId no formato "t<tenantId>:whatsapp-
+// evo:<numero>"), o lembrete vai pro mesmo numero de quem pediu; se veio do app web (sem numero
+// de WhatsApp associado), cai no numero admin configurado do tenant - assim "me lembra de X"
+// funciona nos dois canais
+async function telefoneParaLembrete(tenantId, sessionId) {
+  const marcador = ':whatsapp-evo:';
+  const idx = sessionId?.indexOf(marcador);
+  if (idx !== -1 && idx !== undefined) return sessionId.slice(idx + marcador.length);
+  const { numeroAdmin } = await whatsappInstances.obterConfig(tenantId);
+  return numeroAdmin || null;
 }
 
-async function criarLembrete(telefone, mensagem, quandoISO) {
+async function criarLembrete(tenantId, telefone, mensagem, quandoISO) {
   if (!pool) throw new Error('Lembretes precisam do Postgres configurado (DATABASE_URL) - nao disponivel neste ambiente.');
   if (!telefone) throw new Error('Nao sei pra qual numero de WhatsApp mandar esse lembrete (nenhum configurado).');
   await tabelasProntas;
   const quando = new Date(quandoISO);
   if (Number.isNaN(quando.getTime())) throw new Error(`Data/hora invalida: "${quandoISO}"`);
   const { rows } = await pool.query(
-    'INSERT INTO lembretes (telefone, mensagem, quando) VALUES ($1, $2, $3) RETURNING id',
-    [telefone, mensagem, quando],
+    'INSERT INTO lembretes (tenant_id, telefone, mensagem, quando) VALUES ($1, $2, $3, $4) RETURNING id',
+    [tenantId, telefone, mensagem, quando],
   );
   return { id: rows[0].id, quando: quando.toISOString() };
 }
 
-async function listarLembretesPendentes(telefone) {
+async function listarLembretesPendentes(tenantId, telefone) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    'SELECT id, mensagem, quando FROM lembretes WHERE telefone = $1 AND enviado = false ORDER BY quando ASC',
-    [telefone],
+    'SELECT id, mensagem, quando FROM lembretes WHERE tenant_id = $1 AND telefone = $2 AND enviado = false ORDER BY quando ASC',
+    [tenantId, telefone],
   );
   return rows;
 }
 
-async function cancelarLembrete(id, telefone) {
+async function cancelarLembrete(tenantId, id, telefone) {
   if (!pool) throw new Error('Lembretes precisam do Postgres configurado.');
   const { rowCount } = await pool.query(
-    'DELETE FROM lembretes WHERE id = $1 AND telefone = $2 AND enviado = false',
-    [id, telefone],
+    'DELETE FROM lembretes WHERE id = $1 AND tenant_id = $2 AND telefone = $3 AND enviado = false',
+    [id, tenantId, telefone],
   );
   if (!rowCount) throw new Error(`Nao achei nenhum lembrete pendente com id ${id} pra esse numero.`);
 }
 
 // roda em segundo plano no processo do servidor - a cada 30s checa se algum lembrete venceu
-// e manda pelo WhatsApp (Evolution API). So chamado uma vez, no boot do server.js.
+// (de QUALQUER tenant) e manda pelo WhatsApp (Evolution API). So chamado uma vez, no boot do
+// server.js.
 export function iniciarSchedulerLembretes() {
   if (!pool) return;
   setInterval(async () => {
     try {
       await tabelasProntas;
       const { rows } = await pool.query(
-        'SELECT id, telefone, mensagem FROM lembretes WHERE enviado = false AND quando <= now()',
+        'SELECT id, tenant_id, telefone, mensagem FROM lembretes WHERE enviado = false AND quando <= now()',
       );
       for (const lembrete of rows) {
         try {
-          await enviarMensagemTexto(lembrete.telefone, `⏰ Lembrete: ${lembrete.mensagem}`);
+          await enviarMensagemTexto(lembrete.tenant_id, lembrete.telefone, `⏰ Lembrete: ${lembrete.mensagem}`);
           await pool.query('UPDATE lembretes SET enviado = true WHERE id = $1', [lembrete.id]);
         } catch (err) {
           console.error(`Erro mandando lembrete ${lembrete.id} pro WhatsApp:`, err.message);
@@ -1874,8 +1895,8 @@ export function iniciarSchedulerLembretes() {
   }, 30 * 1000).unref();
 }
 
-export async function limparConversa(sessionId) {
-  await limparSessao(sessionId);
+export async function limparConversa(tenantId, sessionId) {
+  await limparSessao(tenantId, sessionId);
 }
 
 // ---------- Monitoramento de saldo das contas de anuncio (Meta Ads) ----------
@@ -1890,6 +1911,10 @@ const LIMITE_SALDO_BAIXO_REAIS = Number(process.env.META_ADS_LIMITE_SALDO_BAIXO_
 // roda em segundo plano no processo do servidor - a cada 6h confere o saldo de todas as
 // contas de anuncio (Meta) e manda um aviso pro WhatsApp do dono quando alguma estiver com
 // saldo esgotado ou baixo. So chamado uma vez, no boot do server.js.
+// DESATIVADO (ver server.js - nao e chamado no boot, substituido pelo tipo "ads_saldo_baixo"
+// em relatoriosProgramados.js) E QUEBRADO sob multi-tenant: usa LUMIA_WHATSAPP_ADMIN (env var
+// global) e metaAds.listAdAccounts() sem tenantId. Nao reativar sem antes decidir pra qual
+// tenant isso rodaria - o substituto ja e multi-tenant, prefira ele.
 export function iniciarSchedulerSaldoAnuncios() {
   const numeroAdmin = process.env.LUMIA_WHATSAPP_ADMIN;
   if (!numeroAdmin) return; // sem numero configurado, nao ha pra onde mandar o aviso
@@ -1935,6 +1960,9 @@ let ultimaDataRelatorioEnviado = null;
 // relatorio hoje; se sim, gera e manda pro WhatsApp do dono. Chama gerarRelatorioDiario()
 // direto (sem passar pela Claude) - o envio automatico tem que sair sempre identico, sem
 // depender do modelo reproduzir o texto formatado certinho toda vez.
+// DESATIVADO (ver server.js) E QUEBRADO sob multi-tenant: usa LUMIA_WHATSAPP_ADMIN (env var
+// global) e gerarRelatorioDiario() sem tenantId. O relatorio continua disponivel sob demanda
+// via ferramenta gerar_relatorio_diario (essa sim ja e multi-tenant).
 export function iniciarSchedulerRelatorioDiario() {
   const numeroAdmin = process.env.LUMIA_WHATSAPP_ADMIN;
   if (!numeroAdmin) return;
@@ -2003,7 +2031,7 @@ function descreverFerramentaEmAndamento(name) {
 // guarda o resumo/analise que a Lumia deu na hora que leu o anexo, pra poder responder
 // "o que tinha naquele arquivo" depois que o binario ja saiu do historico ativo (ver
 // apagarImagensAntigas) ou depois que o turno inteiro ja saiu do MAX_HISTORY.
-async function registrarAnexosLidos(sessionId, attachments, resumoTexto) {
+async function registrarAnexosLidos(tenantId, sessionId, attachments, resumoTexto) {
   if (!pool || !attachments?.length || !resumoTexto) return;
   await tabelasProntas;
   const vistos = new Set();
@@ -2019,8 +2047,8 @@ async function registrarAnexosLidos(sessionId, attachments, resumoTexto) {
     vistos.add(chave);
     try {
       await pool.query(
-        'INSERT INTO anexos_lidos (session_id, tipo, nome_arquivo, resumo) VALUES ($1, $2, $3, $4)',
-        [sessionId, tipo, nomeArquivo, resumoTexto.slice(0, 4000)],
+        'INSERT INTO anexos_lidos (tenant_id, session_id, tipo, nome_arquivo, resumo) VALUES ($1, $2, $3, $4, $5)',
+        [tenantId, sessionId, tipo, nomeArquivo, resumoTexto.slice(0, 4000)],
       );
     } catch (err) {
       console.error('Erro salvando anexo lido:', err.message);
@@ -2028,14 +2056,14 @@ async function registrarAnexosLidos(sessionId, attachments, resumoTexto) {
   }
 }
 
-async function consultarAnexosLidos(sessionId, termo) {
+async function consultarAnexosLidos(tenantId, sessionId, termo) {
   if (!pool) return { erro: 'Historico de arquivos precisa do Postgres configurado - nao disponivel neste ambiente.' };
   await tabelasProntas;
-  const params = [sessionId];
-  let where = 'session_id = $1';
+  const params = [tenantId, sessionId];
+  let where = 'tenant_id = $1 AND session_id = $2';
   if (termo) {
     params.push(`%${termo}%`);
-    where += ' AND (nome_arquivo ILIKE $2 OR resumo ILIKE $2)';
+    where += ' AND (nome_arquivo ILIKE $3 OR resumo ILIKE $3)';
   }
   const { rows } = await pool.query(
     `SELECT tipo, nome_arquivo, resumo, criado_em FROM anexos_lidos WHERE ${where} ORDER BY criado_em DESC LIMIT 15`,
@@ -2140,7 +2168,7 @@ async function rodarLoopDeFerramentas(session, sessionId, indiceProtegido = sess
   // servidor continuasse de pe, repetindo o mesmo 400 da Anthropic em toda mensagem nova.
   session.history = repararHistorico(session.history);
   definirStatus(sessionId, 'pensando', 'Pensando na resposta...');
-  let response = await callClaude(session.history, sessionId);
+  let response = await callClaude(session.tenantId, session.history, sessionId);
   let rounds = 0;
 
   while (response.stop_reason === 'tool_use' && rounds < MAX_TOOL_ROUNDS) {
@@ -2185,7 +2213,7 @@ async function rodarLoopDeFerramentas(session, sessionId, indiceProtegido = sess
     session.history.push({ role: 'user', content: toolResults });
 
     definirStatus(sessionId, 'pensando', 'Pensando na resposta...');
-    response = await callClaude(session.history, sessionId);
+    response = await callClaude(session.tenantId, session.history, sessionId);
     rounds += 1;
 
     if (session.pendingAction || session.pendingLocalAction) break;
@@ -2217,7 +2245,7 @@ async function rodarLoopDeFerramentas(session, sessionId, indiceProtegido = sess
       ...session.history,
       { role: 'user', content: 'Responda de forma direta e objetiva com o resultado que voce ja tem - sem pensar mais, so o texto final da resposta.' },
     ];
-    textoReal = extractText(await callClaude(historicoComNudge, sessionId));
+    textoReal = extractText(await callClaude(session.tenantId, historicoComNudge, sessionId));
   }
   const replyText = textoReal || 'Tive um problema tecnico formulando a resposta - pode perguntar de novo?';
   session.history.push({ role: 'assistant', content: replyText });
@@ -2262,7 +2290,7 @@ async function processarChat(session, sessionId, userMessage, attachments) {
       session.pendingAction = null;
       let resultado;
       try {
-        resultado = await executeConfirmedAction(name, input);
+        resultado = await executeConfirmedAction(session.tenantId, name, input);
       } catch (err) {
         resultado = { erro: err.message };
       }
@@ -2271,7 +2299,7 @@ async function processarChat(session, sessionId, userMessage, attachments) {
         role: 'user',
         content: `[Sistema] A acao foi confirmada pelo usuario e executada. Resultado: ${JSON.stringify(resultado)}. Informe o usuario do resultado de forma natural.`,
       });
-      const response = await callClaude(session.history, sessionId);
+      const response = await callClaude(session.tenantId, session.history, sessionId);
       const replyText = extractText(response);
       session.history.push({ role: 'assistant', content: replyText });
       return { reply: replyText };
@@ -2316,7 +2344,7 @@ async function processarChat(session, sessionId, userMessage, attachments) {
       session.protegidoDesde = null;
       // grava o que a Lumia leu (PDF/imagem/video) nesta resposta na "memoria de arquivos",
       // pra ela conseguir consultar depois mesmo que o binario ja tenha saido do historico ativo
-      if (resultado.texto) await registrarAnexosLidos(sessionId, attachments, resultado.texto);
+      if (resultado.texto) await registrarAnexosLidos(session.tenantId, sessionId, attachments, resultado.texto);
     }
     return { reply: resultado.texto, arquivo: resultado.arquivo || undefined };
   } catch (err) {
@@ -2328,8 +2356,8 @@ async function processarChat(session, sessionId, userMessage, attachments) {
 // ponto de entrada publico: carrega a sessao do Postgres (ou RAM se nao tiver banco), processa
 // o turno, e salva o resultado antes de devolver - qualquer que seja o caminho que
 // processarChat tomou, a sessao sempre fica persistida no fim
-export async function chat(sessionId, userMessage, attachments = []) {
-  const session = await getSession(sessionId);
+export async function chat(tenantId, sessionId, userMessage, attachments = []) {
+  const session = await getSession(tenantId, sessionId);
   try {
     const resultado = await processarChat(session, sessionId, userMessage, attachments);
     await salvarSessao(sessionId, session);
@@ -2341,8 +2369,8 @@ export async function chat(sessionId, userMessage, attachments = []) {
 
 // chamado quando o navegador ja rodou a acao no computador do usuario e esta devolvendo o
 // resultado - continua a mesma conversa exatamente de onde a Claude parou de esperar
-export async function continuarAcaoLocal(sessionId, resultado) {
-  const session = await getSession(sessionId);
+export async function continuarAcaoLocal(tenantId, sessionId, resultado) {
+  const session = await getSession(tenantId, sessionId);
   if (!session.pendingLocalAction) throw new Error('Nao ha nenhuma acao local pendente nessa sessao.');
 
   const { toolUseId, tool } = session.pendingLocalAction;

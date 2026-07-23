@@ -1,17 +1,18 @@
+// cliente da Meta Marketing API - tokens de anuncio SAO por tenant (cada cliente conecta as
+// PROPRIAS contas de anuncio de negocio), guardados cifrados no Postgres via tenantConfig.js.
+// Regra critica: NUNCA voltar a ser env var global - isso deixaria as contas de anuncio
+// pessoais do dono da Lumia acessiveis por qualquer cliente logado no app compartilhado.
+import * as tenantConfig from './tenantConfig.js';
+
 const API_VERSION = 'v20.0';
 const BASE_URL = `https://graph.facebook.com/${API_VERSION}`;
 
-function tokenSets() {
-  const raw = process.env.META_ADS_TOKENS;
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw);
-  } catch {
-    throw new Error('META_ADS_TOKENS no .env nao e um JSON valido');
-  }
+async function tokenSets(tenantId) {
+  return tenantConfig.obterMetaAdsTokens(tenantId);
 }
 
-// caches em memoria: qual token (das varias empresas) e dono de cada objeto
+// caches em memoria: qual token (das varias contas do tenant) e dono de cada objeto - chave
+// prefixada com tenantId pra nunca misturar cache de tenants diferentes no mesmo processo
 const accountTokenCache = new Map();
 const campaignTokenCache = new Map();
 const adsetTokenCache = new Map();
@@ -23,6 +24,10 @@ const CACHE_BY_TYPE = {
   adset: adsetTokenCache,
   ad: adTokenCache,
 };
+
+function chaveCache(tenantId, id) {
+  return `${tenantId}:${id}`;
+}
 
 async function callWithToken(token, method, path, { query, body } = {}) {
   const url = new URL(BASE_URL + path);
@@ -49,9 +54,11 @@ async function callWithToken(token, method, path, { query, body } = {}) {
   return data;
 }
 
-// tenta o token em cache primeiro; se nao tiver ou falhar, tenta todos ate um funcionar
-async function requestForId(cache, id, method, path, opts) {
-  const cached = cache.get(id);
+// tenta o token em cache primeiro; se nao tiver ou falhar, tenta todos os tokens DESSE TENANT
+// ate um funcionar
+async function requestForId(tenantId, cache, id, method, path, opts) {
+  const chave = chaveCache(tenantId, id);
+  const cached = cache.get(chave);
   if (cached) {
     try {
       return await callWithToken(cached, method, path, opts);
@@ -61,14 +68,14 @@ async function requestForId(cache, id, method, path, opts) {
     }
   }
 
-  const sets = tokenSets();
-  if (sets.length === 0) throw new Error('Nenhum token configurado em META_ADS_TOKENS no .env');
+  const sets = await tokenSets(tenantId);
+  if (sets.length === 0) throw new Error('Esse cliente nao tem nenhuma conta de anuncio (Meta Ads) conectada.');
 
   let lastError;
   for (const set of sets) {
     try {
       const data = await callWithToken(set.token, method, path, opts);
-      cache.set(id, set.token);
+      cache.set(chave, set.token);
       return data;
     } catch (err) {
       lastError = err;
@@ -99,9 +106,9 @@ function calcularSaldo(acc) {
   return { tipoConta: 'desconhecido' };
 }
 
-export async function listAdAccounts() {
-  const sets = tokenSets();
-  if (sets.length === 0) throw new Error('Nenhum token configurado em META_ADS_TOKENS no .env');
+export async function listAdAccounts(tenantId) {
+  const sets = await tokenSets(tenantId);
+  if (sets.length === 0) throw new Error('Esse cliente nao tem nenhuma conta de anuncio (Meta Ads) conectada.');
 
   const all = [];
   for (const set of sets) {
@@ -115,7 +122,7 @@ export async function listAdAccounts() {
     while (true) {
       const data = await callWithToken(set.token, 'GET', path, { query });
       for (const acc of data.data) {
-        accountTokenCache.set(acc.id, set.token);
+        accountTokenCache.set(chaveCache(tenantId, acc.id), set.token);
         all.push({
           ...acc,
           empresa: set.label,
@@ -135,9 +142,9 @@ export async function listAdAccounts() {
   return all;
 }
 
-export async function listCampaigns({ accountId, status } = {}) {
+export async function listCampaigns(tenantId, { accountId, status } = {}) {
   const acc = normalizeAccountId(accountId);
-  const data = await requestForId(accountTokenCache, acc, 'GET', `/${acc}/campaigns`, {
+  const data = await requestForId(tenantId, accountTokenCache, acc, 'GET', `/${acc}/campaigns`, {
     query: {
       fields: 'id,name,objective,status,effective_status,daily_budget,lifetime_budget,start_time,stop_time',
       effective_status: status ? JSON.stringify([status]) : undefined,
@@ -145,8 +152,8 @@ export async function listCampaigns({ accountId, status } = {}) {
     },
   });
 
-  const token = accountTokenCache.get(acc);
-  if (token) data.data.forEach((c) => campaignTokenCache.set(c.id, token));
+  const token = accountTokenCache.get(chaveCache(tenantId, acc));
+  if (token) data.data.forEach((c) => campaignTokenCache.set(chaveCache(tenantId, c.id), token));
 
   return data.data;
 }
@@ -154,7 +161,7 @@ export async function listCampaigns({ accountId, status } = {}) {
 // objectType = tipo do objeto sendo consultado (account/campaign/adset/ad), usado so para
 // achar o token certo no cache. level = granularidade do resultado (pode ser mais fino que
 // objectType, ex: objectType 'campaign' + level 'ad' devolve 1 linha por anuncio dentro dela).
-export async function getInsights({ objectId, objectType = 'account', level, since, until, datePreset } = {}) {
+export async function getInsights(tenantId, { objectId, objectType = 'account', level, since, until, datePreset } = {}) {
   const id = objectType === 'account' ? normalizeAccountId(objectId) : objectId;
   const cache = CACHE_BY_TYPE[objectType] || accountTokenCache;
   const breakdownLevel = level || objectType;
@@ -175,22 +182,22 @@ export async function getInsights({ objectId, objectType = 'account', level, sin
     query.date_preset = datePreset || 'yesterday';
   }
 
-  const data = await requestForId(cache, id, 'GET', `/${id}/insights`, { query });
+  const data = await requestForId(tenantId, cache, id, 'GET', `/${id}/insights`, { query });
   return data.data;
 }
 
 // relatorio de gasto por dia ou por mes, de UMA conta (accountId informado) ou de TODAS as
-// contas que a Lumia tem acesso (accountId omitido) - usa time_increment do Meta pra ja
+// contas que o tenant tem acesso (accountId omitido) - usa time_increment do Meta pra ja
 // devolver o gasto quebrado por periodo direto da API, sem precisar somar manualmente.
-export async function getSpendReport({ accountId, since, until, timeIncrement = '1' } = {}) {
+export async function getSpendReport(tenantId, { accountId, since, until, timeIncrement = '1' } = {}) {
   const contasAlvo = accountId
     ? [{ id: normalizeAccountId(accountId), name: null, empresa: null }]
-    : await listAdAccounts();
+    : await listAdAccounts(tenantId);
 
   const resultado = [];
   for (const conta of contasAlvo) {
     try {
-      const data = await requestForId(accountTokenCache, conta.id, 'GET', `/${conta.id}/insights`, {
+      const data = await requestForId(tenantId, accountTokenCache, conta.id, 'GET', `/${conta.id}/insights`, {
         query: {
           fields: 'spend',
           time_increment: timeIncrement,
@@ -211,45 +218,45 @@ export async function getSpendReport({ accountId, since, until, timeIncrement = 
   return resultado;
 }
 
-export async function createCampaign({ accountId, name, objective, status = 'PAUSED' } = {}) {
+export async function createCampaign(tenantId, { accountId, name, objective, status = 'PAUSED' } = {}) {
   const acc = normalizeAccountId(accountId);
-  const data = await requestForId(accountTokenCache, acc, 'POST', `/${acc}/campaigns`, {
+  const data = await requestForId(tenantId, accountTokenCache, acc, 'POST', `/${acc}/campaigns`, {
     body: { name, objective, status, special_ad_categories: [] },
   });
-  const token = accountTokenCache.get(acc);
-  if (token && data.id) campaignTokenCache.set(data.id, token);
+  const token = accountTokenCache.get(chaveCache(tenantId, acc));
+  if (token && data.id) campaignTokenCache.set(chaveCache(tenantId, data.id), token);
   return data;
 }
 
-export async function updateCampaignStatus({ campaignId, status } = {}) {
-  return requestForId(campaignTokenCache, campaignId, 'POST', `/${campaignId}`, { body: { status } });
+export async function updateCampaignStatus(tenantId, { campaignId, status } = {}) {
+  return requestForId(tenantId, campaignTokenCache, campaignId, 'POST', `/${campaignId}`, { body: { status } });
 }
 
-export async function updateAdSetBudget({ adSetId, dailyBudgetCents } = {}) {
-  return requestForId(adsetTokenCache, adSetId, 'POST', `/${adSetId}`, { body: { daily_budget: dailyBudgetCents } });
+export async function updateAdSetBudget(tenantId, { adSetId, dailyBudgetCents } = {}) {
+  return requestForId(tenantId, adsetTokenCache, adSetId, 'POST', `/${adSetId}`, { body: { daily_budget: dailyBudgetCents } });
 }
 
-export async function listAdSets({ campaignId } = {}) {
-  const data = await requestForId(campaignTokenCache, campaignId, 'GET', `/${campaignId}/adsets`, {
+export async function listAdSets(tenantId, { campaignId } = {}) {
+  const data = await requestForId(tenantId, campaignTokenCache, campaignId, 'GET', `/${campaignId}/adsets`, {
     query: { fields: 'id,name,status,effective_status,daily_budget,lifetime_budget,optimization_goal,billing_event', limit: 100 },
   });
 
-  const token = campaignTokenCache.get(campaignId);
-  if (token) data.data.forEach((a) => adsetTokenCache.set(a.id, token));
+  const token = campaignTokenCache.get(chaveCache(tenantId, campaignId));
+  if (token) data.data.forEach((a) => adsetTokenCache.set(chaveCache(tenantId, a.id), token));
 
   return data.data;
 }
 
-export async function listAds({ adSetId } = {}) {
-  const data = await requestForId(adsetTokenCache, adSetId, 'GET', `/${adSetId}/ads`, {
+export async function listAds(tenantId, { adSetId } = {}) {
+  const data = await requestForId(tenantId, adsetTokenCache, adSetId, 'GET', `/${adSetId}/ads`, {
     query: {
       fields: 'id,name,status,effective_status,creative{title,body,thumbnail_url,object_story_spec}',
       limit: 100,
     },
   });
 
-  const token = adsetTokenCache.get(adSetId);
-  if (token) data.data.forEach((a) => adTokenCache.set(a.id, token));
+  const token = adsetTokenCache.get(chaveCache(tenantId, adSetId));
+  if (token) data.data.forEach((a) => adTokenCache.set(chaveCache(tenantId, a.id), token));
 
   return data.data;
 }
@@ -271,8 +278,8 @@ export function extractResultsAndCPA(insightRow) {
 
 // Analise comparativa: pega o desempenho de cada anuncio dentro de uma campanha e aponta
 // quais estao performando pior que a media do grupo (CTR baixo, CPC/custo por resultado alto).
-export async function analyzeCampaignAds({ campaignId, since, until, datePreset } = {}) {
-  const rows = await getInsights({ objectId: campaignId, objectType: 'campaign', level: 'ad', since, until, datePreset });
+export async function analyzeCampaignAds(tenantId, { campaignId, since, until, datePreset } = {}) {
+  const rows = await getInsights(tenantId, { objectId: campaignId, objectType: 'campaign', level: 'ad', since, until, datePreset });
 
   if (rows.length === 0) {
     return { anuncios: [], resumo: 'Sem dados de performance no periodo (sem gasto/impressoes).' };
@@ -283,7 +290,7 @@ export async function analyzeCampaignAds({ campaignId, since, until, datePreset 
   // quer anuncio que esta ATIVO DE VERDADE agora, entao confere o effective_status atual de
   // cada anuncio (chamada em lote, 1 so requisicao pra todos os ids) e filtra por isso.
   const adIds = [...new Set(rows.map((r) => r.ad_id).filter(Boolean))];
-  const token = adTokenCache.get(adIds[0]) || campaignTokenCache.get(campaignId);
+  const token = adTokenCache.get(chaveCache(tenantId, adIds[0])) || campaignTokenCache.get(chaveCache(tenantId, campaignId));
   let statusPorAd = null;
   if (token && adIds.length) {
     try {
@@ -291,7 +298,7 @@ export async function analyzeCampaignAds({ campaignId, since, until, datePreset 
       statusPorAd = {};
       for (const id of adIds) {
         statusPorAd[id] = data[id]?.effective_status || null;
-        adTokenCache.set(id, token);
+        adTokenCache.set(chaveCache(tenantId, id), token);
       }
     } catch { /* se a checagem de status falhar, segue sem filtrar - melhor mostrar de mais que travar o relatorio inteiro */ }
   }

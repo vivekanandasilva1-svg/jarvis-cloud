@@ -20,11 +20,11 @@ function formatarDataBR(isoDate) {
   return `${dia}/${mes}`;
 }
 
-export async function gerarRelatorioDiario({ diasClinicorp = 30 } = {}) {
+export async function gerarRelatorioDiario(tenantId, { diasClinicorp = 30 } = {}) {
   const agora = new Date();
   const hojeFormatado = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio' });
 
-  const contas = await metaAds.listAdAccounts();
+  const contas = await metaAds.listAdAccounts(tenantId);
 
   const esgotadas = [];
   const criticas = [];
@@ -98,8 +98,8 @@ export async function gerarRelatorioDiario({ diasClinicorp = 30 } = {}) {
   const desde = new Date(agora.getTime() - diasClinicorp * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const ate = agora.toISOString().slice(0, 10);
   const [fin, infoAgenda] = await Promise.all([
-    clinicorp.getFinancialSummary({ from: desde, to: ate }),
-    clinicorp.getAppointmentInfo({ from: desde, to: ate }),
+    clinicorp.getFinancialSummary(tenantId, { from: desde, to: ate }),
+    clinicorp.getAppointmentInfo(tenantId, { from: desde, to: ate }),
   ]);
   const lucroBruto = (fin.TotalSales || 0) - (fin.TotalExpenses || 0);
   const taxaFaltas = infoAgenda.ScheduledTotal

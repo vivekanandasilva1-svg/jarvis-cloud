@@ -140,7 +140,7 @@ export async function enviarPresenca(instancia, numero, presence, delayMs = 6000
 
 // ---------- operacoes na instancia ATIVA (a que a Lumia usa no dia a dia) ----------
 
-export async function enviarMensagemTexto(numero, texto) {
-  const { instanciaAtiva } = await obterConfig();
+export async function enviarMensagemTexto(tenantId, numero, texto) {
+  const { instanciaAtiva } = await obterConfig(tenantId);
   return enviarMensagemTextoPor(instanciaAtiva, numero, texto);
 }

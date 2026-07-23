@@ -218,9 +218,14 @@ document.addEventListener('pointerdown', desbloquearAudio);
 document.addEventListener('keydown', desbloquearAudio);
 
 // ---------- Login / Logout ----------
+// cada tenant (cliente) faz login com usuario/senha proprios - o servidor devolve um token
+// assinado (nao mais a senha em si) que fica guardado em appPassword/sessionStorage e vai no
+// mesmo header x-app-password de sempre em toda chamada. Como o header nunca mudou de nome,
+// nenhum dos ~40 fetch() espalhados pelo resto deste arquivo precisou mudar - so o que
+// acontece AQUI (obter/validar o valor) mudou.
 
-const ADMIN_USERNAME = 'Admin';
-
+// devolve o token em caso de sucesso, ou null - nunca mais reaproveita a senha digitada como
+// se fosse a credencial de toda chamada seguinte
 async function tentarEntrar(usuario, senha) {
   const res = await fetch('/api/login', {
     method: 'POST',
@@ -230,7 +235,23 @@ async function tentarEntrar(usuario, senha) {
   const raw = await res.text();
   try {
     const data = JSON.parse(raw);
-    return data.ok === true;
+    if (!data.ok) return null;
+    // ambiente sem SESSION_SECRET configurado (dev local sem Postgres) roda aberto - o
+    // servidor devolve {ok:true} sem token, e o middleware la tambem nao exige nada nesse caso
+    return data.token || 'sem-auth-configurada';
+  } catch {
+    return null;
+  }
+}
+
+// confirma que o token guardado ainda e valido (nao expirou, tenant continua ativo) - chamado
+// no carregamento da pagina, ja que um token velho nao pode mais ser "reenviado como senha"
+// pra revalidar como acontecia antes
+async function tokenValido() {
+  if (!appPassword) return false;
+  try {
+    const res = await fetch('/api/me', { headers: { 'x-app-password': appPassword } });
+    return res.ok;
   } catch {
     return false;
   }
@@ -265,7 +286,7 @@ function sair() {
 logoutBtn.addEventListener('click', sair);
 
 if (appPassword) {
-  tentarEntrar(ADMIN_USERNAME, appPassword).then((ok) => {
+  tokenValido().then((ok) => {
     if (ok) mostrarApp();
     else { appPassword = ''; sessionStorage.removeItem('jarvis_password'); }
   });
@@ -280,13 +301,13 @@ loginForm.addEventListener('submit', async (e) => {
     loginError.textContent = 'Essa senha tem um caractere invalido (parece colada de algum lugar com formatacao) - tenta digitar direto.';
     return;
   }
-  const ok = await tentarEntrar(usuario, senha);
-  if (!ok) {
+  const token = await tentarEntrar(usuario, senha);
+  if (!token) {
     loginError.textContent = 'Usuario ou senha incorretos.';
     return;
   }
-  appPassword = senha;
-  sessionStorage.setItem('jarvis_password', senha);
+  appPassword = token;
+  sessionStorage.setItem('jarvis_password', token);
   mostrarApp();
 });
 
@@ -1758,9 +1779,10 @@ async function carregarStatusGoogleAgenda() {
 agendaGoogleBtn.addEventListener('click', async () => {
   const conectado = agendaGoogleBtn.classList.contains('conectado');
   if (!conectado) {
-    // precisa ser navegacao de pagina de verdade (nao fetch) - o navegador vai pro
-    // consentimento do Google e volta sozinho pro callback do servidor
-    window.location.href = '/api/agenda/google/conectar';
+    // precisa ser navegacao de pagina de verdade (nao fetch), entao nao da pra mandar o
+    // header de autenticacao - vai por query param so nessa navegacao especifica (o servidor
+    // le isso uma unica vez pra saber qual tenant esta conectando, ver server.js)
+    window.location.href = `/api/agenda/google/conectar?token=${encodeURIComponent(appPassword)}`;
     return;
   }
   if (!confirm('Desconectar a Google Agenda? Os compromissos continuam salvos aqui no app, so param de sincronizar com o Google.')) return;

@@ -1,23 +1,26 @@
+// cliente da API do Clinicorp (sistema de gestao de clinica odontologica) - credenciais SAO
+// por tenant (cada clinica tem a propria assinatura do Clinicorp), guardadas cifradas no
+// Postgres via tenantConfig.js, nunca mais em env var global. Tenant sem Clinicorp configurado
+// recebe um erro claro em vez de acidentalmente usar a config de outro cliente.
+import * as tenantConfig from './tenantConfig.js';
+
 const BASE_URL = 'https://api.clinicorp.com/rest/v1';
 
-function authHeader() {
-  const { CLINICORP_API_USER, CLINICORP_API_TOKEN } = process.env;
-  const encoded = Buffer.from(`${CLINICORP_API_USER}:${CLINICORP_API_TOKEN}`).toString('base64');
-  return `Basic ${encoded}`;
+async function credenciais(tenantId) {
+  const cfg = await tenantConfig.obterClinicorp(tenantId);
+  if (!cfg) throw new Error('Esse cliente nao tem o Clinicorp conectado.');
+  const authHeader = `Basic ${Buffer.from(`${cfg.apiUser}:${cfg.apiToken}`).toString('base64')}`;
+  return {
+    authHeader,
+    subscriberId: cfg.subscriberId,
+    // numero, nao string - o endpoint de criar agendamento valida o tipo e rejeita (400
+    // "Clinic_BusinessId nao pode ser string") se vier como texto
+    defaultBusinessId: Number(cfg.defaultBusinessId),
+  };
 }
 
-function subscriberId() {
-  return process.env.CLINICORP_SUBSCRIBER_ID;
-}
-
-// numero, nao string - o endpoint de criar agendamento valida o tipo e rejeita
-// (400 "Clinic_BusinessId nao pode ser string") se vier como texto, que e como toda env var
-// chega por padrao. Os outros endpoints (query string) nao ligam pro tipo, so esse.
-function defaultBusinessId() {
-  return Number(process.env.CLINICORP_DEFAULT_BUSINESS_ID);
-}
-
-async function request(method, path, { query, body } = {}) {
+async function request(tenantId, method, path, { query, body } = {}) {
+  const { authHeader } = await credenciais(tenantId);
   const url = new URL(BASE_URL + path);
   for (const [key, value] of Object.entries(query || {})) {
     if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
@@ -33,7 +36,7 @@ async function request(method, path, { query, body } = {}) {
     res = await fetch(url, {
       method,
       headers: {
-        Authorization: authHeader(),
+        Authorization: authHeader,
         'Content-Type': 'application/json',
       },
       body: body ? JSON.stringify(body) : undefined,
@@ -58,21 +61,23 @@ async function request(method, path, { query, body } = {}) {
   return data;
 }
 
-export async function listBusinesses() {
-  return request('GET', '/business/list', { query: { subscriber_id: subscriberId() } });
+export async function listBusinesses(tenantId) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/business/list', { query: { subscriber_id: cfg.subscriberId } });
 }
 
-export async function listProfessionals({ fromOnlineScheduling } = {}) {
-  return request('GET', '/professional/list_all_professionals', { query: { fromOnlineScheduling } });
+export async function listProfessionals(tenantId, { fromOnlineScheduling } = {}) {
+  return request(tenantId, 'GET', '/professional/list_all_professionals', { query: { fromOnlineScheduling } });
 }
 
 // showAvailableTimes: 'X' faz a API já devolver os horários livres dentro de cada dia
 // code_link: codigo de acesso do agendamento online (Configuracoes > Agendamento Online no Clinicorp)
-export async function getAvailableDays({ from, to, includeHolidays } = {}) {
-  return request('GET', '/appointment/get_avaliable_days', {
+export async function getAvailableDays(tenantId, { from, to, includeHolidays, codeLink } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/appointment/get_avaliable_days', {
     query: {
-      subscriber_id: subscriberId(),
-      code_link: process.env.CLINICORP_CODE_LINK,
+      subscriber_id: cfg.subscriberId,
+      code_link: codeLink,
       from,
       to,
       includeHolidays,
@@ -81,10 +86,11 @@ export async function getAvailableDays({ from, to, includeHolidays } = {}) {
   });
 }
 
-export async function findPatient({ patientId, name, document, phone, email } = {}) {
-  return request('GET', '/patient/get', {
+export async function findPatient(tenantId, { patientId, name, document, phone, email } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/patient/get', {
     query: {
-      subscriber_id: subscriberId(),
+      subscriber_id: cfg.subscriberId,
       PatientId: patientId,
       Name: name,
       OtherDocumentId: document,
@@ -94,7 +100,7 @@ export async function findPatient({ patientId, name, document, phone, email } = 
   });
 }
 
-export async function createPatient({
+export async function createPatient(tenantId, {
   name,
   birthDate,
   sex,
@@ -104,9 +110,10 @@ export async function createPatient({
   otherDocumentId,
   notes,
 } = {}) {
-  return request('POST', '/patient/create', {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'POST', '/patient/create', {
     body: {
-      subscriber_id: subscriberId(),
+      subscriber_id: cfg.subscriberId,
       Name: name,
       BirthDate: birthDate,
       Sex: sex,
@@ -119,11 +126,11 @@ export async function createPatient({
   });
 }
 
-export async function listPatientAppointments({ patientId } = {}) {
-  return request('GET', '/patient/list_appointments', { query: { PatientId: patientId } });
+export async function listPatientAppointments(tenantId, { patientId } = {}) {
+  return request(tenantId, 'GET', '/patient/list_appointments', { query: { PatientId: patientId } });
 }
 
-export async function createAppointment({
+export async function createAppointment(tenantId, {
   patientId,
   patientName,
   mobilePhone,
@@ -138,7 +145,8 @@ export async function createAppointment({
   categoryDescription,
   notes,
 } = {}) {
-  return request('POST', '/appointment/create_appointment_by_api', {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'POST', '/appointment/create_appointment_by_api', {
     body: {
       Patient_PersonId: patientId,
       PatientName: patientName,
@@ -147,7 +155,7 @@ export async function createAppointment({
       date: date ? `${date}T00:00:00.000Z` : undefined,
       fromTime,
       toTime,
-      Clinic_BusinessId: businessId || defaultBusinessId(),
+      Clinic_BusinessId: businessId || cfg.defaultBusinessId,
       Dentist_PersonId: dentistId,
       Procedures: procedures,
       CategoryColor: categoryColor,
@@ -157,20 +165,22 @@ export async function createAppointment({
   });
 }
 
-export async function cancelAppointment({ id } = {}) {
-  return request('POST', '/appointment/cancel_appointment', {
-    body: { subscriber_id: subscriberId(), id },
+export async function cancelAppointment(tenantId, { id } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'POST', '/appointment/cancel_appointment', {
+    body: { subscriber_id: cfg.subscriberId, id },
   });
 }
 
 // Agenda geral da clinica num periodo (nao so de 1 paciente). includeCanceled: 'X' pra incluir cancelados.
-export async function listAppointments({ from, to, businessId, patientId, includeCanceled } = {}) {
-  const data = await request('GET', '/appointment/list', {
+export async function listAppointments(tenantId, { from, to, businessId, patientId, includeCanceled } = {}) {
+  const cfg = await credenciais(tenantId);
+  const data = await request(tenantId, 'GET', '/appointment/list', {
     query: {
-      subscriber_id: subscriberId(),
+      subscriber_id: cfg.subscriberId,
       from,
       to,
-      businessId: businessId || defaultBusinessId(),
+      businessId: businessId || cfg.defaultBusinessId,
       patientId,
       includeCanceled,
     },
@@ -178,31 +188,36 @@ export async function listAppointments({ from, to, businessId, patientId, includ
   return Array.isArray(data) ? data : data.list || [];
 }
 
-export async function getAppointmentStatusList() {
-  const data = await request('GET', '/appointment/status_list', { query: { subscriber_id: subscriberId() } });
+export async function getAppointmentStatusList(tenantId) {
+  const cfg = await credenciais(tenantId);
+  const data = await request(tenantId, 'GET', '/appointment/status_list', { query: { subscriber_id: cfg.subscriberId } });
   return Array.isArray(data) ? data : data.list || [];
 }
 
-export async function listCategories() {
-  return request('GET', '/appointment/list_categories', { query: { subscriber_id: subscriberId() } });
+export async function listCategories(tenantId) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/appointment/list_categories', { query: { subscriber_id: cfg.subscriberId } });
 }
 
 // Resumo financeiro (vendas, recebido, despesas) de um periodo.
-export async function getFinancialSummary({ from, to, businessId } = {}) {
-  return request('GET', '/financial/list_summary', {
-    query: { subscriber_id: subscriberId(), from, to, business_id: businessId || defaultBusinessId() },
+export async function getFinancialSummary(tenantId, { from, to, businessId } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/financial/list_summary', {
+    query: { subscriber_id: cfg.subscriberId, from, to, business_id: businessId || cfg.defaultBusinessId },
   });
 }
 
-export async function listEstimates({ from, to, clinicId } = {}) {
-  const data = await request('GET', '/estimates/list', {
-    query: { subscriber_id: subscriberId(), from, to, clinic_id: clinicId },
+export async function listEstimates(tenantId, { from, to, clinicId } = {}) {
+  const cfg = await credenciais(tenantId);
+  const data = await request(tenantId, 'GET', '/estimates/list', {
+    query: { subscriber_id: cfg.subscriberId, from, to, clinic_id: clinicId },
   });
   return Array.isArray(data) ? data : data.list || [];
 }
 
-export async function getEstimateDetail({ treatmentId } = {}) {
-  return request('GET', '/estimates/get', { query: { subscriber_id: subscriberId(), treatment_id: treatmentId } });
+export async function getEstimateDetail(tenantId, { treatmentId } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/estimates/get', { query: { subscriber_id: cfg.subscriberId, treatment_id: treatmentId } });
 }
 
 // /estimates/list rejeita periodos com mais de 31 dias - quebra o periodo pedido em pedacos de
@@ -224,11 +239,11 @@ function dividirEmJanelasDe31Dias(from, to) {
 // "" = ainda nao) - e' o unico jeito de saber, pela API, se um orcamento aprovado ja foi
 // finalizado na pratica ou ainda esta em andamento (nao existe endpoint separado de prontuario/
 // execucao clinica, mas esse dado ja vem embutido aqui)
-export async function getEstimatesExecutionSummary({ from, to, status, situacaoClinica } = {}) {
+export async function getEstimatesExecutionSummary(tenantId, { from, to, status, situacaoClinica } = {}) {
   const janelas = dividirEmJanelasDe31Dias(from, to);
   const todos = [];
   for (const janela of janelas) {
-    const pedaco = await listEstimates({ from: janela.from, to: janela.to });
+    const pedaco = await listEstimates(tenantId, { from: janela.from, to: janela.to });
     todos.push(...pedaco);
   }
 
@@ -272,33 +287,37 @@ export async function getEstimatesExecutionSummary({ from, to, status, situacaoC
   return { resumo, orcamentos };
 }
 
-export async function listProcedures() {
-  return request('GET', '/procedures/list', { query: { subscriber_id: subscriberId() } });
+export async function listProcedures(tenantId) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/procedures/list', { query: { subscriber_id: cfg.subscriberId } });
 }
 
-export async function listSpecialties() {
-  return request('GET', '/procedures/list_specialties', { query: { subscriber_id: subscriberId() } });
+export async function listSpecialties(tenantId) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/procedures/list_specialties', { query: { subscriber_id: cfg.subscriberId } });
 }
 
-export async function getAppointmentInfo({ from, to, businessId, groupByMonth } = {}) {
-  return request('GET', '/appointment/list_info', {
+export async function getAppointmentInfo(tenantId, { from, to, businessId, groupByMonth } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/appointment/list_info', {
     query: {
-      subscriber_id: subscriberId(),
+      subscriber_id: cfg.subscriberId,
       from,
       to,
-      business_id: businessId || defaultBusinessId(),
+      business_id: businessId || cfg.defaultBusinessId,
       group_by: groupByMonth ? 'month' : undefined,
     },
   });
 }
 
-export async function getScheduleOccupation({ from, to, businessId, groupByMonth } = {}) {
-  return request('GET', '/appointment/schedule_occupation', {
+export async function getScheduleOccupation(tenantId, { from, to, businessId, groupByMonth } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/appointment/schedule_occupation', {
     query: {
-      subscriber_id: subscriberId(),
+      subscriber_id: cfg.subscriberId,
       from,
       to,
-      business_id: businessId || defaultBusinessId(),
+      business_id: businessId || cfg.defaultBusinessId,
       group_by: groupByMonth ? 'month' : 'none',
     },
   });
@@ -306,40 +325,45 @@ export async function getScheduleOccupation({ from, to, businessId, groupByMonth
 
 // --- Financeiro detalhado ---
 
-export async function listInvoices({ from, to, businessId } = {}) {
-  const data = await request('GET', '/financial/list_invoices', {
-    query: { subscriber_id: subscriberId(), from, to, business_id: businessId || defaultBusinessId() },
+export async function listInvoices(tenantId, { from, to, businessId } = {}) {
+  const cfg = await credenciais(tenantId);
+  const data = await request(tenantId, 'GET', '/financial/list_invoices', {
+    query: { subscriber_id: cfg.subscriberId, from, to, business_id: businessId || cfg.defaultBusinessId },
   });
   return Array.isArray(data) ? data : data.list || data.values || [];
 }
 
-export async function listReceipts({ from, to, businessId } = {}) {
-  const data = await request('GET', '/financial/list_receipt', {
-    query: { subscriber_id: subscriberId(), from, to, business_id: businessId || defaultBusinessId() },
+export async function listReceipts(tenantId, { from, to, businessId } = {}) {
+  const cfg = await credenciais(tenantId);
+  const data = await request(tenantId, 'GET', '/financial/list_receipt', {
+    query: { subscriber_id: cfg.subscriberId, from, to, business_id: businessId || cfg.defaultBusinessId },
   });
   return Array.isArray(data) ? data : data.list || data.values || [];
 }
 
-export async function listCashFlow({ from, to, businessId } = {}) {
-  return request('GET', '/financial/list_cash_flow', {
-    query: { subscriber_id: subscriberId(), from, to, business_id: businessId || defaultBusinessId() },
+export async function listCashFlow(tenantId, { from, to, businessId } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/financial/list_cash_flow', {
+    query: { subscriber_id: cfg.subscriberId, from, to, business_id: businessId || cfg.defaultBusinessId },
   });
 }
 
-export async function listFinancialPayments({ from, to, businessId } = {}) {
-  const data = await request('GET', '/financial/list_payments', {
-    query: { subscriber_id: subscriberId(), from, to, business_id: businessId || defaultBusinessId() },
+export async function listFinancialPayments(tenantId, { from, to, businessId } = {}) {
+  const cfg = await credenciais(tenantId);
+  const data = await request(tenantId, 'GET', '/financial/list_payments', {
+    query: { subscriber_id: cfg.subscriberId, from, to, business_id: businessId || cfg.defaultBusinessId },
   });
   return Array.isArray(data) ? data : data.list || data.values || [];
 }
 
-export async function getAverageInstallments({ from, to, businessId, groupByMonth } = {}) {
-  return request('GET', '/financial/average_installments', {
+export async function getAverageInstallments(tenantId, { from, to, businessId, groupByMonth } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/financial/average_installments', {
     query: {
-      subscriber_id: subscriberId(),
+      subscriber_id: cfg.subscriberId,
       from,
       to,
-      business_id: businessId || defaultBusinessId(),
+      business_id: businessId || cfg.defaultBusinessId,
       group_by: groupByMonth ? 'month' : 'none',
     },
   });
@@ -347,46 +371,52 @@ export async function getAverageInstallments({ from, to, businessId, groupByMont
 
 // --- Comercial / metas ---
 
-export async function getSalesConversion({ from, to, businessId, groupByMonth } = {}) {
-  return request('GET', '/sales/estimates_and_conversion', {
+export async function getSalesConversion(tenantId, { from, to, businessId, groupByMonth } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/sales/estimates_and_conversion', {
     query: {
-      subscriber_id: subscriberId(),
+      subscriber_id: cfg.subscriberId,
       from,
       to,
-      business_id: businessId || defaultBusinessId(),
+      business_id: businessId || cfg.defaultBusinessId,
       group_by: groupByMonth ? 'month' : 'none',
     },
   });
 }
 
-export async function getExpertiseRevenue({ from, to, businessId, patientId } = {}) {
-  return request('GET', '/sales/expertise_revenue', {
-    query: { subscriber_id: subscriberId(), from, to, businessId: businessId || defaultBusinessId(), patientId },
+export async function getExpertiseRevenue(tenantId, { from, to, businessId, patientId } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/sales/expertise_revenue', {
+    query: { subscriber_id: cfg.subscriberId, from, to, businessId: businessId || cfg.defaultBusinessId, patientId },
   });
 }
 
-export async function getAnalyticsResults({ from, to } = {}) {
-  return request('GET', '/analytics/list_results', { query: { subscriber_id: subscriberId(), from, to } });
+export async function getAnalyticsResults(tenantId, { from, to } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/analytics/list_results', { query: { subscriber_id: cfg.subscriberId, from, to } });
 }
 
-export async function listMissesGoals({ from, to, businessId } = {}) {
-  return request('GET', '/operational/list_misses_goals', {
-    query: { subscriber_id: subscriberId(), from, to, business_id: businessId || defaultBusinessId(), isAPI: 'X' },
+export async function listMissesGoals(tenantId, { from, to, businessId } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/operational/list_misses_goals', {
+    query: { subscriber_id: cfg.subscriberId, from, to, business_id: businessId || cfg.defaultBusinessId, isAPI: 'X' },
   });
 }
 
-export async function listSalesGoals({ from, to, businessId } = {}) {
-  return request('GET', '/operational/list_sales_goals', {
-    query: { subscriber_id: subscriberId(), from, to, business_id: businessId || defaultBusinessId(), isAPI: 'X' },
+export async function listSalesGoals(tenantId, { from, to, businessId } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/operational/list_sales_goals', {
+    query: { subscriber_id: cfg.subscriberId, from, to, business_id: businessId || cfg.defaultBusinessId, isAPI: 'X' },
   });
 }
 
 // --- Pagamentos ---
 
-export async function listPayments({ from, to, includeTotalAmount, dateType } = {}) {
-  const data = await request('GET', '/payment/list', {
+export async function listPayments(tenantId, { from, to, includeTotalAmount, dateType } = {}) {
+  const cfg = await credenciais(tenantId);
+  const data = await request(tenantId, 'GET', '/payment/list', {
     query: {
-      subscriber_id: subscriberId(),
+      subscriber_id: cfg.subscriberId,
       from,
       to,
       include_total_amount: includeTotalAmount ? 'X' : undefined,
@@ -397,42 +427,49 @@ export async function listPayments({ from, to, includeTotalAmount, dateType } = 
 }
 
 // type: ALL, OPEN, DISPUTE, REJECT, PARTIAL_PAID, PAID
-export async function listPaymentReconcileClaim({ from, to, type = 'ALL' } = {}) {
-  const data = await request('GET', '/payment/list_reconcile_claim', {
-    query: { subscriber_id: subscriberId(), from, to, type },
+export async function listPaymentReconcileClaim(tenantId, { from, to, type = 'ALL' } = {}) {
+  const cfg = await credenciais(tenantId);
+  const data = await request(tenantId, 'GET', '/payment/list_reconcile_claim', {
+    query: { subscriber_id: cfg.subscriberId, from, to, type },
   });
   return Array.isArray(data) ? data : data.list || data.values || [];
 }
 
 // --- Organizacao ---
 
-export async function listSubscribersClinics() {
-  return request('GET', '/group/list_subscribers_clinics', { query: { subscriber_id: subscriberId() } });
+export async function listSubscribersClinics(tenantId) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/group/list_subscribers_clinics', { query: { subscriber_id: cfg.subscriberId } });
 }
 
-export async function listSubscribers() {
-  return request('GET', '/group/list_subscribers', { query: { subscriber_id: subscriberId() } });
+export async function listSubscribers(tenantId) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/group/list_subscribers', { query: { subscriber_id: cfg.subscriberId } });
 }
 
-export async function listUsers() {
-  return request('GET', '/security/list_users', { query: { subscriber_id: subscriberId() } });
+export async function listUsers(tenantId) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/security/list_users', { query: { subscriber_id: cfg.subscriberId } });
 }
 
-export async function listChairs({ businessId } = {}) {
-  return request('GET', '/business/list_chairs', {
-    query: { subscriber_id: subscriberId(), Clinic_BusinessId: businessId || defaultBusinessId() },
+export async function listChairs(tenantId, { businessId } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/business/list_chairs', {
+    query: { subscriber_id: cfg.subscriberId, Clinic_BusinessId: businessId || cfg.defaultBusinessId },
   });
 }
 
 // --- Pacientes extra ---
 
-export async function getPatientBirthdays({ date } = {}) {
-  const data = await request('GET', '/patient/birthdays', { query: { subscriber_id: subscriberId(), date } });
+export async function getPatientBirthdays(tenantId, { date } = {}) {
+  const cfg = await credenciais(tenantId);
+  const data = await request(tenantId, 'GET', '/patient/birthdays', { query: { subscriber_id: cfg.subscriberId, date } });
   return Array.isArray(data) ? data : data.list || [];
 }
 
-export async function getPatientEstimatesSum({ from, to, businessId } = {}) {
-  return request('GET', '/patient/list_estimates', {
-    query: { subscriber_id: subscriberId(), from, to, business_id: businessId || defaultBusinessId() },
+export async function getPatientEstimatesSum(tenantId, { from, to, businessId } = {}) {
+  const cfg = await credenciais(tenantId);
+  return request(tenantId, 'GET', '/patient/list_estimates', {
+    query: { subscriber_id: cfg.subscriberId, from, to, business_id: businessId || cfg.defaultBusinessId },
   });
 }

@@ -11,8 +11,8 @@ function idDaPlanilha(urlOuId) {
   return match ? match[1] : urlOuId;
 }
 
-async function chamarApi(method, path, body) {
-  const token = await tokenValido();
+async function chamarApi(tenantId, method, path, body) {
+  const token = await tokenValido(tenantId);
   const res = await fetch(`${SHEETS_API}${path}`, {
     method,
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -25,9 +25,9 @@ async function chamarApi(method, path, body) {
 
 // lista as abas (paginas/planilhas dentro do arquivo) - util pra descobrir o nome certo antes
 // de ler/escrever um intervalo especifico (ex: "Laboratorio!A1:F50")
-export async function listarAbas(planilha) {
+export async function listarAbas(tenantId, planilha) {
   const id = idDaPlanilha(planilha);
-  const data = await chamarApi('GET', `/${id}?fields=properties.title,sheets.properties(sheetId,title,gridProperties)`);
+  const data = await chamarApi(tenantId, 'GET', `/${id}?fields=properties.title,sheets.properties(sheetId,title,gridProperties)`);
   return {
     nomeArquivo: data.properties?.title,
     abas: (data.sheets || []).map((s) => ({
@@ -42,17 +42,17 @@ export async function listarAbas(planilha) {
 // intervalo no formato do Google Sheets, ex: "Laboratorio!A1:F50" ou so "A1:F50" (usa a
 // primeira aba). Devolve uma matriz (array de linhas, cada linha um array de celulas) - linhas/
 // colunas vazias no final simplesmente nao vem, do jeito que a API do Google ja devolve.
-export async function lerIntervalo({ planilha, intervalo }) {
+export async function lerIntervalo(tenantId, { planilha, intervalo }) {
   const id = idDaPlanilha(planilha);
-  const data = await chamarApi('GET', `/${id}/values/${encodeURIComponent(intervalo)}`);
+  const data = await chamarApi(tenantId, 'GET', `/${id}/values/${encodeURIComponent(intervalo)}`);
   return data.values || [];
 }
 
 // sobrescreve um intervalo especifico com os valores passados (matriz: array de linhas, cada
 // linha um array de celulas, na mesma ordem/tamanho das colunas do intervalo)
-export async function escreverIntervalo({ planilha, intervalo, valores }) {
+export async function escreverIntervalo(tenantId, { planilha, intervalo, valores }) {
   const id = idDaPlanilha(planilha);
-  await chamarApi('PUT', `/${id}/values/${encodeURIComponent(intervalo)}?valueInputOption=USER_ENTERED`, {
+  await chamarApi(tenantId, 'PUT', `/${id}/values/${encodeURIComponent(intervalo)}?valueInputOption=USER_ENTERED`, {
     values: valores,
   });
   return { ok: true };
@@ -60,9 +60,9 @@ export async function escreverIntervalo({ planilha, intervalo, valores }) {
 
 // adiciona uma linha nova no FIM da tabela de dados de uma aba - nao precisa saber em qual
 // linha exata cai, o Google Sheets acha o fim da tabela sozinho (API de "append")
-export async function adicionarLinha({ planilha, aba, valores }) {
+export async function adicionarLinha(tenantId, { planilha, aba, valores }) {
   const id = idDaPlanilha(planilha);
-  await chamarApi('POST', `/${id}/values/${encodeURIComponent(aba)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
+  await chamarApi(tenantId, 'POST', `/${id}/values/${encodeURIComponent(aba)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
     values: [valores],
   });
   return { ok: true };

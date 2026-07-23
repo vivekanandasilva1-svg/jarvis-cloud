@@ -21,6 +21,7 @@ import * as autoAtendimento from './autoAtendimento.js';
 import * as autoArquivos from './autoAtendimentoArquivos.js';
 import * as crm from './crm.js';
 import * as relatoriosProgramados from './relatoriosProgramados.js';
+import * as tenants from './tenants.js';
 
 const execAsync = promisify(exec);
 
@@ -36,27 +37,20 @@ app.use(express.json({
   verify: (req, res, buf) => { req.rawBody = buf; },
 }));
 
-const APP_PASSWORD = process.env.APP_PASSWORD;
-// so um usuario "de verdade" (nao e um sistema de contas) - existe pra a tela de login pedir
-// usuario+senha em vez de so senha, sem precisar montar autenticacao multiusuario de verdade
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'Admin';
-
-// protege tudo (estaticos + api) com uma senha simples via header - o link fica publico na
-// internet e essa versao consegue mexer em orcamento real de anuncio, entao nao pode ficar
-// aberta para qualquer um que ache a URL. O webhook do WhatsApp fica de fora dessa checagem
-// porque quem chama e a propria Meta (nao da pra mandar nossa senha) - ele se protege sozinho
-// checando a assinatura da requisicao e o numero de quem manda a mensagem.
+// protege tudo (estaticos + api) com um token assinado por tenant (ver tenants.js), no lugar
+// da senha unica compartilhada de antes - cada cliente faz login com usuario/senha proprios e
+// recebe um token HMAC que carrega o tenantId; toda rota autenticada usa req.tenantId a partir
+// daqui pra isolar os dados de cada cliente. O link fica publico na internet e essa versao
+// mexe em orcamento real de anuncio e dado de paciente, entao nao pode ficar aberta pra
+// qualquer um. Os webhooks do WhatsApp ficam de fora porque quem chama e a propria
+// Meta/Evolution (nao da pra mandar nosso token) - eles se protegem sozinhos (assinatura HMAC /
+// mapeamento de instancia pro tenant certo).
 app.use((req, res, next) => {
-  if (!APP_PASSWORD) return next(); // sem senha configurada, roda aberto (nao recomendado)
-  // as duas rotas do Google ficam de fora porque sao navegacao de pagina de verdade (o
-  // navegador vai pro consentimento do Google e volta), nao um fetch que consiga mandar o
-  // header de senha - a seguranca aqui vem do proprio fluxo OAuth (o "code" so e valido uma
-  // vez, pro nosso client_id/redirect_uri exatos)
+  if (!process.env.SESSION_SECRET) return next(); // sem auth configurada, roda aberto (dev local sem Postgres)
   if (
     req.path === '/api/login' ||
     req.path === '/webhook/whatsapp' ||
     req.path === '/api/whatsapp-evolution/webhook' ||
-    req.path === '/api/agenda/google/conectar' ||
     req.path === '/api/agenda/google/callback' ||
     // EventSource nativo do browser nao manda headers customizados - a senha vai por query
     // string aqui, e o proprio handler da rota confere ela antes de abrir o stream
@@ -66,19 +60,45 @@ app.use((req, res, next) => {
     req.path.startsWith('/api/crm/midia/')
   ) return next();
 
-  const provided = req.header('x-app-password');
-  if (provided === APP_PASSWORD) return next();
+  // /api/agenda/google/conectar e navegacao de pagina de verdade (o navegador redireciona pro
+  // consentimento do Google), nao um fetch que consiga mandar header - o token vem por query
+  // param SO nesse caso especifico, nunca como mecanismo geral de auth
+  const provided = req.path === '/api/agenda/google/conectar'
+    ? req.query.token
+    : req.header('x-app-password');
+
+  const tenantId = tenants.verificarToken(provided);
+  if (tenantId) { req.tenantId = tenantId; return next(); }
 
   if (req.path.startsWith('/api/')) {
-    return res.status(401).json({ erro: 'senha invalida' });
+    return res.status(401).json({ erro: 'sessao invalida - faca login de novo' });
   }
   next();
 });
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body || {};
-  if (!APP_PASSWORD) return res.json({ ok: true });
-  res.json({ ok: username === ADMIN_USERNAME && password === APP_PASSWORD });
+  if (!process.env.SESSION_SECRET) return res.json({ ok: true });
+  try {
+    const tenantId = await tenants.autenticar(username, password);
+    if (!tenantId) return res.json({ ok: false });
+    res.json({ ok: true, token: tenants.firmarToken(tenantId) });
+  } catch (err) {
+    res.status(500).json({ ok: false, erro: err.message });
+  }
+});
+
+// o app chama isso no carregamento da pagina pra confirmar que o token guardado ainda e
+// valido (nao expirou) e pra saber o nome do tenant logado
+app.get('/api/me', async (req, res) => {
+  if (!req.tenantId) return res.status(401).json({ erro: 'nao autenticado' });
+  try {
+    const tenant = await tenants.obterPorId(req.tenantId);
+    if (!tenant || !tenant.ativo) return res.status(401).json({ erro: 'tenant nao encontrado' });
+    res.json({ tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
 });
 
 app.use(express.static(PUBLIC_DIR));
@@ -147,6 +167,14 @@ app.get('/api/system-stats', async (req, res) => {
   }
 });
 
+// prefixa o sessionId (gerado pelo proprio navegador, guardado no localStorage) com o tenant
+// autenticado - nunca confia no cliente pra dizer "de qual tenant" e essa sessao, isso vem
+// sempre do token verificado pelo middleware (req.tenantId). Mantem session_id globalmente
+// unico como PK da tabela sessions sem precisar de chave composta.
+function sessionIdDoTenant(req, sessionId) {
+  return `t${req.tenantId}:${sessionId}`;
+}
+
 app.post('/api/chat', async (req, res) => {
   const { message, sessionId, attachments } = req.body || {};
   const temAnexo = Array.isArray(attachments) && attachments.length > 0;
@@ -155,12 +183,13 @@ app.post('/api/chat', async (req, res) => {
   }
 
   try {
-    sessoesVistas.add(sessionId);
+    const sessionIdCompleto = sessionIdDoTenant(req, sessionId);
+    sessoesVistas.add(sessionIdCompleto);
     comandosProcessados++;
     // chat() devolve { reply } no caso normal, ou { reply: null, localAction } quando a
     // proxima coisa a fazer e uma acao no computador do usuario - o navegador que decide
     // rodar (via o agente local) e reporta o resultado em /api/local-action-result
-    const resultado = await chat(sessionId, message, attachments);
+    const resultado = await chat(req.tenantId, sessionIdCompleto, message, attachments);
     res.json(resultado);
   } catch (err) {
     console.error('Erro no chat:', err);
@@ -174,7 +203,7 @@ app.post('/api/chat', async (req, res) => {
 app.get('/api/chat/status', (req, res) => {
   const { sessionId } = req.query;
   if (!sessionId) return res.status(400).json({ erro: 'sessionId obrigatorio' });
-  res.json(obterStatusAoVivo(sessionId) || { estado: null });
+  res.json(obterStatusAoVivo(sessionIdDoTenant(req, sessionId)) || { estado: null });
 });
 
 // o navegador chama isso depois de executar uma acao no computador do usuario (via agente
@@ -185,7 +214,7 @@ app.post('/api/local-action-result', async (req, res) => {
     return res.status(400).json({ erro: 'sessionId e resultado sao obrigatorios' });
   }
   try {
-    const saida = await continuarAcaoLocal(sessionId, resultado);
+    const saida = await continuarAcaoLocal(req.tenantId, sessionIdDoTenant(req, sessionId), resultado);
     res.json(saida);
   } catch (err) {
     console.error('Erro ao continuar acao local:', err);
@@ -211,7 +240,7 @@ app.post('/api/session/clear', async (req, res) => {
   const { sessionId } = req.body || {};
   if (!sessionId) return res.status(400).json({ erro: 'sessionId obrigatorio' });
   try {
-    await limparConversa(sessionId);
+    await limparConversa(req.tenantId, sessionIdDoTenant(req, sessionId));
     res.json({ ok: true });
   } catch (err) {
     console.error('Erro limpando sessao:', err);
@@ -303,11 +332,18 @@ function numeroWhatsappPermitido(numero) {
   return lista.includes(numero);
 }
 
+// canal legado (Meta Cloud API oficial, ao contrario do Evolution API que e o canal principal
+// hoje) - ainda nao tem roteamento por tenant configuravel (WHATSAPP_ALLOWED_NUMBERS continua
+// um env var global), entao fica fixo no tenant 1 por enquanto. Revisar se/quando outro tenant
+// precisar desse canal especifico.
+const TENANT_ID_WHATSAPP_META_LEGADO = 1;
+
 async function processarMensagemWhatsapp(msg) {
   const from = msg.from;
   if (!numeroWhatsappPermitido(from)) return; // ignora silenciosamente numeros nao autorizados
 
-  const sessionId = `whatsapp:${from}`;
+  const tenantId = TENANT_ID_WHATSAPP_META_LEGADO;
+  const sessionId = `t${tenantId}:whatsapp:${from}`;
   let texto = '';
   const attachments = [];
 
@@ -330,7 +366,7 @@ async function processarMensagemWhatsapp(msg) {
   if (!texto && attachments.length === 0) return;
 
   try {
-    const resultado = await chat(sessionId, texto, attachments);
+    const resultado = await chat(tenantId, sessionId, texto, attachments);
     // controle do computador so funciona pelo navegador no proprio PC (precisa do agente
     // local) - por WhatsApp nao ha como executar isso, entao avisa em vez de travar
     if (resultado.localAction) {
@@ -411,7 +447,7 @@ function lembrarEnviada(resposta) {
 // depender do WhatsApp/Evolution ainda ter o arquivo disponivel na hora que o dono for abrir.
 // "melhor esforco": se o download falhar, ainda registra a mensagem (so sem midia, cai no
 // icone de sempre) em vez de perder a mensagem inteira do historico do CRM.
-async function registrarMensagemComMidia({ numero, instancia, direcao, tipo, texto, nome, mensagemBruta }) {
+async function registrarMensagemComMidia(tenantId, { numero, instancia, direcao, tipo, texto, nome, mensagemBruta }) {
   let midiaBase64 = null;
   let midiaMimetype = null;
   if (tipo === 'image' || tipo === 'audio') {
@@ -423,12 +459,18 @@ async function registrarMensagemComMidia({ numero, instancia, direcao, tipo, tex
       console.error('Erro baixando midia pro CRM:', err.message);
     }
   }
-  await crm.registrarMensagem({ numero, instancia, direcao, tipo, texto, nome, midiaBase64, midiaMimetype });
+  await crm.registrarMensagem(tenantId, { numero, instancia, direcao, tipo, texto, nome, midiaBase64, midiaMimetype });
 }
 
 async function processarMensagemEvolution(instanciaDoWebhook, data) {
+  // primeira coisa: descobre de qual tenant e essa instancia - sem mapeamento, ignora a
+  // mensagem silenciosamente (mesmo padrao ja usado pra numero fora da allowlist). Isso
+  // impede uma instancia nao cadastrada de "vazar" pra dentro de um tenant qualquer.
+  const tenantId = await tenants.resolverTenantPorInstancia(instanciaDoWebhook);
+  if (!tenantId) return;
+
   const { numero, texto, tipo, fromMe, id } = extrairMensagemEvolution(data);
-  const { instanciaAtiva, numeroAdmin } = await whatsappInstances.obterConfig();
+  const { instanciaAtiva, numeroAdmin } = await whatsappInstances.obterConfig(tenantId);
   const ehNumeroAdmin = numeroAdmin && mesmoNumero(numero, numeroAdmin);
 
   if (fromMe) {
@@ -441,7 +483,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
     // passar pela Lumia nem pelo painel - registra no CRM como 'saida' pra a conversa la
     // ficar identica a conversa real (senao essas respostas manuais nunca apareciam no CRM).
     if (!ehNumeroAdmin) {
-      registrarMensagemComMidia({ numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo, texto, nome: data?.pushName, mensagemBruta: data })
+      registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo, texto, nome: data?.pushName, mensagemBruta: data })
         .catch((err) => console.error('Erro registrando mensagem manual (fromMe) no CRM:', err.message));
       return;
     }
@@ -454,7 +496,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   // dono, em qualquer instancia conectada - "best-effort", nunca trava o fluxo principal (a
   // resposta da Lumia) se o CRM der erro
   if (!ehNumeroAdmin) {
-    registrarMensagemComMidia({ numero, instancia: instanciaDoWebhook, direcao: 'entrada', tipo, texto, nome: data?.pushName, mensagemBruta: data })
+    registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'entrada', tipo, texto, nome: data?.pushName, mensagemBruta: data })
       .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
   }
 
@@ -464,15 +506,15 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   if (instanciaDoWebhook === instanciaAtiva && ehNumeroAdmin) {
     if (tipo !== 'text') return;
     try {
-      const resultado = await chat(`whatsapp-evo:${numero}`, texto, []);
+      const resultado = await chat(tenantId, `t${tenantId}:whatsapp-evo:${numero}`, texto, []);
       if (resultado.localAction) {
-        lembrarEnviada(await enviarMensagemTexto(numero, 'Isso aí envolve mexer no seu computador, e isso só funciona pelo app no próprio PC (não dá pra fazer por aqui pelo WhatsApp).'));
+        lembrarEnviada(await enviarMensagemTexto(tenantId, numero, 'Isso aí envolve mexer no seu computador, e isso só funciona pelo app no próprio PC (não dá pra fazer por aqui pelo WhatsApp).'));
         return;
       }
-      lembrarEnviada(await enviarMensagemTexto(numero, resultado.reply));
+      lembrarEnviada(await enviarMensagemTexto(tenantId, numero, resultado.reply));
     } catch (err) {
       console.error('Erro no chat via Evolution/WhatsApp:', err);
-      lembrarEnviada(await enviarMensagemTexto(numero, `Deu erro por aqui: ${err.message}`).catch(() => {}));
+      lembrarEnviada(await enviarMensagemTexto(tenantId, numero, `Deu erro por aqui: ${err.message}`).catch(() => {}));
     }
     return;
   }
@@ -480,11 +522,11 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   // qualquer outro contato (nao o dono) - so responde se o auto-atendimento estiver ativo
   // NESSA instancia especifica; usa um motor totalmente separado (prompt/historico/ferramentas
   // proprios), nunca a conversa pessoal da Lumia
-  const configAuto = await autoAtendimento.obterConfig();
+  const configAuto = await autoAtendimento.obterConfig(tenantId);
   if (!configAuto.ativo || configAuto.instancia !== instanciaDoWebhook) return;
   // pausa pontual por conversa (aba CRM) - tem prioridade sobre a config global estar ativa;
   // a mensagem do contato ja foi registrada no CRM acima, so nao gera resposta automatica
-  if (await crm.estaPausado(numero, instanciaDoWebhook).catch(() => false)) return;
+  if (await crm.estaPausado(tenantId, numero, instanciaDoWebhook).catch(() => false)) return;
 
   // "digitando..."/"gravando audio..." no WhatsApp expira sozinho depois de poucos segundos
   // (o app do contato esconde o indicador se nao renovar) - como pensar a resposta (chamar a
@@ -492,7 +534,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   // sinal em loop ate o instante exato de mandar a mensagem de verdade, sem deixar "apagar" no
   // meio do caminho. Ja sabe de antemao se vai ser audio ou texto, pra mostrar o icone certo
   // desde o comeco (nao so "digitando" ate o fim e "gravando" so no ultimo segundo).
-  const provavelAudio = await autoAtendimento.preverVaiSerAudio(numero, tipo).catch(() => false);
+  const provavelAudio = await autoAtendimento.preverVaiSerAudio(tenantId, numero, tipo).catch(() => false);
   const tipoPresenca = provavelAudio ? 'recording' : 'composing';
   const manterPresenca = setInterval(() => {
     evolutionApi.enviarPresenca(instanciaDoWebhook, numero, tipoPresenca).catch(() => {});
@@ -505,7 +547,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
     // resposta pra sempre - "travado" do lado de quem manda mensagem. Isso garante um limite
     // maximo de espera; se estourar, cai no catch abaixo e manda um aviso em vez de silencio.
     const resultado = await Promise.race([
-      autoAtendimento.processarMensagem(numero, instanciaDoWebhook, { texto, tipo, mensagemBruta: data }),
+      autoAtendimento.processarMensagem(tenantId, numero, instanciaDoWebhook, { texto, tipo, mensagemBruta: data }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Demorou demais pra gerar uma resposta (mais de 55s)')), 55000)),
     ]);
     if (!resultado) return;
@@ -515,7 +557,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
     if (resultado.respondeComAudio) {
       try {
         await autoAtendimento.enviarRespostaEmAudio(instanciaDoWebhook, numero, resultado.texto);
-        crm.registrarMensagem({ numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'audio', texto: resultado.texto })
+        crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'audio', texto: resultado.texto })
           .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
         return;
       } catch (err) {
@@ -523,7 +565,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
       }
     }
     await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, resultado.texto);
-    crm.registrarMensagem({ numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'text', texto: resultado.texto })
+    crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'text', texto: resultado.texto })
       .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
   } catch (err) {
     console.error('Erro no auto-atendimento via Evolution/WhatsApp:', err);
@@ -550,7 +592,7 @@ app.post('/api/whatsapp-evolution/webhook', (req, res) => {
 
 app.get('/api/whatsapp/status', async (req, res) => {
   try {
-    const config = await whatsappInstances.obterConfig();
+    const config = await whatsappInstances.obterConfig(req.tenantId);
     let conexao = null;
     try {
       conexao = await evolutionApi.statusConexaoInstancia(config.instanciaAtiva);
@@ -563,9 +605,19 @@ app.get('/api/whatsapp/status', async (req, res) => {
   }
 });
 
+// so mostra/deixa mexer nas instancias que pertencem AO TENANT LOGADO - o Evolution API por
+// baixo e compartilhado entre todos os tenants, entao sem esse filtro um cliente conseguiria
+// ver (e ate desconectar/reconectar) o WhatsApp de outro cliente
+async function instanciaPertenceAoTenant(req, nome) {
+  const dono = await tenants.resolverTenantPorInstancia(nome);
+  return dono === req.tenantId;
+}
+
 app.get('/api/whatsapp/instancias', async (req, res) => {
   try {
-    res.json({ instancias: await evolutionApi.listarInstancias() });
+    const permitidas = new Set(await tenants.listarInstanciasDoTenant(req.tenantId));
+    const todas = await evolutionApi.listarInstancias();
+    res.json({ instancias: todas.filter((i) => permitidas.has(i.nome)) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -576,6 +628,9 @@ app.post('/api/whatsapp/instancias', async (req, res) => {
   if (!nome) return res.status(400).json({ erro: 'nome obrigatorio' });
   try {
     const resultado = await evolutionApi.criarInstancia(nome);
+    // a instancia nasce ja vinculada a quem criou - sem isso ela ficaria "orfa" (sem tenant
+    // nenhum mapeado) e nenhuma mensagem recebida nela seria roteada pra ninguem
+    await tenants.mapearInstanciaParaTenant(nome, req.tenantId);
     res.json({ ok: true, qrcode: resultado?.qrcode?.base64 || null });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -584,6 +639,9 @@ app.post('/api/whatsapp/instancias', async (req, res) => {
 
 app.get('/api/whatsapp/qrcode/:nome', async (req, res) => {
   try {
+    if (!(await instanciaPertenceAoTenant(req, req.params.nome))) {
+      return res.status(403).json({ erro: 'Essa instancia nao pertence a essa conta.' });
+    }
     // pedir QR numa instancia que ja esta conectada pode forcar o Evolution API a reiniciar o
     // socket dela - e foi exatamente isso (ou algo parecido) que causou uma desconexao real por
     // "conflict/device_removed" nessa mesma instancia. So gera QR de verdade quando precisa.
@@ -602,6 +660,9 @@ app.post('/api/whatsapp/desconectar', async (req, res) => {
   const { nome } = req.body || {};
   if (!nome) return res.status(400).json({ erro: 'nome obrigatorio' });
   try {
+    if (!(await instanciaPertenceAoTenant(req, nome))) {
+      return res.status(403).json({ erro: 'Essa instancia nao pertence a essa conta.' });
+    }
     await evolutionApi.desconectarInstancia(nome);
     res.json({ ok: true });
   } catch (err) {
@@ -613,7 +674,10 @@ app.post('/api/whatsapp/ativar', async (req, res) => {
   const { nome } = req.body || {};
   if (!nome) return res.status(400).json({ erro: 'nome obrigatorio' });
   try {
-    await whatsappInstances.definirInstanciaAtiva(nome);
+    if (!(await instanciaPertenceAoTenant(req, nome))) {
+      return res.status(403).json({ erro: 'Essa instancia nao pertence a essa conta.' });
+    }
+    await whatsappInstances.definirInstanciaAtiva(req.tenantId, nome);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -624,7 +688,7 @@ app.post('/api/whatsapp/admin', async (req, res) => {
   const { numero } = req.body || {};
   if (!numero) return res.status(400).json({ erro: 'numero obrigatorio' });
   try {
-    await whatsappInstances.definirNumeroAdmin(numero);
+    await whatsappInstances.definirNumeroAdmin(req.tenantId, numero);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -635,7 +699,7 @@ app.post('/api/whatsapp/admin', async (req, res) => {
 
 app.get('/api/auto-atendimento/config', async (req, res) => {
   try {
-    res.json(await autoAtendimento.obterConfig());
+    res.json(await autoAtendimento.obterConfig(req.tenantId));
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -647,7 +711,7 @@ app.post('/api/auto-atendimento/config', async (req, res) => {
     return res.status(400).json({ erro: 'pra ativar, precisa escolher a instancia e escrever o prompt' });
   }
   try {
-    await autoAtendimento.salvarConfig({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna });
+    await autoAtendimento.salvarConfig(req.tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -659,7 +723,7 @@ app.post('/api/auto-atendimento/config', async (req, res) => {
 // arquivos de tamanho razoavel pra esse uso)
 app.get('/api/auto-atendimento/arquivos', async (req, res) => {
   try {
-    res.json({ arquivos: await autoArquivos.listarArquivos() });
+    res.json({ arquivos: await autoArquivos.listarArquivos(req.tenantId) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -671,7 +735,7 @@ app.post('/api/auto-atendimento/arquivos', async (req, res) => {
     return res.status(400).json({ erro: 'nomeArquivo, descricao, mediaType e base64 sao obrigatorios' });
   }
   try {
-    const id = await autoArquivos.salvarArquivo(nomeArquivo, descricao, Buffer.from(base64, 'base64'), mediaType);
+    const id = await autoArquivos.salvarArquivo(req.tenantId, nomeArquivo, descricao, Buffer.from(base64, 'base64'), mediaType);
     res.json({ ok: true, id });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -680,7 +744,7 @@ app.post('/api/auto-atendimento/arquivos', async (req, res) => {
 
 app.delete('/api/auto-atendimento/arquivos/:id', async (req, res) => {
   try {
-    await autoArquivos.apagarArquivo(Number(req.params.id));
+    await autoArquivos.apagarArquivo(req.tenantId, Number(req.params.id));
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -691,7 +755,7 @@ app.delete('/api/auto-atendimento/arquivos/:id', async (req, res) => {
 
 app.get('/api/relatorios/destinatarios', async (req, res) => {
   try {
-    res.json({ destinatarios: await relatoriosProgramados.listarDestinatarios() });
+    res.json({ destinatarios: await relatoriosProgramados.listarDestinatarios(req.tenantId) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -701,7 +765,7 @@ app.post('/api/relatorios/destinatarios', async (req, res) => {
   const { numero } = req.body || {};
   if (!numero) return res.status(400).json({ erro: 'numero obrigatorio' });
   try {
-    const id = await relatoriosProgramados.adicionarDestinatario(numero);
+    const id = await relatoriosProgramados.adicionarDestinatario(req.tenantId, numero);
     res.json({ ok: true, id });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -710,7 +774,7 @@ app.post('/api/relatorios/destinatarios', async (req, res) => {
 
 app.delete('/api/relatorios/destinatarios/:id', async (req, res) => {
   try {
-    await relatoriosProgramados.removerDestinatario(Number(req.params.id));
+    await relatoriosProgramados.removerDestinatario(req.tenantId, Number(req.params.id));
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -719,7 +783,7 @@ app.delete('/api/relatorios/destinatarios/:id', async (req, res) => {
 
 app.get('/api/relatorios/configs', async (req, res) => {
   try {
-    res.json({ configs: await relatoriosProgramados.obterConfigs() });
+    res.json({ configs: await relatoriosProgramados.obterConfigs(req.tenantId) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -728,7 +792,10 @@ app.get('/api/relatorios/configs', async (req, res) => {
 app.post('/api/relatorios/configs/:tipo', async (req, res) => {
   const { ativo, frequencia, horaEnvio, instancia } = req.body || {};
   try {
-    await relatoriosProgramados.salvarConfig(req.params.tipo, { ativo, frequencia, horaEnvio, instancia });
+    if (instancia && !(await instanciaPertenceAoTenant(req, instancia))) {
+      return res.status(403).json({ erro: 'Essa instancia nao pertence a essa conta.' });
+    }
+    await relatoriosProgramados.salvarConfig(req.tenantId, req.params.tipo, { ativo, frequencia, horaEnvio, instancia });
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });
@@ -739,7 +806,7 @@ app.post('/api/relatorios/configs/:tipo', async (req, res) => {
 // "Enviar agora" da aba, sem esperar a data programada
 app.post('/api/relatorios/enviar-agora/:tipo', async (req, res) => {
   try {
-    const resultado = await relatoriosProgramados.enviarRelatorioAgora(req.params.tipo);
+    const resultado = await relatoriosProgramados.enviarRelatorioAgora(req.tenantId, req.params.tipo);
     res.json({ ok: true, ...resultado });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -750,7 +817,7 @@ app.post('/api/relatorios/enviar-agora/:tipo', async (req, res) => {
 
 app.get('/api/crm/contatos', async (req, res) => {
   try {
-    res.json({ etapas: crm.ETAPAS, contatos: await crm.listarContatos() });
+    res.json({ etapas: crm.ETAPAS, contatos: await crm.listarContatos(req.tenantId) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -760,7 +827,7 @@ app.get('/api/crm/mensagens', async (req, res) => {
   const { numero, instancia } = req.query;
   if (!numero || !instancia) return res.status(400).json({ erro: 'numero e instancia sao obrigatorios' });
   try {
-    res.json({ mensagens: await crm.listarMensagens(String(numero), String(instancia)) });
+    res.json({ mensagens: await crm.listarMensagens(req.tenantId, String(numero), String(instancia)) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -770,7 +837,7 @@ app.post('/api/crm/mensagens', async (req, res) => {
   const { numero, instancia, texto } = req.body || {};
   if (!numero || !instancia || !texto) return res.status(400).json({ erro: 'numero, instancia e texto sao obrigatorios' });
   try {
-    await crm.enviarMensagem(numero, instancia, texto);
+    await crm.enviarMensagem(req.tenantId, numero, instancia, texto);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -781,7 +848,7 @@ app.post('/api/crm/contatos/:id/etapa', async (req, res) => {
   const { etapa } = req.body || {};
   if (!etapa) return res.status(400).json({ erro: 'etapa e obrigatoria' });
   try {
-    await crm.moverEtapa(Number(req.params.id), etapa);
+    await crm.moverEtapa(req.tenantId, Number(req.params.id), etapa);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -791,7 +858,7 @@ app.post('/api/crm/contatos/:id/etapa', async (req, res) => {
 app.post('/api/crm/contatos/:id/auto', async (req, res) => {
   const { pausado } = req.body || {};
   try {
-    await crm.alternarAutoAtendimento(Number(req.params.id), !!pausado);
+    await crm.alternarAutoAtendimento(req.tenantId, Number(req.params.id), !!pausado);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -800,7 +867,7 @@ app.post('/api/crm/contatos/:id/auto', async (req, res) => {
 
 app.delete('/api/crm/contatos/:id', async (req, res) => {
   try {
-    await crm.apagarContato(Number(req.params.id));
+    await crm.apagarContato(req.tenantId, Number(req.params.id));
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -813,7 +880,7 @@ app.delete('/api/crm/contatos/:id', async (req, res) => {
 app.post('/api/crm/contatos/:id/ocultar', async (req, res) => {
   const { oculto } = req.body || {};
   try {
-    await crm.alternarOcultar(Number(req.params.id), !!oculto);
+    await crm.alternarOcultar(req.tenantId, Number(req.params.id), !!oculto);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -825,20 +892,22 @@ app.post('/api/crm/contatos/:id/ocultar', async (req, res) => {
 // ver as conversas que o dono marcou pra ignorar/esconder
 app.get('/api/crm/contatos-ocultos', async (req, res) => {
   try {
-    const ok = await crm.verificarSenhaOcultas(req.query.senha ? String(req.query.senha) : '');
+    const ok = await crm.verificarSenhaOcultas(req.tenantId, req.query.senha ? String(req.query.senha) : '');
     if (!ok) return res.status(401).json({ erro: 'senha incorreta' });
-    res.json({ etapas: crm.ETAPAS, contatos: await crm.listarContatosOcultos() });
+    res.json({ etapas: crm.ETAPAS, contatos: await crm.listarContatosOcultos(req.tenantId) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
 });
 
-// serve a imagem/audio guardada de uma mensagem do CRM - autenticado por query string (senha)
-// porque e usado direto em <img src>/<audio src>, que nao mandam header customizado
+// serve a imagem/audio guardada de uma mensagem do CRM - autenticado por query string (token)
+// porque e usado direto em <img src>/<audio src>, que nao mandam header customizado. So essa
+// rota fica de fora do middleware geral (ver acima), entao valida o token aqui na mao.
 app.get('/api/crm/midia/:mensagemId', async (req, res) => {
-  if (APP_PASSWORD && req.query.senha !== APP_PASSWORD) return res.status(401).end();
+  const tenantId = tenants.verificarToken(req.query.senha);
+  if (!tenantId) return res.status(401).end();
   try {
-    const midia = await crm.obterMidiaMensagem(Number(req.params.mensagemId));
+    const midia = await crm.obterMidiaMensagem(tenantId, Number(req.params.mensagemId));
     if (!midia) return res.status(404).end();
     res.set('Content-Type', midia.mimetype);
     res.set('Cache-Control', 'private, max-age=31536000, immutable');
@@ -850,20 +919,20 @@ app.get('/api/crm/midia/:mensagemId', async (req, res) => {
 
 app.get('/api/crm/ocultas/senha-status', async (req, res) => {
   try {
-    res.json({ configurada: !!(await crm.obterSenhaOcultas()) });
+    res.json({ configurada: !!(await crm.obterSenhaOcultas(req.tenantId)) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
 });
 
 // define/troca/remove a senha das ocultas - se ja existe uma, exige a atual pra trocar (mas o
-// acesso a essa rota ja exige a senha geral do app, ver middleware de x-app-password acima)
+// acesso a essa rota ja exige login no tenant, ver middleware de auth acima)
 app.post('/api/crm/ocultas/senha', async (req, res) => {
   const { senhaAtual, novaSenha } = req.body || {};
   try {
-    const atual = await crm.obterSenhaOcultas();
+    const atual = await crm.obterSenhaOcultas(req.tenantId);
     if (atual && senhaAtual !== atual) return res.status(401).json({ erro: 'senha atual incorreta' });
-    await crm.definirSenhaOcultas(novaSenha ? String(novaSenha) : null);
+    await crm.definirSenhaOcultas(req.tenantId, novaSenha ? String(novaSenha) : null);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -871,11 +940,15 @@ app.post('/api/crm/ocultas/senha', async (req, res) => {
 });
 
 // tempo real da aba CRM via Server-Sent Events - EventSource nativo do browser nao manda
-// headers customizados, entao o frontend usa fetch() + leitura manual do stream (mesmo
-// x-app-password de sempre, so que como query string aqui, unico jeito de autenticar essa
-// rota especifica sem mudar todo o esquema de auth do app)
+// headers customizados, entao o frontend usa fetch() + leitura manual do stream (mesmo token
+// de sempre, so que como query string aqui, unico jeito de autenticar essa rota especifica
+// sem mudar todo o esquema de auth do app). So essa rota fica de fora do middleware geral, e
+// so repassa eventos do PROPRIO tenant - eventosCrm e um emissor global compartilhado por
+// todos os tenants no mesmo processo, entao o filtro por tenantId aqui e essencial, senao um
+// cliente veria em tempo real as conversas de outro.
 app.get('/api/crm/eventos', (req, res) => {
-  if (APP_PASSWORD && req.query.senha !== APP_PASSWORD) return res.status(401).end();
+  const tenantId = tenants.verificarToken(req.query.senha);
+  if (!tenantId) return res.status(401).end();
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -886,8 +959,8 @@ app.get('/api/crm/eventos', (req, res) => {
   res.write('\n');
 
   const mandar = (tipo, payload) => res.write(`data: ${JSON.stringify({ tipo, ...payload })}\n\n`);
-  const onMensagem = (payload) => mandar('mensagem', payload);
-  const onContatoAtualizado = (payload) => mandar('contato-atualizado', payload);
+  const onMensagem = (payload) => { if (payload.tenantId === tenantId) mandar('mensagem', payload); };
+  const onContatoAtualizado = (payload) => { if (payload.tenantId === tenantId) mandar('contato-atualizado', payload); };
   crm.eventosCrm.on('mensagem', onMensagem);
   crm.eventosCrm.on('contato-atualizado', onContatoAtualizado);
 
@@ -907,7 +980,7 @@ app.get('/api/crm/eventos', (req, res) => {
 
 app.get('/api/agenda/eventos', async (req, res) => {
   try {
-    const eventos = await agenda.listarEventos(req.query.from, req.query.to);
+    const eventos = await agenda.listarEventos(req.tenantId, req.query.from, req.query.to);
     res.json({ eventos });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -918,7 +991,7 @@ app.post('/api/agenda/eventos', async (req, res) => {
   const { titulo, descricao, local, inicio, fim } = req.body || {};
   if (!titulo || !inicio || !fim) return res.status(400).json({ erro: 'titulo, inicio e fim sao obrigatorios' });
   try {
-    const resultado = await agenda.criarEvento({ titulo, descricao, local, inicio, fim });
+    const resultado = await agenda.criarEvento(req.tenantId, { titulo, descricao, local, inicio, fim });
     res.json(resultado);
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -927,7 +1000,7 @@ app.post('/api/agenda/eventos', async (req, res) => {
 
 app.delete('/api/agenda/eventos/:id', async (req, res) => {
   try {
-    await agenda.cancelarEvento(Number(req.params.id));
+    await agenda.cancelarEvento(req.tenantId, Number(req.params.id));
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -936,26 +1009,29 @@ app.delete('/api/agenda/eventos/:id', async (req, res) => {
 
 app.get('/api/agenda/google/status', async (req, res) => {
   try {
-    res.json({ conectado: await googleCalendar.estaConectado() });
+    res.json({ conectado: await googleCalendar.estaConectado(req.tenantId) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
 });
 
-// estado anti-CSRF de curta duracao (2min) pro round-trip do OAuth - so existe pra confirmar
-// que o callback que voltou do Google corresponde a um "conectar" que a gente mesmo iniciou
+// estado anti-CSRF de curta duracao (2min) pro round-trip do OAuth - confirma que o callback
+// que voltou do Google corresponde a um "conectar" que a gente mesmo iniciou, E carrega o
+// tenantId (o callback do Google nao consegue mandar nosso token de sessao, entao e assim que
+// sabemos pra qual tenant salvar os tokens de calendario)
 const estadosOAuthPendentes = new Map();
 setInterval(() => {
   const agora = Date.now();
-  for (const [state, criadoEm] of estadosOAuthPendentes) {
+  for (const [state, { criadoEm }] of estadosOAuthPendentes) {
     if (agora - criadoEm > 2 * 60 * 1000) estadosOAuthPendentes.delete(state);
   }
 }, 60 * 1000).unref();
 
 app.get('/api/agenda/google/conectar', (req, res) => {
+  if (!req.tenantId) return res.status(401).send('Sessao invalida - abre essa tela de dentro do app, nao direto pela URL.');
   try {
     const state = crypto.randomUUID();
-    estadosOAuthPendentes.set(state, Date.now());
+    estadosOAuthPendentes.set(state, { criadoEm: Date.now(), tenantId: req.tenantId });
     res.redirect(`${googleCalendar.urlAutorizacao()}&state=${state}`);
   } catch (err) {
     res.status(500).send(`Erro iniciando conexao com o Google: ${err.message}`);
@@ -965,11 +1041,12 @@ app.get('/api/agenda/google/conectar', (req, res) => {
 app.get('/api/agenda/google/callback', async (req, res) => {
   const { code, state, error } = req.query;
   if (error) return res.redirect(`/?agenda_google=erro&msg=${encodeURIComponent(String(error))}`);
-  if (!state || !estadosOAuthPendentes.has(String(state))) return res.status(400).send('Estado invalido ou expirado - tenta conectar de novo pelo app.');
+  const pendente = state && estadosOAuthPendentes.get(String(state));
+  if (!pendente) return res.status(400).send('Estado invalido ou expirado - tenta conectar de novo pelo app.');
   estadosOAuthPendentes.delete(String(state));
 
   try {
-    await googleCalendar.trocarCodigoPorToken(code);
+    await googleCalendar.trocarCodigoPorToken(pendente.tenantId, code);
     res.redirect('/?agenda_google=conectado');
   } catch (err) {
     res.redirect(`/?agenda_google=erro&msg=${encodeURIComponent(err.message)}`);
@@ -978,7 +1055,7 @@ app.get('/api/agenda/google/callback', async (req, res) => {
 
 app.post('/api/agenda/google/desconectar', async (req, res) => {
   try {
-    await googleCalendar.desconectar();
+    await googleCalendar.desconectar(req.tenantId);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
