@@ -8,9 +8,11 @@
 // acesso as contas de anuncio de negocio de cada cliente) - essas tem que ser por tenant.
 import { pool } from './db.js';
 import { encrypt, decrypt } from './crypto.js';
+import { tabelasProntas as tenantsProntos } from './tenants.js';
 
 async function garantirTabelas() {
   if (!pool) return;
+  await tenantsProntos; // tenants precisa existir antes (REFERENCES tenants(id) abaixo)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tenant_config (
       tenant_id INT PRIMARY KEY REFERENCES tenants(id),

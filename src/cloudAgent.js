@@ -13,11 +13,13 @@ import { gerarRelatorioDiario } from './relatorioDiario.js';
 import * as trello from './trello.js';
 import * as googleSheets from './googleSheets.js';
 import * as whatsappInstances from './whatsappInstances.js';
+import { tabelasProntas as tenantsProntos } from './tenants.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function garantirTabelas() {
   if (!pool) return;
+  await tenantsProntos; // tenants precisa existir antes (REFERENCES tenants(id) abaixo)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sessions (
       session_id TEXT PRIMARY KEY,

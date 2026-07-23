@@ -29,7 +29,12 @@ async function garantirTabelas() {
     );
   `);
 }
-const tabelasProntas = garantirTabelas().catch((err) => {
+// exportado pra outros modulos poderem esperar a tabela "tenants" existir antes de criar as
+// PROPRIAS tabelas (que tem REFERENCES tenants(id)) - sem isso, como cada modulo cria sua
+// tabela de forma assincrona e independente no momento do import, um modulo importado ANTES
+// de tenants.js (ou so mais rapido no race) podia tentar criar sua tabela com a FK apontando
+// pra "tenants" antes dela existir de verdade, e quebrar com "relation tenants does not exist"
+export const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabela de tenants:', err.message);
 });
 

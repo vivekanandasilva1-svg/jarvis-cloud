@@ -4,9 +4,11 @@
 // (a sincronizacao e "best effort", nunca trava a agenda por causa de uma falha externa).
 import { pool } from './db.js';
 import * as googleCalendar from './googleCalendar.js';
+import { tabelasProntas as tenantsProntos } from './tenants.js';
 
 async function garantirTabela() {
   if (!pool) return;
+  await tenantsProntos; // tenants precisa existir antes (REFERENCES tenants(id) abaixo)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS agenda_eventos (
       id SERIAL PRIMARY KEY,

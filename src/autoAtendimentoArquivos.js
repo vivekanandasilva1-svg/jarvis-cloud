@@ -3,9 +3,11 @@
 // (ex: catalogo, tabela de precos, video institucional). Guardado no Postgres como bytea -
 // simples e consistente com o resto do app, sem precisar de storage externo.
 import { pool } from './db.js';
+import { tabelasProntas as tenantsProntos } from './tenants.js';
 
 async function garantirTabela() {
   if (!pool) return;
+  await tenantsProntos; // tenants precisa existir antes (REFERENCES tenants(id) abaixo)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS auto_atendimento_arquivos (
       id SERIAL PRIMARY KEY,

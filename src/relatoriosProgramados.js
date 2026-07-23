@@ -7,6 +7,7 @@ import { pool } from './db.js';
 import * as metaAds from './metaads.js';
 import * as clinicorp from './clinicorp.js';
 import { enviarMensagemTexto, enviarMensagemTextoPor } from './evolutionApi.js';
+import { tabelasProntas as tenantsProntos } from './tenants.js';
 
 export const TIPOS_RELATORIO = ['ads_financeiro', 'ads_metricas', 'clinica_financeiro', 'clinica_agendamentos', 'ads_saldo_baixo'];
 // as duas primeiras (X_horas) existem so pra fazer sentido no alerta de saldo baixo (precisa
@@ -52,6 +53,7 @@ function diasCalendarioEntre(dataIsoAntiga, dataIsoNova) {
 
 async function garantirTabelas() {
   if (!pool) return;
+  await tenantsProntos; // tenants precisa existir antes (REFERENCES tenants(id) abaixo)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS relatorio_destinatarios (
       id SERIAL PRIMARY KEY,

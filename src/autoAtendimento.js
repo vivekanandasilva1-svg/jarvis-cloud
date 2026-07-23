@@ -13,11 +13,13 @@ import * as crm from './crm.js';
 import { transcrever } from './whisper.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
 import { moedaPorExtenso } from './numeroPorExtenso.js';
+import { tabelasProntas as tenantsProntos } from './tenants.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function garantirTabelas() {
   if (!pool) return;
+  await tenantsProntos; // tenants precisa existir antes (REFERENCES tenants(id) abaixo)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS auto_atendimento_config (
       tenant_id INT PRIMARY KEY REFERENCES tenants(id),

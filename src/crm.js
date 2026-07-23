@@ -6,6 +6,7 @@
 import { EventEmitter } from 'node:events';
 import { pool } from './db.js';
 import * as evolutionApi from './evolutionApi.js';
+import { tabelasProntas as tenantsProntos } from './tenants.js';
 
 // avisa quem estiver ouvindo (endpoint SSE em server.js) sempre que uma mensagem nova entra ou
 // sai de alguma conversa - e o que da o "tempo real" da aba CRM, sem precisar de polling
@@ -27,6 +28,7 @@ const IDS_ETAPAS = new Set(ETAPAS.map((e) => e.id));
 
 async function garantirTabelas() {
   if (!pool) return;
+  await tenantsProntos; // tenants precisa existir antes (REFERENCES tenants(id) abaixo)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS crm_contatos (
       id SERIAL PRIMARY KEY,

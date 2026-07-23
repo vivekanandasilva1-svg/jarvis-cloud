@@ -5,9 +5,11 @@
 // dele. O app OAuth (client id/secret) e compartilhado entre todos os tenants (1 app cadastrado
 // no Google Cloud) - so os TOKENS sao por tenant, cada um fazendo o proprio consentimento.
 import { pool } from './db.js';
+import { tabelasProntas as tenantsProntos } from './tenants.js';
 
 async function garantirTabela() {
   if (!pool) return;
+  await tenantsProntos; // tenants precisa existir antes (REFERENCES tenants(id) abaixo)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS google_calendar_tokens (
       tenant_id INT PRIMARY KEY REFERENCES tenants(id),

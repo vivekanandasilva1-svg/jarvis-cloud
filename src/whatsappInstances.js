@@ -2,9 +2,11 @@
 // guardado no Postgres, 1 linha por tenant, pra dar pra trocar direto pela aba WhatsApp do app
 // sem precisar mexer no servidor.
 import { pool } from './db.js';
+import { tabelasProntas as tenantsProntos } from './tenants.js';
 
 async function garantirTabela() {
   if (!pool) return;
+  await tenantsProntos; // tenants precisa existir antes (REFERENCES tenants(id) abaixo)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS whatsapp_config (
       tenant_id INT PRIMARY KEY REFERENCES tenants(id),
