@@ -66,12 +66,23 @@ const tabBtnWhatsapp = document.getElementById('tabBtnWhatsapp');
 const tabBtnCrm = document.getElementById('tabBtnCrm');
 const tabBtnAuto = document.getElementById('tabBtnAuto');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
+const tabBtnClientes = document.getElementById('tabBtnClientes');
 const tabPainel = document.getElementById('tabPainel');
 const tabAgenda = document.getElementById('tabAgenda');
 const tabWhatsapp = document.getElementById('tabWhatsapp');
 const tabCrm = document.getElementById('tabCrm');
 const tabAuto = document.getElementById('tabAuto');
 const tabRelatorios = document.getElementById('tabRelatorios');
+const tabClientes = document.getElementById('tabClientes');
+
+// ---------- Clientes (admin - so super_admin ve): elementos ----------
+const clienteNomeInput = document.getElementById('clienteNomeInput');
+const clienteUsuarioInput = document.getElementById('clienteUsuarioInput');
+const clienteSenhaInput = document.getElementById('clienteSenhaInput');
+const clienteCriarBtn = document.getElementById('clienteCriarBtn');
+const clienteCriarErro = document.getElementById('clienteCriarErro');
+const clientesLista = document.getElementById('clientesLista');
+const clienteIntegracoesPainel = document.getElementById('clienteIntegracoesPainel');
 const agendaGoogleStatus = document.getElementById('agendaGoogleStatus');
 const agendaGoogleBtn = document.getElementById('agendaGoogleBtn');
 const agendaForm = document.getElementById('agendaForm');
@@ -244,14 +255,21 @@ async function tentarEntrar(usuario, senha) {
   }
 }
 
+// so o dono da Lumia (tenant 1) tem isso true - controla se a aba "Clientes" aparece.
+// Preenchido por tokenValido()/mostrarApp() ao consultar /api/me.
+let souSuperAdmin = false;
+
 // confirma que o token guardado ainda e valido (nao expirou, tenant continua ativo) - chamado
 // no carregamento da pagina, ja que um token velho nao pode mais ser "reenviado como senha"
-// pra revalidar como acontecia antes
+// pra revalidar como acontecia antes. Aproveita e guarda se esse tenant e super_admin.
 async function tokenValido() {
   if (!appPassword) return false;
   try {
     const res = await fetch('/api/me', { headers: { 'x-app-password': appPassword } });
-    return res.ok;
+    if (!res.ok) return false;
+    const data = await res.json().catch(() => null);
+    souSuperAdmin = !!data?.superAdmin;
+    return true;
   } catch {
     return false;
   }
@@ -260,6 +278,7 @@ async function tokenValido() {
 function mostrarApp() {
   loginScreen.hidden = true;
   appWindow.hidden = false;
+  tabBtnClientes.hidden = !souSuperAdmin;
   if (!chatLog.childElementCount) {
     addBubble('Lumia pronta. Digite, aperte o microfone ou ative o modo conversa.', 'system');
   }
@@ -308,6 +327,7 @@ loginForm.addEventListener('submit', async (e) => {
   }
   appPassword = token;
   sessionStorage.setItem('jarvis_password', token);
+  await tokenValido(); // so pra popular souSuperAdmin antes de decidir mostrar a aba "Clientes"
   mostrarApp();
 });
 
@@ -1725,12 +1745,14 @@ function mudarAba(aba) {
   tabCrm.hidden = aba !== 'crm';
   tabAuto.hidden = aba !== 'auto';
   tabRelatorios.hidden = aba !== 'relatorios';
+  tabClientes.hidden = aba !== 'clientes';
   tabBtnPainel.classList.toggle('active', aba === 'painel');
   tabBtnAgenda.classList.toggle('active', aba === 'agenda');
   tabBtnWhatsapp.classList.toggle('active', aba === 'whatsapp');
   tabBtnCrm.classList.toggle('active', aba === 'crm');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
+  tabBtnClientes.classList.toggle('active', aba === 'clientes');
   if (aba === 'agenda') {
     carregarStatusGoogleAgenda();
     carregarEventosAgenda();
@@ -1744,6 +1766,8 @@ function mudarAba(aba) {
   } else if (aba === 'relatorios') {
     carregarDestinatariosRelatorios();
     carregarConfigsRelatorios();
+  } else if (aba === 'clientes') {
+    carregarClientes();
   }
   // o polling do CRM (contatos + conversa aberta) so deve rodar com a aba visivel, senao fica
   // batendo na API/banco a toa em segundo plano pra sempre
@@ -1756,6 +1780,7 @@ tabBtnWhatsapp.addEventListener('click', () => mudarAba('whatsapp'));
 tabBtnCrm.addEventListener('click', () => mudarAba('crm'));
 tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
+tabBtnClientes.addEventListener('click', () => mudarAba('clientes'));
 
 // ---------- Agenda: Google Agenda (conectar/desconectar) ----------
 async function carregarStatusGoogleAgenda() {
@@ -3350,4 +3375,275 @@ function criarCardConfigRelatorio(cfg, instancias) {
   card.appendChild(enviarBtn);
 
   return card;
+}
+
+// ---------- Clientes (painel admin - so super_admin ve, ver tokenValido()/mostrarApp()) ----------
+// cadastro manual de tenant novo (decisao explicita do usuario: sem cadastro publico/cobranca
+// automatica por enquanto) + configuracao das integracoes isoladas de cada um (Clinicorp, Meta
+// Ads, Trello) - nunca mostra o segredo salvo de volta, so confirma o que ja esta configurado.
+let clienteSelecionadoId = null;
+
+async function carregarClientes() {
+  clientesLista.textContent = '';
+  const carregando = document.createElement('p');
+  carregando.className = 'agenda-vazia';
+  carregando.textContent = 'Carregando...';
+  clientesLista.appendChild(carregando);
+
+  try {
+    const res = await fetch('/api/admin/tenants', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    clientesLista.textContent = '';
+
+    if (!data.tenants.length) {
+      const vazio = document.createElement('p');
+      vazio.className = 'agenda-vazia';
+      vazio.textContent = 'Nenhum cliente cadastrado ainda.';
+      clientesLista.appendChild(vazio);
+      return;
+    }
+
+    for (const t of data.tenants) {
+      const card = document.createElement('div');
+      card.className = 'cliente-card' + (t.id === clienteSelecionadoId ? ' selecionado' : '');
+      card.addEventListener('click', () => selecionarCliente(t.id, t.nome));
+
+      const nome = document.createElement('div');
+      nome.className = 'cliente-card-nome';
+      nome.textContent = t.nome;
+      card.appendChild(nome);
+
+      const meta = document.createElement('div');
+      meta.className = 'cliente-card-meta';
+      meta.textContent = `usuario: ${t.username}`;
+      card.appendChild(meta);
+
+      const row = document.createElement('div');
+      row.className = 'cliente-card-row';
+      const status = document.createElement('span');
+      status.className = 'cliente-card-meta';
+      status.textContent = t.ativo ? 'Ativo' : 'Desativado';
+      row.appendChild(status);
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      toggleBtn.textContent = t.ativo ? 'Desativar' : 'Ativar';
+      toggleBtn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        try {
+          await fetch(`/api/admin/tenants/${t.id}/ativo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+            body: JSON.stringify({ ativo: !t.ativo }),
+          });
+          carregarClientes();
+        } catch (err) {
+          addBubble(`Erro atualizando cliente: ${err.message}`, 'system');
+        }
+      });
+      row.appendChild(toggleBtn);
+      card.appendChild(row);
+
+      clientesLista.appendChild(card);
+    }
+  } catch (err) {
+    clientesLista.textContent = '';
+    const erro = document.createElement('p');
+    erro.className = 'agenda-vazia';
+    erro.textContent = `Nao consegui carregar os clientes: ${err.message}`;
+    clientesLista.appendChild(erro);
+  }
+}
+
+clienteCriarBtn.addEventListener('click', async () => {
+  const nome = clienteNomeInput.value.trim();
+  const username = clienteUsuarioInput.value.trim();
+  const senha = clienteSenhaInput.value;
+  clienteCriarErro.hidden = true;
+  if (!nome || !username || !senha) {
+    clienteCriarErro.textContent = 'Preenche nome, usuario e senha.';
+    clienteCriarErro.hidden = false;
+    return;
+  }
+  try {
+    const res = await fetch('/api/admin/tenants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ nome, username, senha }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    clienteNomeInput.value = '';
+    clienteUsuarioInput.value = '';
+    clienteSenhaInput.value = '';
+    carregarClientes();
+  } catch (err) {
+    clienteCriarErro.textContent = err.message;
+    clienteCriarErro.hidden = false;
+  }
+});
+
+async function selecionarCliente(id, nome) {
+  clienteSelecionadoId = id;
+  carregarClientes(); // redesenha pra marcar o card selecionado
+  clienteIntegracoesPainel.textContent = '';
+
+  const titulo = document.createElement('h3');
+  titulo.textContent = `Integracoes de "${nome}"`;
+  clienteIntegracoesPainel.appendChild(titulo);
+
+  const carregandoIntegracoes = document.createElement('p');
+  carregandoIntegracoes.className = 'agenda-vazia';
+  carregandoIntegracoes.textContent = 'Carregando...';
+  clienteIntegracoesPainel.appendChild(carregandoIntegracoes);
+
+  let resumo;
+  try {
+    const res = await fetch(`/api/admin/tenants/${id}/integracoes`, { headers: { 'x-app-password': appPassword } });
+    resumo = await res.json();
+    if (!res.ok) throw new Error(resumo.erro || 'erro desconhecido');
+  } catch (err) {
+    clienteIntegracoesPainel.textContent = '';
+    clienteIntegracoesPainel.appendChild(titulo);
+    const erro = document.createElement('p');
+    erro.className = 'agenda-vazia';
+    erro.textContent = `Nao consegui carregar as integracoes: ${err.message}`;
+    clienteIntegracoesPainel.appendChild(erro);
+    return;
+  }
+
+  clienteIntegracoesPainel.textContent = '';
+  clienteIntegracoesPainel.appendChild(titulo);
+
+  // ---- Clinicorp ----
+  const clinicorpLabel = document.createElement('label'); clinicorpLabel.className = 'auto-label'; clinicorpLabel.textContent = 'Clinicorp';
+  clienteIntegracoesPainel.appendChild(clinicorpLabel);
+  const clinicorpStatus = document.createElement('p');
+  clinicorpStatus.className = 'agenda-vazia';
+  clinicorpStatus.textContent = resumo.clinicorp
+    ? `Conectado (usuario: ${resumo.clinicorp.apiUser})`
+    : 'Nao conectado.';
+  clienteIntegracoesPainel.appendChild(clinicorpStatus);
+
+  const clinicorpForm = document.createElement('div');
+  clinicorpForm.className = 'cliente-form';
+  const ccApiUser = document.createElement('input'); ccApiUser.placeholder = 'API User';
+  const ccApiToken = document.createElement('input'); ccApiToken.placeholder = 'API Token'; ccApiToken.type = 'password';
+  const ccSubscriber = document.createElement('input'); ccSubscriber.placeholder = 'Subscriber ID';
+  const ccBusiness = document.createElement('input'); ccBusiness.placeholder = 'Default Business ID (opcional)';
+  const ccSalvar = document.createElement('button'); ccSalvar.type = 'button'; ccSalvar.textContent = 'Salvar Clinicorp';
+  ccSalvar.addEventListener('click', async () => {
+    try {
+      const res = await fetch(`/api/admin/tenants/${id}/integracoes/clinicorp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ apiUser: ccApiUser.value.trim(), apiToken: ccApiToken.value, subscriberId: ccSubscriber.value.trim(), defaultBusinessId: ccBusiness.value.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+      selecionarCliente(id, nome);
+    } catch (err) {
+      addBubble(`Erro salvando Clinicorp: ${err.message}`, 'system');
+    }
+  });
+  clinicorpForm.append(ccApiUser, ccApiToken, ccSubscriber, ccBusiness, ccSalvar);
+  clienteIntegracoesPainel.appendChild(clinicorpForm);
+
+  // ---- Meta Ads ----
+  const metaAdsLabel = document.createElement('label'); metaAdsLabel.className = 'auto-label'; metaAdsLabel.textContent = 'Meta Ads';
+  clienteIntegracoesPainel.appendChild(metaAdsLabel);
+  const metaAdsStatus = document.createElement('p');
+  metaAdsStatus.className = 'agenda-vazia';
+  metaAdsStatus.textContent = resumo.metaAds.length
+    ? `${resumo.metaAds.length} conta(s) conectada(s): ${resumo.metaAds.join(', ')}`
+    : 'Nenhuma conta conectada.';
+  clienteIntegracoesPainel.appendChild(metaAdsStatus);
+
+  const metaAdsForm = document.createElement('div');
+  metaAdsForm.className = 'cliente-form';
+  const maAviso = document.createElement('p');
+  maAviso.className = 'agenda-vazia';
+  maAviso.textContent = 'Cole 1 conta por linha, no formato "Nome da empresa | token_de_acesso". Isso SUBSTITUI a lista atual desse cliente.';
+  const maTextarea = document.createElement('textarea');
+  maTextarea.placeholder = 'Ex:\nClinica Sorriso | EAABw...token...\nOutra Empresa | EAABw...token2...';
+  maTextarea.rows = 4;
+  const maSalvar = document.createElement('button'); maSalvar.type = 'button'; maSalvar.textContent = 'Salvar Meta Ads';
+  maSalvar.addEventListener('click', async () => {
+    const linhas = maTextarea.value.split('\n').map((l) => l.trim()).filter(Boolean);
+    const tokens = linhas.map((l) => {
+      const [label, token] = l.split('|').map((p) => p?.trim());
+      return { label: label || 'Conta', token: token || '' };
+    }).filter((t) => t.token);
+    try {
+      const res = await fetch(`/api/admin/tenants/${id}/integracoes/metaads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ tokens }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+      selecionarCliente(id, nome);
+    } catch (err) {
+      addBubble(`Erro salvando Meta Ads: ${err.message}`, 'system');
+    }
+  });
+  metaAdsForm.append(maAviso, maTextarea, maSalvar);
+  clienteIntegracoesPainel.appendChild(metaAdsForm);
+
+  // ---- Trello ----
+  const trelloLabel = document.createElement('label'); trelloLabel.className = 'auto-label'; trelloLabel.textContent = 'Trello';
+  clienteIntegracoesPainel.appendChild(trelloLabel);
+  const trelloStatus = document.createElement('p');
+  trelloStatus.className = 'agenda-vazia';
+  trelloStatus.textContent = resumo.trello ? 'Conectado.' : 'Nao conectado.';
+  clienteIntegracoesPainel.appendChild(trelloStatus);
+
+  const trelloForm = document.createElement('div');
+  trelloForm.className = 'cliente-form';
+  const trApiKey = document.createElement('input'); trApiKey.placeholder = 'API Key';
+  const trToken = document.createElement('input'); trToken.placeholder = 'Token'; trToken.type = 'password';
+  const trSalvar = document.createElement('button'); trSalvar.type = 'button'; trSalvar.textContent = 'Salvar Trello';
+  trSalvar.addEventListener('click', async () => {
+    try {
+      const res = await fetch(`/api/admin/tenants/${id}/integracoes/trello`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ apiKey: trApiKey.value.trim(), token: trToken.value.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+      selecionarCliente(id, nome);
+    } catch (err) {
+      addBubble(`Erro salvando Trello: ${err.message}`, 'system');
+    }
+  });
+  trelloForm.append(trApiKey, trToken, trSalvar);
+  clienteIntegracoesPainel.appendChild(trelloForm);
+
+  // ---- Redefinir senha ----
+  const senhaLabel = document.createElement('label'); senhaLabel.className = 'auto-label'; senhaLabel.textContent = 'Redefinir senha de acesso';
+  clienteIntegracoesPainel.appendChild(senhaLabel);
+  const senhaForm = document.createElement('div');
+  senhaForm.className = 'cliente-form';
+  const novaSenhaInput = document.createElement('input'); novaSenhaInput.placeholder = 'Nova senha'; novaSenhaInput.type = 'password';
+  const senhaSalvar = document.createElement('button'); senhaSalvar.type = 'button'; senhaSalvar.textContent = 'Redefinir senha';
+  senhaSalvar.addEventListener('click', async () => {
+    if (!novaSenhaInput.value) return;
+    try {
+      const res = await fetch(`/api/admin/tenants/${id}/senha`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ novaSenha: novaSenhaInput.value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+      novaSenhaInput.value = '';
+      addBubble(`Senha de "${nome}" redefinida.`, 'system');
+    } catch (err) {
+      addBubble(`Erro redefinindo senha: ${err.message}`, 'system');
+    }
+  });
+  senhaForm.append(novaSenhaInput, senhaSalvar);
+  clienteIntegracoesPainel.appendChild(senhaForm);
 }

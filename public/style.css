@@ -1466,6 +1466,45 @@ html, body {
   gap: 8px;
 }
 .auto-arquivos-header { font-size: 13px; font-weight: 600; color: var(--text); }
+.cliente-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.cliente-form input, .cliente-form textarea {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+}
+.cliente-form input:focus, .cliente-form textarea:focus { border-color: var(--gold); }
+.cliente-form button {
+  align-self: flex-start;
+  border: 1px solid rgba(212, 175, 55, 0.5);
+  background: rgba(212, 175, 55, 0.16);
+  color: var(--gold-bright);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cliente-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.cliente-card.selecionado { border-color: var(--gold); }
+.cliente-card-nome { font-size: 13px; font-weight: 600; color: var(--text); }
+.cliente-card-meta { font-size: 11px; color: var(--text-dim); }
+.cliente-card-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .auto-upload-row { display: flex; align-items: center; gap: 10px; }
 .auto-upload-row button,
 .auto-arquivos-wrap > button {

@@ -115,3 +115,20 @@ export async function salvarTrello(tenantId, { apiKey, token }) {
     [tenantId, apiKey, encrypt(token)],
   );
 }
+
+// resumo pro painel "Clientes" (aba admin) - so diz O QUE ESTA configurado, nunca devolve o
+// segredo em si de volta pro navegador (o apiUser do Clinicorp e o label de cada conta de Ads
+// nao sao segredo, servem so pra confirmar visualmente qual conta ta conectada)
+export async function obterResumo(tenantId) {
+  if (!pool) return { clinicorp: null, metaAds: [], trello: false };
+  const [clinicorp, metaAdsTokens, trello] = await Promise.all([
+    obterClinicorp(tenantId),
+    obterMetaAdsTokens(tenantId),
+    obterTrello(tenantId),
+  ]);
+  return {
+    clinicorp: clinicorp ? { apiUser: clinicorp.apiUser, subscriberId: clinicorp.subscriberId } : null,
+    metaAds: metaAdsTokens.map((t) => t.label),
+    trello: !!trello,
+  };
+}

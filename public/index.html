@@ -72,6 +72,7 @@
       <button type="button" class="tab-btn" id="tabBtnCrm" data-tab="crm">CRM</button>
       <button type="button" class="tab-btn" id="tabBtnAuto" data-tab="auto">Auto Atendimento</button>
       <button type="button" class="tab-btn" id="tabBtnRelatorios" data-tab="relatorios">Relatórios</button>
+      <button type="button" class="tab-btn" id="tabBtnClientes" data-tab="clientes" hidden>Clientes</button>
     </div>
 
     <div class="agent-panel" id="agentPanel" hidden>
@@ -519,6 +520,33 @@
 
       <div class="auto-coluna-dir" id="relatorioConfigsLista">
         <p class="agenda-vazia">Carregando...</p>
+      </div>
+    </div>
+
+    <div class="window-body tab-auto" id="tabClientes" hidden>
+      <div class="auto-coluna-esq">
+        <div class="auto-aviso">
+          Cadastre aqui cada cliente novo que for usar a Lumia - cada um recebe login proprio
+          e fica completamente isolado dos dados e credenciais dos outros (inclusive das suas).
+        </div>
+
+        <label class="auto-label">Cadastrar cliente novo</label>
+        <div class="cliente-form">
+          <input type="text" id="clienteNomeInput" placeholder="Nome do negocio (ex: Clinica Sorriso)" />
+          <input type="text" id="clienteUsuarioInput" placeholder="Usuario de login" />
+          <input type="password" id="clienteSenhaInput" placeholder="Senha" />
+          <button type="button" id="clienteCriarBtn">Criar cliente</button>
+        </div>
+        <p class="agenda-erro" id="clienteCriarErro" hidden></p>
+
+        <label class="auto-label">Clientes cadastrados</label>
+        <div class="auto-arquivos-lista" id="clientesLista">
+          <p class="agenda-vazia">Carregando...</p>
+        </div>
+      </div>
+
+      <div class="auto-coluna-dir" id="clienteIntegracoesPainel">
+        <p class="agenda-vazia">Selecione um cliente na lista pra ver/configurar as integrações dele.</p>
       </div>
     </div>
   </div>

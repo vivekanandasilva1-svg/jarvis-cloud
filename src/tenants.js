@@ -19,6 +19,10 @@ async function garantirTabelas() {
       criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // super_admin = enxerga a aba "Clientes" (criar/gerenciar outros tenants) - so o dono da
+  // Lumia (tenant 1) tem isso; nenhum cliente que comprar o produto deve ver essa aba
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS super_admin BOOLEAN NOT NULL DEFAULT false;`);
+  await pool.query(`UPDATE tenants SET super_admin = true WHERE id = 1 AND super_admin = false;`);
   // qual tenant e dono de cada instancia do Evolution API - usado pra rotear mensagem
   // recebida no webhook (que so identifica a instancia, nao tem conceito de tenant) pro
   // tenant certo. 1 instancia so pode pertencer a 1 tenant.
@@ -107,21 +111,47 @@ export async function autenticar(username, senha) {
 export async function obterPorId(id) {
   if (!pool) return null;
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT id, slug, nome, username, ativo FROM tenants WHERE id = $1', [id]);
+  const { rows } = await pool.query('SELECT id, slug, nome, username, ativo, super_admin FROM tenants WHERE id = $1', [id]);
   return rows[0] || null;
 }
 
-// usado pelo painel de provisionamento manual (fase 3) - por enquanto so exportado pra uso
-// via script/console, sem rota HTTP ainda
+// painel "Clientes" (aba nova, so super_admin ve) - lista todo mundo, do jeito mais simples
+export async function listarTenants() {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT id, slug, nome, username, ativo, criado_em FROM tenants ORDER BY criado_em ASC');
+  return rows;
+}
+
+function gerarSlug(nome) {
+  return (nome || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // tira acento
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `cliente-${Date.now()}`;
+}
+
 export async function criarTenant({ slug, nome, username, senha }) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
-  if (!slug || !nome || !username || !senha) throw new Error('slug, nome, username e senha sao obrigatorios');
+  if (!nome || !username || !senha) throw new Error('nome, username e senha sao obrigatorios');
   await tabelasProntas;
+  const slugFinal = slug || gerarSlug(nome);
   const { rows } = await pool.query(
     'INSERT INTO tenants (slug, nome, username, password_hash) VALUES ($1, $2, $3, $4) RETURNING id',
-    [slug, nome, username, hashSenha(senha)],
+    [slugFinal, nome, username, hashSenha(senha)],
   );
   return rows[0].id;
+}
+
+export async function definirAtivo(tenantId, ativo) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  await pool.query('UPDATE tenants SET ativo = $1 WHERE id = $2', [!!ativo, tenantId]);
+}
+
+export async function redefinirSenha(tenantId, novaSenha) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  if (!novaSenha) throw new Error('Nova senha obrigatoria.');
+  await tabelasProntas;
+  await pool.query('UPDATE tenants SET password_hash = $1 WHERE id = $2', [hashSenha(novaSenha), tenantId]);
 }
 
 export { hashSenha };

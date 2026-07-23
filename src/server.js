@@ -22,6 +22,7 @@ import * as autoArquivos from './autoAtendimentoArquivos.js';
 import * as crm from './crm.js';
 import * as relatoriosProgramados from './relatoriosProgramados.js';
 import * as tenants from './tenants.js';
+import * as tenantConfig from './tenantConfig.js';
 
 const execAsync = promisify(exec);
 
@@ -95,13 +96,107 @@ app.get('/api/me', async (req, res) => {
   try {
     const tenant = await tenants.obterPorId(req.tenantId);
     if (!tenant || !tenant.ativo) return res.status(401).json({ erro: 'tenant nao encontrado' });
-    res.json({ tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug });
+    res.json({ tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
 });
 
 app.use(express.static(PUBLIC_DIR));
+
+// ---------- Painel "Clientes" (provisionamento manual de tenant, so o dono/super_admin ve) ----------
+// nao e self-serve de proposito (decisao explicita do usuario) - so quem ja tem super_admin=true
+// consegue criar/gerenciar outros tenants; um cliente comum nem ve essa aba no app (o frontend
+// esconde com base em /api/me.superAdmin), e o backend confere de novo aqui por seguranca.
+async function exigirSuperAdmin(req, res, next) {
+  try {
+    const tenant = await tenants.obterPorId(req.tenantId);
+    if (!tenant?.super_admin) return res.status(403).json({ erro: 'so o administrador pode fazer isso' });
+    next();
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+}
+
+app.get('/api/admin/tenants', exigirSuperAdmin, async (req, res) => {
+  try {
+    res.json({ tenants: await tenants.listarTenants() });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/admin/tenants', exigirSuperAdmin, async (req, res) => {
+  const { nome, username, senha, slug } = req.body || {};
+  if (!nome || !username || !senha) return res.status(400).json({ erro: 'nome, username e senha sao obrigatorios' });
+  try {
+    const id = await tenants.criarTenant({ nome, username, senha, slug });
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/admin/tenants/:id/ativo', exigirSuperAdmin, async (req, res) => {
+  const { ativo } = req.body || {};
+  try {
+    await tenants.definirAtivo(Number(req.params.id), !!ativo);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/admin/tenants/:id/senha', exigirSuperAdmin, async (req, res) => {
+  const { novaSenha } = req.body || {};
+  try {
+    await tenants.redefinirSenha(Number(req.params.id), novaSenha);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/admin/tenants/:id/integracoes', exigirSuperAdmin, async (req, res) => {
+  try {
+    res.json(await tenantConfig.obterResumo(Number(req.params.id)));
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/admin/tenants/:id/integracoes/clinicorp', exigirSuperAdmin, async (req, res) => {
+  const { apiUser, apiToken, subscriberId, defaultBusinessId } = req.body || {};
+  if (!apiUser || !apiToken) return res.status(400).json({ erro: 'apiUser e apiToken sao obrigatorios' });
+  try {
+    await tenantConfig.salvarClinicorp(Number(req.params.id), { apiUser, apiToken, subscriberId, defaultBusinessId });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/admin/tenants/:id/integracoes/metaads', exigirSuperAdmin, async (req, res) => {
+  const { tokens } = req.body || {};
+  if (!Array.isArray(tokens)) return res.status(400).json({ erro: 'tokens precisa ser uma lista de {label, token}' });
+  try {
+    await tenantConfig.salvarMetaAdsTokens(Number(req.params.id), tokens);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/admin/tenants/:id/integracoes/trello', exigirSuperAdmin, async (req, res) => {
+  const { apiKey, token } = req.body || {};
+  if (!apiKey || !token) return res.status(400).json({ erro: 'apiKey e token sao obrigatorios' });
+  try {
+    await tenantConfig.salvarTrello(Number(req.params.id), { apiKey, token });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
 
 // ---------- Stats do sistema (painel do dashboard) ----------
 
