@@ -1,7 +1,10 @@
 :root {
   --bg-0: #0a0a0a;
-  --panel: rgba(18, 17, 14, 0.78);
+  --panel: linear-gradient(155deg, rgba(28, 25, 18, 0.86) 0%, rgba(16, 15, 12, 0.88) 55%, rgba(10, 9, 7, 0.92) 100%);
+  --panel-flat: rgba(18, 17, 14, 0.78);
+  --panel-sheen: linear-gradient(90deg, transparent 0%, rgba(245, 213, 118, 0.55) 50%, transparent 100%);
   --border: rgba(212, 175, 55, 0.28);
+  --border-soft: rgba(212, 175, 55, 0.16);
   --gold: #d4af37;
   --gold-bright: #f5d576;
   --silver: #c9ccd1;
@@ -9,8 +12,10 @@
   --white: #f5f5f0;
   --text: #f0ede4;
   --text-dim: #9a968a;
-  --user-bubble: rgba(212, 175, 55, 0.15);
-  --assistant-bubble: rgba(201, 204, 209, 0.12);
+  --user-bubble: linear-gradient(155deg, rgba(212, 175, 55, 0.22) 0%, rgba(212, 175, 55, 0.1) 100%);
+  --assistant-bubble: linear-gradient(155deg, rgba(201, 204, 209, 0.16) 0%, rgba(201, 204, 209, 0.07) 100%);
+  --shadow-card: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  --shadow-card-hover: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(212, 175, 55, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 * { box-sizing: border-box; }
@@ -20,7 +25,11 @@
 html, body {
   margin: 0;
   height: 100%;
-  background: radial-gradient(1200px 800px at 50% -10%, #201a0d 0%, var(--bg-0) 55%, #000000 100%);
+  background:
+    radial-gradient(900px 620px at 14% -8%, rgba(212, 175, 55, 0.12) 0%, transparent 60%),
+    radial-gradient(760px 640px at 106% 12%, rgba(201, 204, 209, 0.07) 0%, transparent 55%),
+    radial-gradient(1200px 900px at 50% 108%, rgba(212, 175, 55, 0.06) 0%, transparent 60%),
+    radial-gradient(1400px 900px at 50% -10%, #221c0f 0%, var(--bg-0) 55%, #000000 100%);
   color: var(--text);
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
   overflow: hidden;
@@ -178,6 +187,48 @@ html, body {
   flex-direction: column;
   margin: 0 auto;
   position: relative;
+  overflow: hidden;
+}
+
+/* dois "orbes" de luz bem borrados, derivando devagar por tras do conteudo - da sensacao de
+   ambiente vivo/tecnologico sem competir com nada (blur pesado + opacidade baixa, atras de
+   tudo via z-index). Puramente decorativo, sempre atras do window-body de verdade. */
+.app-window::before,
+.app-window::after {
+  content: '';
+  position: absolute;
+  width: 46vmin;
+  height: 46vmin;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.16;
+  pointer-events: none;
+  z-index: 0;
+}
+.app-window::before {
+  top: -12%;
+  left: -8%;
+  background: radial-gradient(circle, var(--gold-bright) 0%, transparent 70%);
+  animation: orbeDerivaA 22s ease-in-out infinite;
+}
+.app-window::after {
+  bottom: -14%;
+  right: -6%;
+  background: radial-gradient(circle, var(--silver) 0%, transparent 70%);
+  animation: orbeDerivaB 26s ease-in-out infinite;
+}
+@keyframes orbeDerivaA {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(6%, 8%) scale(1.12); }
+}
+@keyframes orbeDerivaB {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-6%, -6%) scale(1.1); }
+}
+.app-window > * { position: relative; z-index: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .app-window::before, .app-window::after { animation: none !important; }
 }
 
 @media (min-width: 760px) {
@@ -188,7 +239,7 @@ html, body {
     border-radius: 18px;
     border: 1px solid var(--border);
     overflow: hidden;
-    box-shadow: 0 30px 90px rgba(0,0,0,0.65);
+    box-shadow: 0 30px 90px rgba(0,0,0,0.65), 0 0 0 1px rgba(212, 175, 55, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
 }
 
@@ -199,7 +250,8 @@ html, body {
   gap: 14px;
   padding: 12px 18px;
   border-bottom: 1px solid var(--border);
-  background: rgba(12, 11, 8, 0.9);
+  background: linear-gradient(180deg, rgba(20, 18, 13, 0.95) 0%, rgba(10, 9, 7, 0.92) 100%);
+  box-shadow: 0 1px 0 rgba(212, 175, 55, 0.06);
 }
 
 .brand {
@@ -367,9 +419,10 @@ html, body {
   gap: 4px;
   padding: 8px 18px 0;
   border-bottom: 1px solid var(--border);
-  background: rgba(12, 11, 8, 0.9);
+  background: linear-gradient(180deg, rgba(14, 13, 10, 0.92) 0%, rgba(10, 9, 7, 0.9) 100%);
 }
 .tab-btn {
+  position: relative;
   border: 1px solid transparent;
   border-bottom: none;
   background: none;
@@ -380,12 +433,25 @@ html, body {
   padding: 8px 16px;
   border-radius: 8px 8px 0 0;
   cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease;
 }
-.tab-btn:hover { color: var(--text); }
+.tab-btn:hover { color: var(--text); background: rgba(255, 255, 255, 0.03); }
 .tab-btn.active {
   color: var(--gold-bright);
-  background: var(--bg-0);
+  background: linear-gradient(180deg, rgba(212, 175, 55, 0.14) 0%, rgba(10, 9, 7, 0.001) 100%), var(--bg-0);
   border-color: var(--border);
+  text-shadow: 0 0 10px rgba(212, 175, 55, 0.35);
+}
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold-bright), transparent);
+  box-shadow: 0 0 8px 1px rgba(245, 213, 118, 0.6);
 }
 
 /* em telas bem estreitas (celulares compactos) o relogio + status + "Sair" nao cabem numa
@@ -1588,11 +1654,30 @@ html, body {
 .auto-arquivo-detalhe { font-size: 11px; color: var(--text-dim); margin-top: 2px; overflow-wrap: anywhere; }
 
 .panel {
+  position: relative;
   flex: 0 0 auto;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--panel);
   padding: 12px;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+}
+/* linha fina de luz no topo do card, como o brilho de uma borda de vidro - reforca a
+   sensacao "premium/tecnologico" sem precisar de nenhuma cor fora da paleta */
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: var(--panel-sheen);
+  opacity: 0.6;
+}
+.panel:hover {
+  border-color: rgba(212, 175, 55, 0.45);
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-1px);
 }
 
 .panel-header {
@@ -1611,7 +1696,7 @@ html, body {
   letter-spacing: 0.03em;
   color: var(--text);
 }
-.panel-title svg { color: var(--gold); flex: 0 0 auto; }
+.panel-title svg { color: var(--gold); flex: 0 0 auto; filter: drop-shadow(0 0 4px rgba(212, 175, 55, 0.5)); }
 
 .panel-refresh, .panel-toggle {
   border: 1px solid var(--border);
@@ -1671,8 +1756,10 @@ html, body {
   border-radius: 8px;
   padding: 6px 4px;
   text-align: center;
-  background: rgba(255, 255, 255, 0.02);
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.015) 100%);
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
+.stat-mini:hover { border-color: rgba(212, 175, 55, 0.5); background: linear-gradient(155deg, rgba(212, 175, 55, 0.1) 0%, rgba(255, 255, 255, 0.02) 100%); }
 .stat-mini-label {
   display: block;
   font-size: 9.5px;
@@ -1687,6 +1774,7 @@ html, body {
   font-weight: 600;
   color: var(--gold-bright);
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 8px rgba(212, 175, 55, 0.35);
 }
 
 /* ---------- Weather ---------- */
@@ -1775,8 +1863,29 @@ html, body {
   position: relative;
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 30%, rgba(212, 175, 55, 0.1), transparent 60%),
+    radial-gradient(circle at 50% 22%, rgba(245, 213, 118, 0.14), transparent 55%),
+    radial-gradient(circle at 15% 85%, rgba(201, 204, 209, 0.08), transparent 50%),
+    radial-gradient(circle at 85% 92%, rgba(212, 175, 55, 0.07), transparent 45%),
     var(--bg-0);
+}
+/* linha de "scanner" bem sutil descendo devagar - reforca a leitura de holograma/tech
+   por tras do avatar sem chamar mais atencao que ele */
+.avatar-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 0%, rgba(245, 213, 118, 0.05) 48%, transparent 100%);
+  background-size: 100% 240%;
+  animation: avatarScan 9s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes avatarScan {
+  0% { background-position: 0 -140%; }
+  50% { background-position: 0 40%; }
+  100% { background-position: 0 -140%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .avatar-stage::after { animation: none !important; }
 }
 
 @media (max-width: 720px) {
@@ -1910,6 +2019,7 @@ html, body {
   border: 1px solid var(--border);
   white-space: pre-wrap;
   word-break: break-word;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
 }
 
 .bubble.user {
@@ -2116,6 +2226,8 @@ html, body {
 .icon-btn:hover, .send-btn:hover {
   border-color: var(--gold);
   color: var(--gold-bright);
+  box-shadow: 0 0 12px rgba(212, 175, 55, 0.25);
+  transform: translateY(-1px);
 }
 
 .mic-btn.active {
@@ -2135,8 +2247,16 @@ html, body {
   font-weight: 600;
   color: var(--gold-bright);
   border-color: rgba(212, 175, 55, 0.45);
+  background: linear-gradient(155deg, rgba(212, 175, 55, 0.22) 0%, rgba(212, 175, 55, 0.08) 100%);
   font-size: 13px;
 }
+.send-btn:hover {
+  background: linear-gradient(155deg, rgba(212, 175, 55, 0.32) 0%, rgba(212, 175, 55, 0.14) 100%);
+  box-shadow: 0 0 16px rgba(212, 175, 55, 0.4);
+}
 
+* { scrollbar-color: rgba(212, 175, 55, 0.35) rgba(255, 255, 255, 0.03); scrollbar-width: thin; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 8px; }
+::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); }
+::-webkit-scrollbar-thumb { background: rgba(212, 175, 55, 0.32); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(212, 175, 55, 0.55); }
