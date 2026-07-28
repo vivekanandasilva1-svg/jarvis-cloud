@@ -137,11 +137,16 @@ async function main() {
   // aqui com os valores reais de producao - nao faz sentido sobrescrever com o valor da env
   // var (que pode nem bater mais). So insere do zero se a tabela estiver genuinamente vazia
   // (instalacao nova); senao so deixa o backfill do passo 5 preencher o tenant_id dessa linha.
-  const instanciaAtiva = process.env.EVOLUTION_INSTANCE || 'Lumia';
   const numeroAdmin = process.env.LUMIA_WHATSAPP_ADMIN || null;
-  const { rows: whatsappConfigExistente } = await pool.query('SELECT 1 FROM whatsapp_config LIMIT 1');
+  const { rows: whatsappConfigExistente } = await pool.query('SELECT instancia_ativa FROM whatsapp_config LIMIT 1');
+  // se ja existe linha real, o roteamento do webhook (passo abaixo) tem que usar a instancia
+  // JA CONFIGURADA nela, nao a env var - senao o mapeamento fica pra um nome de instancia que
+  // ninguem usa e toda mensagem do WhatsApp real passa a ser ignorada silenciosamente
+  const instanciaAtiva = whatsappConfigExistente.length
+    ? whatsappConfigExistente[0].instancia_ativa
+    : (process.env.EVOLUTION_INSTANCE || 'Lumia');
   if (whatsappConfigExistente.length) {
-    console.log(`whatsapp_config ja tem uma linha (dado real de producao) - o backfill do passo 5 so vai preencher o tenant_id dela, sem mexer em instancia_ativa/numero_admin ja configurados.`);
+    console.log(`whatsapp_config ja tem uma linha (dado real de producao) - o backfill do passo 5 so vai preencher o tenant_id dela, sem mexer em instancia_ativa/numero_admin ja configurados. Roteamento do webhook vai usar a instancia real ja configurada: "${instanciaAtiva}".`);
   } else {
     console.log(`whatsapp_config esta vazia - vou criar a linha do tenant ${tenantId} com instancia_ativa="${instanciaAtiva}", numero_admin="${numeroAdmin || '(nenhum)'}" (valores das env vars atuais).`);
     if (!DRY_RUN) {
