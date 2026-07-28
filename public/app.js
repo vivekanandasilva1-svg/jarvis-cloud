@@ -884,6 +884,11 @@ function pararPensamentoVisual() {
 
 // so um audio por vez - qualquer fala nova cancela a anterior, pra nao atropelar
 let audioAtual = null;
+// incrementado toda vez que a fala e interrompida (nova mensagem, botao do microfone) -
+// falarComVozNatural guarda o valor no inicio e confere antes de tocar cada pedaco novo; se
+// mudou no meio (alguem interrompeu), para de tocar os pedacos seguintes em vez de deixar a
+// sequencia em pedacos continuar "por baixo" depois da interrupcao
+let falaTokenAtual = 0;
 
 function base64ParaBlob(base64, tipo) {
   const bin = atob(base64);
@@ -893,15 +898,17 @@ function base64ParaBlob(base64, tipo) {
 }
 
 // revela o texto na bolha em sincronia com o audio, usando o alinhamento de caracteres
-// que o servidor devolve (estimado a partir da duracao real do audio gerado)
+// que o servidor devolve (estimado a partir da duracao real do audio gerado). "prefixo" e o
+// texto das frases ANTERIORES ja faladas por completo (fala em pedacos - ver falarComVozNatural),
+// pra legenda continuar de onde parou em vez de reiniciar do zero a cada frase nova.
 let legendaRAF = null;
-function legendarProgressivo(audio, bubbleEl, characters, starts) {
+function legendarProgressivo(audio, bubbleEl, characters, starts, prefixo = '') {
   cancelAnimationFrame(legendaRAF);
   function atualizar() {
     const t = audio.currentTime;
     let idx = 0;
     while (idx < starts.length && starts[idx] <= t) idx++;
-    bubbleEl.textContent = characters.slice(0, idx).join('');
+    bubbleEl.textContent = prefixo + characters.slice(0, idx).join('');
     chatLog.scrollTop = chatLog.scrollHeight;
     if (!audio.paused && !audio.ended) legendaRAF = requestAnimationFrame(atualizar);
   }
@@ -914,68 +921,143 @@ function pararLegenda(bubbleEl, textoCompleto) {
   if (bubbleEl) bubbleEl.textContent = textoCompleto;
 }
 
-async function falarComVozNatural(texto, bubbleEl) {
-  // sem isso, o intervalo entre a resposta chegar (bolha "pensando" ja some antes daqui) e o
-  // audio comecar a tocar ficava com a tela parada, sem feedback nenhum - parecia travado
-  // mesmo quando o Kokoro so estava demorando um pouco (VPS sob carga)
-  mostrarBolhaStatus('gerando_audio', 'Gerando audio...');
-  let res;
-  try {
-    res = await fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-      body: JSON.stringify({ text: texto }),
-    });
-  } finally {
-    removerBolhaStatus();
+// divide a resposta em pedacos falaveis - o Kokoro (voz auto-hospedada, sem GPU) e bem mais
+// lento que tempo real pra gerar (medido ao vivo: ~2s de custo fixo so pra abrir a chamada +
+// ~0.15s por caractere - uma frase de 94 caracteres levou 17.5s), entao gerar a resposta INTEIRA
+// antes de comecar a falar deixava a Lumia muda por 10-20s numa resposta media.
+// Como o Kokoro so tem 1.5 nucleo de CPU pra trabalhar, gerar TODOS os pedacos em pedacos
+// igualmente pequenos criaria pausas no MEIO da fala tambem (cada pedaco leva mais tempo pra
+// gerar do que o anterior leva pra tocar) - a abertura pequena reduz drasticamente so o tempo
+// ATE ela comecar a falar (o que foi reclamado), e os pedacos seguintes ficam maiores (menos
+// chamadas = menos custo fixo somado no total, ainda gerando em paralelo enquanto ela fala).
+const TAMANHO_MAX_ABERTURA = 40;
+const TAMANHO_MINIMO_FRASE = 90;
+function dividirEmFrasesParaFala(texto) {
+  const brutas = texto
+    .split(/(?<=[.!?])\s+(?=[A-ZÀ-ÖØ-Ý0-9"“(])/g)
+    .map((f) => f.trim())
+    .filter(Boolean);
+  const sentencas = brutas.length ? brutas : [texto];
+
+  // a abertura (primeiro pedaco) fica bem menor que o resto - corta na virgula ou espaco mais
+  // proximo dentro do limite, nunca no meio de uma palavra
+  let abertura = sentencas[0];
+  let restoDaPrimeira = '';
+  if (abertura.length > TAMANHO_MAX_ABERTURA) {
+    const trecho = abertura.slice(0, TAMANHO_MAX_ABERTURA);
+    // so corta em virgula SEGUIDA DE ESPACO (pausa de verdade, "Sim, tudo bem") - uma virgula
+    // decimal/de milhar ("50.000,00") nunca tem espaco depois, entao nunca vira ponto de corte
+    const idxVirgula = trecho.lastIndexOf(', ');
+    const idxEspaco = trecho.lastIndexOf(' ');
+    const corte = idxVirgula > 10 ? idxVirgula + 1 : idxEspaco;
+    if (corte > 10) {
+      restoDaPrimeira = abertura.slice(corte).trim();
+      abertura = abertura.slice(0, corte).trim();
+    }
   }
+
+  const demais = restoDaPrimeira ? [restoDaPrimeira, ...sentencas.slice(1)] : sentencas.slice(1);
+  const frases = [abertura];
+  let atual = '';
+  for (const f of demais) {
+    atual = atual ? `${atual} ${f}` : f;
+    if (atual.length >= TAMANHO_MINIMO_FRASE) { frases.push(atual); atual = ''; }
+  }
+  if (atual) frases.push(atual);
+  return frases;
+}
+
+async function buscarTts(texto) {
+  const res = await fetch('/api/tts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+    body: JSON.stringify({ text: texto }),
+  });
   if (!res.ok) throw new Error('tts indisponivel');
   const data = await res.json();
   if (!data.audio || !data.alignment) throw new Error('tts sem alinhamento');
-  // texto normalizado (ex: "R$" -> "Real", "14h" -> "14 horas") que foi de fato falado - usa
-  // ele na legenda final tambem, senao ela mostraria isso durante a fala e "pularia" de volta
-  // pro texto original no instante em que o audio termina
-  const textoFalado = data.textoFalado || texto;
+  return data;
+}
 
-  if (audioAtual) { audioAtual.pause(); audioAtual = null; }
+// toca UM pedaco ja gerado, esperando ele terminar (ou dar erro/timeout) antes de resolver -
+// so dispara iniciarFalaVisual() se ainda nao estava falando (fala continua entre pedacos, sem
+// reiniciar a animacao/crossfade do avatar a cada frase nova) e so encerra a fala visual/legenda
+// se for o ULTIMO pedaco (senao o proximo pedaco assume sem soletrar tudo de novo)
+function tocarPedacoDeFala(data, bubbleEl, prefixoLegenda, ehUltimo) {
+  return new Promise((resolve) => {
+    const blob = base64ParaBlob(data.audio, 'audio/mpeg');
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audioAtual = audio;
 
-  const blob = base64ParaBlob(data.audio, 'audio/mpeg');
-  const url = URL.createObjectURL(blob);
-  const audio = new Audio(url);
-  audioAtual = audio;
-
-  const ctx = ensureAudioContext();
-  if (ctx.state === 'suspended') await ctx.resume();
-  const source = ctx.createMediaElementSource(audio);
-  source.connect(ctx.destination);
-
-  const characters = data.alignment.characters || [];
-  const starts = data.alignment.character_start_times_seconds || [];
-
-  await new Promise((resolve) => {
+    const characters = data.alignment.characters || [];
+    const starts = data.alignment.character_start_times_seconds || [];
     let timeoutSeguranca = null;
+
     audio.onplay = () => {
       clearTimeout(timeoutSeguranca);
-      setStatus('falando', 'speaking');
-      iniciarFalaVisual();
-      if (bubbleEl) legendarProgressivo(audio, bubbleEl, characters, starts);
+      if (!estaFalando()) {
+        setStatus('falando', 'speaking');
+        iniciarFalaVisual();
+      }
+      if (bubbleEl) legendarProgressivo(audio, bubbleEl, characters, starts, prefixoLegenda);
     };
     const finalizar = () => {
       clearTimeout(timeoutSeguranca);
-      pararFalaVisual();
-      pararLegenda(bubbleEl, textoFalado);
+      if (ehUltimo) {
+        pararFalaVisual();
+        pararLegenda(bubbleEl, prefixoLegenda + (data.textoFalado || ''));
+      }
       URL.revokeObjectURL(url);
       if (audioAtual === audio) audioAtual = null;
       resolve();
     };
     audio.onended = finalizar;
     audio.onerror = finalizar;
-    audio.play().catch(finalizar);
+    const ctx = ensureAudioContext();
+    (ctx.state === 'suspended' ? ctx.resume() : Promise.resolve()).then(() => {
+      const source = ctx.createMediaElementSource(audio);
+      source.connect(ctx.destination);
+      audio.play().catch(finalizar);
+    });
     // se o <audio> nunca disparar "ended" (aba em segundo plano, engasgo do SO etc), o modo
     // conversa ficava esperando pra sempre sem nunca voltar a ouvir - rede de seguranca com
     // folga generosa (duracao estimada do audio, com minimo de 6s)
     timeoutSeguranca = setTimeout(finalizar, Math.max(6000, (starts[starts.length - 1] || 0) * 1000 + 4000));
   });
+}
+
+async function falarComVozNatural(texto, bubbleEl) {
+  if (audioAtual) { audioAtual.pause(); audioAtual = null; }
+  const meuToken = ++falaTokenAtual;
+
+  const frases = dividirEmFrasesParaFala(texto);
+
+  // sem isso, o intervalo entre a resposta chegar (bolha "pensando" ja some antes daqui) e o
+  // audio comecar a tocar ficava com a tela parada, sem feedback nenhum - parecia travado
+  // mesmo quando o Kokoro so estava demorando um pouco (VPS sob carga)
+  mostrarBolhaStatus('gerando_audio', 'Gerando audio...');
+  let proxima = buscarTts(frases[0]);
+  let textoRevelado = '';
+
+  for (let i = 0; i < frases.length; i++) {
+    let data;
+    try {
+      data = await proxima;
+    } finally {
+      if (i === 0) removerBolhaStatus();
+    }
+    // interrompida (mic/nova mensagem) - encerra a fala/legenda em vez de tocar o resto dos
+    // pedacos "por baixo" ou deixar o avatar preso na pose de fala pra sempre
+    if (meuToken !== falaTokenAtual) { pararFalaVisual(); pararLegenda(bubbleEl, textoRevelado.trim()); return; }
+    // dispara a busca do PROXIMO pedaco imediatamente (antes de tocar o atual) - assim ele gera
+    // em paralelo enquanto o pedaco atual esta tocando, escondendo a demora do Kokoro atras do
+    // tempo que ela ja esta falando
+    if (i + 1 < frases.length) proxima = buscarTts(frases[i + 1]);
+    await tocarPedacoDeFala(data, bubbleEl, textoRevelado, i === frases.length - 1);
+    textoRevelado += (data.textoFalado || frases[i]) + ' ';
+    if (meuToken !== falaTokenAtual) { pararFalaVisual(); pararLegenda(bubbleEl, textoRevelado.trim()); return; }
+  }
 }
 
 
@@ -1534,6 +1616,7 @@ micBtn.addEventListener('click', () => {
   if (!gravacaoSuportada) return;
   if (modoConversa) { pararModoConversa(); return; }
   if (gravando) { pararGravacaoEEnviar(); return; }
+  falaTokenAtual++; // invalida a sequencia de fala em pedacos em andamento, se tiver alguma
   if (audioAtual) audioAtual.pause();
   window.speechSynthesis.cancel();
   ouvirSegmento();
