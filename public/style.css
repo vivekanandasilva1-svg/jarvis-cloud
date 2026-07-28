@@ -22,6 +22,22 @@
 
 [hidden] { display: none !important; }
 
+/* a lista suspensa de um <select> e desenhada pelo proprio navegador/SO, nao da pra estilizar
+   com o mesmo nivel de controle do resto do app - mas background-color/color no <option> e
+   respeitado pela maioria dos navegadores modernos (Chrome/Edge/Firefox). Regra GLOBAL (nao por
+   id/classe) pra pegar todo <select> do app de uma vez so, inclusive os que ainda nao existem -
+   assim ninguem esquece de estilizar um select novo depois. */
+select option {
+  background-color: #e9e6de;
+  color: #8a6108;
+  font-weight: 700;
+}
+select option:checked,
+select option:hover {
+  background-color: var(--gold-bright);
+  color: #241c05;
+}
+
 html, body {
   margin: 0;
   height: 100%;
@@ -1411,16 +1427,6 @@ html, body {
   outline: none;
 }
 #autoInstancia:focus { border-color: var(--gold); }
-/* a lista suspensa de um <select> e desenhada pelo proprio navegador/SO, nao da pra estilizar
-   com o mesmo nivel de controle do resto do app - mas background-color/color no <option> e
-   respeitado pela maioria dos navegadores modernos (Chrome/Edge/Firefox), entao da pra pelo
-   menos trocar o branco padrao (que deixava o texto claro ilegivel) por um fundo cinza claro
-   com o texto dourado */
-#autoInstancia option {
-  background-color: #e8e6e1;
-  color: #8a6a12;
-  font-weight: 600;
-}
 
 #autoFrequenciaAudio {
   background: rgba(255, 255, 255, 0.04);
@@ -1432,13 +1438,6 @@ html, body {
   outline: none;
 }
 #autoFrequenciaAudio:focus { border-color: var(--gold); }
-/* mesmo motivo do #autoInstancia option acima - lista suspensa nativa, so da pra controlar
-   background/cor do option, entao troca o branco padrao ilegivel por cinza claro + dourado */
-#autoFrequenciaAudio option {
-  background-color: #e8e6e1;
-  color: #8a6a12;
-  font-weight: 600;
-}
 
 #autoPrompt {
   flex: 1 1 auto;
