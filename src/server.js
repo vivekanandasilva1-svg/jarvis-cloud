@@ -514,11 +514,25 @@ function extrairMensagemEvolution(data) {
 function normalizarTelefone(n) {
   return (n || '').replace(/\D/g, '');
 }
+// o "9" extra de celular fica ENTRE o DDD e o numero - comparar so os ultimos 10 digitos
+// (slice(-10)) nao resolve isso, porque a presenca do 9 desloca todos os digitos que vem
+// depois dele. Precisa separar DDD do numero pra so ai tirar o 9, senao "5582993220377" e
+// "558293220377" (o mesmo numero, um com e outro sem o 9) nunca batem.
+function numeroCanonicoBR(n) {
+  let d = normalizarTelefone(n);
+  if (d.length >= 12 && d.startsWith('55')) d = d.slice(2);
+  if (d.length !== 10 && d.length !== 11) return d;
+  const ddd = d.slice(0, 2);
+  let local = d.slice(2);
+  if (local.length === 9 && local[0] === '9') local = local.slice(1);
+  return ddd + local;
+}
 function mesmoNumero(a, b) {
   const na = normalizarTelefone(a);
   const nb = normalizarTelefone(b);
   if (!na || !nb) return false;
-  return na === nb || na.slice(-10) === nb.slice(-10);
+  if (na === nb || na.slice(-10) === nb.slice(-10)) return true;
+  return numeroCanonicoBR(a) === numeroCanonicoBR(b);
 }
 
 // ids das mensagens que a PROPRIA Lumia acabou de mandar pro numero do dono - quando o
