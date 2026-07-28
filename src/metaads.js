@@ -106,7 +106,10 @@ function calcularSaldo(acc) {
   return { tipoConta: 'desconhecido' };
 }
 
-export async function listAdAccounts(tenantId) {
+// apenasAtivas: quando true, tira as contas que o tenant desativou na aba Integracoes (ver
+// tenantConfig.obterContasMetaAdsDesativadas) - usado pelos geradores de relatorio automatico
+// (relatoriosProgramados.js); o chat/ferramentas continuam vendo TODAS as contas normalmente
+export async function listAdAccounts(tenantId, { apenasAtivas = false } = {}) {
   const sets = await tokenSets(tenantId);
   if (sets.length === 0) throw new Error('Esse cliente nao tem nenhuma conta de anuncio (Meta Ads) conectada.');
 
@@ -139,7 +142,9 @@ export async function listAdAccounts(tenantId) {
     }
   }
 
-  return all;
+  if (!apenasAtivas) return all;
+  const desativadas = new Set(await tenantConfig.obterContasMetaAdsDesativadas(tenantId));
+  return all.filter((c) => !desativadas.has(c.id));
 }
 
 export async function listCampaigns(tenantId, { accountId, status } = {}) {

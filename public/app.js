@@ -66,6 +66,7 @@ const tabBtnWhatsapp = document.getElementById('tabBtnWhatsapp');
 const tabBtnCrm = document.getElementById('tabBtnCrm');
 const tabBtnAuto = document.getElementById('tabBtnAuto');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
+const tabBtnIntegracoes = document.getElementById('tabBtnIntegracoes');
 const tabBtnClientes = document.getElementById('tabBtnClientes');
 const tabPainel = document.getElementById('tabPainel');
 const tabAgenda = document.getElementById('tabAgenda');
@@ -73,7 +74,13 @@ const tabWhatsapp = document.getElementById('tabWhatsapp');
 const tabCrm = document.getElementById('tabCrm');
 const tabAuto = document.getElementById('tabAuto');
 const tabRelatorios = document.getElementById('tabRelatorios');
+const tabIntegracoes = document.getElementById('tabIntegracoes');
 const tabClientes = document.getElementById('tabClientes');
+
+// ---------- Integracoes (Meta Ads / sistemas conectados): elementos ----------
+const integracoesMetaAdsLista = document.getElementById('integracoesMetaAdsLista');
+const integracoesSistemasLista = document.getElementById('integracoesSistemasLista');
+const integracoesEmBreveLista = document.getElementById('integracoesEmBreveLista');
 
 // ---------- Clientes (admin - so super_admin ve): elementos ----------
 const clienteNomeInput = document.getElementById('clienteNomeInput');
@@ -1745,6 +1752,7 @@ function mudarAba(aba) {
   tabCrm.hidden = aba !== 'crm';
   tabAuto.hidden = aba !== 'auto';
   tabRelatorios.hidden = aba !== 'relatorios';
+  tabIntegracoes.hidden = aba !== 'integracoes';
   tabClientes.hidden = aba !== 'clientes';
   tabBtnPainel.classList.toggle('active', aba === 'painel');
   tabBtnAgenda.classList.toggle('active', aba === 'agenda');
@@ -1752,6 +1760,7 @@ function mudarAba(aba) {
   tabBtnCrm.classList.toggle('active', aba === 'crm');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
+  tabBtnIntegracoes.classList.toggle('active', aba === 'integracoes');
   tabBtnClientes.classList.toggle('active', aba === 'clientes');
   if (aba === 'agenda') {
     carregarStatusGoogleAgenda();
@@ -1766,6 +1775,8 @@ function mudarAba(aba) {
   } else if (aba === 'relatorios') {
     carregarDestinatariosRelatorios();
     carregarConfigsRelatorios();
+  } else if (aba === 'integracoes') {
+    carregarIntegracoes();
   } else if (aba === 'clientes') {
     carregarClientes();
   }
@@ -1780,6 +1791,7 @@ tabBtnWhatsapp.addEventListener('click', () => mudarAba('whatsapp'));
 tabBtnCrm.addEventListener('click', () => mudarAba('crm'));
 tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
+tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
 tabBtnClientes.addEventListener('click', () => mudarAba('clientes'));
 
 // ---------- Agenda: Google Agenda (conectar/desconectar) ----------
@@ -3375,6 +3387,184 @@ function criarCardConfigRelatorio(cfg, instancias) {
   card.appendChild(enviarBtn);
 
   return card;
+}
+
+// ---------- Integracoes (visivel pra qualquer tenant - so mostra/mexe nas PROPRIAS contas) ----------
+// contas de anuncio Meta Ads (com toggle por conta pra relatorio automatico), sistemas
+// conectados (Clinicorp/Trello/Google - liga/desliga sem apagar credencial) e placeholders
+// "em breve" pra Google Ads/TikTok Ads, que ainda nao tem integracao de verdade no backend.
+
+function criarSwitch(id, marcado) {
+  const label = document.createElement('label');
+  label.className = 'auto-switch';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.id = id;
+  input.checked = !!marcado;
+  const track = document.createElement('span');
+  track.className = 'auto-switch-track';
+  track.innerHTML = '<span class="auto-switch-thumb"></span>';
+  label.append(input, track);
+  return { label, input };
+}
+
+async function carregarIntegracoes() {
+  integracoesMetaAdsLista.innerHTML = '<p class="agenda-vazia">Carregando...</p>';
+  integracoesSistemasLista.innerHTML = '<p class="agenda-vazia">Carregando...</p>';
+  try {
+    const res = await fetch('/api/integracoes', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'Erro ao carregar integrações');
+    renderizarMetaAdsContas(data);
+    renderizarSistemasConectados(data);
+    renderizarEmBreve();
+  } catch (err) {
+    integracoesMetaAdsLista.innerHTML = `<p class="agenda-erro">${err.message}</p>`;
+    integracoesSistemasLista.innerHTML = '';
+  }
+}
+
+function renderizarMetaAdsContas(data) {
+  integracoesMetaAdsLista.innerHTML = '';
+  if (!data.metaAds.conectado) {
+    integracoesMetaAdsLista.innerHTML = '<p class="agenda-vazia">Nenhuma conta de anúncio Meta Ads conectada ainda. Peça pro administrador cadastrar na aba Clientes.</p>';
+    return;
+  }
+  if (data.erroMetaAds) {
+    integracoesMetaAdsLista.innerHTML = `<p class="agenda-erro">Não consegui buscar as contas agora: ${data.erroMetaAds}</p>`;
+    return;
+  }
+  if (!data.contasMetaAds.length) {
+    integracoesMetaAdsLista.innerHTML = '<p class="agenda-vazia">Nenhuma conta de anúncio encontrada nos tokens conectados.</p>';
+    return;
+  }
+  for (const conta of data.contasMetaAds) {
+    const item = document.createElement('div');
+    item.className = 'auto-arquivo-item';
+    const info = document.createElement('div');
+    info.className = 'auto-arquivo-info';
+    const nome = document.createElement('div');
+    nome.className = 'auto-arquivo-nome';
+    nome.textContent = conta.nome;
+    const detalhe = document.createElement('div');
+    detalhe.className = 'auto-arquivo-detalhe';
+    detalhe.textContent = `${conta.empresa} · ${conta.ativa ? 'inclui nos relatórios automáticos' : 'fora dos relatórios automáticos'}`;
+    info.append(nome, detalhe);
+
+    const { label, input } = criarSwitch(`metaAdsConta_${conta.id}`, conta.ativa);
+    input.addEventListener('change', async () => {
+      input.disabled = true;
+      try {
+        const res = await fetch(`/api/integracoes/meta-ads/contas/${encodeURIComponent(conta.id)}/ativo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+          body: JSON.stringify({ ativo: input.checked }),
+        });
+        if (!res.ok) throw new Error((await res.json()).erro || 'Erro ao salvar');
+        detalhe.textContent = `${conta.empresa} · ${input.checked ? 'inclui nos relatórios automáticos' : 'fora dos relatórios automáticos'}`;
+      } catch (err) {
+        input.checked = !input.checked;
+        alert(`Erro: ${err.message}`);
+      } finally {
+        input.disabled = false;
+      }
+    });
+
+    item.append(info, label);
+    integracoesMetaAdsLista.appendChild(item);
+  }
+}
+
+function renderizarSistemasConectados(data) {
+  integracoesSistemasLista.innerHTML = '';
+
+  // Clinicorp e Trello: liga/desliga real (obterClinicorp/obterTrello devolvem null enquanto
+  // desativado, entao as ferramentas correspondentes param de funcionar de verdade)
+  for (const sistema of ['clinicorp', 'trello']) {
+    const info = data[sistema];
+    const item = document.createElement('div');
+    item.className = 'auto-arquivo-item';
+    const infoBox = document.createElement('div');
+    infoBox.className = 'auto-arquivo-info';
+    const nome = document.createElement('div');
+    nome.className = 'auto-arquivo-nome';
+    nome.textContent = sistema === 'clinicorp' ? 'Clinicorp' : 'Trello';
+    const detalhe = document.createElement('div');
+    detalhe.className = 'auto-arquivo-detalhe';
+    detalhe.textContent = info.conectado
+      ? (info.ativo ? 'Conectado · ativo' : 'Conectado · desativado')
+      : 'Não conectado';
+    infoBox.append(nome, detalhe);
+    item.appendChild(infoBox);
+
+    if (info.conectado) {
+      const { label, input } = criarSwitch(`sistemaAtivo_${sistema}`, info.ativo);
+      input.addEventListener('change', async () => {
+        input.disabled = true;
+        try {
+          const res = await fetch(`/api/integracoes/sistemas/${sistema}/ativo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+            body: JSON.stringify({ ativo: input.checked }),
+          });
+          if (!res.ok) throw new Error((await res.json()).erro || 'Erro ao salvar');
+          detalhe.textContent = input.checked ? 'Conectado · ativo' : 'Conectado · desativado';
+        } catch (err) {
+          input.checked = !input.checked;
+          alert(`Erro: ${err.message}`);
+        } finally {
+          input.disabled = false;
+        }
+      });
+      item.appendChild(label);
+    }
+    integracoesSistemasLista.appendChild(item);
+  }
+
+  // Meta Ads: so status (o controle fino e por conta, na coluna da esquerda)
+  const itemAds = document.createElement('div');
+  itemAds.className = 'auto-arquivo-item';
+  const infoAds = document.createElement('div');
+  infoAds.className = 'auto-arquivo-info';
+  infoAds.innerHTML = `<div class="auto-arquivo-nome">Meta Ads</div><div class="auto-arquivo-detalhe">${data.metaAds.conectado ? `${data.metaAds.quantidade} conta(s) conectada(s) - gerencie ao lado` : 'Não conectado'}</div>`;
+  itemAds.appendChild(infoAds);
+  integracoesSistemasLista.appendChild(itemAds);
+
+  // Google Calendar/Sheets: mesma conexao pras duas ferramentas - status + desconectar
+  // reaproveitando a rota que a aba Agenda ja usa
+  const itemGoogle = document.createElement('div');
+  itemGoogle.className = 'auto-arquivo-item';
+  const infoGoogle = document.createElement('div');
+  infoGoogle.className = 'auto-arquivo-info';
+  infoGoogle.innerHTML = `<div class="auto-arquivo-nome">Google (Agenda + Planilhas)</div><div class="auto-arquivo-detalhe">${data.google ? 'Conectado' : 'Não conectado'}</div>`;
+  itemGoogle.appendChild(infoGoogle);
+  if (data.google) {
+    const desconectarBtn = document.createElement('button');
+    desconectarBtn.type = 'button';
+    desconectarBtn.className = 'relatorio-config-enviar';
+    desconectarBtn.textContent = 'Desconectar';
+    desconectarBtn.addEventListener('click', async () => {
+      if (!confirm('Desconectar sua conta Google? A agenda para de sincronizar ate voce reconectar pela aba Agenda.')) return;
+      try {
+        await fetch('/api/agenda/google/desconectar', { method: 'POST', headers: { 'x-app-password': appPassword } });
+        carregarIntegracoes();
+      } catch (err) {
+        alert(`Erro: ${err.message}`);
+      }
+    });
+    itemGoogle.appendChild(desconectarBtn);
+  }
+  integracoesSistemasLista.appendChild(itemGoogle);
+}
+
+function renderizarEmBreve() {
+  integracoesEmBreveLista.innerHTML = '';
+  for (const nome of ['Google Ads', 'TikTok Ads']) {
+    const item = document.createElement('div');
+    item.className = 'auto-arquivo-item';
+    item.innerHTML = `<div class="auto-arquivo-info"><div class="auto-arquivo-nome">${nome}</div><div class="auto-arquivo-detalhe">Integração ainda não disponível - avise que voce quer pra gente priorizar.</div></div>`;
+    integracoesEmBreveLista.appendChild(item);
+  }
 }
 
 // ---------- Clientes (painel admin - so super_admin ve, ver tokenValido()/mostrarApp()) ----------

@@ -200,7 +200,7 @@ function formatarDataHoraBR() {
 // ---------- 1. Meta Ads - Financeiro Completo ----------
 
 export async function gerarRelatorioAdsFinanceiroCompleto(tenantId) {
-  const todasContas = await metaAds.listAdAccounts(tenantId);
+  const todasContas = await metaAds.listAdAccounts(tenantId, { apenasAtivas: true });
   const hoje = new Date();
   const seteDiasAtras = new Date(hoje.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const ontem = hoje.toISOString().slice(0, 10);
@@ -362,7 +362,7 @@ function montarBlocoCampanha({ conta, campanha, row, frequencia, hoje }) {
 
 export async function gerarRelatorioAdsMetricasCompleto(tenantId, { frequencia = 'diario' } = {}) {
   const { since, until, hoje } = periodoDiasCalendario(frequencia);
-  const contas = await metaAds.listAdAccounts(tenantId);
+  const contas = await metaAds.listAdAccounts(tenantId, { apenasAtivas: true });
   const blocos = [];
 
   for (const c of contas) {
@@ -554,7 +554,7 @@ const LIMITE_SALDO_BAIXO_REAIS = Number(process.env.META_ADS_LIMITE_SALDO_BAIXO_
 // gerarRelatorioAdsFinanceiroCompleto (conta sem nenhum anuncio rodando fica de fora, saldo
 // baixo la nao e urgente e so geraria ruido no WhatsApp).
 export async function gerarAlertaSaldoBaixo(tenantId) {
-  const contas = await metaAds.listAdAccounts(tenantId);
+  const contas = await metaAds.listAdAccounts(tenantId, { apenasAtivas: true });
   const linhas = [];
 
   for (const c of contas) {

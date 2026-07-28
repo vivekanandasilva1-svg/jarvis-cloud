@@ -23,6 +23,7 @@ import * as crm from './crm.js';
 import * as relatoriosProgramados from './relatoriosProgramados.js';
 import * as tenants from './tenants.js';
 import * as tenantConfig from './tenantConfig.js';
+import * as metaAds from './metaads.js';
 
 const execAsync = promisify(exec);
 
@@ -195,6 +196,57 @@ app.post('/api/admin/tenants/:id/integracoes/trello', exigirSuperAdmin, async (r
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
+  }
+});
+
+// ---------- Integracoes (aba "Integracoes" - qualquer tenant ve/gerencia so as PROPRIAS) ----------
+
+app.get('/api/integracoes', async (req, res) => {
+  try {
+    const [status, google] = await Promise.all([
+      tenantConfig.obterStatusIntegracoes(req.tenantId),
+      googleCalendar.estaConectado(req.tenantId).catch(() => false),
+    ]);
+    let contasMetaAds = [];
+    if (status.metaAds.conectado) {
+      try {
+        const desativadas = new Set(await tenantConfig.obterContasMetaAdsDesativadas(req.tenantId));
+        const contas = await metaAds.listAdAccounts(req.tenantId);
+        contasMetaAds = contas.map((c) => ({
+          id: c.id,
+          nome: c.name,
+          empresa: c.empresa,
+          ativa: !desativadas.has(c.id),
+        }));
+      } catch (err) {
+        // conta configurada mas API falhou (token expirado etc) - devolve a lista vazia com o
+        // erro pro front mostrar, em vez de quebrar a rota inteira
+        return res.json({ ...status, google, contasMetaAds: [], erroMetaAds: err.message });
+      }
+    }
+    res.json({ ...status, google, contasMetaAds });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/integracoes/meta-ads/contas/:accountId/ativo', async (req, res) => {
+  const { ativo } = req.body || {};
+  try {
+    await tenantConfig.definirContaMetaAdsAtiva(req.tenantId, req.params.accountId, !!ativo);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/integracoes/sistemas/:sistema/ativo', async (req, res) => {
+  const { ativo } = req.body || {};
+  try {
+    await tenantConfig.definirIntegracaoAtiva(req.tenantId, req.params.sistema, !!ativo);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
   }
 });
 

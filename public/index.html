@@ -72,6 +72,7 @@
       <button type="button" class="tab-btn" id="tabBtnCrm" data-tab="crm">CRM</button>
       <button type="button" class="tab-btn" id="tabBtnAuto" data-tab="auto">Auto Atendimento</button>
       <button type="button" class="tab-btn" id="tabBtnRelatorios" data-tab="relatorios">Relatórios</button>
+      <button type="button" class="tab-btn" id="tabBtnIntegracoes" data-tab="integracoes">Integrações</button>
       <button type="button" class="tab-btn" id="tabBtnClientes" data-tab="clientes" hidden>Clientes</button>
     </div>
 
@@ -520,6 +521,30 @@
 
       <div class="auto-coluna-dir" id="relatorioConfigsLista">
         <p class="agenda-vazia">Carregando...</p>
+      </div>
+    </div>
+
+    <div class="window-body tab-auto" id="tabIntegracoes" hidden>
+      <div class="auto-coluna-esq">
+        <div class="auto-aviso">
+          Contas de anúncio Meta Ads que você conectou. Desativar uma conta so tira ela dos
+          relatórios automáticos - ela continua funcionando normalmente se você pedir algo sobre
+          ela no chat.
+        </div>
+        <label class="auto-label">Contas de anúncio (Meta Ads)</label>
+        <div class="auto-arquivos-lista" id="integracoesMetaAdsLista">
+          <p class="agenda-vazia">Carregando...</p>
+        </div>
+      </div>
+
+      <div class="auto-coluna-dir">
+        <label class="auto-label">Sistemas conectados</label>
+        <div class="auto-arquivos-lista" id="integracoesSistemasLista">
+          <p class="agenda-vazia">Carregando...</p>
+        </div>
+
+        <label class="auto-label" style="margin-top: 16px;">Em breve</label>
+        <div class="auto-arquivos-lista" id="integracoesEmBreveLista"></div>
       </div>
     </div>
 

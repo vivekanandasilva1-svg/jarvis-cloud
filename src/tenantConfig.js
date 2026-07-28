@@ -28,22 +28,38 @@ async function garantirTabelas() {
   `);
   await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS trello_api_key TEXT;`);
   await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS trello_token_enc BYTEA;`);
+  // "ativo" de cada integracao (aba Integracoes) - desativar NAO apaga a credencial, so faz
+  // obterClinicorp/obterTrello devolverem null enquanto estiver falso, como se o tenant nao
+  // tivesse configurado nada. Reversivel, sem perder o que ja foi cadastrado.
+  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS clinicorp_ativo BOOLEAN NOT NULL DEFAULT true;`);
+  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS trello_ativo BOOLEAN NOT NULL DEFAULT true;`);
+  // ids das contas de anuncio (Meta Ads) que o tenant tirou dos relatorios automaticos - a
+  // conta continua conectada e utilizavel pelo chat/ferramentas, so fica de fora do que os
+  // geradores de relatorio (relatoriosProgramados.js) incluem
+  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS meta_ads_contas_desativadas JSONB NOT NULL DEFAULT '[]'::jsonb;`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabela de tenant_config:', err.message);
 });
 
-// devolve null se o tenant nao tiver Clinicorp configurado (tenant sem essa integracao - ver
-// fase 2 do plano, por enquanto so significa "essas ferramentas nao vao funcionar pra ele")
+// le a linha crua do Clinicorp, IGNORANDO o "ativo" - uso interno (obterClinicorp de verdade e
+// obterStatusIntegracoes/obterResumo, que precisam saber se ta configurado mesmo desativado)
+async function _lerClinicorpBruto(tenantId) {
+  const { rows } = await pool.query(
+    'SELECT clinicorp_api_user, clinicorp_api_token_enc, clinicorp_subscriber_id, clinicorp_default_business_id, clinicorp_ativo FROM tenant_config WHERE tenant_id = $1',
+    [tenantId],
+  );
+  return rows[0] || null;
+}
+
+// devolve null se o tenant nao tiver Clinicorp configurado OU se tiver desativado na aba
+// Integracoes (tenant sem essa integracao - ver fase 2 do plano, por enquanto so significa
+// "essas ferramentas nao vao funcionar pra ele")
 export async function obterClinicorp(tenantId) {
   if (!pool) return null;
   await tabelasProntas;
-  const { rows } = await pool.query(
-    'SELECT clinicorp_api_user, clinicorp_api_token_enc, clinicorp_subscriber_id, clinicorp_default_business_id FROM tenant_config WHERE tenant_id = $1',
-    [tenantId],
-  );
-  const linha = rows[0];
-  if (!linha || !linha.clinicorp_api_user) return null;
+  const linha = await _lerClinicorpBruto(tenantId);
+  if (!linha || !linha.clinicorp_api_user || !linha.clinicorp_ativo) return null;
   return {
     apiUser: linha.clinicorp_api_user,
     apiToken: decrypt(linha.clinicorp_api_token_enc),
@@ -95,14 +111,40 @@ export async function salvarMetaAdsTokens(tenantId, tokens) {
   );
 }
 
+// ---------- Meta Ads: quais contas ficam de fora dos relatorios automaticos ----------
+// (a conta continua conectada e utilizavel pelo chat normalmente - ver metaads.js listAdAccounts)
+
+export async function obterContasMetaAdsDesativadas(tenantId) {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT meta_ads_contas_desativadas FROM tenant_config WHERE tenant_id = $1', [tenantId]);
+  return rows[0]?.meta_ads_contas_desativadas || [];
+}
+
+export async function definirContaMetaAdsAtiva(tenantId, accountId, ativa) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const atuais = await obterContasMetaAdsDesativadas(tenantId);
+  const proximas = ativa ? atuais.filter((id) => id !== accountId) : [...new Set([...atuais, accountId])];
+  await pool.query(
+    `INSERT INTO tenant_config (tenant_id, meta_ads_contas_desativadas, atualizado_em) VALUES ($1, $2::jsonb, now())
+     ON CONFLICT (tenant_id) DO UPDATE SET meta_ads_contas_desativadas = $2::jsonb, atualizado_em = now()`,
+    [tenantId, JSON.stringify(proximas)],
+  );
+}
+
 // ---------- Trello (quadro pessoal do proprio tenant) ----------
+
+async function _lerTrelloBruto(tenantId) {
+  const { rows } = await pool.query('SELECT trello_api_key, trello_token_enc, trello_ativo FROM tenant_config WHERE tenant_id = $1', [tenantId]);
+  return rows[0] || null;
+}
 
 export async function obterTrello(tenantId) {
   if (!pool) return null;
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT trello_api_key, trello_token_enc FROM tenant_config WHERE tenant_id = $1', [tenantId]);
-  const linha = rows[0];
-  if (!linha || !linha.trello_api_key) return null;
+  const linha = await _lerTrelloBruto(tenantId);
+  if (!linha || !linha.trello_api_key || !linha.trello_ativo) return null;
   return { apiKey: linha.trello_api_key, token: decrypt(linha.trello_token_enc) };
 }
 
@@ -118,17 +160,64 @@ export async function salvarTrello(tenantId, { apiKey, token }) {
 
 // resumo pro painel "Clientes" (aba admin) - so diz O QUE ESTA configurado, nunca devolve o
 // segredo em si de volta pro navegador (o apiUser do Clinicorp e o label de cada conta de Ads
-// nao sao segredo, servem so pra confirmar visualmente qual conta ta conectada)
+// nao sao segredo, servem so pra confirmar visualmente qual conta ta conectada). Le os dados
+// BRUTOS (ignora o "ativo") - uma integracao pausada continua aparecendo como configurada aqui,
+// so nao aparece como configurada pra obterClinicorp/obterTrello (que sao os que decidem se a
+// ferramenta funciona de verdade).
 export async function obterResumo(tenantId) {
   if (!pool) return { clinicorp: null, metaAds: [], trello: false };
-  const [clinicorp, metaAdsTokens, trello] = await Promise.all([
-    obterClinicorp(tenantId),
+  await tabelasProntas;
+  const [clinicorpBruto, metaAdsTokens, trelloBruto] = await Promise.all([
+    _lerClinicorpBruto(tenantId),
     obterMetaAdsTokens(tenantId),
-    obterTrello(tenantId),
+    _lerTrelloBruto(tenantId),
   ]);
+  const clinicorp = clinicorpBruto?.clinicorp_api_user ? clinicorpBruto : null;
+  const trello = trelloBruto?.trello_api_key ? trelloBruto : null;
   return {
-    clinicorp: clinicorp ? { apiUser: clinicorp.apiUser, subscriberId: clinicorp.subscriberId } : null,
+    clinicorp: clinicorp ? { apiUser: clinicorp.clinicorp_api_user, subscriberId: clinicorp.clinicorp_subscriber_id } : null,
     metaAds: metaAdsTokens.map((t) => t.label),
     trello: !!trello,
   };
+}
+
+// status pra aba "Integracoes" (visivel pra qualquer tenant, sobre as PROPRIAS integracoes) -
+// mesma logica "bruta" do obterResumo acima, mas incluindo o flag ativo de cada uma
+export async function obterStatusIntegracoes(tenantId) {
+  if (!pool) return { clinicorp: { conectado: false, ativo: true }, trello: { conectado: false, ativo: true }, metaAds: { conectado: false, quantidade: 0 } };
+  await tabelasProntas;
+  const [clinicorpBruto, metaAdsTokens, trelloBruto] = await Promise.all([
+    _lerClinicorpBruto(tenantId),
+    obterMetaAdsTokens(tenantId),
+    _lerTrelloBruto(tenantId),
+  ]);
+  return {
+    clinicorp: {
+      conectado: !!clinicorpBruto?.clinicorp_api_user,
+      ativo: clinicorpBruto?.clinicorp_ativo !== false,
+      apiUser: clinicorpBruto?.clinicorp_api_user || null,
+    },
+    trello: {
+      conectado: !!trelloBruto?.trello_api_key,
+      ativo: trelloBruto?.trello_ativo !== false,
+    },
+    metaAds: {
+      conectado: metaAdsTokens.length > 0,
+      quantidade: metaAdsTokens.length,
+    },
+  };
+}
+
+// liga/desliga uma integracao inteira (Clinicorp ou Trello) sem apagar a credencial ja salva -
+// so faz obterClinicorp/obterTrello devolverem null enquanto estiver desativada
+export async function definirIntegracaoAtiva(tenantId, sistema, ativo) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const coluna = { clinicorp: 'clinicorp_ativo', trello: 'trello_ativo' }[sistema];
+  if (!coluna) throw new Error(`Sistema desconhecido: ${sistema}`);
+  await pool.query(
+    `INSERT INTO tenant_config (tenant_id, ${coluna}, atualizado_em) VALUES ($1, $2, now())
+     ON CONFLICT (tenant_id) DO UPDATE SET ${coluna} = $2, atualizado_em = now()`,
+    [tenantId, !!ativo],
+  );
 }
