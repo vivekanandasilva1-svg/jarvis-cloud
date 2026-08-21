@@ -698,6 +698,11 @@ export function iniciarSchedulerRelatoriosProgramados() {
           } catch (err) {
             console.error(`Erro no envio automatico do relatorio "${cfg.tipo}" (tenant ${tenantId}):`, err.message);
           }
+          // pausa curta entre relatorios do MESMO tenant - varios relatorios de Meta Ads
+          // costumam vencer juntos (mesma hora_envio, ex: todos as 07:00), e cada um ja faz
+          // dezenas de chamadas por conta de anuncio sozinho; disparar todos em sequencia sem
+          // pausa aumentava a chance de estourar o limite de taxa da API do Meta no meio
+          await new Promise((r) => setTimeout(r, 10000));
         }
       }
     } catch (err) {

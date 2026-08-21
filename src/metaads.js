@@ -29,7 +29,11 @@ function chaveCache(tenantId, id) {
   return `${tenantId}:${id}`;
 }
 
-async function callWithToken(token, method, path, { query, body } = {}) {
+// codigos de erro da Graph API que significam "limite de chamadas atingido" (app/usuario/pagina)
+// - a propria Meta recomenda esperar e tentar de novo, nao e uma falha definitiva
+const CODIGOS_LIMITE_TAXA = new Set([4, 17, 32, 613]);
+
+async function callWithToken(token, method, path, { query, body } = {}, tentativa = 1) {
   const url = new URL(BASE_URL + path);
   url.searchParams.set('access_token', token);
   for (const [key, value] of Object.entries(query || {})) {
@@ -45,6 +49,17 @@ async function callWithToken(token, method, path, { query, body } = {}) {
   const data = await res.json().catch(() => null);
 
   if (!res.ok || data?.error) {
+    // um relatorio automatico faz dezenas de chamadas seguidas (uma por conta de anuncio) -
+    // sem retry aqui, estourar o limite no MEIO do relatorio derrubava o relatorio inteiro do
+    // dia, e o scheduler so tenta de novo no dia seguinte (ver relatoriosProgramados.js), entao
+    // um relatorio ficava faltando com frequencia. Espera crescente (15s/30s/45s) da tempo do
+    // limite (janela curta, renovada por tempo) se recuperar antes de desistir de vez.
+    if (CODIGOS_LIMITE_TAXA.has(data?.error?.code) && tentativa <= 3) {
+      const esperaMs = 15000 * tentativa;
+      console.warn(`Meta Ads: limite de requisicoes atingido (codigo ${data.error.code}), esperando ${esperaMs / 1000}s antes de tentar de novo (tentativa ${tentativa}/3)...`);
+      await new Promise((r) => setTimeout(r, esperaMs));
+      return callWithToken(token, method, path, { query, body }, tentativa + 1);
+    }
     const message = data?.error?.message || `Erro ${res.status} ao chamar ${path}`;
     const err = new Error(message);
     err.isApiError = true;
