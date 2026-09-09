@@ -30,11 +30,15 @@
                             700: '#8C6800'
                         },
                         silver: {
+                            100: '#F8FAFC',
                             200: '#E5E7EB',
+                            300: '#CBD5E1',
                             400: '#9CA3AF',
-                            600: '#4B5563'
+                            500: '#71797E',
+                            600: '#4B5563',
+                            700: '#374151'
                         },
-                        ledCyan: '#00F0FF',
+                        ledSilver: '#D8DEE8',
                         ledGreen: '#10B981',
                         ledPurple: '#8B5CF6'
                     },
@@ -73,7 +77,7 @@
         }
 
         .glow-cyan {
-            box-shadow: 0 0 25px rgba(0, 240, 255, 0.25);
+            box-shadow: 0 0 25px rgba(216, 222, 232, 0.25);
         }
 
         .glow-green {
@@ -147,8 +151,8 @@
         #sliderTraffic::-webkit-slider-thumb { background: #D4AF37; box-shadow: 0 0 16px rgba(212, 175, 55, 0.9); }
         #sliderTraffic::-moz-range-thumb { background: #D4AF37; box-shadow: 0 0 16px rgba(212, 175, 55, 0.9); }
 
-        #sliderTicket::-webkit-slider-thumb { background: #00F0FF; box-shadow: 0 0 16px rgba(0, 240, 255, 0.9); }
-        #sliderTicket::-moz-range-thumb { background: #00F0FF; box-shadow: 0 0 16px rgba(0, 240, 255, 0.9); }
+        #sliderTicket::-webkit-slider-thumb { background: #D8DEE8; box-shadow: 0 0 16px rgba(216, 222, 232, 0.9); }
+        #sliderTicket::-moz-range-thumb { background: #D8DEE8; box-shadow: 0 0 16px rgba(216, 222, 232, 0.9); }
 
         #sliderConversion::-webkit-slider-thumb { background: #10B981; box-shadow: 0 0 16px rgba(16, 185, 129, 0.9); }
         #sliderConversion::-moz-range-thumb { background: #10B981; box-shadow: 0 0 16px rgba(16, 185, 129, 0.9); }
@@ -195,8 +199,8 @@
         #sliderTraffic::-webkit-slider-thumb { background: #D4AF37; box-shadow: 0 0 14px rgba(212, 175, 55, 0.8); }
         #sliderTraffic::-moz-range-thumb { background: #D4AF37; box-shadow: 0 0 14px rgba(212, 175, 55, 0.8); }
 
-        #sliderTicket::-webkit-slider-thumb { background: #00F0FF; box-shadow: 0 0 14px rgba(0, 240, 255, 0.8); }
-        #sliderTicket::-moz-range-thumb { background: #00F0FF; box-shadow: 0 0 14px rgba(0, 240, 255, 0.8); }
+        #sliderTicket::-webkit-slider-thumb { background: #D8DEE8; box-shadow: 0 0 14px rgba(216, 222, 232, 0.8); }
+        #sliderTicket::-moz-range-thumb { background: #D8DEE8; box-shadow: 0 0 14px rgba(216, 222, 232, 0.8); }
 
         #sliderConversion::-webkit-slider-thumb { background: #10B981; box-shadow: 0 0 14px rgba(16, 185, 129, 0.8); }
         #sliderConversion::-moz-range-thumb { background: #10B981; box-shadow: 0 0 14px rgba(16, 185, 129, 0.8); }
@@ -213,7 +217,7 @@
 
         /* Inline Editor Visuals */
         body.editor-active [data-editable="true"] {
-            outline: 2px dashed rgba(0, 240, 255, 0.6) !important;
+            outline: 2px dashed rgba(216, 222, 232, 0.6) !important;
             outline-offset: 3px;
             cursor: text !important;
             border-radius: 4px;
@@ -221,14 +225,14 @@
         }
 
         body.editor-active [data-editable="true"]:hover {
-            background-color: rgba(0, 240, 255, 0.08) !important;
-            outline: 2px solid #00F0FF !important;
+            background-color: rgba(216, 222, 232, 0.08) !important;
+            outline: 2px solid #D8DEE8 !important;
         }
 
         body.editor-active [data-editable="true"]:focus {
-            background-color: rgba(0, 240, 255, 0.15) !important;
-            outline: 2px solid #00F0FF !important;
-            box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+            background-color: rgba(216, 222, 232, 0.15) !important;
+            outline: 2px solid #D8DEE8 !important;
+            box-shadow: 0 0 15px rgba(216, 222, 232, 0.4);
         }
 
         /* Client View Mode - Hides all Admin UI */
@@ -256,7 +260,7 @@
                 <div>
                     <h1 id="navBrandTitle" class="font-tech text-sm sm:text-base font-bold tracking-wider text-white uppercase flex items-center gap-1.5">
                         VIVEKANANDA
-                        <span class="w-2 h-2 rounded-full bg-ledCyan inline-block animate-pulse"></span>
+                        <span class="w-2 h-2 rounded-full bg-ledSilver inline-block animate-pulse"></span>
                     </h1>
                     <p id="navBrandSubtitle" class="text-[10px] text-gold-400 tracking-wider font-semibold uppercase">ESPECIALISTA EM CLÍNICAS & IA</p>
                 </div>
@@ -266,13 +270,13 @@
             <div class="flex items-center gap-1.5 sm:gap-3">
                 <!-- Client Mode Indicator Badge -->
                 <div id="clientStatusBadge" class="hidden items-center gap-2 bg-gold-500/10 border border-gold-500/40 text-gold-300 text-xs px-3 py-1.5 rounded-lg font-semibold">
-                    <span class="w-2 h-2 rounded-full bg-ledGreen animate-pulse"></span>
+                    <span class="w-2 h-2 rounded-full bg-gold-400 animate-pulse"></span>
                     <span>Proposta Interativa Exclusiva</span>
                 </div>
 
                 <!-- Modo Editor Trigger (Admin Only) -->
                 <button id="editorModeBtn" onclick="toggleInlineEditMode()" title="Clique para editar qualquer texto da tela" class="admin-only flex items-center gap-1.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs sm:text-sm px-2.5 sm:px-3 py-2 rounded-xl font-semibold transition shadow">
-                    <i id="editorModeIcon" class="fa-solid fa-pen-to-square text-ledCyan"></i>
+                    <i id="editorModeIcon" class="fa-solid fa-pen-to-square text-ledSilver"></i>
                     <span id="editorModeLabel" class="hidden md:inline">Modo Editor</span>
                 </button>
 
@@ -296,17 +300,17 @@
         </div>
     </header>
 
-    <div id="editorActiveToolbar" class="fixed top-16 left-0 right-0 z-40 bg-cyan-950/90 border-b border-cyan-500/40 py-2.5 px-4 backdrop-blur hidden transition-all">
+    <div id="editorActiveToolbar" class="fixed top-16 left-0 right-0 z-40 bg-slate-900/90 border-b border-silver-400/40 py-2.5 px-4 backdrop-blur hidden transition-all">
         <div class="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-2 text-xs">
-            <div class="flex items-center gap-2 text-cyan-300">
-                <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping"></span>
+            <div class="flex items-center gap-2 text-silver-200">
+                <span class="w-2.5 h-2.5 rounded-full bg-silver-300 animate-ping"></span>
                 <strong class="font-bold">MODO EDITOR ATIVO:</strong> Clique em qualquer texto da página para alterar os textos ao vivo.
             </div>
             <div class="flex items-center gap-2">
                 <button onclick="window.print()" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition border border-slate-600">
                     <i class="fa-solid fa-print"></i> Imprimir / PDF
                 </button>
-                <button onclick="toggleInlineEditMode()" class="px-3 py-1 bg-cyan-400 hover:bg-cyan-300 text-black font-bold rounded-lg transition shadow">
+                <button onclick="toggleInlineEditMode()" class="px-3 py-1 bg-silver-300 hover:bg-silver-200 text-black font-bold rounded-lg transition shadow">
                     <i class="fa-solid fa-check"></i> Concluir Edição
                 </button>
             </div>
@@ -316,7 +320,7 @@
     <main class="pt-28 pb-20 px-4 sm:px-6 max-w-7xl mx-auto space-y-24">
         <section class="text-center relative pt-8 pb-4">
             <!-- Background Decorative Aura -->
-            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] sm:w-[650px] h-[350px] sm:h-[650px] bg-gradient-to-tr from-gold-500/10 via-ledCyan/10 to-transparent rounded-full blur-3xl pointer-events-none -z-10"></div>
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] sm:w-[650px] h-[350px] sm:h-[650px] bg-gradient-to-tr from-gold-500/10 via-ledSilver/10 to-transparent rounded-full blur-3xl pointer-events-none -z-10"></div>
 
             <!-- Personalized VIP Pill -->
             <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/90 border border-gold-500/40 text-xs font-semibold text-gold-300 mb-6 shadow-[0_0_15px_rgba(212,175,55,0.2)]">
@@ -343,7 +347,7 @@
                 </div>
                 <div class="glass-card p-5 rounded-2xl border-white/5 hover:border-gold-500/40 transition">
                     <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Receita Gerada</p>
-                    <p data-editable="true" class="text-2xl sm:text-3xl font-tech font-black text-emerald-400">+R$ 50 Mi</p>
+                    <p data-editable="true" class="text-2xl sm:text-3xl font-tech font-black text-gold-400">+R$ 50 Mi</p>
                     <p data-editable="true" class="text-[11px] text-slate-400 mt-1">Faturados para clientes</p>
                 </div>
                 <div class="glass-card p-5 rounded-2xl border-white/5 hover:border-gold-500/40 transition">
@@ -351,9 +355,9 @@
                     <p data-editable="true" class="text-2xl sm:text-3xl font-tech font-black text-white">15 Clínicas</p>
                     <p data-editable="true" class="text-[11px] text-slate-400 mt-1">Sob gestão de tráfego e vendas</p>
                 </div>
-                <div class="glass-card p-5 rounded-2xl border-white/5 hover:border-ledCyan/40 transition">
+                <div class="glass-card p-5 rounded-2xl border-white/5 hover:border-ledSilver/40 transition">
                     <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Inovação Exclusiva</p>
-                    <p data-editable="true" class="text-2xl sm:text-3xl font-tech font-black text-ledCyan">LumIA 24/7</p>
+                    <p data-editable="true" class="text-2xl sm:text-3xl font-tech font-black text-ledSilver">LumIA 24/7</p>
                     <p data-editable="true" class="text-[11px] text-slate-400 mt-1">Agente de IA Treinada para Odonto</p>
                 </div>
             </div>
@@ -384,9 +388,9 @@
                 </div>
 
                 <!-- Pillar 2 -->
-                <div class="glass-card p-6 rounded-2xl border-white/5 hover:border-ledCyan/40 hover:-translate-y-1 transition duration-300 flex flex-col justify-between">
+                <div class="glass-card p-6 rounded-2xl border-white/5 hover:border-ledSilver/40 hover:-translate-y-1 transition duration-300 flex flex-col justify-between">
                     <div>
-                        <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-ledCyan text-xl mb-4">
+                        <div class="w-12 h-12 rounded-xl bg-silver-400/10 border border-silver-400/30 flex items-center justify-center text-ledSilver text-xl mb-4">
                             <i class="fa-solid fa-brain"></i>
                         </div>
                         <h4 data-editable="true" class="text-lg font-bold text-white mb-2">PNL & Neuromarketing</h4>
@@ -394,15 +398,15 @@
                             Roteiros de criativos e scripts de vendas estruturados com gatilhos mentais e psicologia de decisão, quebrando objeções de preço e elevando a percepção de autoridade.
                         </p>
                     </div>
-                    <div class="mt-4 pt-3 border-t border-white/5 text-[11px] text-cyan-300 font-semibold flex items-center gap-1">
+                    <div class="mt-4 pt-3 border-t border-white/5 text-[11px] text-silver-200 font-semibold flex items-center gap-1">
                         <i class="fa-solid fa-check"></i> Quebra de Objeções Imediata
                     </div>
                 </div>
 
                 <!-- Pillar 3 -->
-                <div class="glass-card p-6 rounded-2xl border-white/5 hover:border-emerald-500/40 hover:-translate-y-1 transition duration-300 flex flex-col justify-between">
+                <div class="glass-card p-6 rounded-2xl border-white/5 hover:border-gold-500/40 hover:-translate-y-1 transition duration-300 flex flex-col justify-between">
                     <div>
-                        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-xl mb-4">
+                        <div class="w-12 h-12 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400 text-xl mb-4">
                             <i class="fa-solid fa-users-gear"></i>
                         </div>
                         <h4 data-editable="true" class="text-lg font-bold text-white mb-2">Treinamento de Vendas & CRM</h4>
@@ -410,7 +414,7 @@
                             Capacitação direta da equipe da recepção e consultoras comerciais. Implementamos rotina produtiva de CRM para nenhum lead ficar esquecido ou sem retorno rápido.
                         </p>
                     </div>
-                    <div class="mt-4 pt-3 border-t border-white/5 text-[11px] text-emerald-300 font-semibold flex items-center gap-1">
+                    <div class="mt-4 pt-3 border-t border-white/5 text-[11px] text-gold-300 font-semibold flex items-center gap-1">
                         <i class="fa-solid fa-check"></i> Abordagem e Fechamento Ativo
                     </div>
                 </div>
@@ -434,17 +438,17 @@
         </section>
 
         <section class="glass-card-gold p-6 sm:p-10 rounded-3xl relative overflow-hidden">
-            <div class="absolute -right-20 -top-20 w-80 h-80 bg-ledCyan/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div class="absolute -right-20 -top-20 w-80 h-80 bg-ledSilver/10 rounded-full blur-3xl pointer-events-none"></div>
 
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
                 <!-- LumIA Description -->
                 <div class="lg:col-span-6 space-y-5">
-                    <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-cyan-950/80 border border-ledCyan/40 text-ledCyan text-xs font-bold">
+                    <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-slate-900/80 border border-ledSilver/40 text-ledSilver text-xs font-bold">
                         <i class="fa-solid fa-microchip"></i>
                         <span>TECNOLOGIA PROPRIETÁRIA DE IA</span>
                     </div>
                     <h3 data-editable="true" class="text-2xl sm:text-4xl font-bold font-luxury text-white">
-                        Conheça a <span class="text-ledCyan font-tech">LumIA</span>: A Agente de IA Mais Completa para Clínicas
+                        Conheça a <span class="text-ledSilver font-tech">LumIA</span>: A Agente de IA Mais Completa para Clínicas
                     </h3>
                     <p data-editable="true" class="text-slate-300 text-sm sm:text-base leading-relaxed">
                         Enquanto sua concorrência demora 2 horas para responder uma mensagem no WhatsApp (e perde a venda), a LumIA responde em <strong>menos de 3 segundos</strong>, qualifica a capacidade de investimento do paciente, quebra medos de dor ou custos e agenda a consulta diretamente na sua agenda.
@@ -452,22 +456,22 @@
 
                     <div class="space-y-2.5 pt-2">
                         <div class="flex items-start gap-3">
-                            <div class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs mt-0.5"><i class="fa-solid fa-check"></i></div>
+                            <div class="w-5 h-5 rounded-full bg-gold-500/20 text-gold-400 flex items-center justify-center text-xs mt-0.5"><i class="fa-solid fa-check"></i></div>
                             <span data-editable="true" class="text-xs sm:text-sm text-slate-300"><strong>Atendimento 24/7 sem folgas:</strong> Converte leads na madrugada, fins de semana e feriados.</span>
                         </div>
                         <div class="flex items-start gap-3">
-                            <div class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs mt-0.5"><i class="fa-solid fa-check"></i></div>
+                            <div class="w-5 h-5 rounded-full bg-gold-500/20 text-gold-400 flex items-center justify-center text-xs mt-0.5"><i class="fa-solid fa-check"></i></div>
                             <span data-editable="true" class="text-xs sm:text-sm text-slate-300"><strong>Pré-Qualificação de Ticket:</strong> Filtra quem procura tratamento gratuito ou populares.</span>
                         </div>
                         <div class="flex items-start gap-3">
-                            <div class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs mt-0.5"><i class="fa-solid fa-check"></i></div>
+                            <div class="w-5 h-5 rounded-full bg-gold-500/20 text-gold-400 flex items-center justify-center text-xs mt-0.5"><i class="fa-solid fa-check"></i></div>
                             <span data-editable="true" class="text-xs sm:text-sm text-slate-300"><strong>Sincronização com CRM da Clínica:</strong> Alimenta o funil com status e gravações dos atendimentos.</span>
                         </div>
                     </div>
 
                     <div class="pt-4 flex flex-wrap gap-3">
-                        <button id="btnRestartLumia" type="button" onclick="runLumiaDemoSim()" class="w-full sm:w-auto px-6 py-4 bg-gradient-to-r from-cyan-500/30 to-blue-600/40 hover:from-cyan-500/50 hover:to-blue-600/60 active:scale-95 border-2 border-cyan-400 text-white rounded-2xl font-bold text-sm transition flex items-center justify-center gap-3 shadow-[0_0_25px_rgba(0,240,255,0.4)] select-none cursor-pointer touch-manipulation">
-                            <i class="fa-solid fa-rotate-right text-ledCyan text-lg animate-spin-hover"></i>
+                        <button id="btnRestartLumia" type="button" onclick="runLumiaDemoSim()" class="w-full sm:w-auto px-6 py-4 bg-gradient-to-r from-silver-400/30 to-slate-700/40 hover:from-silver-400/50 hover:to-slate-700/60 active:scale-95 border-2 border-silver-300 text-white rounded-2xl font-bold text-sm transition flex items-center justify-center gap-3 shadow-[0_0_25px_rgba(0,240,255,0.4)] select-none cursor-pointer touch-manipulation">
+                            <i class="fa-solid fa-rotate-right text-ledSilver text-lg animate-spin-hover"></i>
                             <span class="tracking-wide">Reiniciar Simulação da LumIA</span>
                         </button>
                     </div>
@@ -480,7 +484,7 @@
                         <div class="bg-slate-900 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
                             <div class="flex items-center gap-3">
                                 <div class="relative">
-                                    <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-400 to-blue-600 flex items-center justify-center font-bold text-black text-sm">
+                                    <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-silver-300 to-slate-700 flex items-center justify-center font-bold text-black text-sm">
                                         IA
                                     </div>
                                     <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-slate-900"></span>
@@ -488,7 +492,7 @@
                                 <div>
                                     <h5 class="text-xs font-bold text-white flex items-center gap-1.5">
                                         LumIA • Atendimento Inteligente
-                                        <i class="fa-solid fa-circle-check text-ledCyan text-[10px]"></i>
+                                        <i class="fa-solid fa-circle-check text-ledSilver text-[10px]"></i>
                                     </h5>
                                     <p class="text-[10px] text-emerald-400 font-medium">Online agora • Resposta instantânea</p>
                                 </div>
@@ -502,11 +506,11 @@
                         </div>
 
                         <!-- Typing Indicator Box -->
-                        <div id="lumiaTypingIndicator" class="hidden px-4 py-1.5 bg-slate-900/90 border-t border-slate-800/80 text-[11px] text-cyan-300 flex items-center gap-2">
+                        <div id="lumiaTypingIndicator" class="hidden px-4 py-1.5 bg-slate-900/90 border-t border-slate-800/80 text-[11px] text-silver-200 flex items-center gap-2">
                             <span class="inline-flex gap-1 items-center">
-                                <span class="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style="animation-delay: 0s;"></span>
-                                <span class="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style="animation-delay: 0.15s;"></span>
-                                <span class="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style="animation-delay: 0.3s;"></span>
+                                <span class="w-1.5 h-1.5 bg-silver-300 rounded-full animate-bounce" style="animation-delay: 0s;"></span>
+                                <span class="w-1.5 h-1.5 bg-silver-300 rounded-full animate-bounce" style="animation-delay: 0.15s;"></span>
+                                <span class="w-1.5 h-1.5 bg-silver-300 rounded-full animate-bounce" style="animation-delay: 0.3s;"></span>
                             </span>
                             <span>LumIA está digitando...</span>
                         </div>
@@ -524,7 +528,7 @@
             <!-- LumIA - servico a parte, com valor de implementacao (unico) + mensalidade -->
             <div class="mt-8 pt-8 border-t border-white/10 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
                 <div class="lg:col-span-7 space-y-2">
-                    <span class="text-xs uppercase font-tech tracking-widest text-ledCyan font-bold">INVESTIMENTO EM AUTOMAÇÃO</span>
+                    <span class="text-xs uppercase font-tech tracking-widest text-ledSilver font-bold">INVESTIMENTO EM AUTOMAÇÃO</span>
                     <h4 data-editable="true" class="text-lg font-bold text-white">Serviço de Automação com IA (LumIA)</h4>
                     <p data-editable="true" class="text-xs text-slate-400 leading-relaxed">
                         Serviço à parte da gestão de tráfego, com estudo estratégico do seu negócio pra definir o escopo exato de implementação. Investimento único de implementação + mensalidade pela operação contínua.
@@ -537,15 +541,15 @@
                                 <label for="addonLumiaCheck" class="text-xs font-bold text-white cursor-pointer block">Incluir Automação LumIA</label>
                                 <span class="text-[11px] text-slate-400">Valor sob consulta, definido em reunião</span>
                             </div>
-                            <input type="checkbox" id="addonLumiaCheck" onchange="updateProposalTotal()" class="w-5 h-5 rounded bg-slate-800 border-slate-700 text-cyan-400 focus:ring-cyan-400 cursor-pointer">
+                            <input type="checkbox" id="addonLumiaCheck" onchange="updateProposalTotal()" class="w-5 h-5 rounded bg-slate-800 border-slate-700 text-silver-300 focus:ring-silver-300 cursor-pointer">
                         </div>
                         <div class="flex justify-between items-center text-xs pt-2 border-t border-white/5">
                             <span class="text-slate-400">Implementação (pagamento único):</span>
-                            <span id="lumiaImplementationDisplay" class="font-tech text-cyan-300 font-bold">Sob consulta</span>
+                            <span id="lumiaImplementationDisplay" class="font-tech text-silver-200 font-bold">Sob consulta</span>
                         </div>
                         <div class="flex justify-between items-center text-xs">
                             <span class="text-slate-400">Mensalidade recorrente:</span>
-                            <span id="lumiaMonthlyDisplay" class="font-tech text-cyan-300 font-bold">Sob consulta</span>
+                            <span id="lumiaMonthlyDisplay" class="font-tech text-silver-200 font-bold">Sob consulta</span>
                         </div>
                     </div>
                 </div>
@@ -554,7 +558,7 @@
 
         <section class="space-y-8">
             <div class="text-center space-y-2">
-                <span class="text-xs uppercase font-tech tracking-widest text-emerald-400 font-bold">SIMULAÇÃO DE RESULTADOS</span>
+                <span class="text-xs uppercase font-tech tracking-widest text-gold-400 font-bold">SIMULAÇÃO DE RESULTADOS</span>
                 <h3 data-editable="true" class="text-2xl sm:text-4xl font-bold font-luxury text-white">Calculadora Interativa de Faturamento</h3>
                 <p data-editable="true" class="text-slate-400 text-sm sm:text-base max-w-2xl mx-auto">Mova os controles abaixo ou use os botões para simular o potencial de escala de faturamento da sua clínica.</p>
             </div>
@@ -591,24 +595,24 @@
                     <div class="space-y-2.5 bg-slate-900/60 p-4 rounded-2xl border border-white/5">
                         <div class="flex justify-between items-center text-xs sm:text-sm">
                             <span class="text-slate-300 font-medium">Ticket Médio (Implantes / Alinhadores):</span>
-                            <span id="sliderTicketLabel" class="font-tech font-bold text-ledCyan text-base bg-cyan-500/10 px-3 py-1 rounded-lg border border-cyan-500/30 shadow">R$ 4.500</span>
+                            <span id="sliderTicketLabel" class="font-tech font-bold text-ledSilver text-base bg-silver-400/10 px-3 py-1 rounded-lg border border-silver-400/30 shadow">R$ 4.500</span>
                         </div>
                         <div class="flex items-center gap-2.5">
-                            <button type="button" onclick="adjustSlider('sliderTicket', -500)" class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-cyan-400 active:text-black border border-slate-700 flex items-center justify-center text-slate-200 text-xl font-black transition select-none flex-shrink-0 touch-manipulation shadow-md">
+                            <button type="button" onclick="adjustSlider('sliderTicket', -500)" class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-silver-300 active:text-black border border-slate-700 flex items-center justify-center text-slate-200 text-xl font-black transition select-none flex-shrink-0 touch-manipulation shadow-md">
                                 <i class="fa-solid fa-minus"></i>
                             </button>
                             <input type="range" id="sliderTicket" min="1500" max="18000" step="500" value="4500" class="w-full">
-                            <button type="button" onclick="adjustSlider('sliderTicket', 500)" class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-cyan-400 active:text-black border border-slate-700 flex items-center justify-center text-slate-200 text-xl font-black transition select-none flex-shrink-0 touch-manipulation shadow-md">
+                            <button type="button" onclick="adjustSlider('sliderTicket', 500)" class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-silver-300 active:text-black border border-slate-700 flex items-center justify-center text-slate-200 text-xl font-black transition select-none flex-shrink-0 touch-manipulation shadow-md">
                                 <i class="fa-solid fa-plus"></i>
                             </button>
                         </div>
                         <!-- Quick Presets for Mobile -->
                         <div class="flex flex-wrap items-center gap-1.5 pt-1">
                             <span class="text-[10px] text-slate-400 mr-1">Toque rápido:</span>
-                            <button type="button" onclick="setSliderValue('sliderTicket', 2500)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-cyan-400 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 2.500</button>
-                            <button type="button" onclick="setSliderValue('sliderTicket', 4500)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-cyan-400 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 4.500</button>
-                            <button type="button" onclick="setSliderValue('sliderTicket', 8000)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-cyan-400 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 8.000</button>
-                            <button type="button" onclick="setSliderValue('sliderTicket', 12000)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-cyan-400 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 12.000</button>
+                            <button type="button" onclick="setSliderValue('sliderTicket', 2500)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-silver-300 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 2.500</button>
+                            <button type="button" onclick="setSliderValue('sliderTicket', 4500)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-silver-300 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 4.500</button>
+                            <button type="button" onclick="setSliderValue('sliderTicket', 8000)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-silver-300 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 8.000</button>
+                            <button type="button" onclick="setSliderValue('sliderTicket', 12000)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-silver-300 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 12.000</button>
                         </div>
                     </div>
 
@@ -616,24 +620,24 @@
                     <div class="space-y-2.5 bg-slate-900/60 p-4 rounded-2xl border border-white/5">
                         <div class="flex justify-between items-center text-xs sm:text-sm">
                             <span class="text-slate-300 font-medium">Taxa de Conversão da Equipe (PNL + LumIA):</span>
-                            <span id="sliderConversionLabel" class="font-tech font-bold text-emerald-400 text-base bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/30 shadow">18%</span>
+                            <span id="sliderConversionLabel" class="font-tech font-bold text-gold-400 text-base bg-gold-500/10 px-3 py-1 rounded-lg border border-gold-500/30 shadow">18%</span>
                         </div>
                         <div class="flex items-center gap-2.5">
-                            <button type="button" onclick="adjustSlider('sliderConversion', -1)" class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-emerald-400 active:text-black border border-slate-700 flex items-center justify-center text-slate-200 text-xl font-black transition select-none flex-shrink-0 touch-manipulation shadow-md">
+                            <button type="button" onclick="adjustSlider('sliderConversion', -1)" class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-gold-400 active:text-black border border-slate-700 flex items-center justify-center text-slate-200 text-xl font-black transition select-none flex-shrink-0 touch-manipulation shadow-md">
                                 <i class="fa-solid fa-minus"></i>
                             </button>
                             <input type="range" id="sliderConversion" min="8" max="35" step="1" value="18" class="w-full">
-                            <button type="button" onclick="adjustSlider('sliderConversion', 1)" class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-emerald-400 active:text-black border border-slate-700 flex items-center justify-center text-slate-200 text-xl font-black transition select-none flex-shrink-0 touch-manipulation shadow-md">
+                            <button type="button" onclick="adjustSlider('sliderConversion', 1)" class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-gold-400 active:text-black border border-slate-700 flex items-center justify-center text-slate-200 text-xl font-black transition select-none flex-shrink-0 touch-manipulation shadow-md">
                                 <i class="fa-solid fa-plus"></i>
                             </button>
                         </div>
                         <!-- Quick Presets for Mobile -->
                         <div class="flex flex-wrap items-center gap-1.5 pt-1">
                             <span class="text-[10px] text-slate-400 mr-1">Toque rápido:</span>
-                            <button type="button" onclick="setSliderValue('sliderConversion', 12)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-emerald-400 active:text-black rounded-lg border border-slate-700 text-slate-300">12%</button>
-                            <button type="button" onclick="setSliderValue('sliderConversion', 18)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-emerald-400 active:text-black rounded-lg border border-slate-700 text-slate-300">18%</button>
-                            <button type="button" onclick="setSliderValue('sliderConversion', 25)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-emerald-400 active:text-black rounded-lg border border-slate-700 text-slate-300">25%</button>
-                            <button type="button" onclick="setSliderValue('sliderConversion', 30)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-emerald-400 active:text-black rounded-lg border border-slate-700 text-slate-300">30%</button>
+                            <button type="button" onclick="setSliderValue('sliderConversion', 12)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-gold-400 active:text-black rounded-lg border border-slate-700 text-slate-300">12%</button>
+                            <button type="button" onclick="setSliderValue('sliderConversion', 18)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-gold-400 active:text-black rounded-lg border border-slate-700 text-slate-300">18%</button>
+                            <button type="button" onclick="setSliderValue('sliderConversion', 25)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-gold-400 active:text-black rounded-lg border border-slate-700 text-slate-300">25%</button>
+                            <button type="button" onclick="setSliderValue('sliderConversion', 30)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-gold-400 active:text-black rounded-lg border border-slate-700 text-slate-300">30%</button>
                         </div>
                     </div>
                 </div>
@@ -647,12 +651,12 @@
                     </div>
                     <div class="bg-slate-900/90 p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-1">
                         <p class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Consultas Agendadas</p>
-                        <p id="calcAppointments" class="text-2xl sm:text-3xl font-tech font-bold text-ledCyan">27</p>
+                        <p id="calcAppointments" class="text-2xl sm:text-3xl font-tech font-bold text-ledSilver">27</p>
                         <p class="text-[10px] text-slate-500">pacientes na clínica/mês</p>
                     </div>
                     <div class="bg-slate-900/90 p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-1">
                         <p class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Vendas Fechadas Estimadas</p>
-                        <p id="calcDeals" class="text-2xl sm:text-3xl font-tech font-bold text-emerald-400">12</p>
+                        <p id="calcDeals" class="text-2xl sm:text-3xl font-tech font-bold text-gold-400">12</p>
                         <p class="text-[10px] text-slate-500">tratamentos iniciados</p>
                     </div>
                     <div class="bg-gradient-to-br from-amber-500/20 to-gold-500/10 p-4 sm:p-5 rounded-2xl border border-gold-500/40 space-y-1">
@@ -739,10 +743,10 @@
                 <div class="glass-card p-7 rounded-3xl border-white/10 space-y-6 flex flex-col justify-between">
                     <div>
                         <div class="flex items-center justify-between mb-4">
-                            <span class="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 text-xs font-bold border border-cyan-500/40">
+                            <span class="px-3 py-1 rounded-full bg-silver-400/20 text-silver-200 text-xs font-bold border border-silver-400/40">
                                 ADICIONAL OPCIONAL
                             </span>
-                            <i class="fa-solid fa-video text-ledCyan text-xl"></i>
+                            <i class="fa-solid fa-video text-ledSilver text-xl"></i>
                         </div>
 
                         <h4 data-editable="true" class="text-xl font-bold text-white">Serviço de Videomaker & Edição</h4>
@@ -752,19 +756,19 @@
 
                         <div class="mt-5 space-y-3 text-xs text-slate-300">
                             <div class="flex items-center gap-2">
-                                <i class="fa-solid fa-circle-check text-ledCyan"></i>
+                                <i class="fa-solid fa-circle-check text-ledSilver"></i>
                                 <span><strong>5 a 10 vídeos mensais</strong> gravados na clínica</span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <i class="fa-solid fa-circle-check text-ledCyan"></i>
+                                <i class="fa-solid fa-circle-check text-ledSilver"></i>
                                 <span>Edição moderna estilo reels/tiktok de alta retenção</span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <i class="fa-solid fa-circle-check text-ledCyan"></i>
+                                <i class="fa-solid fa-circle-check text-ledSilver"></i>
                                 <span>Direção presencial do doutor e depoimentos de pacientes</span>
                             </div>
                             <div class="flex items-center gap-2">
-                                <i class="fa-solid fa-circle-check text-ledCyan"></i>
+                                <i class="fa-solid fa-circle-check text-ledSilver"></i>
                                 <span>Entrega dos criativos prontos formatados para anúncios</span>
                             </div>
                             <div class="flex items-center gap-2 pt-2 mt-1 border-t border-white/5">
@@ -806,11 +810,11 @@
                     </div>
                     <div id="summaryVideomakerRow" class="hidden justify-between items-center text-xs text-slate-400">
                         <span id="summaryVideomakerLabel">Videomaker & Edição:</span>
-                        <span id="summaryVideomakerPrice" class="font-tech text-cyan-300 font-bold">R$ 1.500</span>
+                        <span id="summaryVideomakerPrice" class="font-tech text-silver-200 font-bold">R$ 1.500</span>
                     </div>
                     <div id="summaryLumiaMonthlyRow" class="hidden justify-between items-center text-xs text-slate-400">
                         <span>Automação LumIA (mensalidade):</span>
-                        <span id="summaryLumiaMonthlyPrice" class="font-tech text-cyan-300 font-bold">Sob consulta</span>
+                        <span id="summaryLumiaMonthlyPrice" class="font-tech text-silver-200 font-bold">Sob consulta</span>
                     </div>
                     <div class="pt-3 border-t border-white/10 flex justify-between items-baseline">
                         <span class="text-xs sm:text-sm font-bold text-white">Total Mensal Proposto:</span>
@@ -1077,7 +1081,7 @@
     </div>
 
     <div id="toastMessage" class="fixed bottom-6 right-6 z-[110] bg-slate-900/95 border border-gold-500/60 text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none text-xs">
-        <i class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
+        <i class="fa-solid fa-circle-check text-gold-400 text-base"></i>
         <span id="toastText">Operação realizada com sucesso.</span>
     </div>
 
@@ -1139,16 +1143,16 @@
             if (isEditorActive) {
                 document.body.classList.add('editor-active');
                 editableElements.forEach(el => el.setAttribute('contenteditable', 'true'));
-                btn.classList.add('bg-cyan-500/20', 'border-cyan-400', 'text-cyan-300');
-                icon.className = 'fa-solid fa-check text-cyan-300';
+                btn.classList.add('bg-silver-400/20', 'border-silver-300', 'text-silver-200');
+                icon.className = 'fa-solid fa-check text-silver-200';
                 label.innerText = 'Sair do Editor';
                 toolbar.classList.remove('hidden');
                 showToast('Modo Editor ativado! Clique em qualquer texto para editar.');
             } else {
                 document.body.classList.remove('editor-active');
                 editableElements.forEach(el => el.removeAttribute('contenteditable'));
-                btn.classList.remove('bg-cyan-500/20', 'border-cyan-400', 'text-cyan-300');
-                icon.className = 'fa-solid fa-pen-to-square text-ledCyan';
+                btn.classList.remove('bg-silver-400/20', 'border-silver-300', 'text-silver-200');
+                icon.className = 'fa-solid fa-pen-to-square text-ledSilver';
                 label.innerText = 'Modo Editor';
                 toolbar.classList.add('hidden');
                 showToast('Edições fixadas na página com sucesso.');
@@ -1621,10 +1625,10 @@
                     bubble.className = `flex ${isUser ? 'justify-end' : 'justify-start'} transition-all duration-300`;
 
                     bubble.innerHTML = `
-                        <div class="max-w-[88%] rounded-2xl px-3.5 py-2.5 ${isUser ? 'bg-slate-800 text-white border border-slate-700' : 'bg-gradient-to-r from-cyan-950 to-slate-900 border border-ledCyan/30 text-slate-100'} shadow-md">
-                            ${!isUser ? '<div class="text-[10px] text-ledCyan font-bold mb-1 flex items-center gap-1"><i class="fa-solid fa-robot"></i> LumIA</div>' : ''}
+                        <div class="max-w-[88%] rounded-2xl px-3.5 py-2.5 ${isUser ? 'bg-slate-800 text-white border border-slate-700' : 'bg-gradient-to-r from-slate-900 to-slate-900 border border-ledSilver/30 text-slate-100'} shadow-md">
+                            ${!isUser ? '<div class="text-[10px] text-ledSilver font-bold mb-1 flex items-center gap-1"><i class="fa-solid fa-robot"></i> LumIA</div>' : ''}
                             <p class="leading-relaxed text-xs">${msg.text}</p>
-                            <div class="text-[9px] text-slate-400 text-right mt-1">${msg.time} ${isUser ? '<i class="fa-solid fa-check-double text-ledCyan"></i>' : ''}</div>
+                            <div class="text-[9px] text-slate-400 text-right mt-1">${msg.time} ${isUser ? '<i class="fa-solid fa-check-double text-ledSilver"></i>' : ''}</div>
                         </div>
                     `;
                     container.appendChild(bubble);
