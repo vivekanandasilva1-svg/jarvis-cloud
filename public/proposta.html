@@ -520,6 +520,36 @@
                     </div>
                 </div>
             </div>
+
+            <!-- LumIA - servico a parte, com valor de implementacao (unico) + mensalidade -->
+            <div class="mt-8 pt-8 border-t border-white/10 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                <div class="lg:col-span-7 space-y-2">
+                    <span class="text-xs uppercase font-tech tracking-widest text-ledCyan font-bold">INVESTIMENTO EM AUTOMAÇÃO</span>
+                    <h4 data-editable="true" class="text-lg font-bold text-white">Serviço de Automação com IA (LumIA)</h4>
+                    <p data-editable="true" class="text-xs text-slate-400 leading-relaxed">
+                        Serviço à parte da gestão de tráfego, com estudo estratégico do seu negócio pra definir o escopo exato de implementação. Investimento único de implementação + mensalidade pela operação contínua.
+                    </p>
+                </div>
+                <div class="lg:col-span-5">
+                    <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <label for="addonLumiaCheck" class="text-xs font-bold text-white cursor-pointer block">Incluir Automação LumIA</label>
+                                <span class="text-[11px] text-slate-400">Valor sob consulta, definido em reunião</span>
+                            </div>
+                            <input type="checkbox" id="addonLumiaCheck" onchange="updateProposalTotal()" class="w-5 h-5 rounded bg-slate-800 border-slate-700 text-cyan-400 focus:ring-cyan-400 cursor-pointer">
+                        </div>
+                        <div class="flex justify-between items-center text-xs pt-2 border-t border-white/5">
+                            <span class="text-slate-400">Implementação (pagamento único):</span>
+                            <span id="lumiaImplementationDisplay" class="font-tech text-cyan-300 font-bold">Sob consulta</span>
+                        </div>
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="text-slate-400">Mensalidade recorrente:</span>
+                            <span id="lumiaMonthlyDisplay" class="font-tech text-cyan-300 font-bold">Sob consulta</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <section class="space-y-8">
@@ -737,15 +767,20 @@
                                 <i class="fa-solid fa-circle-check text-ledCyan"></i>
                                 <span>Entrega dos criativos prontos formatados para anúncios</span>
                             </div>
+                            <div class="flex items-center gap-2 pt-2 mt-1 border-t border-white/5">
+                                <i class="fa-solid fa-star text-gold-400"></i>
+                                <span><strong class="text-gold-300">Versão Plus:</strong> tudo isso + Social Media (gestão e postagem diária nas redes)</span>
+                            </div>
                         </div>
 
-                        <!-- Checkbox Toggle for Proposal Summary -->
-                        <div class="mt-6 p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
-                            <div>
-                                <label for="addonVideomakerCheck" class="text-xs font-bold text-white cursor-pointer block">Incluir Videomaker Presencial</label>
-                                <span id="addonVideomakerPriceDisplay" class="text-[11px] text-slate-400">+ R$ 1.500 / mês</span>
-                            </div>
-                            <input type="checkbox" id="addonVideomakerCheck" onchange="updateProposalTotal()" class="w-5 h-5 rounded bg-slate-800 border-slate-700 text-gold-500 focus:ring-gold-500 cursor-pointer">
+                        <!-- Tier Selector for Proposal Summary -->
+                        <div class="mt-6 p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                            <label for="addonNivelSelect" class="text-xs font-bold text-white block">Escolher pacote:</label>
+                            <select id="addonNivelSelect" onchange="updateProposalTotal()" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-gold-500">
+                                <option value="nenhum">Não incluir</option>
+                                <option value="basico" id="addonBasicoOption">Videomaker & Edição</option>
+                                <option value="plus" id="addonPlusOption">Videomaker + Editor + Social Media (Plus)</option>
+                            </select>
                         </div>
                     </div>
 
@@ -770,12 +805,20 @@
                         <span id="summaryBasePrice" class="font-tech text-slate-200 font-bold">R$ 2.500</span>
                     </div>
                     <div id="summaryVideomakerRow" class="hidden justify-between items-center text-xs text-slate-400">
-                        <span>Videomaker Presencial (5 a 10 vídeos gravados/mês):</span>
+                        <span id="summaryVideomakerLabel">Videomaker & Edição:</span>
                         <span id="summaryVideomakerPrice" class="font-tech text-cyan-300 font-bold">R$ 1.500</span>
+                    </div>
+                    <div id="summaryLumiaMonthlyRow" class="hidden justify-between items-center text-xs text-slate-400">
+                        <span>Automação LumIA (mensalidade):</span>
+                        <span id="summaryLumiaMonthlyPrice" class="font-tech text-cyan-300 font-bold">Sob consulta</span>
                     </div>
                     <div class="pt-3 border-t border-white/10 flex justify-between items-baseline">
                         <span class="text-xs sm:text-sm font-bold text-white">Total Mensal Proposto:</span>
                         <span id="summaryTotalPrice" class="font-tech text-3xl sm:text-4xl font-extrabold gold-gradient-text">R$ 2.500 <span class="text-xs text-slate-400 font-normal">/mês</span></span>
+                    </div>
+                    <div id="summaryLumiaImplementationRow" class="hidden justify-between items-center text-xs text-slate-400 pt-2 border-t border-white/10">
+                        <span>+ Implementação LumIA (pagamento único, à parte):</span>
+                        <span id="summaryLumiaImplementationPrice" class="font-tech text-gold-300 font-bold">Sob consulta</span>
                     </div>
                 </div>
 
@@ -889,12 +932,24 @@
                             <input type="number" id="cfgBasePrice" step="100" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
                         </div>
                         <div>
-                            <label class="block text-slate-400 mb-1">Videomaker Adicional (R$)</label>
+                            <label class="block text-slate-400 mb-1">Videomaker Básico (R$/mês)</label>
                             <input type="number" id="cfgVideomakerPrice" step="100" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1">Videomaker Plus c/ Social Media (R$/mês)</label>
+                            <input type="number" id="cfgVideomakerPlusPrice" step="100" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
                         </div>
                         <div>
                             <label class="block text-slate-400 mb-1">WhatsApp de Fechamento (DDI+DDD+Num)</label>
                             <input type="text" id="cfgWhatsappPhone" placeholder="5582999999999" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1">LumIA - Implementação única (R$, vazio = sob consulta)</label>
+                            <input type="number" id="cfgLumiaImplementationPrice" step="100" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1">LumIA - Mensalidade (R$, vazio = sob consulta)</label>
+                            <input type="number" id="cfgLumiaMonthlyPrice" step="100" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
                         </div>
                     </div>
                 </div>
@@ -1037,11 +1092,22 @@
             city: 'Sua Região',
             specialty: 'Implantes & Alinhadores Invisíveis',
             basePrice: 2500,
+            // Addon de video em 2 niveis - 'nenhum' | 'basico' | 'plus' (Plus inclui Social Media)
+            addonNivel: 'nenhum',
             videomakerPrice: 1500,
-            hasVideomaker: false,
+            videomakerPlusPrice: 2800,
+            hasVideomaker: false, // mantido so por compatibilidade com links antigos
+            // Automacao LumIA - servico a parte, valor definido em reuniao (null = "Sob consulta")
+            hasLumia: false,
+            lumiaImplementationPrice: null,
+            lumiaMonthlyPrice: null,
             whatsappPhone: '5582999999999',
             customDomain: 'https://lumia-marketing.com/proposta.html'
         };
+
+        function formatarPrecoOuConsulta(valor) {
+            return valor ? `R$ ${Number(valor).toLocaleString('pt-BR')}` : 'Sob consulta';
+        }
 
         let isEditorActive = false;
         let isClientMode = false;
@@ -1099,7 +1165,10 @@
             document.getElementById('cfgSpecialty').value = proposalConfig.specialty;
             document.getElementById('cfgBasePrice').value = proposalConfig.basePrice;
             document.getElementById('cfgVideomakerPrice').value = proposalConfig.videomakerPrice;
+            document.getElementById('cfgVideomakerPlusPrice').value = proposalConfig.videomakerPlusPrice;
             document.getElementById('cfgWhatsappPhone').value = proposalConfig.whatsappPhone;
+            document.getElementById('cfgLumiaImplementationPrice').value = proposalConfig.lumiaImplementationPrice || '';
+            document.getElementById('cfgLumiaMonthlyPrice').value = proposalConfig.lumiaMonthlyPrice || '';
 
             document.getElementById('personalizationModal').classList.remove('hidden');
         }
@@ -1117,7 +1186,10 @@
             proposalConfig.specialty = document.getElementById('cfgSpecialty').value || 'Implantes & Estética';
             proposalConfig.basePrice = parseFloat(document.getElementById('cfgBasePrice').value) || 2500;
             proposalConfig.videomakerPrice = parseFloat(document.getElementById('cfgVideomakerPrice').value) || 1500;
+            proposalConfig.videomakerPlusPrice = parseFloat(document.getElementById('cfgVideomakerPlusPrice').value) || 2800;
             proposalConfig.whatsappPhone = document.getElementById('cfgWhatsappPhone').value || '';
+            proposalConfig.lumiaImplementationPrice = parseFloat(document.getElementById('cfgLumiaImplementationPrice').value) || null;
+            proposalConfig.lumiaMonthlyPrice = parseFloat(document.getElementById('cfgLumiaMonthlyPrice').value) || null;
 
             applyConfigToDOM();
             closePersonalizationModal();
@@ -1136,32 +1208,76 @@
 
             // Proposal Pricing
             document.getElementById('proposalBasePriceDisplay').innerHTML = `R$ ${proposalConfig.basePrice.toLocaleString('pt-BR')} <span class="text-xs text-slate-400 font-normal">/ mês</span>`;
-            document.getElementById('addonVideomakerPriceDisplay').innerText = `+ R$ ${proposalConfig.videomakerPrice.toLocaleString('pt-BR')} / mês`;
+
+            // Addon de video - preco de cada nivel aparece dentro do proprio seletor
+            const addonBasicoOption = document.getElementById('addonBasicoOption');
+            const addonPlusOption = document.getElementById('addonPlusOption');
+            if (addonBasicoOption) addonBasicoOption.textContent = `Videomaker & Edição — R$ ${proposalConfig.videomakerPrice.toLocaleString('pt-BR')}/mês`;
+            if (addonPlusOption) addonPlusOption.textContent = `Videomaker + Editor + Social Media (Plus) — R$ ${proposalConfig.videomakerPlusPrice.toLocaleString('pt-BR')}/mês`;
+            const addonNivelSelect = document.getElementById('addonNivelSelect');
+            if (addonNivelSelect) addonNivelSelect.value = proposalConfig.addonNivel || 'nenhum';
+
+            // LumIA - "Sob consulta" enquanto nao tiver um valor definido
+            const addonLumiaCheck = document.getElementById('addonLumiaCheck');
+            if (addonLumiaCheck) addonLumiaCheck.checked = !!proposalConfig.hasLumia;
+            document.getElementById('lumiaImplementationDisplay').innerText = formatarPrecoOuConsulta(proposalConfig.lumiaImplementationPrice);
+            document.getElementById('lumiaMonthlyDisplay').innerText = formatarPrecoOuConsulta(proposalConfig.lumiaMonthlyPrice) + (proposalConfig.lumiaMonthlyPrice ? '/mês' : '');
 
             // Summary
             document.getElementById('summaryDoctorName').innerText = proposalConfig.doctorName;
             document.getElementById('summaryClinicName').innerText = proposalConfig.clinicName;
             document.getElementById('summaryBasePrice').innerText = `R$ ${proposalConfig.basePrice.toLocaleString('pt-BR')}`;
-            document.getElementById('summaryVideomakerPrice').innerText = `R$ ${proposalConfig.videomakerPrice.toLocaleString('pt-BR')}`;
 
             updateProposalTotal();
         }
 
         // Proposal Pricing Calculation
         function updateProposalTotal() {
-            const hasVideomaker = document.getElementById('addonVideomakerCheck').checked;
-            proposalConfig.hasVideomaker = hasVideomaker;
+            const addonNivelSelect = document.getElementById('addonNivelSelect');
+            const addonNivel = addonNivelSelect ? addonNivelSelect.value : 'nenhum';
+            proposalConfig.addonNivel = addonNivel;
+            proposalConfig.hasVideomaker = addonNivel !== 'nenhum'; // compatibilidade com links antigos
+
+            const hasLumia = document.getElementById('addonLumiaCheck').checked;
+            proposalConfig.hasLumia = hasLumia;
 
             let total = proposalConfig.basePrice;
-            const videomakerRow = document.getElementById('summaryVideomakerRow');
 
-            if (hasVideomaker) {
+            const videomakerRow = document.getElementById('summaryVideomakerRow');
+            const videomakerLabel = document.getElementById('summaryVideomakerLabel');
+            const videomakerPriceEl = document.getElementById('summaryVideomakerPrice');
+            if (addonNivel === 'basico') {
                 total += proposalConfig.videomakerPrice;
+                videomakerLabel.innerText = 'Videomaker & Edição:';
+                videomakerPriceEl.innerText = `R$ ${proposalConfig.videomakerPrice.toLocaleString('pt-BR')}`;
+                videomakerRow.classList.remove('hidden');
+                videomakerRow.classList.add('flex');
+            } else if (addonNivel === 'plus') {
+                total += proposalConfig.videomakerPlusPrice;
+                videomakerLabel.innerText = 'Videomaker + Editor + Social Media (Plus):';
+                videomakerPriceEl.innerText = `R$ ${proposalConfig.videomakerPlusPrice.toLocaleString('pt-BR')}`;
                 videomakerRow.classList.remove('hidden');
                 videomakerRow.classList.add('flex');
             } else {
                 videomakerRow.classList.remove('flex');
                 videomakerRow.classList.add('hidden');
+            }
+
+            const lumiaMonthlyRow = document.getElementById('summaryLumiaMonthlyRow');
+            const lumiaImplementationRow = document.getElementById('summaryLumiaImplementationRow');
+            if (hasLumia) {
+                if (proposalConfig.lumiaMonthlyPrice) total += Number(proposalConfig.lumiaMonthlyPrice);
+                document.getElementById('summaryLumiaMonthlyPrice').innerText = formatarPrecoOuConsulta(proposalConfig.lumiaMonthlyPrice);
+                document.getElementById('summaryLumiaImplementationPrice').innerText = formatarPrecoOuConsulta(proposalConfig.lumiaImplementationPrice);
+                lumiaMonthlyRow.classList.remove('hidden');
+                lumiaMonthlyRow.classList.add('flex');
+                lumiaImplementationRow.classList.remove('hidden');
+                lumiaImplementationRow.classList.add('flex');
+            } else {
+                lumiaMonthlyRow.classList.remove('flex');
+                lumiaMonthlyRow.classList.add('hidden');
+                lumiaImplementationRow.classList.remove('flex');
+                lumiaImplementationRow.classList.add('hidden');
             }
 
             document.getElementById('summaryTotalPrice').innerHTML = `R$ ${total.toLocaleString('pt-BR')} <span class="text-xs text-slate-400 font-normal">/mês</span>`;
@@ -1193,8 +1309,8 @@
         let ultimoLinkCurto = { assinatura: null, url: null };
 
         function assinaturaProposalConfig() {
-            const { doctorName, clinicName, city, specialty, basePrice, videomakerPrice, hasVideomaker, whatsappPhone } = proposalConfig;
-            return JSON.stringify({ doctorName, clinicName, city, specialty, basePrice, videomakerPrice, hasVideomaker, whatsappPhone });
+            const { doctorName, clinicName, city, specialty, basePrice, addonNivel, videomakerPrice, videomakerPlusPrice, hasLumia, lumiaImplementationPrice, lumiaMonthlyPrice, whatsappPhone } = proposalConfig;
+            return JSON.stringify({ doctorName, clinicName, city, specialty, basePrice, addonNivel, videomakerPrice, videomakerPlusPrice, hasLumia, lumiaImplementationPrice, lumiaMonthlyPrice, whatsappPhone });
         }
 
         function origemDoDominioConfigurado() {
@@ -1360,14 +1476,14 @@
                     const resp = await fetch(`/api/propostas/${curtoMatch[1]}`);
                     if (resp.ok) {
                         const dados = await resp.json();
-                        ['doctorName', 'clinicName', 'city', 'specialty', 'basePrice', 'videomakerPrice', 'whatsappPhone'].forEach((chave) => {
+                        ['doctorName', 'clinicName', 'city', 'specialty', 'basePrice', 'videomakerPrice', 'videomakerPlusPrice', 'lumiaImplementationPrice', 'lumiaMonthlyPrice', 'whatsappPhone'].forEach((chave) => {
                             if (dados[chave] !== null && dados[chave] !== undefined) proposalConfig[chave] = dados[chave];
                         });
-                        if (dados.hasVideomaker) {
+                        if (dados.addonNivel && dados.addonNivel !== 'nenhum') {
+                            proposalConfig.addonNivel = dados.addonNivel;
                             proposalConfig.hasVideomaker = true;
-                            const cb = document.getElementById('addonVideomakerCheck');
-                            if (cb) cb.checked = true;
                         }
+                        if (dados.hasLumia) proposalConfig.hasLumia = true;
                         // marca de quem vendeu essa proposta - "branded" mantem a marca padrao
                         // (Vivekananda/LumIA); "white_label" usa a marca do proprio assinante
                         if (dados.plano === 'white_label') {
@@ -1395,9 +1511,8 @@
                 if (params.get('cid')) proposalConfig.city = params.get('cid');
                 if (params.get('p')) proposalConfig.basePrice = parseFloat(params.get('p')) || proposalConfig.basePrice;
                 if (params.get('vm') === '1') {
+                    proposalConfig.addonNivel = 'basico';
                     proposalConfig.hasVideomaker = true;
-                    const cb = document.getElementById('addonVideomakerCheck');
-                    if (cb) cb.checked = true;
                 }
 
                 // Legacy JSON support if present
@@ -1406,9 +1521,8 @@
                     try {
                         const parsed = JSON.parse(decodeURIComponent(dados));
                         proposalConfig = Object.assign(proposalConfig, parsed);
-                        if (parsed.hasVideomaker) {
-                            const cb = document.getElementById('addonVideomakerCheck');
-                            if (cb) cb.checked = true;
+                        if (parsed.hasVideomaker && (!parsed.addonNivel || parsed.addonNivel === 'nenhum')) {
+                            proposalConfig.addonNivel = 'basico';
                         }
                     } catch (e) {
                         console.error('Erro ao restaurar dados da proposta', e);
@@ -1425,16 +1539,29 @@
             let total = proposalConfig.basePrice;
             let escopo = `Gestão de Tráfego Pago (Meta, Google e TikTok), Treinamento de Vendas com PNL/Neuromarketing, Rotina de CRM, Roteiros de Criativos e Lançamentos (Meteórico e 360°)`;
 
-            if (proposalConfig.hasVideomaker) {
+            if (proposalConfig.addonNivel === 'basico') {
                 total += proposalConfig.videomakerPrice;
                 escopo += ` + Serviço de Videomaker e Edição Presencial (5 a 10 vídeos gravados na clínica)`;
+            } else if (proposalConfig.addonNivel === 'plus') {
+                total += proposalConfig.videomakerPlusPrice;
+                escopo += ` + Serviço de Videomaker + Editor + Social Media (Plus)`;
+            }
+
+            if (proposalConfig.hasLumia && proposalConfig.lumiaMonthlyPrice) {
+                total += Number(proposalConfig.lumiaMonthlyPrice);
             }
 
             let msg = `Olá, Vivekananda! Aqui é ${proposalConfig.doctorName} da clínica ${proposalConfig.clinicName}.\n\n`;
             msg += `Gostei da proposta e quero fechar a parceria para acelerar a captação de pacientes da clínica.\n\n`;
             msg += `📋 *Escopo Selecionado:* ${escopo}\n`;
-            msg += `💰 *Valor Mensal Fechado:* R$ ${total.toLocaleString('pt-BR')}/mês\n\n`;
-            msg += `Podemos enviar o contrato e marcar o alinhamento de onboarding?`;
+            msg += `💰 *Valor Mensal Fechado:* R$ ${total.toLocaleString('pt-BR')}/mês\n`;
+
+            if (proposalConfig.hasLumia) {
+                msg += `🤖 *Automação LumIA (mensalidade já incluída no valor acima):* ${formatarPrecoOuConsulta(proposalConfig.lumiaMonthlyPrice)}${proposalConfig.lumiaMonthlyPrice ? '/mês' : ''}\n`;
+                msg += `➕ *Implementação LumIA (pagamento único, à parte):* ${formatarPrecoOuConsulta(proposalConfig.lumiaImplementationPrice)}\n`;
+            }
+
+            msg += `\nPodemos enviar o contrato e marcar o alinhamento de onboarding?`;
 
             const encoded = encodeURIComponent(msg);
             const phone = proposalConfig.whatsappPhone || '5582999999999';

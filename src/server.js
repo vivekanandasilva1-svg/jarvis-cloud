@@ -114,7 +114,9 @@ app.post('/api/propostas', async (req, res) => {
   try {
     const { doctorName, clinicName } = req.body || {};
     if (!doctorName || !clinicName) return res.status(400).json({ erro: 'nome do doutor e da clinica sao obrigatorios' });
-    const id = await propostas.criar(req.body || {});
+    // uso direto do proprio Vivekananda em proposta.html, sem login - sempre "branded" (sem
+    // tenant dono, sem marca propria)
+    const id = await propostas.criar(null, req.body || {});
     res.json({ id });
   } catch (err) {
     res.status(500).json({ erro: err.message });

@@ -37,6 +37,17 @@ async function garantirTabela() {
   await pool.query(`ALTER TABLE propostas_comerciais ADD COLUMN IF NOT EXISTS brand_name TEXT;`);
   await pool.query(`ALTER TABLE propostas_comerciais ADD COLUMN IF NOT EXISTS brand_subtitle TEXT;`);
   await pool.query(`ALTER TABLE propostas_comerciais ADD COLUMN IF NOT EXISTS logo_text TEXT;`);
+  // addon de video em 2 niveis (basico/plus com social media) - "addon_nivel" e a fonte de
+  // verdade; has_videomaker/videomaker_price ficam so por compatibilidade com leitura de linhas
+  // criadas antes dessa mudanca (ver mapearLinha)
+  await pool.query(`ALTER TABLE propostas_comerciais ADD COLUMN IF NOT EXISTS addon_nivel TEXT NOT NULL DEFAULT 'nenhum';`);
+  await pool.query(`ALTER TABLE propostas_comerciais ADD COLUMN IF NOT EXISTS videomaker_plus_price NUMERIC;`);
+  // Automacao LumIA - servico a parte, com valor de implementacao (pagamento unico) e
+  // mensalidade definidos caso a caso (podem ficar em branco = "sob consulta", ate o estudo
+  // estrategico do negocio do cliente definir um numero)
+  await pool.query(`ALTER TABLE propostas_comerciais ADD COLUMN IF NOT EXISTS has_lumia BOOLEAN NOT NULL DEFAULT false;`);
+  await pool.query(`ALTER TABLE propostas_comerciais ADD COLUMN IF NOT EXISTS lumia_implementation_price NUMERIC;`);
+  await pool.query(`ALTER TABLE propostas_comerciais ADD COLUMN IF NOT EXISTS lumia_monthly_price NUMERIC;`);
 }
 export const tabelasProntas = garantirTabela().catch((err) => {
   console.error('Erro criando tabela propostas_comerciais:', err.message);
@@ -58,11 +69,20 @@ function gerarId() {
   return crypto.randomBytes(4).toString('base64url');
 }
 
+function numeroOuNulo(valor) {
+  return Number.isFinite(Number(valor)) && Number(valor) > 0 ? Number(valor) : null;
+}
+
 // tenantId: dono da proposta. marca: snapshot { plano, brandName, brandSubtitle, logoText } -
 // pra "branded" fica tudo null (a pagina publica cai nos valores fixos do Vivekananda)
 export async function criar(tenantId, dados, marca = {}) {
   if (!pool) throw new Error('banco de dados nao configurado');
   await tabelasProntas;
+
+  // addonNivel e a fonte de verdade ('nenhum'|'basico'|'plus'); aceita o hasVideomaker antigo
+  // como fallback pra nao quebrar nenhuma chamada que ainda mande so o campo velho
+  let addonNivel = ['nenhum', 'basico', 'plus'].includes(dados.addonNivel) ? dados.addonNivel : null;
+  if (!addonNivel) addonNivel = dados.hasVideomaker ? 'basico' : 'nenhum';
 
   const linha = {
     doctor_name: cortar(dados.doctorName, LIMITES.doctorName),
@@ -71,7 +91,12 @@ export async function criar(tenantId, dados, marca = {}) {
     specialty: cortar(dados.specialty, LIMITES.specialty),
     base_price: Number.isFinite(Number(dados.basePrice)) ? Number(dados.basePrice) : null,
     videomaker_price: Number.isFinite(Number(dados.videomakerPrice)) ? Number(dados.videomakerPrice) : null,
-    has_videomaker: !!dados.hasVideomaker,
+    videomaker_plus_price: Number.isFinite(Number(dados.videomakerPlusPrice)) ? Number(dados.videomakerPlusPrice) : null,
+    addon_nivel: addonNivel,
+    has_videomaker: addonNivel !== 'nenhum',
+    has_lumia: !!dados.hasLumia,
+    lumia_implementation_price: numeroOuNulo(dados.lumiaImplementationPrice),
+    lumia_monthly_price: numeroOuNulo(dados.lumiaMonthlyPrice),
     whatsapp_phone: cortar(dados.whatsappPhone, LIMITES.whatsappPhone),
     plano: marca.plano === 'white_label' ? 'white_label' : 'branded',
     brand_name: cortar(marca.brandName, LIMITES.brandName),
@@ -84,9 +109,9 @@ export async function criar(tenantId, dados, marca = {}) {
     try {
       await pool.query(
         `INSERT INTO propostas_comerciais
-           (id, tenant_id, doctor_name, clinic_name, city, specialty, base_price, videomaker_price, has_videomaker, whatsapp_phone, plano, brand_name, brand_subtitle, logo_text)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-        [id, tenantId || null, linha.doctor_name, linha.clinic_name, linha.city, linha.specialty, linha.base_price, linha.videomaker_price, linha.has_videomaker, linha.whatsapp_phone, linha.plano, linha.brand_name, linha.brand_subtitle, linha.logo_text]
+           (id, tenant_id, doctor_name, clinic_name, city, specialty, base_price, videomaker_price, videomaker_plus_price, addon_nivel, has_videomaker, has_lumia, lumia_implementation_price, lumia_monthly_price, whatsapp_phone, plano, brand_name, brand_subtitle, logo_text)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+        [id, tenantId || null, linha.doctor_name, linha.clinic_name, linha.city, linha.specialty, linha.base_price, linha.videomaker_price, linha.videomaker_plus_price, linha.addon_nivel, linha.has_videomaker, linha.has_lumia, linha.lumia_implementation_price, linha.lumia_monthly_price, linha.whatsapp_phone, linha.plano, linha.brand_name, linha.brand_subtitle, linha.logo_text]
       );
       return id;
     } catch (err) {
@@ -98,6 +123,11 @@ export async function criar(tenantId, dados, marca = {}) {
 }
 
 function mapearLinha(r) {
+  // linhas criadas antes do addon_nivel existir tem o default 'nenhum' mesmo com
+  // has_videomaker=true - cai pro "basico" nesse caso pra nao perder o addon que já tinham
+  const addonNivel = r.addon_nivel && r.addon_nivel !== 'nenhum'
+    ? r.addon_nivel
+    : (r.has_videomaker ? 'basico' : 'nenhum');
   return {
     id: r.id,
     doctorName: r.doctor_name,
@@ -106,7 +136,12 @@ function mapearLinha(r) {
     specialty: r.specialty,
     basePrice: r.base_price != null ? Number(r.base_price) : null,
     videomakerPrice: r.videomaker_price != null ? Number(r.videomaker_price) : null,
+    videomakerPlusPrice: r.videomaker_plus_price != null ? Number(r.videomaker_plus_price) : null,
+    addonNivel,
     hasVideomaker: r.has_videomaker,
+    hasLumia: r.has_lumia,
+    lumiaImplementationPrice: r.lumia_implementation_price != null ? Number(r.lumia_implementation_price) : null,
+    lumiaMonthlyPrice: r.lumia_monthly_price != null ? Number(r.lumia_monthly_price) : null,
     whatsappPhone: r.whatsapp_phone,
     plano: r.plano,
     brandName: r.brand_name,

@@ -127,10 +127,42 @@
                     <label class="block text-xs text-slate-400 mb-1">WhatsApp de fechamento</label>
                     <input type="text" id="propWhatsapp" placeholder="5582999999999" class="w-full rounded-xl p-2.5 text-sm">
                 </div>
-                <div class="sm:col-span-2 flex items-center gap-2">
-                    <input type="checkbox" id="propHasVideomaker" class="w-4 h-4">
-                    <label for="propHasVideomaker" class="text-xs text-slate-300">Incluir serviço adicional (videomaker)</label>
-                    <input type="number" id="propVideomakerPrice" step="50" value="1500" placeholder="Preço do adicional" class="w-32 rounded-xl p-2 text-xs ml-auto">
+                <div class="sm:col-span-2 space-y-2 p-3 bg-slate-900 rounded-xl border border-slate-800">
+                    <label class="block text-xs text-slate-400">Addon de Vídeo (o cliente escolhe o pacote na proposta, você define os preços)</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[11px] text-slate-500 mb-1">Videomaker Básico (R$/mês)</label>
+                            <input type="number" id="propVideomakerPrice" step="50" value="1500" class="w-full rounded-xl p-2 text-xs">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-slate-500 mb-1">Videomaker Plus c/ Social Media (R$/mês)</label>
+                            <input type="number" id="propVideomakerPlusPrice" step="50" value="2800" class="w-full rounded-xl p-2 text-xs">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] text-slate-500 mb-1">Pacote pré-selecionado ao abrir o link</label>
+                        <select id="propAddonNivel" class="w-full rounded-xl p-2 text-xs">
+                            <option value="nenhum">Nenhum</option>
+                            <option value="basico">Videomaker Básico</option>
+                            <option value="plus">Videomaker Plus</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="sm:col-span-2 space-y-2 p-3 bg-slate-900 rounded-xl border border-slate-800">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="propHasLumia" class="w-4 h-4">
+                        <label for="propHasLumia" class="text-xs text-slate-300">Incluir Automação LumIA (serviço à parte)</label>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[11px] text-slate-500 mb-1">Implementação única (R$, vazio = sob consulta)</label>
+                            <input type="number" id="propLumiaImplementationPrice" step="100" placeholder="Sob consulta" class="w-full rounded-xl p-2 text-xs">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-slate-500 mb-1">Mensalidade (R$, vazio = sob consulta)</label>
+                            <input type="number" id="propLumiaMonthlyPrice" step="100" placeholder="Sob consulta" class="w-full rounded-xl p-2 text-xs">
+                        </div>
+                    </div>
                 </div>
                 <button type="submit" class="sm:col-span-2 py-3 bg-gradient-to-r from-gold-500 to-amber-600 text-black font-bold rounded-xl text-sm">
                     <i class="fa-solid fa-link"></i> Gerar Proposta
@@ -241,7 +273,11 @@
                 specialty: document.getElementById('propSpecialty').value.trim(),
                 basePrice: parseFloat(document.getElementById('propBasePrice').value) || 0,
                 videomakerPrice: parseFloat(document.getElementById('propVideomakerPrice').value) || 0,
-                hasVideomaker: document.getElementById('propHasVideomaker').checked,
+                videomakerPlusPrice: parseFloat(document.getElementById('propVideomakerPlusPrice').value) || 0,
+                addonNivel: document.getElementById('propAddonNivel').value,
+                hasLumia: document.getElementById('propHasLumia').checked,
+                lumiaImplementationPrice: parseFloat(document.getElementById('propLumiaImplementationPrice').value) || null,
+                lumiaMonthlyPrice: parseFloat(document.getElementById('propLumiaMonthlyPrice').value) || null,
                 whatsappPhone: document.getElementById('propWhatsapp').value.trim(),
             };
             const resp = await fetch('/api/minha-proposta/propostas', {
