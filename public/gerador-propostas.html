@@ -74,11 +74,20 @@
         @keyframes girarBorda { to { --borda-ang: 360deg; } }
         @property --borda-ang { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
 
-        .login-logo-wrap { animation: pulsarLogo 2.8s ease-in-out infinite; }
+        .login-logo-wrap {
+            animation: pulsarLogo 2.8s ease-in-out infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         @keyframes pulsarLogo {
             0%, 100% { box-shadow: 0 0 10px rgba(212, 175, 55, 0.5); }
             50% { box-shadow: 0 0 26px rgba(245, 213, 118, 0.9); }
         }
+        /* icone gira devagar dentro da caixa - reforca a "pegada tecnologica" com movimento
+           visivel, igual ao giro do logo no login principal da Lumia (style.css) */
+        .login-logo-icon { animation: girarIcone 8s linear infinite; }
+        @keyframes girarIcone { to { transform: rotate(360deg); } }
 
         #loginUsername:focus, #loginSenha:focus {
             border-color: #D4AF37;
@@ -96,7 +105,7 @@
         @keyframes brilhoBotao { 0% { left: -60%; } 40%, 100% { left: 130%; } }
 
         @media (prefers-reduced-motion: reduce) {
-            .circuit-lines path, .circuit-nodes circle, .login-card::before, .login-logo-wrap, .login-submit::after {
+            .circuit-lines path, .circuit-nodes circle, .login-card::before, .login-logo-wrap, .login-logo-icon, .login-submit::after {
                 animation: none !important;
             }
         }
@@ -127,8 +136,8 @@
 
         <form id="formLogin" class="login-card card rounded-2xl p-8 max-w-sm w-full space-y-4 relative z-10">
             <div class="text-center space-y-2 mb-2">
-                <div class="login-logo-wrap w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-gold-300 via-gold-500 to-amber-700 flex items-center justify-center font-tech text-black font-black text-2xl">
-                    <i class="fa-solid fa-file-signature"></i>
+                <div class="login-logo-wrap w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-gold-400 via-gold-500 to-amber-700 font-tech text-black font-black text-2xl">
+                    <i class="login-logo-icon fa-solid fa-file-signature"></i>
                 </div>
                 <h1 class="text-lg font-bold text-white font-tech tracking-widest uppercase">Gerador de Propostas</h1>
                 <p class="text-[11px] text-silver-400 uppercase tracking-widest">Acesso restrito a assinantes</p>
