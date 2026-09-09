@@ -1186,54 +1186,83 @@
             document.getElementById('sendProposalModal').classList.add('hidden');
         }
 
-        function updateShareableUrlFromCustomHost() {
-            const domainInput = document.getElementById('customHostDomainInput');
-            const customHost = domainInput ? domainInput.value.trim() : (proposalConfig.customDomain || 'https://lumia-marketing.com/proposta.html');
-            const input = document.getElementById('clientShareableUrlInput');
+        // Cache do ultimo link curto gerado - evita criar uma linha nova no banco toda vez que
+        // o modal reabre sem nada ter mudado na personalizacao
+        let ultimoLinkCurto = { assinatura: null, url: null };
 
-            if (customHost) {
-                proposalConfig.customDomain = customHost;
-                try {
-                    let base = customHost.startsWith('http') ? customHost : 'https://' + customHost;
-                    const url = new URL(base);
-
-                    // Create ultra-clean, short query parameters
-                    url.searchParams.set('modo', 'c');
-                    url.searchParams.set('d', proposalConfig.doctorName);
-                    url.searchParams.set('cl', proposalConfig.clinicName);
-                    url.searchParams.set('cid', proposalConfig.city);
-                    url.searchParams.set('p', proposalConfig.basePrice);
-                    if (proposalConfig.hasVideomaker) url.searchParams.set('vm', '1');
-
-                    input.value = url.toString();
-                    return;
-                } catch(e) {}
-            }
-
-            input.value = `https://lumia-marketing.com/proposta.html?modo=c&d=${encodeURIComponent(proposalConfig.doctorName)}&cl=${encodeURIComponent(proposalConfig.clinicName)}&p=${proposalConfig.basePrice}`;
+        function assinaturaProposalConfig() {
+            const { doctorName, clinicName, city, specialty, basePrice, videomakerPrice, hasVideomaker, whatsappPhone } = proposalConfig;
+            return JSON.stringify({ doctorName, clinicName, city, specialty, basePrice, videomakerPrice, hasVideomaker, whatsappPhone });
         }
 
-        function generateClientShareUrl() {
+        function origemDoDominioConfigurado() {
             const domainInput = document.getElementById('customHostDomainInput');
             const customHost = domainInput ? domainInput.value.trim() : (proposalConfig.customDomain || 'https://lumia-marketing.com/proposta.html');
-            if (customHost) {
-                try {
-                    let base = customHost.startsWith('http') ? customHost : 'https://' + customHost;
-                    const url = new URL(base);
-                    url.searchParams.set('modo', 'c');
-                    url.searchParams.set('d', proposalConfig.doctorName);
-                    url.searchParams.set('cl', proposalConfig.clinicName);
-                    url.searchParams.set('cid', proposalConfig.city);
-                    url.searchParams.set('p', proposalConfig.basePrice);
-                    if (proposalConfig.hasVideomaker) url.searchParams.set('vm', '1');
-                    return url.toString();
-                } catch(e) {}
-            }
-            return `https://lumia-marketing.com/proposta.html?modo=c&d=${encodeURIComponent(proposalConfig.doctorName)}&cl=${encodeURIComponent(proposalConfig.clinicName)}&p=${proposalConfig.basePrice}`;
+            if (customHost) proposalConfig.customDomain = customHost;
+            const base = customHost.startsWith('http') ? customHost : 'https://' + customHost;
+            return new URL(base).origin;
         }
 
-        function copyClientShareUrl() {
+        function construirUrlLonga() {
+            try {
+                const base = proposalConfig.customDomain || 'https://lumia-marketing.com/proposta.html';
+                const url = new URL(base.startsWith('http') ? base : 'https://' + base);
+                url.searchParams.set('modo', 'c');
+                url.searchParams.set('d', proposalConfig.doctorName);
+                url.searchParams.set('cl', proposalConfig.clinicName);
+                url.searchParams.set('cid', proposalConfig.city);
+                url.searchParams.set('p', proposalConfig.basePrice);
+                if (proposalConfig.hasVideomaker) url.searchParams.set('vm', '1');
+                return url.toString();
+            } catch (e) {
+                return `https://lumia-marketing.com/proposta.html?modo=c&d=${encodeURIComponent(proposalConfig.doctorName)}&cl=${encodeURIComponent(proposalConfig.clinicName)}&p=${proposalConfig.basePrice}`;
+            }
+        }
+
+        // Salva a personalizacao atual no servidor e devolve um link curto tipo
+        // https://lumia-marketing.com/p/A1b2C3 - se o servidor/banco nao estiver disponivel
+        // (ex: rodando local sem Postgres), cai de volta pro link longo com query string
+        async function generateClientShareUrl() {
+            const assinatura = assinaturaProposalConfig();
+            let origem;
+            try {
+                origem = origemDoDominioConfigurado();
+            } catch (e) {
+                origem = null;
+            }
+
+            if (ultimoLinkCurto.assinatura === assinatura && ultimoLinkCurto.url) {
+                return ultimoLinkCurto.url;
+            }
+
+            try {
+                const resp = await fetch('/api/propostas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(proposalConfig),
+                });
+                if (!resp.ok) throw new Error('falha ao gerar link curto');
+                const { id } = await resp.json();
+                const url = `${origem || 'https://lumia-marketing.com'}/p/${id}`;
+                ultimoLinkCurto = { assinatura, url };
+                return url;
+            } catch (e) {
+                console.error('Nao foi possivel gerar link curto, usando link longo:', e);
+                return construirUrlLonga();
+            }
+        }
+
+        async function updateShareableUrlFromCustomHost() {
             const input = document.getElementById('clientShareableUrlInput');
+            input.value = 'Gerando link curto...';
+            input.value = await generateClientShareUrl();
+        }
+
+        async function copyClientShareUrl() {
+            const input = document.getElementById('clientShareableUrlInput');
+            if (!input.value.startsWith('http')) {
+                await updateShareableUrlFromCustomHost();
+            }
             if (!input.value.startsWith('http')) {
                 showToast('Por favor, informe a URL do seu site no campo acima!');
                 return;
@@ -1244,8 +1273,8 @@
             showToast('Link curto do cliente copiado com sucesso!');
         }
 
-        function dispatchClientWhatsApp() {
-            const shareUrl = generateClientShareUrl();
+        async function dispatchClientWhatsApp() {
+            const shareUrl = await generateClientShareUrl();
             let msg = `Olá, ${proposalConfig.doctorName}! 🦷✨\n\n`;
             msg += `Conforme combinamos, preparei a apresentação estratégica e a proposta comercial exclusiva para a *${proposalConfig.clinicName}*.\n\n`;
 
@@ -1321,7 +1350,31 @@
             }
         }
 
-        function checkUrlForClientMode() {
+        async function checkUrlForClientMode() {
+            // Link curto: /p/A1b2C3 - busca a personalizacao salva no servidor
+            const curtoMatch = window.location.pathname.match(/^\/p\/([A-Za-z0-9_-]+)$/);
+            if (curtoMatch) {
+                try {
+                    const resp = await fetch(`/api/propostas/${curtoMatch[1]}`);
+                    if (resp.ok) {
+                        const dados = await resp.json();
+                        Object.keys(dados).forEach((chave) => {
+                            if (dados[chave] !== null && dados[chave] !== undefined) proposalConfig[chave] = dados[chave];
+                        });
+                        if (proposalConfig.hasVideomaker) {
+                            const cb = document.getElementById('addonVideomakerCheck');
+                            if (cb) cb.checked = true;
+                        }
+                        applyConfigToDOM();
+                        setClientMode(true);
+                        return;
+                    }
+                } catch (e) {
+                    console.error('Erro ao carregar proposta pelo link curto', e);
+                }
+            }
+
+            // Compatibilidade com links antigos gerados por query string (?modo=c&d=...)
             const params = new URLSearchParams(window.location.search);
             const isClient = params.get('modo') === 'c' || params.get('modo') === 'cliente' || params.get('mode') === 'client';
 

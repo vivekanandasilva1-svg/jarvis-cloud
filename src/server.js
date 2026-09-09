@@ -24,6 +24,7 @@ import * as relatoriosProgramados from './relatoriosProgramados.js';
 import * as tenants from './tenants.js';
 import * as tenantConfig from './tenantConfig.js';
 import * as metaAds from './metaads.js';
+import * as propostas from './propostas.js';
 
 const execAsync = promisify(exec);
 
@@ -59,7 +60,10 @@ app.use((req, res, next) => {
     req.path === '/api/crm/eventos' ||
     // <img src>/<audio src> tambem nao mandam headers customizados - mesma solucao (senha via
     // query string, conferida dentro do proprio handler)
-    req.path.startsWith('/api/crm/midia/')
+    req.path.startsWith('/api/crm/midia/') ||
+    // pagina de proposta comercial (public/proposta.html) e publica, sem login - quem preenche
+    // e o proprio Vivekananda direto no navegador, e quem le o link e o cliente em potencial
+    req.path.startsWith('/api/propostas')
   ) return next();
 
   // /api/agenda/google/conectar e navegacao de pagina de verdade (o navegador redireciona pro
@@ -104,6 +108,34 @@ app.get('/api/me', async (req, res) => {
 });
 
 app.use(express.static(PUBLIC_DIR));
+
+// ---------- Proposta comercial (public/proposta.html) - link curto por id em vez de query string ----------
+app.post('/api/propostas', async (req, res) => {
+  try {
+    const { doctorName, clinicName } = req.body || {};
+    if (!doctorName || !clinicName) return res.status(400).json({ erro: 'nome do doutor e da clinica sao obrigatorios' });
+    const id = await propostas.criar(req.body || {});
+    res.json({ id });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/propostas/:id', async (req, res) => {
+  try {
+    const dados = await propostas.obter(req.params.id);
+    if (!dados) return res.status(404).json({ erro: 'proposta nao encontrada' });
+    res.json(dados);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// link curto que o cliente recebe (ex: lumia-marketing.com/p/A1b2C3) - serve o mesmo HTML da
+// proposta, que busca os dados pelo id via /api/propostas/:id no carregamento
+app.get('/p/:id', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'proposta.html'));
+});
 
 // ---------- Painel "Clientes" (provisionamento manual de tenant, so o dono/super_admin ve) ----------
 // nao e self-serve de proposito (decisao explicita do usuario) - so quem ja tem super_admin=true
