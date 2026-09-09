@@ -3811,6 +3811,41 @@ async function selecionarCliente(id, nome) {
   trelloForm.append(trApiKey, trToken, trSalvar);
   clienteIntegracoesPainel.appendChild(trelloForm);
 
+  // ---- Gerador de Propostas (plano) ----
+  const propostaLabel = document.createElement('label'); propostaLabel.className = 'auto-label'; propostaLabel.textContent = 'Gerador de Propostas - Plano';
+  clienteIntegracoesPainel.appendChild(propostaLabel);
+  const propostaStatus = document.createElement('p');
+  propostaStatus.className = 'agenda-vazia';
+  propostaStatus.textContent = resumo.propostaPlano === 'white_label'
+    ? 'White Label - o cliente usa a propria marca nas propostas dele.'
+    : 'Branded - o cliente usa a marca padrao (Vivekananda/LumIA).';
+  clienteIntegracoesPainel.appendChild(propostaStatus);
+
+  const propostaForm = document.createElement('div');
+  propostaForm.className = 'cliente-form';
+  const propostaSelect = document.createElement('select');
+  const optBranded = document.createElement('option'); optBranded.value = 'branded'; optBranded.textContent = 'Branded (marca padrao)';
+  const optWhiteLabel = document.createElement('option'); optWhiteLabel.value = 'white_label'; optWhiteLabel.textContent = 'White Label (marca propria)';
+  propostaSelect.append(optBranded, optWhiteLabel);
+  propostaSelect.value = resumo.propostaPlano === 'white_label' ? 'white_label' : 'branded';
+  const propostaSalvar = document.createElement('button'); propostaSalvar.type = 'button'; propostaSalvar.textContent = 'Salvar Plano';
+  propostaSalvar.addEventListener('click', async () => {
+    try {
+      const res = await fetch(`/api/admin/tenants/${id}/proposta-plano`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ plano: propostaSelect.value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+      selecionarCliente(id, nome);
+    } catch (err) {
+      addBubble(`Erro salvando plano do Gerador de Propostas: ${err.message}`, 'system');
+    }
+  });
+  propostaForm.append(propostaSelect, propostaSalvar);
+  clienteIntegracoesPainel.appendChild(propostaForm);
+
   // ---- Redefinir senha ----
   const senhaLabel = document.createElement('label'); senhaLabel.className = 'auto-label'; senhaLabel.textContent = 'Redefinir senha de acesso';
   clienteIntegracoesPainel.appendChild(senhaLabel);

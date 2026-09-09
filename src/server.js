@@ -192,7 +192,11 @@ app.post('/api/admin/tenants/:id/senha', exigirSuperAdmin, async (req, res) => {
 
 app.get('/api/admin/tenants/:id/integracoes', exigirSuperAdmin, async (req, res) => {
   try {
-    res.json(await tenantConfig.obterResumo(Number(req.params.id)));
+    const [resumo, propostaConfig] = await Promise.all([
+      tenantConfig.obterResumo(Number(req.params.id)),
+      tenantConfig.obterConfigProposta(Number(req.params.id)),
+    ]);
+    res.json({ ...resumo, propostaPlano: propostaConfig.plano });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
