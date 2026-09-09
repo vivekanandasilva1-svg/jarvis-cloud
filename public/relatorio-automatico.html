@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório Automático de Anúncios | Vivekananda</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#08090C',
+                        darkCard: '#10131A',
+                        gold: { 100: '#FFF6D1', 300: '#FDE047', 400: '#FACC15', 500: '#D4AF37', 600: '#B8860B', 700: '#8C6800' },
+                        ledCyan: '#00F0FF',
+                        ledGreen: '#10B981'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        tech: ['Space Grotesk', 'sans-serif'],
+                        luxury: ['Cinzel', 'serif']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { background-color: #08090C; color: #E2E8F0; overflow-x: hidden; font-family: 'Inter', sans-serif; }
+        .gold-gradient-text {
+            background: linear-gradient(135deg, #FFF6D1 0%, #D4AF37 50%, #B8860B 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .glass-card { background: rgba(16, 19, 26, 0.85); backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .glass-card-gold { background: rgba(20, 18, 12, 0.85); backdrop-filter: blur(14px); border: 1px solid rgba(212, 175, 55, 0.3); }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #08090C; }
+        ::-webkit-scrollbar-thumb { background: #1F2432; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #D4AF37; }
+        input, textarea { -webkit-tap-highlight-color: transparent; }
+    </style>
+</head>
+<body class="selection:bg-gold-500 selection:text-black antialiased">
+
+    <header class="fixed top-0 left-0 right-0 z-50 glass-card border-b border-white/10 px-4 sm:px-6 py-3">
+        <div class="max-w-6xl mx-auto flex items-center justify-between gap-2">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-gold-300 via-gold-500 to-amber-700 flex items-center justify-center font-tech text-black font-black text-xl shadow-[0_0_15px_rgba(212,175,55,0.4)]">V</div>
+                <div>
+                    <h1 class="font-tech text-sm sm:text-base font-bold tracking-wider text-white uppercase">Relatório Automático</h1>
+                    <p class="text-[10px] text-gold-400 tracking-wider font-semibold uppercase">Vivekananda • Gestão de Tráfego</p>
+                </div>
+            </div>
+            <a href="#assinar" class="flex items-center gap-1.5 bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-300 hover:to-gold-500 text-black font-black text-xs sm:text-sm px-4 py-2 rounded-xl shadow-[0_0_18px_rgba(212,175,55,0.35)] transition">
+                <i class="fa-solid fa-bolt"></i> Quero Assinar
+            </a>
+        </div>
+    </header>
+
+    <main class="pt-28 pb-20 px-4 sm:px-6 max-w-6xl mx-auto space-y-20">
+        <section class="text-center relative pt-6">
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] sm:w-[600px] h-[350px] sm:h-[600px] bg-gradient-to-tr from-gold-500/10 via-ledCyan/10 to-transparent rounded-full blur-3xl pointer-events-none -z-10"></div>
+
+            <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/90 border border-gold-500/40 text-xs font-semibold text-gold-300 mb-6">
+                <i class="fa-solid fa-chart-line text-gold-400"></i>
+                <span>Para quem anuncia no Meta Ads (Facebook/Instagram)</span>
+            </div>
+
+            <h2 class="font-luxury text-3xl sm:text-5xl font-bold tracking-tight text-white max-w-3xl mx-auto leading-tight">
+                Pare de Abrir o Gerenciador de Anúncios Todo Dia pra Saber se Ainda Tem Saldo
+            </h2>
+            <p class="mt-6 text-slate-300 text-base sm:text-lg max-w-2xl mx-auto font-light leading-relaxed">
+                Receba automaticamente no seu WhatsApp o raio-x completo da sua conta de anúncios: saldo, gasto, métricas de campanha e alerta de saldo baixo — sem precisar entrar em painel nenhum.
+            </p>
+
+            <div class="mt-10">
+                <a href="#assinar" class="inline-flex items-center gap-2 px-7 py-4 bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-300 hover:to-gold-500 text-black font-black text-sm rounded-2xl shadow-[0_0_25px_rgba(212,175,55,0.4)] transition">
+                    <i class="fa-solid fa-rocket"></i> Quero Receber Meus Relatórios
+                </a>
+            </div>
+        </section>
+
+        <section class="space-y-8">
+            <div class="text-center space-y-2">
+                <span class="text-xs uppercase font-tech tracking-widest text-gold-400 font-bold">O QUE VOCÊ RECEBE</span>
+                <h3 class="text-2xl sm:text-3xl font-bold font-luxury text-white">3 Relatórios Automáticos, na Frequência que Você Escolher</h3>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="glass-card p-6 rounded-2xl border-white/5 hover:border-gold-500/40 transition">
+                    <div class="w-12 h-12 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400 text-xl mb-4">
+                        <i class="fa-solid fa-sack-dollar"></i>
+                    </div>
+                    <h4 class="text-lg font-bold text-white mb-2">Financeiro Completo</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed">Saldo disponível ou fatura em aberto de cada conta de anúncio, com alerta destacado pra contas zeradas ou com valor alto pendente.</p>
+                </div>
+                <div class="glass-card p-6 rounded-2xl border-white/5 hover:border-ledCyan/40 transition">
+                    <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-ledCyan text-xl mb-4">
+                        <i class="fa-solid fa-chart-pie"></i>
+                    </div>
+                    <h4 class="text-lg font-bold text-white mb-2">Métricas das Campanhas</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed">Gasto, alcance, cliques e resultado de cada campanha ativa — pra você saber o que está performando sem precisar filtrar nada no Gerenciador.</p>
+                </div>
+                <div class="glass-card p-6 rounded-2xl border-white/5 hover:border-emerald-500/40 transition">
+                    <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-xl mb-4">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                    </div>
+                    <h4 class="text-lg font-bold text-white mb-2">Alerta de Saldo Baixo</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed">Checagem automática a cada poucas horas — se uma conta está zerando, você é avisado antes do anúncio parar de rodar, não depois.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="space-y-8">
+            <div class="text-center space-y-2">
+                <span class="text-xs uppercase font-tech tracking-widest text-ledCyan font-bold">COMO FUNCIONA</span>
+                <h3 class="text-2xl sm:text-3xl font-bold font-luxury text-white">3 Passos pra Começar a Receber</h3>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="glass-card p-6 rounded-2xl border-white/5 space-y-2">
+                    <span class="font-tech text-3xl font-black gold-gradient-text">1</span>
+                    <h4 class="text-sm font-bold text-white">Você assina</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed">Preenche o formulário abaixo e fechamos os detalhes direto no WhatsApp (pagamento via Pix, sem burocracia).</p>
+                </div>
+                <div class="glass-card p-6 rounded-2xl border-white/5 space-y-2">
+                    <span class="font-tech text-3xl font-black gold-gradient-text">2</span>
+                    <h4 class="text-sm font-bold text-white">Libera acesso de leitura</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed">Você nos adiciona como parceiro no Gerenciador de Negócios da Meta com acesso <strong class="text-white">somente leitura</strong> à sua conta de anúncios — nunca alteramos nada, só lemos os dados.</p>
+                </div>
+                <div class="glass-card p-6 rounded-2xl border-white/5 space-y-2">
+                    <span class="font-tech text-3xl font-black gold-gradient-text">3</span>
+                    <h4 class="text-sm font-bold text-white">Recebe no WhatsApp</h4>
+                    <p class="text-xs text-slate-400 leading-relaxed">Você escolhe a frequência de cada relatório (a cada 6h, diário, semanal...) e ele chega sozinho, sem precisar pedir.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="glass-card-gold p-6 sm:p-10 rounded-3xl text-center space-y-6">
+            <span class="text-xs uppercase font-tech tracking-widest text-gold-400 font-bold">INVESTIMENTO</span>
+            <h3 class="text-2xl sm:text-3xl font-bold font-luxury text-white">Um Plano Único, Sem Pegadinha</h3>
+            <div class="max-w-sm mx-auto p-6 rounded-2xl bg-slate-950/80 border border-gold-500/30 space-y-3">
+                <p id="precoDisplay" class="font-tech text-4xl font-extrabold gold-gradient-text">R$ 97 <span class="text-sm text-slate-400 font-normal">/ mês</span></p>
+                <p class="text-xs text-slate-400">por conta de anúncio conectada</p>
+                <ul class="text-xs text-slate-300 text-left space-y-2 pt-2">
+                    <li class="flex items-start gap-2"><i class="fa-solid fa-check text-gold-400 mt-0.5"></i> Os 3 relatórios inclusos, sem custo adicional</li>
+                    <li class="flex items-start gap-2"><i class="fa-solid fa-check text-gold-400 mt-0.5"></i> Frequência de envio configurável por relatório</li>
+                    <li class="flex items-start gap-2"><i class="fa-solid fa-check text-gold-400 mt-0.5"></i> Envio direto no seu WhatsApp</li>
+                    <li class="flex items-start gap-2"><i class="fa-solid fa-check text-gold-400 mt-0.5"></i> Cancele quando quiser, sem fidelidade</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="assinar" class="space-y-8 scroll-mt-24">
+            <div class="text-center space-y-2">
+                <span class="text-xs uppercase font-tech tracking-widest text-emerald-400 font-bold">VAMOS COMEÇAR</span>
+                <h3 class="text-2xl sm:text-3xl font-bold font-luxury text-white">Deixe Seus Dados que Te Chamamos no WhatsApp</h3>
+                <p class="text-slate-400 text-sm max-w-xl mx-auto">Sem cobrança automática aqui — só combinamos os detalhes e o pagamento direto com você.</p>
+            </div>
+
+            <form id="formLead" class="glass-card p-6 sm:p-8 rounded-3xl border-white/10 max-w-xl mx-auto space-y-4">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1.5">Seu nome *</label>
+                    <input required type="text" id="leadNome" maxlength="150" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-gold-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1.5">Empresa / Negócio</label>
+                    <input type="text" id="leadEmpresa" maxlength="150" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-gold-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1.5">WhatsApp (com DDD) *</label>
+                    <input required type="text" id="leadWhatsapp" placeholder="82999999999" maxlength="30" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-gold-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1.5">E-mail</label>
+                    <input type="email" id="leadEmail" maxlength="150" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-gold-500">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-2">Quais relatórios te interessam?</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                        <label class="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl p-2.5 cursor-pointer">
+                            <input type="checkbox" value="Financeiro Completo" class="leadInteresse w-4 h-4"> Financeiro Completo
+                        </label>
+                        <label class="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl p-2.5 cursor-pointer">
+                            <input type="checkbox" value="Métricas de Campanhas" class="leadInteresse w-4 h-4"> Métricas
+                        </label>
+                        <label class="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl p-2.5 cursor-pointer">
+                            <input type="checkbox" value="Alerta de Saldo Baixo" class="leadInteresse w-4 h-4"> Alerta de Saldo
+                        </label>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1.5">Mensagem (opcional)</label>
+                    <textarea id="leadMensagem" maxlength="1000" rows="3" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-gold-500"></textarea>
+                </div>
+
+                <button type="submit" id="btnEnviarLead" class="w-full py-4 bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-300 hover:to-gold-500 text-black font-extrabold rounded-2xl shadow-[0_0_20px_rgba(212,175,55,0.35)] transition text-sm uppercase tracking-wider">
+                    <i class="fa-solid fa-paper-plane"></i> Quero Assinar
+                </button>
+
+                <p class="text-center text-[11px] text-slate-500">
+                    Prefere falar direto? <a id="linkWhatsappDireto" href="#" target="_blank" class="text-emerald-400 font-semibold hover:underline">Chama no WhatsApp <i class="fa-brands fa-whatsapp"></i></a>
+                </p>
+            </form>
+
+            <div id="mensagemSucesso" class="hidden max-w-xl mx-auto glass-card-gold p-8 rounded-3xl text-center space-y-3">
+                <i class="fa-solid fa-circle-check text-emerald-400 text-4xl"></i>
+                <h4 class="text-xl font-bold text-white">Recebemos seus dados!</h4>
+                <p class="text-sm text-slate-300">Vamos te chamar no WhatsApp em breve pra fechar os detalhes e ativar seus relatórios automáticos.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-white/10 py-8 px-4 text-center text-xs text-slate-500">
+        <p>© 2026 Vivekananda - Relatório Automático de Anúncios. Todos os direitos reservados.</p>
+    </footer>
+
+    <div id="toastMessage" class="fixed bottom-6 right-6 z-[110] bg-slate-900/95 border border-gold-500/60 text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none text-xs">
+        <i class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
+        <span id="toastText">Operação realizada com sucesso.</span>
+    </div>
+
+    <script>
+        // numero de WhatsApp do Vivekananda pra onde vao os leads que preferem falar direto -
+        // TROQUE pelo numero real (formato DDI+DDD+numero, so digitos) antes de divulgar a pagina
+        const WHATSAPP_VIVEKANANDA = '5582999999999';
+
+        function showToast(message) {
+            const toast = document.getElementById('toastMessage');
+            document.getElementById('toastText').innerText = message;
+            toast.classList.remove('translate-y-24', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-24', 'opacity-0');
+            }, 3500);
+        }
+
+        document.getElementById('linkWhatsappDireto').href =
+            `https://wa.me/${WHATSAPP_VIVEKANANDA}?text=${encodeURIComponent('Olá! Vi a página do Relatório Automático de Anúncios e quero saber mais.')}`;
+
+        document.getElementById('formLead').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('btnEnviarLead');
+            const nome = document.getElementById('leadNome').value.trim();
+            const whatsapp = document.getElementById('leadWhatsapp').value.trim();
+            if (!nome || !whatsapp) {
+                showToast('Preencha nome e WhatsApp pra continuar.');
+                return;
+            }
+
+            const interesses = Array.from(document.querySelectorAll('.leadInteresse:checked')).map(el => el.value);
+
+            const dados = {
+                nome,
+                empresa: document.getElementById('leadEmpresa').value.trim(),
+                whatsapp,
+                email: document.getElementById('leadEmail').value.trim(),
+                interesses,
+                mensagem: document.getElementById('leadMensagem').value.trim(),
+            };
+
+            btn.disabled = true;
+            btn.innerText = 'Enviando...';
+
+            try {
+                const resp = await fetch('/api/leads-relatorios', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(dados),
+                });
+                if (!resp.ok) throw new Error('falha ao enviar');
+
+                document.getElementById('formLead').classList.add('hidden');
+                document.getElementById('mensagemSucesso').classList.remove('hidden');
+            } catch (err) {
+                console.error('Erro enviando lead:', err);
+                showToast('Não conseguimos enviar agora. Chama no WhatsApp que resolvemos na hora!');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Quero Assinar';
+            }
+        });
+    </script>
+</body>
+</html>

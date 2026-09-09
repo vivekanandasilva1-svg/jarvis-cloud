@@ -25,6 +25,7 @@ import * as tenants from './tenants.js';
 import * as tenantConfig from './tenantConfig.js';
 import * as metaAds from './metaads.js';
 import * as propostas from './propostas.js';
+import * as leadsRelatorios from './leadsRelatorios.js';
 
 const execAsync = promisify(exec);
 
@@ -63,7 +64,11 @@ app.use((req, res, next) => {
     req.path.startsWith('/api/crm/midia/') ||
     // pagina de proposta comercial (public/proposta.html) e publica, sem login - quem preenche
     // e o proprio Vivekananda direto no navegador, e quem le o link e o cliente em potencial
-    req.path.startsWith('/api/propostas')
+    req.path.startsWith('/api/propostas') ||
+    // formulario de lead da pagina de vendas do relatorio automatico (publica, sem login) -
+    // so a captura e aberta; listar os leads (GET /api/admin/leads-relatorios) continua exigindo
+    // login de super_admin, como qualquer outra rota /api/admin/*
+    req.path === '/api/leads-relatorios'
   ) return next();
 
   // /api/agenda/google/conectar e navegacao de pagina de verdade (o navegador redireciona pro
@@ -135,6 +140,24 @@ app.get('/api/propostas/:id', async (req, res) => {
 // proposta, que busca os dados pelo id via /api/propostas/:id no carregamento
 app.get('/p/:id', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'proposta.html'));
+});
+
+// ---------- Lead da pagina de vendas do "Relatorio Automatico" (public/relatorio-automatico.html) ----------
+app.post('/api/leads-relatorios', async (req, res) => {
+  try {
+    const id = await leadsRelatorios.criar(req.body || {});
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/admin/leads-relatorios', exigirSuperAdmin, async (req, res) => {
+  try {
+    res.json({ leads: await leadsRelatorios.listar() });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
 });
 
 // ---------- Painel "Clientes" (provisionamento manual de tenant, so o dono/super_admin ve) ----------
