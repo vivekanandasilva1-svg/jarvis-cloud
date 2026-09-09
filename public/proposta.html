@@ -1129,6 +1129,7 @@
             document.getElementById('navBrandLogo').innerText = proposalConfig.logoText;
             document.getElementById('navBrandTitle').childNodes[0].nodeValue = proposalConfig.brandTitle + ' ';
             document.getElementById('navBrandSubtitle').innerText = proposalConfig.brandSubtitle;
+            document.title = `${proposalConfig.brandTitle} | Proposta para ${proposalConfig.clinicName}`;
 
             // Hero
             document.getElementById('heroTargetDisplay').innerText = `${proposalConfig.doctorName} • ${proposalConfig.clinicName} (${proposalConfig.city})`;
