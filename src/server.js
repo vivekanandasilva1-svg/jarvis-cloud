@@ -25,7 +25,6 @@ import * as tenants from './tenants.js';
 import * as tenantConfig from './tenantConfig.js';
 import * as metaAds from './metaads.js';
 import * as propostas from './propostas.js';
-import * as leadsRelatorios from './leadsRelatorios.js';
 
 const execAsync = promisify(exec);
 
@@ -64,11 +63,7 @@ app.use((req, res, next) => {
     req.path.startsWith('/api/crm/midia/') ||
     // pagina de proposta comercial (public/proposta.html) e publica, sem login - quem preenche
     // e o proprio Vivekananda direto no navegador, e quem le o link e o cliente em potencial
-    req.path.startsWith('/api/propostas') ||
-    // formulario de lead da pagina de vendas do relatorio automatico (publica, sem login) -
-    // so a captura e aberta; listar os leads (GET /api/admin/leads-relatorios) continua exigindo
-    // login de super_admin, como qualquer outra rota /api/admin/*
-    req.path === '/api/leads-relatorios'
+    req.path.startsWith('/api/propostas')
   ) return next();
 
   // /api/agenda/google/conectar e navegacao de pagina de verdade (o navegador redireciona pro
@@ -140,24 +135,6 @@ app.get('/api/propostas/:id', async (req, res) => {
 // proposta, que busca os dados pelo id via /api/propostas/:id no carregamento
 app.get('/p/:id', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'proposta.html'));
-});
-
-// ---------- Lead da pagina de vendas do "Relatorio Automatico" (public/relatorio-automatico.html) ----------
-app.post('/api/leads-relatorios', async (req, res) => {
-  try {
-    const id = await leadsRelatorios.criar(req.body || {});
-    res.json({ ok: true, id });
-  } catch (err) {
-    res.status(400).json({ erro: err.message });
-  }
-});
-
-app.get('/api/admin/leads-relatorios', exigirSuperAdmin, async (req, res) => {
-  try {
-    res.json({ leads: await leadsRelatorios.listar() });
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
 });
 
 // ---------- Painel "Clientes" (provisionamento manual de tenant, so o dono/super_admin ve) ----------
@@ -299,6 +276,59 @@ app.post('/api/integracoes/sistemas/:sistema/ativo', async (req, res) => {
   const { ativo } = req.body || {};
   try {
     await tenantConfig.definirIntegracaoAtiva(req.tenantId, req.params.sistema, !!ativo);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// ---------- Gerador de Propostas (public/gerador-propostas.html) - qualquer tenant logado usa
+// pra criar propostas pros PROPRIOS clientes; o plano (branded/white_label) so o super_admin muda ----------
+
+app.get('/api/minha-proposta/config', async (req, res) => {
+  try {
+    res.json(await tenantConfig.obterConfigProposta(req.tenantId));
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/minha-proposta/config', async (req, res) => {
+  const { brandName, brandSubtitle, logoText, customDomain } = req.body || {};
+  try {
+    await tenantConfig.salvarMarcaProposta(req.tenantId, { brandName, brandSubtitle, logoText, customDomain });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/minha-proposta/propostas', async (req, res) => {
+  try {
+    res.json({ propostas: await propostas.listarPorTenant(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/minha-proposta/propostas', async (req, res) => {
+  const { doctorName, clinicName } = req.body || {};
+  if (!doctorName || !clinicName) return res.status(400).json({ erro: 'nome do cliente e do negocio dele sao obrigatorios' });
+  try {
+    const marca = await tenantConfig.obterConfigProposta(req.tenantId);
+    const id = await propostas.criar(req.tenantId, req.body || {}, marca);
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// admin-only: define se o assinante e "branded" (marca fixa Vivekananda) ou "white_label"
+// (marca propria) - corresponde ao plano que ele pagou, nao e self-service
+app.post('/api/admin/tenants/:id/proposta-plano', exigirSuperAdmin, async (req, res) => {
+  const { plano } = req.body || {};
+  try {
+    await tenantConfig.definirPlanoProposta(Number(req.params.id), plano);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });

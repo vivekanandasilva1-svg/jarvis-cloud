@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Propostas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: { gold: { 400: '#FACC15', 500: '#D4AF37', 600: '#B8860B' } },
+                    fontFamily: { sans: ['Inter', 'sans-serif'], tech: ['Space Grotesk', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #08090C; color: #E2E8F0; font-family: 'Inter', sans-serif; }
+        .card { background: rgba(16, 19, 26, 0.9); border: 1px solid rgba(255, 255, 255, 0.08); }
+        input, textarea { background: #10131A; border: 1px solid #1F2432; color: white; }
+        input:focus, textarea:focus { outline: none; border-color: #D4AF37; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #08090C; }
+        ::-webkit-scrollbar-thumb { background: #1F2432; border-radius: 4px; }
+    </style>
+</head>
+<body class="antialiased min-h-screen">
+
+    <!-- Tela de Login -->
+    <div id="telaLogin" class="min-h-screen flex items-center justify-center p-4">
+        <form id="formLogin" class="card rounded-2xl p-8 max-w-sm w-full space-y-4">
+            <div class="text-center space-y-1 mb-2">
+                <i class="fa-solid fa-file-signature text-3xl text-gold-400"></i>
+                <h1 class="text-lg font-bold text-white font-tech">Gerador de Propostas</h1>
+            </div>
+            <div>
+                <label class="block text-xs text-slate-400 mb-1.5">Usuário</label>
+                <input required type="text" id="loginUsername" class="w-full rounded-xl p-3 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-slate-400 mb-1.5">Senha</label>
+                <input required type="password" id="loginSenha" class="w-full rounded-xl p-3 text-sm">
+            </div>
+            <p id="loginErro" class="hidden text-xs text-red-400"></p>
+            <button type="submit" class="w-full py-3 bg-gradient-to-r from-gold-500 to-amber-600 text-black font-bold rounded-xl text-sm">Entrar</button>
+        </form>
+    </div>
+
+    <!-- Painel principal (so aparece depois de logado) -->
+    <div id="painel" class="hidden max-w-4xl mx-auto px-4 py-8 space-y-8">
+        <header class="flex items-center justify-between">
+            <div>
+                <h1 class="text-xl font-bold text-white font-tech">Gerador de Propostas</h1>
+                <p id="nomeTenant" class="text-xs text-slate-400"></p>
+            </div>
+            <button onclick="sair()" class="text-xs text-slate-400 hover:text-white px-3 py-2 border border-slate-700 rounded-lg">
+                <i class="fa-solid fa-right-from-bracket"></i> Sair
+            </button>
+        </header>
+
+        <!-- Minha Marca (so aparece pra plano white_label) -->
+        <section id="secaoMarca" class="hidden card rounded-2xl p-6 space-y-4">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-crown text-gold-400"></i>
+                <h2 class="text-sm font-bold text-white">Minha Marca (plano White Label)</h2>
+            </div>
+            <p class="text-xs text-slate-400">As propostas que você criar vão usar essa marca no lugar da marca padrão.</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Nome do seu negócio</label>
+                    <input type="text" id="marcaBrandName" maxlength="120" class="w-full rounded-xl p-2.5 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Subtítulo / slogan</label>
+                    <input type="text" id="marcaBrandSubtitle" maxlength="150" class="w-full rounded-xl p-2.5 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Iniciais do logo (até 3 letras)</label>
+                    <input type="text" id="marcaLogoText" maxlength="3" class="w-full rounded-xl p-2.5 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Seu domínio próprio (opcional)</label>
+                    <input type="text" id="marcaCustomDomain" placeholder="https://propostas.seudominio.com.br" class="w-full rounded-xl p-2.5 text-sm">
+                </div>
+            </div>
+            <button onclick="salvarMarca()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl border border-slate-700">
+                <i class="fa-solid fa-check"></i> Salvar Marca
+            </button>
+            <p class="text-[11px] text-slate-500">Domínio próprio precisa ser apontado manualmente pra esse servidor - fale com o suporte antes de divulgar.</p>
+        </section>
+
+        <p id="avisoPlanoBranded" class="hidden text-xs text-slate-400 card rounded-xl p-4">
+            <i class="fa-solid fa-circle-info text-gold-400"></i> Você está no plano padrão: as propostas usam a marca já configurada pra você. Preencha só os dados do cliente abaixo.
+        </p>
+
+        <!-- Nova Proposta -->
+        <section class="card rounded-2xl p-6 space-y-4">
+            <h2 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-plus text-gold-400"></i> Nova Proposta</h2>
+            <form id="formProposta" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Nome do cliente *</label>
+                    <input required type="text" id="propDoctorName" maxlength="120" class="w-full rounded-xl p-2.5 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Negócio do cliente *</label>
+                    <input required type="text" id="propClinicName" maxlength="150" class="w-full rounded-xl p-2.5 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Cidade / Região</label>
+                    <input type="text" id="propCity" maxlength="100" class="w-full rounded-xl p-2.5 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Especialidade / Nicho</label>
+                    <input type="text" id="propSpecialty" maxlength="150" class="w-full rounded-xl p-2.5 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Preço base (R$)</label>
+                    <input type="number" id="propBasePrice" step="50" value="2500" class="w-full rounded-xl p-2.5 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">WhatsApp de fechamento</label>
+                    <input type="text" id="propWhatsapp" placeholder="5582999999999" class="w-full rounded-xl p-2.5 text-sm">
+                </div>
+                <div class="sm:col-span-2 flex items-center gap-2">
+                    <input type="checkbox" id="propHasVideomaker" class="w-4 h-4">
+                    <label for="propHasVideomaker" class="text-xs text-slate-300">Incluir serviço adicional (videomaker)</label>
+                    <input type="number" id="propVideomakerPrice" step="50" value="1500" placeholder="Preço do adicional" class="w-32 rounded-xl p-2 text-xs ml-auto">
+                </div>
+                <button type="submit" class="sm:col-span-2 py-3 bg-gradient-to-r from-gold-500 to-amber-600 text-black font-bold rounded-xl text-sm">
+                    <i class="fa-solid fa-link"></i> Gerar Proposta
+                </button>
+            </form>
+            <div id="resultadoProposta" class="hidden p-4 bg-slate-900 rounded-xl border border-gold-500/40 space-y-2">
+                <p class="text-xs text-slate-400">Link da proposta:</p>
+                <div class="flex gap-2">
+                    <input readonly id="linkGerado" class="w-full rounded-lg p-2.5 text-xs text-gold-300 font-mono">
+                    <button onclick="copiarLink()" class="px-3 bg-gold-500 text-black font-bold rounded-lg text-xs">Copiar</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Minhas Propostas -->
+        <section class="card rounded-2xl p-6 space-y-3">
+            <h2 class="text-sm font-bold text-white flex items-center gap-2"><i class="fa-solid fa-list text-gold-400"></i> Minhas Propostas</h2>
+            <div id="listaPropostas" class="space-y-2 text-xs">
+                <p class="text-slate-500">Carregando...</p>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        let appPassword = sessionStorage.getItem('jarvis_password') || '';
+        let configAtual = { plano: 'branded' };
+
+        function mostrarErroLogin(msg) {
+            const el = document.getElementById('loginErro');
+            el.innerText = msg;
+            el.classList.remove('hidden');
+        }
+
+        async function autenticar(username, senha) {
+            const resp = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password: senha }),
+            });
+            const data = await resp.json();
+            if (!data.ok) throw new Error('Usuário ou senha inválidos');
+            if (data.token) {
+                appPassword = data.token;
+                sessionStorage.setItem('jarvis_password', appPassword);
+            }
+        }
+
+        async function carregarPainel() {
+            const resp = await fetch('/api/me', { headers: { 'x-app-password': appPassword } });
+            if (!resp.ok) throw new Error('sessao invalida');
+            const me = await resp.json();
+
+            document.getElementById('telaLogin').classList.add('hidden');
+            document.getElementById('painel').classList.remove('hidden');
+            document.getElementById('nomeTenant').innerText = me.nome || '';
+
+            configAtual = await (await fetch('/api/minha-proposta/config', { headers: { 'x-app-password': appPassword } })).json();
+            if (configAtual.plano === 'white_label') {
+                document.getElementById('secaoMarca').classList.remove('hidden');
+                document.getElementById('marcaBrandName').value = configAtual.brandName || '';
+                document.getElementById('marcaBrandSubtitle').value = configAtual.brandSubtitle || '';
+                document.getElementById('marcaLogoText').value = configAtual.logoText || '';
+                document.getElementById('marcaCustomDomain').value = configAtual.customDomain || '';
+            } else {
+                document.getElementById('avisoPlanoBranded').classList.remove('hidden');
+            }
+
+            await carregarPropostas();
+        }
+
+        document.getElementById('formLogin').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            try {
+                await autenticar(document.getElementById('loginUsername').value.trim(), document.getElementById('loginSenha').value);
+                await carregarPainel();
+            } catch (err) {
+                mostrarErroLogin(err.message);
+            }
+        });
+
+        function sair() {
+            sessionStorage.removeItem('jarvis_password');
+            window.location.reload();
+        }
+
+        async function salvarMarca() {
+            const dados = {
+                brandName: document.getElementById('marcaBrandName').value.trim(),
+                brandSubtitle: document.getElementById('marcaBrandSubtitle').value.trim(),
+                logoText: document.getElementById('marcaLogoText').value.trim(),
+                customDomain: document.getElementById('marcaCustomDomain').value.trim(),
+            };
+            await fetch('/api/minha-proposta/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+                body: JSON.stringify(dados),
+            });
+            configAtual = { ...configAtual, ...dados };
+            alert('Marca salva!');
+        }
+
+        document.getElementById('formProposta').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const dados = {
+                doctorName: document.getElementById('propDoctorName').value.trim(),
+                clinicName: document.getElementById('propClinicName').value.trim(),
+                city: document.getElementById('propCity').value.trim(),
+                specialty: document.getElementById('propSpecialty').value.trim(),
+                basePrice: parseFloat(document.getElementById('propBasePrice').value) || 0,
+                videomakerPrice: parseFloat(document.getElementById('propVideomakerPrice').value) || 0,
+                hasVideomaker: document.getElementById('propHasVideomaker').checked,
+                whatsappPhone: document.getElementById('propWhatsapp').value.trim(),
+            };
+            const resp = await fetch('/api/minha-proposta/propostas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+                body: JSON.stringify(dados),
+            });
+            const data = await resp.json();
+            if (!data.ok) { alert(data.erro || 'Erro ao gerar proposta'); return; }
+
+            const base = configAtual.customDomain && configAtual.customDomain.startsWith('http')
+                ? new URL(configAtual.customDomain).origin
+                : window.location.origin;
+            const link = `${base}/p/${data.id}`;
+
+            document.getElementById('linkGerado').value = link;
+            document.getElementById('resultadoProposta').classList.remove('hidden');
+            document.getElementById('formProposta').reset();
+            await carregarPropostas();
+        });
+
+        function copiarLink() {
+            const input = document.getElementById('linkGerado');
+            input.select();
+            input.setSelectionRange(0, 99999);
+            document.execCommand('copy');
+        }
+
+        async function carregarPropostas() {
+            const resp = await fetch('/api/minha-proposta/propostas', { headers: { 'x-app-password': appPassword } });
+            const data = await resp.json();
+            const lista = document.getElementById('listaPropostas');
+            if (!data.propostas || !data.propostas.length) {
+                lista.innerHTML = '<p class="text-slate-500">Nenhuma proposta criada ainda.</p>';
+                return;
+            }
+            const base = configAtual.customDomain && configAtual.customDomain.startsWith('http')
+                ? new URL(configAtual.customDomain).origin
+                : window.location.origin;
+            lista.innerHTML = data.propostas.map(p => `
+                <div class="flex items-center justify-between p-3 bg-slate-900 rounded-xl border border-slate-800">
+                    <div>
+                        <p class="text-white font-semibold">${p.doctorName} • ${p.clinicName}</p>
+                        <p class="text-slate-500">${p.city || ''} ${p.basePrice != null ? '• R$ ' + Number(p.basePrice).toLocaleString('pt-BR') : ''}</p>
+                    </div>
+                    <a href="${base}/p/${p.id}" target="_blank" class="text-gold-400 hover:underline">${base.replace(/^https?:\/\//, '')}/p/${p.id}</a>
+                </div>
+            `).join('');
+        }
+
+        (async () => {
+            if (!appPassword) return;
+            try {
+                await carregarPainel();
+            } catch (e) {
+                sessionStorage.removeItem('jarvis_password');
+            }
+        })();
+    </script>
+</body>
+</html>

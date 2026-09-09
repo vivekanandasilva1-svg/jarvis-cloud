@@ -37,6 +37,16 @@ async function garantirTabelas() {
   // conta continua conectada e utilizavel pelo chat/ferramentas, so fica de fora do que os
   // geradores de relatorio (relatoriosProgramados.js) incluem
   await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS meta_ads_contas_desativadas JSONB NOT NULL DEFAULT '[]'::jsonb;`);
+  // Gerador de Propostas (public/gerador-propostas.html): "branded" usa a marca fixa do
+  // Vivekananda (o tenant so preenche os dados do cliente dele); "white_label" deixa o tenant
+  // configurar a propria marca (nome, subtitulo, logo, dominio) pras propostas que ele manda.
+  // O PLANO em si so o super_admin muda (corresponde ao que o assinante pagou) - os campos de
+  // marca abaixo sao self-service, o proprio tenant edita.
+  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_plano TEXT NOT NULL DEFAULT 'branded';`);
+  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_brand_name TEXT;`);
+  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_brand_subtitle TEXT;`);
+  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_logo_text TEXT;`);
+  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_custom_domain TEXT;`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabela de tenant_config:', err.message);
@@ -155,6 +165,52 @@ export async function salvarTrello(tenantId, { apiKey, token }) {
     `INSERT INTO tenant_config (tenant_id, trello_api_key, trello_token_enc, atualizado_em) VALUES ($1, $2, $3, now())
      ON CONFLICT (tenant_id) DO UPDATE SET trello_api_key = $2, trello_token_enc = $3, atualizado_em = now()`,
     [tenantId, apiKey, encrypt(token)],
+  );
+}
+
+// ---------- Gerador de Propostas (plano + marca de cada assinante) ----------
+
+export async function obterConfigProposta(tenantId) {
+  if (!pool) return { plano: 'branded', brandName: null, brandSubtitle: null, logoText: null, customDomain: null };
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    'SELECT proposta_plano, proposta_brand_name, proposta_brand_subtitle, proposta_logo_text, proposta_custom_domain FROM tenant_config WHERE tenant_id = $1',
+    [tenantId],
+  );
+  const r = rows[0];
+  return {
+    plano: r?.proposta_plano || 'branded',
+    brandName: r?.proposta_brand_name || null,
+    brandSubtitle: r?.proposta_brand_subtitle || null,
+    logoText: r?.proposta_logo_text || null,
+    customDomain: r?.proposta_custom_domain || null,
+  };
+}
+
+// self-service: SO os campos de marca, nunca o plano (isso e definido por definirPlanoProposta,
+// so o super_admin chama)
+export async function salvarMarcaProposta(tenantId, { brandName, brandSubtitle, logoText, customDomain }) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  await pool.query(
+    `INSERT INTO tenant_config (tenant_id, proposta_brand_name, proposta_brand_subtitle, proposta_logo_text, proposta_custom_domain, atualizado_em)
+     VALUES ($1, $2, $3, $4, $5, now())
+     ON CONFLICT (tenant_id) DO UPDATE SET
+       proposta_brand_name = $2, proposta_brand_subtitle = $3, proposta_logo_text = $4, proposta_custom_domain = $5, atualizado_em = now()`,
+    [tenantId, brandName || null, brandSubtitle || null, logoText || null, customDomain || null],
+  );
+}
+
+// admin-only (ver server.js) - define se o assinante e "branded" (usa a marca do Vivekananda) ou
+// "white_label" (usa a marca propria) - corresponde ao plano que ele pagou
+export async function definirPlanoProposta(tenantId, plano) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  if (plano !== 'branded' && plano !== 'white_label') throw new Error('plano invalido');
+  await tabelasProntas;
+  await pool.query(
+    `INSERT INTO tenant_config (tenant_id, proposta_plano, atualizado_em) VALUES ($1, $2, now())
+     ON CONFLICT (tenant_id) DO UPDATE SET proposta_plano = $2, atualizado_em = now()`,
+    [tenantId, plano],
   );
 }
 

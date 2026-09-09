@@ -1128,6 +1128,7 @@
             // Header
             document.getElementById('navBrandLogo').innerText = proposalConfig.logoText;
             document.getElementById('navBrandTitle').childNodes[0].nodeValue = proposalConfig.brandTitle + ' ';
+            document.getElementById('navBrandSubtitle').innerText = proposalConfig.brandSubtitle;
 
             // Hero
             document.getElementById('heroTargetDisplay').innerText = `${proposalConfig.doctorName} • ${proposalConfig.clinicName} (${proposalConfig.city})`;
@@ -1358,12 +1359,20 @@
                     const resp = await fetch(`/api/propostas/${curtoMatch[1]}`);
                     if (resp.ok) {
                         const dados = await resp.json();
-                        Object.keys(dados).forEach((chave) => {
+                        ['doctorName', 'clinicName', 'city', 'specialty', 'basePrice', 'videomakerPrice', 'whatsappPhone'].forEach((chave) => {
                             if (dados[chave] !== null && dados[chave] !== undefined) proposalConfig[chave] = dados[chave];
                         });
-                        if (proposalConfig.hasVideomaker) {
+                        if (dados.hasVideomaker) {
+                            proposalConfig.hasVideomaker = true;
                             const cb = document.getElementById('addonVideomakerCheck');
                             if (cb) cb.checked = true;
+                        }
+                        // marca de quem vendeu essa proposta - "branded" mantem a marca padrao
+                        // (Vivekananda/LumIA); "white_label" usa a marca do proprio assinante
+                        if (dados.plano === 'white_label') {
+                            if (dados.brandName) proposalConfig.brandTitle = dados.brandName;
+                            if (dados.brandSubtitle) proposalConfig.brandSubtitle = dados.brandSubtitle;
+                            if (dados.logoText) proposalConfig.logoText = dados.logoText;
                         }
                         applyConfigToDOM();
                         setClientMode(true);
