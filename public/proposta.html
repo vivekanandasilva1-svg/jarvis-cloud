@@ -1,0 +1,1595 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vivekananda | Acelerador de Clínicas & LumIA</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#08090C',
+                        darkCard: '#10131A',
+                        darkBorder: '#1F2432',
+                        gold: {
+                            100: '#FFF6D1',
+                            300: '#FDE047',
+                            400: '#FACC15',
+                            500: '#D4AF37',
+                            600: '#B8860B',
+                            700: '#8C6800'
+                        },
+                        silver: {
+                            200: '#E5E7EB',
+                            400: '#9CA3AF',
+                            600: '#4B5563'
+                        },
+                        ledCyan: '#00F0FF',
+                        ledGreen: '#10B981',
+                        ledPurple: '#8B5CF6'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        tech: ['Space Grotesk', 'sans-serif'],
+                        luxury: ['Cinzel', 'serif']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #08090C;
+            color: #E2E8F0;
+            overflow-x: hidden;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .gold-gradient-text {
+            background: linear-gradient(135deg, #FFF6D1 0%, #D4AF37 50%, #B8860B 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .silver-gradient-text {
+            background: linear-gradient(135deg, #FFFFFF 0%, #E5E7EB 50%, #9CA3AF 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .glow-gold {
+            box-shadow: 0 0 25px rgba(212, 175, 55, 0.25);
+        }
+
+        .glow-cyan {
+            box-shadow: 0 0 25px rgba(0, 240, 255, 0.25);
+        }
+
+        .glow-green {
+            box-shadow: 0 0 25px rgba(16, 185, 129, 0.25);
+        }
+
+        .glass-card {
+            background: rgba(16, 19, 26, 0.85);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-card-gold {
+            background: rgba(20, 18, 12, 0.85);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(212, 175, 55, 0.3);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #08090C;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1F2432;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #D4AF37;
+        }
+
+        /* Mobile-Ready Touch Range Sliders */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 16px;
+            background: #1F2432;
+            border-radius: 9999px;
+            outline: none;
+            touch-action: pan-y;
+            cursor: pointer;
+            margin: 10px 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid #08090C;
+            box-shadow: 0 0 14px rgba(0, 0, 0, 0.9);
+            transition: transform 0.1s ease;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid #08090C;
+            box-shadow: 0 0 14px rgba(0, 0, 0, 0.9);
+        }
+
+        #sliderTraffic::-webkit-slider-thumb { background: #D4AF37; box-shadow: 0 0 16px rgba(212, 175, 55, 0.9); }
+        #sliderTraffic::-moz-range-thumb { background: #D4AF37; box-shadow: 0 0 16px rgba(212, 175, 55, 0.9); }
+
+        #sliderTicket::-webkit-slider-thumb { background: #00F0FF; box-shadow: 0 0 16px rgba(0, 240, 255, 0.9); }
+        #sliderTicket::-moz-range-thumb { background: #00F0FF; box-shadow: 0 0 16px rgba(0, 240, 255, 0.9); }
+
+        #sliderConversion::-webkit-slider-thumb { background: #10B981; box-shadow: 0 0 16px rgba(16, 185, 129, 0.9); }
+        #sliderConversion::-moz-range-thumb { background: #10B981; box-shadow: 0 0 16px rgba(16, 185, 129, 0.9); }
+
+        input[type="range"]:active::-webkit-slider-thumb {
+            transform: scale(1.18);
+        }
+
+        /* Preset Chips for Mobile Instant Tap */
+        .preset-chip {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        /* Touch Chat Container */
+        #lumiaChatWindow {
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-y: contain;
+            scroll-behavior: smooth;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid #08090C;
+            box-shadow: 0 0 12px rgba(0, 0, 0, 0.8);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid #08090C;
+            box-shadow: 0 0 12px rgba(0, 0, 0, 0.8);
+        }
+
+        #sliderTraffic::-webkit-slider-thumb { background: #D4AF37; box-shadow: 0 0 14px rgba(212, 175, 55, 0.8); }
+        #sliderTraffic::-moz-range-thumb { background: #D4AF37; box-shadow: 0 0 14px rgba(212, 175, 55, 0.8); }
+
+        #sliderTicket::-webkit-slider-thumb { background: #00F0FF; box-shadow: 0 0 14px rgba(0, 240, 255, 0.8); }
+        #sliderTicket::-moz-range-thumb { background: #00F0FF; box-shadow: 0 0 14px rgba(0, 240, 255, 0.8); }
+
+        #sliderConversion::-webkit-slider-thumb { background: #10B981; box-shadow: 0 0 14px rgba(16, 185, 129, 0.8); }
+        #sliderConversion::-moz-range-thumb { background: #10B981; box-shadow: 0 0 14px rgba(16, 185, 129, 0.8); }
+
+        input[type="range"]:active::-webkit-slider-thumb {
+            transform: scale(1.2);
+        }
+
+        /* Touch Chat Container */
+        #lumiaChatWindow {
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-y: contain;
+        }
+
+        /* Inline Editor Visuals */
+        body.editor-active [data-editable="true"] {
+            outline: 2px dashed rgba(0, 240, 255, 0.6) !important;
+            outline-offset: 3px;
+            cursor: text !important;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        body.editor-active [data-editable="true"]:hover {
+            background-color: rgba(0, 240, 255, 0.08) !important;
+            outline: 2px solid #00F0FF !important;
+        }
+
+        body.editor-active [data-editable="true"]:focus {
+            background-color: rgba(0, 240, 255, 0.15) !important;
+            outline: 2px solid #00F0FF !important;
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
+        }
+
+        /* Client View Mode - Hides all Admin UI */
+        body.client-view .admin-only {
+            display: none !important;
+        }
+
+        body.client-view [data-editable="true"],
+        body.client-view [contenteditable="true"] {
+            outline: none !important;
+            cursor: default !important;
+            background: transparent !important;
+        }
+    </style>
+</head>
+<body class="selection:bg-gold-500 selection:text-black antialiased">
+
+    <header class="fixed top-0 left-0 right-0 z-50 glass-card border-b border-white/10 px-3 sm:px-6 py-3 transition-all duration-300">
+        <div class="max-w-7xl mx-auto flex items-center justify-between gap-2">
+            <!-- Brand Logo & Subtitle -->
+            <div class="flex items-center gap-3">
+                <div id="navBrandLogo" class="w-10 h-10 rounded-xl bg-gradient-to-br from-gold-300 via-gold-500 to-amber-700 flex items-center justify-center font-tech text-black font-black text-xl shadow-[0_0_15px_rgba(212,175,55,0.4)]">
+                    V
+                </div>
+                <div>
+                    <h1 id="navBrandTitle" class="font-tech text-sm sm:text-base font-bold tracking-wider text-white uppercase flex items-center gap-1.5">
+                        VIVEKANANDA
+                        <span class="w-2 h-2 rounded-full bg-ledCyan inline-block animate-pulse"></span>
+                    </h1>
+                    <p id="navBrandSubtitle" class="text-[10px] text-gold-400 tracking-wider font-semibold uppercase">ESPECIALISTA EM CLÍNICAS & IA</p>
+                </div>
+            </div>
+
+            <!-- Action Controls -->
+            <div class="flex items-center gap-1.5 sm:gap-3">
+                <!-- Client Mode Indicator Badge -->
+                <div id="clientStatusBadge" class="hidden items-center gap-2 bg-gold-500/10 border border-gold-500/40 text-gold-300 text-xs px-3 py-1.5 rounded-lg font-semibold">
+                    <span class="w-2 h-2 rounded-full bg-ledGreen animate-pulse"></span>
+                    <span>Proposta Interativa Exclusiva</span>
+                </div>
+
+                <!-- Modo Editor Trigger (Admin Only) -->
+                <button id="editorModeBtn" onclick="toggleInlineEditMode()" title="Clique para editar qualquer texto da tela" class="admin-only flex items-center gap-1.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs sm:text-sm px-2.5 sm:px-3 py-2 rounded-xl font-semibold transition shadow">
+                    <i id="editorModeIcon" class="fa-solid fa-pen-to-square text-ledCyan"></i>
+                    <span id="editorModeLabel" class="hidden md:inline">Modo Editor</span>
+                </button>
+
+                <!-- Personalizar Proposta Trigger (Admin Only) -->
+                <button onclick="openPersonalizationModal()" title="Configurar dados da clínica e valores" class="admin-only flex items-center gap-1.5 bg-gradient-to-r from-amber-500/20 to-gold-500/20 hover:from-amber-500/30 hover:to-gold-500/30 border border-gold-500/50 text-gold-300 text-xs sm:text-sm px-2.5 sm:px-3.5 py-2 rounded-xl font-bold transition shadow-[0_0_12px_rgba(212,175,55,0.2)]">
+                    <i class="fa-solid fa-sliders text-gold-400"></i>
+                    <span class="hidden sm:inline">Personalizar Proposta</span>
+                </button>
+
+                <!-- Enviar Proposta ao Cliente (Admin Only) -->
+                <button onclick="openSendProposalModal()" title="Gerar versão limpa para enviar ao cliente" class="admin-only flex items-center gap-1.5 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-black font-extrabold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-xl shadow-[0_0_18px_rgba(16,185,129,0.35)] transition">
+                    <i class="fa-solid fa-paper-plane text-black"></i>
+                    <span>Enviar Proposta</span>
+                </button>
+
+                <!-- Direct CTA Proposal Button -->
+                <a href="#proposta-comercial" class="hidden lg:flex items-center gap-1.5 bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-300 hover:to-gold-500 text-black font-black text-xs sm:text-sm px-4 py-2 rounded-xl shadow-[0_0_18px_rgba(212,175,55,0.35)] transition">
+                    <i class="fa-solid fa-bolt"></i> Ver Proposta
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <div id="editorActiveToolbar" class="fixed top-16 left-0 right-0 z-40 bg-cyan-950/90 border-b border-cyan-500/40 py-2.5 px-4 backdrop-blur hidden transition-all">
+        <div class="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-2 text-xs">
+            <div class="flex items-center gap-2 text-cyan-300">
+                <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping"></span>
+                <strong class="font-bold">MODO EDITOR ATIVO:</strong> Clique em qualquer texto da página para alterar os textos ao vivo.
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="window.print()" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition border border-slate-600">
+                    <i class="fa-solid fa-print"></i> Imprimir / PDF
+                </button>
+                <button onclick="toggleInlineEditMode()" class="px-3 py-1 bg-cyan-400 hover:bg-cyan-300 text-black font-bold rounded-lg transition shadow">
+                    <i class="fa-solid fa-check"></i> Concluir Edição
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <main class="pt-28 pb-20 px-4 sm:px-6 max-w-7xl mx-auto space-y-24">
+        <section class="text-center relative pt-8 pb-4">
+            <!-- Background Decorative Aura -->
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] sm:w-[650px] h-[350px] sm:h-[650px] bg-gradient-to-tr from-gold-500/10 via-ledCyan/10 to-transparent rounded-full blur-3xl pointer-events-none -z-10"></div>
+
+            <!-- Personalized VIP Pill -->
+            <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/90 border border-gold-500/40 text-xs font-semibold text-gold-300 mb-6 shadow-[0_0_15px_rgba(212,175,55,0.2)]">
+                <i class="fa-solid fa-shield-halved text-gold-400"></i>
+                <span>Plano Estratégico Exclusivo para: <strong id="heroTargetDisplay" class="text-white">Dr(a). Roberto & Clínica Odontológica</strong></span>
+            </div>
+
+            <!-- Main Headline -->
+            <h2 data-editable="true" class="font-luxury text-3xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-white max-w-5xl mx-auto leading-tight">
+                Engenharia de Vendas, Tráfego de Alta Conversão e <span class="gold-gradient-text">Inteligência Artificial LumIA</span>
+            </h2>
+
+            <!-- Subtitle -->
+            <p data-editable="true" class="mt-6 text-slate-300 text-base sm:text-xl max-w-3xl mx-auto font-light leading-relaxed">
+                Transformando clínicas odontológicas em máquinas previsíveis de agendamento de alto ticket através de Neuromarketing, PNL, Automação 24/7 e Lançamentos de Pacientes.
+            </p>
+
+            <!-- Metrics Highlight Badges -->
+            <div class="mt-12 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-5xl mx-auto">
+                <div class="glass-card p-5 rounded-2xl border-white/5 hover:border-gold-500/40 transition">
+                    <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Experiência</p>
+                    <p data-editable="true" class="text-2xl sm:text-3xl font-tech font-black gold-gradient-text">+8 Anos</p>
+                    <p data-editable="true" class="text-[11px] text-slate-400 mt-1">Especialista em Marketing & Tráfego</p>
+                </div>
+                <div class="glass-card p-5 rounded-2xl border-white/5 hover:border-gold-500/40 transition">
+                    <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Receita Gerada</p>
+                    <p data-editable="true" class="text-2xl sm:text-3xl font-tech font-black text-emerald-400">+R$ 50 Mi</p>
+                    <p data-editable="true" class="text-[11px] text-slate-400 mt-1">Faturados para clientes</p>
+                </div>
+                <div class="glass-card p-5 rounded-2xl border-white/5 hover:border-gold-500/40 transition">
+                    <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Clínicas Ativas</p>
+                    <p data-editable="true" class="text-2xl sm:text-3xl font-tech font-black text-white">15 Clínicas</p>
+                    <p data-editable="true" class="text-[11px] text-slate-400 mt-1">Sob gestão de tráfego e vendas</p>
+                </div>
+                <div class="glass-card p-5 rounded-2xl border-white/5 hover:border-ledCyan/40 transition">
+                    <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">Inovação Exclusiva</p>
+                    <p data-editable="true" class="text-2xl sm:text-3xl font-tech font-black text-ledCyan">LumIA 24/7</p>
+                    <p data-editable="true" class="text-[11px] text-slate-400 mt-1">Agente de IA Treinada para Odonto</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="space-y-8">
+            <div class="text-center space-y-2">
+                <span class="text-xs uppercase font-tech tracking-widest text-gold-400 font-bold">DIFERENCIAL COMPETITIVO</span>
+                <h3 data-editable="true" class="text-2xl sm:text-4xl font-bold font-luxury text-white">Os 4 Pilares da Metodologia Vivekananda</h3>
+                <p data-editable="true" class="text-slate-400 text-sm sm:text-base max-w-2xl mx-auto">Tráfego pago sem processo comercial é desperdício de dinheiro. Nós construímos o ecossistema completo.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <!-- Pillar 1 -->
+                <div class="glass-card p-6 rounded-2xl border-white/5 hover:border-gold-500/40 hover:-translate-y-1 transition duration-300 flex flex-col justify-between">
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400 text-xl mb-4">
+                            <i class="fa-solid fa-bullseye"></i>
+                        </div>
+                        <h4 data-editable="true" class="text-lg font-bold text-white mb-2">Tráfego Multi-Plataforma</h4>
+                        <p data-editable="true" class="text-xs text-slate-400 leading-relaxed">
+                            Meta Ads (Instagram/Facebook), Google Ads (Rede de Pesquisa fundo de funil) e TikTok Ads, segmentando público qualificado para implantes, alinhadores e tratamentos nobres.
+                        </p>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-white/5 text-[11px] text-gold-300 font-semibold flex items-center gap-1">
+                        <i class="fa-solid fa-check"></i> Anúncios Foco Ticket Alto
+                    </div>
+                </div>
+
+                <!-- Pillar 2 -->
+                <div class="glass-card p-6 rounded-2xl border-white/5 hover:border-ledCyan/40 hover:-translate-y-1 transition duration-300 flex flex-col justify-between">
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-ledCyan text-xl mb-4">
+                            <i class="fa-solid fa-brain"></i>
+                        </div>
+                        <h4 data-editable="true" class="text-lg font-bold text-white mb-2">PNL & Neuromarketing</h4>
+                        <p data-editable="true" class="text-xs text-slate-400 leading-relaxed">
+                            Roteiros de criativos e scripts de vendas estruturados com gatilhos mentais e psicologia de decisão, quebrando objeções de preço e elevando a percepção de autoridade.
+                        </p>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-white/5 text-[11px] text-cyan-300 font-semibold flex items-center gap-1">
+                        <i class="fa-solid fa-check"></i> Quebra de Objeções Imediata
+                    </div>
+                </div>
+
+                <!-- Pillar 3 -->
+                <div class="glass-card p-6 rounded-2xl border-white/5 hover:border-emerald-500/40 hover:-translate-y-1 transition duration-300 flex flex-col justify-between">
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-xl mb-4">
+                            <i class="fa-solid fa-users-gear"></i>
+                        </div>
+                        <h4 data-editable="true" class="text-lg font-bold text-white mb-2">Treinamento de Vendas & CRM</h4>
+                        <p data-editable="true" class="text-xs text-slate-400 leading-relaxed">
+                            Capacitação direta da equipe da recepção e consultoras comerciais. Implementamos rotina produtiva de CRM para nenhum lead ficar esquecido ou sem retorno rápido.
+                        </p>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-white/5 text-[11px] text-emerald-300 font-semibold flex items-center gap-1">
+                        <i class="fa-solid fa-check"></i> Abordagem e Fechamento Ativo
+                    </div>
+                </div>
+
+                <!-- Pillar 4 -->
+                <div class="glass-card p-6 rounded-2xl border-white/5 hover:border-amber-500/40 hover:-translate-y-1 transition duration-300 flex flex-col justify-between">
+                    <div>
+                        <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 text-xl mb-4">
+                            <i class="fa-solid fa-rocket"></i>
+                        </div>
+                        <h4 data-editable="true" class="text-lg font-bold text-white mb-2">Eventos & Lançamentos</h4>
+                        <p data-editable="true" class="text-xs text-slate-400 leading-relaxed">
+                            Estratégias de picos rápidos de faturamento: Eventos curtos (1 a 2 dias - Lançamento Meteórico) e campanhas estruturadas (3 a 6 dias - Lançamento 360°).
+                        </p>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-white/5 text-[11px] text-amber-300 font-semibold flex items-center gap-1">
+                        <i class="fa-solid fa-check"></i> Injeções Rápidas de Caixa
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="glass-card-gold p-6 sm:p-10 rounded-3xl relative overflow-hidden">
+            <div class="absolute -right-20 -top-20 w-80 h-80 bg-ledCyan/10 rounded-full blur-3xl pointer-events-none"></div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                <!-- LumIA Description -->
+                <div class="lg:col-span-6 space-y-5">
+                    <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-cyan-950/80 border border-ledCyan/40 text-ledCyan text-xs font-bold">
+                        <i class="fa-solid fa-microchip"></i>
+                        <span>TECNOLOGIA PROPRIETÁRIA DE IA</span>
+                    </div>
+                    <h3 data-editable="true" class="text-2xl sm:text-4xl font-bold font-luxury text-white">
+                        Conheça a <span class="text-ledCyan font-tech">LumIA</span>: A Agente de IA Mais Completa para Clínicas
+                    </h3>
+                    <p data-editable="true" class="text-slate-300 text-sm sm:text-base leading-relaxed">
+                        Enquanto sua concorrência demora 2 horas para responder uma mensagem no WhatsApp (e perde a venda), a LumIA responde em <strong>menos de 3 segundos</strong>, qualifica a capacidade de investimento do paciente, quebra medos de dor ou custos e agenda a consulta diretamente na sua agenda.
+                    </p>
+
+                    <div class="space-y-2.5 pt-2">
+                        <div class="flex items-start gap-3">
+                            <div class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs mt-0.5"><i class="fa-solid fa-check"></i></div>
+                            <span data-editable="true" class="text-xs sm:text-sm text-slate-300"><strong>Atendimento 24/7 sem folgas:</strong> Converte leads na madrugada, fins de semana e feriados.</span>
+                        </div>
+                        <div class="flex items-start gap-3">
+                            <div class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs mt-0.5"><i class="fa-solid fa-check"></i></div>
+                            <span data-editable="true" class="text-xs sm:text-sm text-slate-300"><strong>Pré-Qualificação de Ticket:</strong> Filtra quem procura tratamento gratuito ou populares.</span>
+                        </div>
+                        <div class="flex items-start gap-3">
+                            <div class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs mt-0.5"><i class="fa-solid fa-check"></i></div>
+                            <span data-editable="true" class="text-xs sm:text-sm text-slate-300"><strong>Sincronização com CRM da Clínica:</strong> Alimenta o funil com status e gravações dos atendimentos.</span>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 flex flex-wrap gap-3">
+                        <button id="btnRestartLumia" type="button" onclick="runLumiaDemoSim()" class="w-full sm:w-auto px-6 py-4 bg-gradient-to-r from-cyan-500/30 to-blue-600/40 hover:from-cyan-500/50 hover:to-blue-600/60 active:scale-95 border-2 border-cyan-400 text-white rounded-2xl font-bold text-sm transition flex items-center justify-center gap-3 shadow-[0_0_25px_rgba(0,240,255,0.4)] select-none cursor-pointer touch-manipulation">
+                            <i class="fa-solid fa-rotate-right text-ledCyan text-lg animate-spin-hover"></i>
+                            <span class="tracking-wide">Reiniciar Simulação da LumIA</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- WhatsApp Simulation Mockup -->
+                <div class="lg:col-span-6">
+                    <div class="max-w-md mx-auto rounded-3xl bg-slate-950 border border-slate-700 shadow-2xl overflow-hidden">
+                        <!-- Chat Header -->
+                        <div class="bg-slate-900 px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="relative">
+                                    <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-400 to-blue-600 flex items-center justify-center font-bold text-black text-sm">
+                                        IA
+                                    </div>
+                                    <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-slate-900"></span>
+                                </div>
+                                <div>
+                                    <h5 class="text-xs font-bold text-white flex items-center gap-1.5">
+                                        LumIA • Atendimento Inteligente
+                                        <i class="fa-solid fa-circle-check text-ledCyan text-[10px]"></i>
+                                    </h5>
+                                    <p class="text-[10px] text-emerald-400 font-medium">Online agora • Resposta instantânea</p>
+                                </div>
+                            </div>
+                            <span class="text-[10px] bg-slate-800 text-slate-300 px-2 py-1 rounded">WhatsApp API</span>
+                        </div>
+
+                        <!-- Chat Messages Container -->
+                        <div id="lumiaChatWindow" class="p-4 space-y-3 h-80 overflow-y-auto text-xs bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px]">
+                            <!-- Injected dynamically via JS -->
+                        </div>
+
+                        <!-- Typing Indicator Box -->
+                        <div id="lumiaTypingIndicator" class="hidden px-4 py-1.5 bg-slate-900/90 border-t border-slate-800/80 text-[11px] text-cyan-300 flex items-center gap-2">
+                            <span class="inline-flex gap-1 items-center">
+                                <span class="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style="animation-delay: 0s;"></span>
+                                <span class="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style="animation-delay: 0.15s;"></span>
+                                <span class="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style="animation-delay: 0.3s;"></span>
+                            </span>
+                            <span>LumIA está digitando...</span>
+                        </div>
+
+                        <!-- Simulation Footer -->
+                        <div class="p-3 bg-slate-900 border-t border-slate-800 text-center">
+                            <p class="text-[11px] text-slate-400">
+                                <i class="fa-solid fa-bolt text-gold-400"></i> Automação ativa gerando consultas agendadas 24h por dia.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="space-y-8">
+            <div class="text-center space-y-2">
+                <span class="text-xs uppercase font-tech tracking-widest text-emerald-400 font-bold">SIMULAÇÃO DE RESULTADOS</span>
+                <h3 data-editable="true" class="text-2xl sm:text-4xl font-bold font-luxury text-white">Calculadora Interativa de Faturamento</h3>
+                <p data-editable="true" class="text-slate-400 text-sm sm:text-base max-w-2xl mx-auto">Mova os controles abaixo ou use os botões para simular o potencial de escala de faturamento da sua clínica.</p>
+            </div>
+
+            <div class="glass-card p-5 sm:p-8 rounded-3xl border-white/10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                <!-- Sliders Controls -->
+                <div class="lg:col-span-6 space-y-6">
+                    <!-- Slider 1: Orçamento Anúncios -->
+                    <div class="space-y-2.5 bg-slate-900/60 p-4 rounded-2xl border border-white/5">
+                        <div class="flex justify-between items-center text-xs sm:text-sm">
+                            <span class="text-slate-300 font-medium">Investimento em Tráfego Pago:</span>
+                            <span id="sliderTrafficLabel" class="font-tech font-bold text-gold-400 text-base bg-gold-500/10 px-3 py-1 rounded-lg border border-gold-500/30 shadow">R$ 3.000</span>
+                        </div>
+                        <div class="flex items-center gap-2.5">
+                            <button type="button" onclick="adjustSlider('sliderTraffic', -500)" class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-gold-500 active:text-black border border-slate-700 flex items-center justify-center text-slate-200 text-xl font-black transition select-none flex-shrink-0 touch-manipulation shadow-md">
+                                <i class="fa-solid fa-minus"></i>
+                            </button>
+                            <input type="range" id="sliderTraffic" min="1000" max="15000" step="500" value="3000" class="w-full">
+                            <button type="button" onclick="adjustSlider('sliderTraffic', 500)" class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-gold-500 active:text-black border border-slate-700 flex items-center justify-center text-slate-200 text-xl font-black transition select-none flex-shrink-0 touch-manipulation shadow-md">
+                                <i class="fa-solid fa-plus"></i>
+                            </button>
+                        </div>
+                        <!-- Quick Presets for Mobile -->
+                        <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                            <span class="text-[10px] text-slate-400 mr-1">Toque rápido:</span>
+                            <button type="button" onclick="setSliderValue('sliderTraffic', 2000)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-gold-500 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 2.000</button>
+                            <button type="button" onclick="setSliderValue('sliderTraffic', 3000)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-gold-500 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 3.000</button>
+                            <button type="button" onclick="setSliderValue('sliderTraffic', 5000)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-gold-500 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 5.000</button>
+                            <button type="button" onclick="setSliderValue('sliderTraffic', 8000)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-gold-500 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 8.000</button>
+                        </div>
+                    </div>
+
+                    <!-- Slider 2: Ticket Médio dos Procedimentos -->
+                    <div class="space-y-2.5 bg-slate-900/60 p-4 rounded-2xl border border-white/5">
+                        <div class="flex justify-between items-center text-xs sm:text-sm">
+                            <span class="text-slate-300 font-medium">Ticket Médio (Implantes / Alinhadores):</span>
+                            <span id="sliderTicketLabel" class="font-tech font-bold text-ledCyan text-base bg-cyan-500/10 px-3 py-1 rounded-lg border border-cyan-500/30 shadow">R$ 4.500</span>
+                        </div>
+                        <div class="flex items-center gap-2.5">
+                            <button type="button" onclick="adjustSlider('sliderTicket', -500)" class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-cyan-400 active:text-black border border-slate-700 flex items-center justify-center text-slate-200 text-xl font-black transition select-none flex-shrink-0 touch-manipulation shadow-md">
+                                <i class="fa-solid fa-minus"></i>
+                            </button>
+                            <input type="range" id="sliderTicket" min="1500" max="18000" step="500" value="4500" class="w-full">
+                            <button type="button" onclick="adjustSlider('sliderTicket', 500)" class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-cyan-400 active:text-black border border-slate-700 flex items-center justify-center text-slate-200 text-xl font-black transition select-none flex-shrink-0 touch-manipulation shadow-md">
+                                <i class="fa-solid fa-plus"></i>
+                            </button>
+                        </div>
+                        <!-- Quick Presets for Mobile -->
+                        <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                            <span class="text-[10px] text-slate-400 mr-1">Toque rápido:</span>
+                            <button type="button" onclick="setSliderValue('sliderTicket', 2500)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-cyan-400 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 2.500</button>
+                            <button type="button" onclick="setSliderValue('sliderTicket', 4500)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-cyan-400 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 4.500</button>
+                            <button type="button" onclick="setSliderValue('sliderTicket', 8000)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-cyan-400 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 8.000</button>
+                            <button type="button" onclick="setSliderValue('sliderTicket', 12000)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-cyan-400 active:text-black rounded-lg border border-slate-700 text-slate-300">R$ 12.000</button>
+                        </div>
+                    </div>
+
+                    <!-- Slider 3: Taxa de Fechamento com Treinamento de Vendas -->
+                    <div class="space-y-2.5 bg-slate-900/60 p-4 rounded-2xl border border-white/5">
+                        <div class="flex justify-between items-center text-xs sm:text-sm">
+                            <span class="text-slate-300 font-medium">Taxa de Conversão da Equipe (PNL + LumIA):</span>
+                            <span id="sliderConversionLabel" class="font-tech font-bold text-emerald-400 text-base bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/30 shadow">18%</span>
+                        </div>
+                        <div class="flex items-center gap-2.5">
+                            <button type="button" onclick="adjustSlider('sliderConversion', -1)" class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-emerald-400 active:text-black border border-slate-700 flex items-center justify-center text-slate-200 text-xl font-black transition select-none flex-shrink-0 touch-manipulation shadow-md">
+                                <i class="fa-solid fa-minus"></i>
+                            </button>
+                            <input type="range" id="sliderConversion" min="8" max="35" step="1" value="18" class="w-full">
+                            <button type="button" onclick="adjustSlider('sliderConversion', 1)" class="w-12 h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-emerald-400 active:text-black border border-slate-700 flex items-center justify-center text-slate-200 text-xl font-black transition select-none flex-shrink-0 touch-manipulation shadow-md">
+                                <i class="fa-solid fa-plus"></i>
+                            </button>
+                        </div>
+                        <!-- Quick Presets for Mobile -->
+                        <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                            <span class="text-[10px] text-slate-400 mr-1">Toque rápido:</span>
+                            <button type="button" onclick="setSliderValue('sliderConversion', 12)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-emerald-400 active:text-black rounded-lg border border-slate-700 text-slate-300">12%</button>
+                            <button type="button" onclick="setSliderValue('sliderConversion', 18)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-emerald-400 active:text-black rounded-lg border border-slate-700 text-slate-300">18%</button>
+                            <button type="button" onclick="setSliderValue('sliderConversion', 25)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-emerald-400 active:text-black rounded-lg border border-slate-700 text-slate-300">25%</button>
+                            <button type="button" onclick="setSliderValue('sliderConversion', 30)" class="preset-chip text-[11px] px-2.5 py-1 bg-slate-800 hover:bg-slate-700 active:bg-emerald-400 active:text-black rounded-lg border border-slate-700 text-slate-300">30%</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Simulation Output Display Cards -->
+                <div class="lg:col-span-6 grid grid-cols-2 gap-3 sm:gap-4">
+                    <div class="bg-slate-900/90 p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-1">
+                        <p class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Leads Qualificados Estimados</p>
+                        <p id="calcLeads" class="text-2xl sm:text-3xl font-tech font-bold text-white">150</p>
+                        <p class="text-[10px] text-slate-500">contatos no WhatsApp/mês</p>
+                    </div>
+                    <div class="bg-slate-900/90 p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-1">
+                        <p class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Consultas Agendadas</p>
+                        <p id="calcAppointments" class="text-2xl sm:text-3xl font-tech font-bold text-ledCyan">27</p>
+                        <p class="text-[10px] text-slate-500">pacientes na clínica/mês</p>
+                    </div>
+                    <div class="bg-slate-900/90 p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-1">
+                        <p class="text-[11px] uppercase tracking-wider text-slate-400 font-medium">Vendas Fechadas Estimadas</p>
+                        <p id="calcDeals" class="text-2xl sm:text-3xl font-tech font-bold text-emerald-400">12</p>
+                        <p class="text-[10px] text-slate-500">tratamentos iniciados</p>
+                    </div>
+                    <div class="bg-gradient-to-br from-amber-500/20 to-gold-500/10 p-4 sm:p-5 rounded-2xl border border-gold-500/40 space-y-1">
+                        <p class="text-[11px] uppercase tracking-wider text-gold-300 font-bold">Faturamento Novo Projetado</p>
+                        <p id="calcRevenue" class="text-2xl sm:text-3xl font-tech font-extrabold gold-gradient-text">R$ 54.000</p>
+                        <p id="calcRoi" class="text-[10px] text-gold-400 font-semibold">Retorno aprox. 18.0x sobre tráfego</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="proposta-comercial" class="space-y-8">
+            <div class="text-center space-y-2">
+                <span class="text-xs uppercase font-tech tracking-widest text-gold-400 font-bold">PROPOSTA COMERCIAL DIRETA</span>
+                <h3 data-editable="true" class="text-2xl sm:text-4xl font-bold font-luxury text-white">Escopo Completo da Parceria</h3>
+                <p data-editable="true" class="text-slate-400 text-sm sm:text-base max-w-2xl mx-auto">Transparência, execução de alto nível e foco total em gerar pacientes na cadeira da sua clínica.</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Package: Plano Essencial de Gestão e Vendas -->
+                <div class="glass-card-gold p-7 rounded-3xl lg:col-span-2 space-y-6 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
+                            <span class="px-3 py-1 rounded-full bg-gold-500/20 text-gold-300 text-xs font-bold border border-gold-500/40">
+                                ESCOPO PRINCIPAL INCLUSO
+                            </span>
+                            <span class="text-xs text-slate-400">Sem taxa de adesão ou taxas ocultas</span>
+                        </div>
+
+                        <h4 data-editable="true" class="text-2xl font-bold text-white">Gestão Completa de Tráfego, Vendas & Automação</h4>
+                        <p data-editable="true" class="text-slate-300 text-xs sm:text-sm mt-2 leading-relaxed">
+                            Toda a inteligência e execução necessária para alimentar sua clínica diariamente com leads e pacientes qualificados.
+                        </p>
+
+                        <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs text-slate-200">
+                            <div class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/60 border border-white/5">
+                                <i class="fa-solid fa-check text-gold-400 mt-0.5"></i>
+                                <span><strong>Meta Ads Completo:</strong> Campanhas no Instagram & Facebook focadas em procedimentos lucrativos.</span>
+                            </div>
+                            <div class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/60 border border-white/5">
+                                <i class="fa-solid fa-check text-gold-400 mt-0.5"></i>
+                                <span><strong>Google Ads Rede de Pesquisa:</strong> Captação dos pacientes com intenção imediata de tratamento.</span>
+                            </div>
+                            <div class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/60 border border-white/5">
+                                <i class="fa-solid fa-check text-gold-400 mt-0.5"></i>
+                                <span><strong>TikTok Ads Odonto:</strong> Expansão de autoridade e público jovem/estético.</span>
+                            </div>
+                            <div class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/60 border border-white/5">
+                                <i class="fa-solid fa-check text-gold-400 mt-0.5"></i>
+                                <span><strong>Roteiros de Criativos:</strong> Scripts com PNL e gatilhos mentais para gravar de forma natural.</span>
+                            </div>
+                            <div class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/60 border border-white/5">
+                                <i class="fa-solid fa-check text-gold-400 mt-0.5"></i>
+                                <span><strong>Treinamento de Vendas:</strong> Técnicas de abordagem no WhatsApp e fechamento presencial.</span>
+                            </div>
+                            <div class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/60 border border-white/5">
+                                <i class="fa-solid fa-check text-gold-400 mt-0.5"></i>
+                                <span><strong>Rotina Produtiva de CRM:</strong> Organização do funil de vendas para follow-up eficiente.</span>
+                            </div>
+                            <div class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/60 border border-white/5">
+                                <i class="fa-solid fa-check text-gold-400 mt-0.5"></i>
+                                <span><strong>Eventos Curtos (1-2 Dias):</strong> Método de Lançamento Meteórico para rápida conversão.</span>
+                            </div>
+                            <div class="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-900/60 border border-white/5">
+                                <i class="fa-solid fa-check text-gold-400 mt-0.5"></i>
+                                <span><strong>Eventos Longos (3-6 Dias):</strong> Estratégia de Lançamento 360° para preencher agenda do mês.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Fee Base Info -->
+                    <div class="pt-6 border-t border-white/10 flex items-center justify-between flex-wrap gap-4">
+                        <div>
+                            <span class="text-xs text-slate-400 block">Honorário Mensal Base:</span>
+                            <span id="proposalBasePriceDisplay" class="font-tech text-3xl font-extrabold gold-gradient-text">R$ 2.500 <span class="text-xs text-slate-400 font-normal">/ mês</span></span>
+                        </div>
+                        <span class="text-xs text-slate-400 italic bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-800">
+                            *Valor ajustável conforme a estrutura e necessidade da clínica.
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Addon Service: Videomaker & Editor Presencial -->
+                <div class="glass-card p-7 rounded-3xl border-white/10 space-y-6 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 text-xs font-bold border border-cyan-500/40">
+                                ADICIONAL OPCIONAL
+                            </span>
+                            <i class="fa-solid fa-video text-ledCyan text-xl"></i>
+                        </div>
+
+                        <h4 data-editable="true" class="text-xl font-bold text-white">Serviço de Videomaker & Edição</h4>
+                        <p data-editable="true" class="text-slate-300 text-xs mt-2 leading-relaxed">
+                            Gravação presencial na clínica com câmera profissional, iluminação de cinema e edição completa de criativos magnéticos.
+                        </p>
+
+                        <div class="mt-5 space-y-3 text-xs text-slate-300">
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-circle-check text-ledCyan"></i>
+                                <span><strong>5 a 10 vídeos mensais</strong> gravados na clínica</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-circle-check text-ledCyan"></i>
+                                <span>Edição moderna estilo reels/tiktok de alta retenção</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-circle-check text-ledCyan"></i>
+                                <span>Direção presencial do doutor e depoimentos de pacientes</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i class="fa-solid fa-circle-check text-ledCyan"></i>
+                                <span>Entrega dos criativos prontos formatados para anúncios</span>
+                            </div>
+                        </div>
+
+                        <!-- Checkbox Toggle for Proposal Summary -->
+                        <div class="mt-6 p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+                            <div>
+                                <label for="addonVideomakerCheck" class="text-xs font-bold text-white cursor-pointer block">Incluir Videomaker Presencial</label>
+                                <span id="addonVideomakerPriceDisplay" class="text-[11px] text-slate-400">+ R$ 1.500 / mês</span>
+                            </div>
+                            <input type="checkbox" id="addonVideomakerCheck" onchange="updateProposalTotal()" class="w-5 h-5 rounded bg-slate-800 border-slate-700 text-gold-500 focus:ring-gold-500 cursor-pointer">
+                        </div>
+                    </div>
+
+                    <div class="pt-4 border-t border-white/5 text-center">
+                        <p class="text-[11px] text-slate-400">Você grava com apoio de roteiros e nossa equipe cuida de 100% da pós-produção.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="proposta-fechamento" class="glass-card-gold p-6 sm:p-8 rounded-3xl border border-gold-500/40 text-center space-y-6">
+                <div class="max-w-2xl mx-auto space-y-2">
+                    <span class="text-xs uppercase font-tech tracking-widest text-gold-400 font-bold">RESUMO DO INVESTIMENTO</span>
+                    <h4 class="text-2xl sm:text-3xl font-bold text-white">Investimento Mensal Total da Parceria</h4>
+                    <p class="text-xs sm:text-sm text-slate-300">
+                        Proposta personalizada para <strong id="summaryClinicName" class="text-gold-300 font-semibold">Sua Clínica</strong> sob a liderança do(a) <strong id="summaryDoctorName" class="text-white">Dr(a). Roberto</strong>.
+                    </p>
+                </div>
+
+                <div class="p-6 rounded-2xl bg-slate-950/80 border border-gold-500/30 max-w-md mx-auto shadow-inner space-y-2">
+                    <div class="flex justify-between items-center text-xs text-slate-400">
+                        <span>Gestão de Tráfego + Treinamento Vendas + CRM:</span>
+                        <span id="summaryBasePrice" class="font-tech text-slate-200 font-bold">R$ 2.500</span>
+                    </div>
+                    <div id="summaryVideomakerRow" class="hidden justify-between items-center text-xs text-slate-400">
+                        <span>Videomaker Presencial (5 a 10 vídeos gravados/mês):</span>
+                        <span id="summaryVideomakerPrice" class="font-tech text-cyan-300 font-bold">R$ 1.500</span>
+                    </div>
+                    <div class="pt-3 border-t border-white/10 flex justify-between items-baseline">
+                        <span class="text-xs sm:text-sm font-bold text-white">Total Mensal Proposto:</span>
+                        <span id="summaryTotalPrice" class="font-tech text-3xl sm:text-4xl font-extrabold gold-gradient-text">R$ 2.500 <span class="text-xs text-slate-400 font-normal">/mês</span></span>
+                    </div>
+                </div>
+
+                <!-- Closing WhatsApp Trigger -->
+                <div class="pt-2">
+                    <button onclick="sendContractWhatsApp()" class="w-full max-w-md py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-500 via-green-500 to-emerald-600 hover:from-emerald-400 hover:to-green-500 text-black font-extrabold text-sm sm:text-base tracking-wide uppercase shadow-[0_0_25px_rgba(16,185,129,0.4)] transition transform hover:-translate-y-0.5 inline-flex items-center justify-center gap-3">
+                        <i class="fa-brands fa-whatsapp text-2xl"></i>
+                        <span>Aprovar Proposta e Iniciar Parceria</span>
+                    </button>
+                    <p class="text-[11px] text-slate-500 mt-2">Clique para confirmar via WhatsApp com Vivekananda e iniciarmos o setup da clínica.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="glass-card p-6 sm:p-10 rounded-3xl border-white/5">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+                <div class="md:col-span-4 text-center">
+                    <div class="w-32 h-32 sm:w-40 sm:h-40 rounded-full mx-auto p-1 bg-gradient-to-tr from-gold-400 to-amber-600 shadow-[0_0_25px_rgba(212,175,55,0.3)]">
+                        <div class="w-full h-full rounded-full bg-slate-900 flex items-center justify-center font-tech text-4xl sm:text-5xl font-black text-white">
+                            VK
+                        </div>
+                    </div>
+                    <h5 data-editable="true" class="mt-4 font-bold text-lg text-white">Vivekananda</h5>
+                    <p data-editable="true" class="text-xs text-gold-400 font-semibold">Head de Crescimento & IA para Clínicas</p>
+                </div>
+
+                <div class="md:col-span-8 space-y-4">
+                    <h4 data-editable="true" class="text-2xl font-bold font-luxury text-white">Sobre Vivekananda</h4>
+                    <p data-editable="true" class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                        Com mais de 8 anos dedicados exclusivamente ao ecossistema de marketing digital de alta performance, tráfego pago estratégico, PNL, Neuromarketing e automações avançadas, já ajudei a movimentar mais de <strong>R$ 50 milhões em receitas</strong> para negócios em todo o Brasil.
+                    </p>
+                    <p data-editable="true" class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                        Atualmente respondo diretamente pelo marketing e faturamento de <strong>15 clínicas odontológicas</strong> ativas, desenvolvendo soluções proprietárias como a <strong>LumIA</strong> para transformar cada clique em consulta na cadeira da clínica.
+                    </p>
+                    <div class="flex flex-wrap gap-2 pt-2">
+                        <span class="text-[11px] px-3 py-1 bg-slate-900 border border-slate-800 text-slate-300 rounded-lg">8+ Anos de Mercado</span>
+                        <span class="text-[11px] px-3 py-1 bg-slate-900 border border-slate-800 text-slate-300 rounded-lg">Criador da LumIA</span>
+                        <span class="text-[11px] px-3 py-1 bg-slate-900 border border-slate-800 text-slate-300 rounded-lg">+50 Milhões em Vendas</span>
+                        <span class="text-[11px] px-3 py-1 bg-slate-900 border border-slate-800 text-slate-300 rounded-lg">Especialista em Odonto High Ticket</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-white/10 py-8 px-4 text-center text-xs text-slate-500">
+        <p data-editable="true">© 2026 Vivekananda - Soluções em Marketing Digital & Inteligência Artificial para Clínicas. Todos os direitos reservados.</p>
+    </footer>
+
+    <div id="personalizationModal" class="admin-only fixed inset-0 bg-black/85 backdrop-blur-md z-[99] hidden flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div class="bg-darkCard border border-gold-500/50 rounded-2xl p-5 sm:p-7 max-w-2xl w-full shadow-[0_0_35px_rgba(212,175,55,0.25)] relative my-auto">
+            <button onclick="closePersonalizationModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg transition">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+
+            <div class="flex items-center gap-3 mb-5 border-b border-white/10 pb-4">
+                <div class="p-3 bg-gold-500/10 rounded-xl text-gold-400 border border-gold-500/30">
+                    <i class="fa-solid fa-sliders text-2xl"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">Central de Personalização da Proposta</h3>
+                    <p class="text-xs text-slate-400">Edite as variáveis abaixo para atualizar toda a apresentação instantaneamente.</p>
+                </div>
+            </div>
+
+            <div class="space-y-4 max-h-[70vh] overflow-y-auto pr-2 text-xs">
+                <!-- Section 1: Marca & Ícone -->
+                <div class="space-y-2">
+                    <h4 class="font-bold text-gold-400 uppercase tracking-wider text-[11px] border-b border-white/5 pb-1">1. Identidade & Logotipo</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-slate-400 mb-1">Ícone / Letra do Topo</label>
+                            <input type="text" id="cfgLogoText" maxlength="3" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="block text-slate-400 mb-1">Nome Principal da Marca</label>
+                            <input type="text" id="cfgBrandTitle" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Dados do Cliente -->
+                <div class="space-y-2 pt-2">
+                    <h4 class="font-bold text-gold-400 uppercase tracking-wider text-[11px] border-b border-white/5 pb-1">2. Dados do Cliente / Clínica</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-slate-400 mb-1">Nome do(a) Doutor(a) / Proprietário(a)</label>
+                            <input type="text" id="cfgDoctorName" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1">Nome da Clínica</label>
+                            <input type="text" id="cfgClinicName" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1">Cidade / Região</label>
+                            <input type="text" id="cfgCity" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1">Especialidade Principal Foco</label>
+                            <input type="text" id="cfgSpecialty" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Condições Comerciais -->
+                <div class="space-y-2 pt-2">
+                    <h4 class="font-bold text-gold-400 uppercase tracking-wider text-[11px] border-b border-white/5 pb-1">3. Valores e Contato</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-slate-400 mb-1">Fee Base (R$)</label>
+                            <input type="number" id="cfgBasePrice" step="100" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1">Videomaker Adicional (R$)</label>
+                            <input type="number" id="cfgVideomakerPrice" step="100" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
+                        </div>
+                        <div>
+                            <label class="block text-slate-400 mb-1">WhatsApp de Fechamento (DDI+DDD+Num)</label>
+                            <input type="text" id="cfgWhatsappPhone" placeholder="5582999999999" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Actions -->
+                <div class="pt-4 flex flex-col sm:flex-row gap-2">
+                    <button onclick="savePersonalization()" class="flex-1 py-3 bg-gradient-to-r from-gold-500 to-amber-600 text-black font-extrabold rounded-xl shadow-[0_0_20px_rgba(212,175,55,0.4)] transition text-xs uppercase tracking-wider flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-check"></i> Aplicar Alterações na Proposta
+                    </button>
+                    <button onclick="closePersonalizationModal()" class="py-3 px-4 bg-slate-800 text-slate-300 font-semibold rounded-xl text-xs">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="sendProposalModal" class="admin-only fixed inset-0 bg-black/85 backdrop-blur-md z-[100] hidden flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+        <div class="bg-darkCard border border-emerald-500/50 rounded-2xl p-5 sm:p-7 max-w-xl w-full shadow-[0_0_35px_rgba(16,185,129,0.25)] relative my-auto">
+            <button onclick="closeSendProposalModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg transition">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+
+            <div class="flex items-center gap-3 mb-5 border-b border-white/10 pb-4">
+                <div class="p-3 bg-emerald-500/10 rounded-xl text-emerald-400 border border-emerald-500/30">
+                    <i class="fa-solid fa-paper-plane text-2xl"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">Enviar Proposta ao Cliente</h3>
+                    <p class="text-xs text-slate-400">Escolha como deseja enviar a versão final, interativa e sem botões de edição.</p>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <!-- Preview Info Box -->
+                <div class="p-3.5 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1 text-xs">
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Destinatário:</span>
+                        <span id="sendModalDoctorDisplay" class="font-bold text-white">Dr(a). Roberto</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Clínica:</span>
+                        <span id="sendModalClinicDisplay" class="font-bold text-gold-300">Sua Clínica</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Total Proposto:</span>
+                        <span id="sendModalPriceDisplay" class="font-bold text-emerald-400 font-tech">R$ 2.500 / mês</span>
+                    </div>
+                </div>
+
+                <!-- Método 1: Link Oficial no Domínio lumia-marketing.com -->
+                <div class="p-4 bg-gradient-to-br from-emerald-950/40 to-slate-900/90 rounded-xl border border-emerald-500/50 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-xs font-bold text-emerald-300 flex items-center gap-2">
+                            <i class="fa-solid fa-globe text-emerald-400"></i> Link Oficial Integrado (lumia-marketing.com)
+                        </h4>
+                        <span class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-bold flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Ativo
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-slate-300 leading-relaxed">
+                        Seu domínio oficial <strong class="text-white">lumia-marketing.com</strong> já está conectado. Basta subir este arquivo com o nome <code class="text-emerald-300 bg-black/50 px-1 py-0.5 rounded">proposta.html</code> (ou na raiz) no gerenciador de arquivos da sua Hostinger.
+                    </p>
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="block text-[10px] uppercase tracking-wider text-slate-400 font-bold">Caminho no seu Domínio:</label>
+                            <span class="text-[10px] text-emerald-400">Padrão configurado</span>
+                        </div>
+                        <input type="text" id="customHostDomainInput" oninput="updateShareableUrlFromCustomHost()" value="https://lumia-marketing.com/proposta.html" class="w-full bg-slate-950 border border-emerald-500/40 rounded-lg px-3 py-2 text-white text-xs font-mono placeholder:text-slate-600 focus:outline-none focus:border-emerald-400">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-1">Link Exclusivo deste Cliente (Sem Edições):</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="clientShareableUrlInput" readonly class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-emerald-400 text-xs font-mono select-all">
+                            <button onclick="copyClientShareUrl()" class="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold rounded-lg text-xs transition flex items-center gap-1.5 whitespace-nowrap shadow-[0_0_12px_rgba(16,185,129,0.3)] active:scale-95">
+                                <i class="fa-solid fa-copy"></i> Copiar Link
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Método 2: Link Grátis na Nuvem em 15 Segundos (Tiiny Host) -->
+                <div class="p-3.5 bg-slate-900/60 rounded-xl border border-slate-800 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-xs font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-cloud-arrow-up text-cyan-400"></i> Opção 2: Gerar Link na Nuvem em 15 Segundos (Grátis)
+                        </h4>
+                        <span class="text-[10px] bg-slate-800 text-cyan-300 px-2 py-0.5 rounded">Sem Hospedagem</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 leading-relaxed">
+                        Não quer usar a Hostinger agora? Baixe o arquivo e arraste no site <strong>Tiiny.host</strong> para ter um link como <code class="text-cyan-300">proposta-dr.tiiny.site</code> em segundos:
+                    </p>
+                    <div class="flex flex-wrap gap-2 pt-1">
+                        <button onclick="downloadClientHtmlFile()" class="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg text-xs transition flex items-center justify-center gap-2 border border-slate-700">
+                            <i class="fa-solid fa-download text-xs text-emerald-400"></i> 1. Baixar Arquivo
+                        </button>
+                        <a href="https://tiiny.host" target="_blank" class="flex-1 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-bold rounded-lg text-xs transition flex items-center justify-center gap-2 border border-cyan-500/40">
+                            <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i> 2. Abrir Tiiny Host
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Método 3: Envio do Arquivo Direto no WhatsApp -->
+                <div class="p-3 bg-slate-900/40 rounded-xl border border-white/5 flex items-center justify-between text-xs">
+                    <div class="space-y-0.5">
+                        <span class="font-bold text-slate-300">Prefere enviar como documento?</span>
+                        <p class="text-[10px] text-slate-500">Baixe o arquivo e anexe no WhatsApp. Abre no celular sem precisar de servidor.</p>
+                    </div>
+                    <button onclick="downloadClientHtmlFile()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-semibold text-xs transition border border-slate-700 whitespace-nowrap">
+                        <i class="fa-solid fa-file-arrow-down"></i> Baixar HTML
+                    </button>
+                </div>
+
+                <!-- Opções de Ação Direta -->
+                <div class="pt-2 flex flex-col sm:flex-row gap-2.5">
+                    <button onclick="dispatchClientWhatsApp()" class="flex-1 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-black font-extrabold rounded-xl shadow-[0_0_18px_rgba(34,197,94,0.3)] transition text-xs uppercase tracking-wider flex items-center justify-center gap-2">
+                        <i class="fa-brands fa-whatsapp text-base"></i> Enviar Mensagem no WhatsApp
+                    </button>
+                    <button onclick="togglePreviewAsClient()" class="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-xl transition text-xs flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-eye"></i> Testar Visualização
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastMessage" class="fixed bottom-6 right-6 z-[110] bg-slate-900/95 border border-gold-500/60 text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none text-xs">
+        <i class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
+        <span id="toastText">Operação realizada com sucesso.</span>
+    </div>
+
+    <script>
+        // Global Proposal State
+        let proposalConfig = {
+            logoText: 'V',
+            brandTitle: 'VIVEKANANDA',
+            brandSubtitle: 'ESPECIALISTA EM CLÍNICAS & IA',
+            doctorName: 'Dr(a). Roberto',
+            clinicName: 'Sua Clínica Odontológica',
+            city: 'Sua Região',
+            specialty: 'Implantes & Alinhadores Invisíveis',
+            basePrice: 2500,
+            videomakerPrice: 1500,
+            hasVideomaker: false,
+            whatsappPhone: '5582999999999',
+            customDomain: 'https://lumia-marketing.com/proposta.html'
+        };
+
+        let isEditorActive = false;
+        let isClientMode = false;
+
+        // Toast Notification System
+        function showToast(message) {
+            const toast = document.getElementById('toastMessage');
+            const text = document.getElementById('toastText');
+            text.innerText = message;
+            toast.classList.remove('translate-y-24', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-24', 'opacity-0');
+            }, 3500);
+        }
+
+        // Inline Editor Mode Toggle
+        function toggleInlineEditMode() {
+            if (isClientMode) return;
+            isEditorActive = !isEditorActive;
+            const btn = document.getElementById('editorModeBtn');
+            const icon = document.getElementById('editorModeIcon');
+            const label = document.getElementById('editorModeLabel');
+            const toolbar = document.getElementById('editorActiveToolbar');
+
+            const editableElements = document.querySelectorAll('[data-editable="true"]');
+
+            if (isEditorActive) {
+                document.body.classList.add('editor-active');
+                editableElements.forEach(el => el.setAttribute('contenteditable', 'true'));
+                btn.classList.add('bg-cyan-500/20', 'border-cyan-400', 'text-cyan-300');
+                icon.className = 'fa-solid fa-check text-cyan-300';
+                label.innerText = 'Sair do Editor';
+                toolbar.classList.remove('hidden');
+                showToast('Modo Editor ativado! Clique em qualquer texto para editar.');
+            } else {
+                document.body.classList.remove('editor-active');
+                editableElements.forEach(el => el.removeAttribute('contenteditable'));
+                btn.classList.remove('bg-cyan-500/20', 'border-cyan-400', 'text-cyan-300');
+                icon.className = 'fa-solid fa-pen-to-square text-ledCyan';
+                label.innerText = 'Modo Editor';
+                toolbar.classList.add('hidden');
+                showToast('Edições fixadas na página com sucesso.');
+            }
+        }
+
+        // Personalization Modal Functions
+        function openPersonalizationModal() {
+            document.getElementById('cfgLogoText').value = proposalConfig.logoText;
+            document.getElementById('cfgBrandTitle').value = proposalConfig.brandTitle;
+            document.getElementById('cfgDoctorName').value = proposalConfig.doctorName;
+            document.getElementById('cfgClinicName').value = proposalConfig.clinicName;
+            document.getElementById('cfgCity').value = proposalConfig.city;
+            document.getElementById('cfgSpecialty').value = proposalConfig.specialty;
+            document.getElementById('cfgBasePrice').value = proposalConfig.basePrice;
+            document.getElementById('cfgVideomakerPrice').value = proposalConfig.videomakerPrice;
+            document.getElementById('cfgWhatsappPhone').value = proposalConfig.whatsappPhone;
+
+            document.getElementById('personalizationModal').classList.remove('hidden');
+        }
+
+        function closePersonalizationModal() {
+            document.getElementById('personalizationModal').classList.add('hidden');
+        }
+
+        function savePersonalization() {
+            proposalConfig.logoText = document.getElementById('cfgLogoText').value || 'V';
+            proposalConfig.brandTitle = document.getElementById('cfgBrandTitle').value || 'VIVEKANANDA';
+            proposalConfig.doctorName = document.getElementById('cfgDoctorName').value || 'Dr(a). Cliente';
+            proposalConfig.clinicName = document.getElementById('cfgClinicName').value || 'Clínica Odontológica';
+            proposalConfig.city = document.getElementById('cfgCity').value || 'Sua Região';
+            proposalConfig.specialty = document.getElementById('cfgSpecialty').value || 'Implantes & Estética';
+            proposalConfig.basePrice = parseFloat(document.getElementById('cfgBasePrice').value) || 2500;
+            proposalConfig.videomakerPrice = parseFloat(document.getElementById('cfgVideomakerPrice').value) || 1500;
+            proposalConfig.whatsappPhone = document.getElementById('cfgWhatsappPhone').value || '';
+
+            applyConfigToDOM();
+            closePersonalizationModal();
+            showToast('Proposta personalizada com sucesso!');
+        }
+
+        function applyConfigToDOM() {
+            // Header
+            document.getElementById('navBrandLogo').innerText = proposalConfig.logoText;
+            document.getElementById('navBrandTitle').childNodes[0].nodeValue = proposalConfig.brandTitle + ' ';
+
+            // Hero
+            document.getElementById('heroTargetDisplay').innerText = `${proposalConfig.doctorName} • ${proposalConfig.clinicName} (${proposalConfig.city})`;
+
+            // Proposal Pricing
+            document.getElementById('proposalBasePriceDisplay').innerHTML = `R$ ${proposalConfig.basePrice.toLocaleString('pt-BR')} <span class="text-xs text-slate-400 font-normal">/ mês</span>`;
+            document.getElementById('addonVideomakerPriceDisplay').innerText = `+ R$ ${proposalConfig.videomakerPrice.toLocaleString('pt-BR')} / mês`;
+
+            // Summary
+            document.getElementById('summaryDoctorName').innerText = proposalConfig.doctorName;
+            document.getElementById('summaryClinicName').innerText = proposalConfig.clinicName;
+            document.getElementById('summaryBasePrice').innerText = `R$ ${proposalConfig.basePrice.toLocaleString('pt-BR')}`;
+            document.getElementById('summaryVideomakerPrice').innerText = `R$ ${proposalConfig.videomakerPrice.toLocaleString('pt-BR')}`;
+
+            updateProposalTotal();
+        }
+
+        // Proposal Pricing Calculation
+        function updateProposalTotal() {
+            const hasVideomaker = document.getElementById('addonVideomakerCheck').checked;
+            proposalConfig.hasVideomaker = hasVideomaker;
+
+            let total = proposalConfig.basePrice;
+            const videomakerRow = document.getElementById('summaryVideomakerRow');
+
+            if (hasVideomaker) {
+                total += proposalConfig.videomakerPrice;
+                videomakerRow.classList.remove('hidden');
+                videomakerRow.classList.add('flex');
+            } else {
+                videomakerRow.classList.remove('flex');
+                videomakerRow.classList.add('hidden');
+            }
+
+            document.getElementById('summaryTotalPrice').innerHTML = `R$ ${total.toLocaleString('pt-BR')} <span class="text-xs text-slate-400 font-normal">/mês</span>`;
+        }
+
+        // Send Proposal Modal Functions
+        function openSendProposalModal() {
+            if (isEditorActive) toggleInlineEditMode();
+
+            document.getElementById('sendModalDoctorDisplay').innerText = proposalConfig.doctorName;
+            document.getElementById('sendModalClinicDisplay').innerText = `${proposalConfig.clinicName} (${proposalConfig.city})`;
+            document.getElementById('sendModalPriceDisplay').innerText = document.getElementById('summaryTotalPrice').innerText;
+
+            const domainInput = document.getElementById('customHostDomainInput');
+            if (domainInput && proposalConfig.customDomain) {
+                domainInput.value = proposalConfig.customDomain;
+            }
+
+            updateShareableUrlFromCustomHost();
+            document.getElementById('sendProposalModal').classList.remove('hidden');
+        }
+
+        function closeSendProposalModal() {
+            document.getElementById('sendProposalModal').classList.add('hidden');
+        }
+
+        function updateShareableUrlFromCustomHost() {
+            const domainInput = document.getElementById('customHostDomainInput');
+            const customHost = domainInput ? domainInput.value.trim() : (proposalConfig.customDomain || 'https://lumia-marketing.com/proposta.html');
+            const input = document.getElementById('clientShareableUrlInput');
+
+            if (customHost) {
+                proposalConfig.customDomain = customHost;
+                try {
+                    let base = customHost.startsWith('http') ? customHost : 'https://' + customHost;
+                    const url = new URL(base);
+
+                    // Create ultra-clean, short query parameters
+                    url.searchParams.set('modo', 'c');
+                    url.searchParams.set('d', proposalConfig.doctorName);
+                    url.searchParams.set('cl', proposalConfig.clinicName);
+                    url.searchParams.set('cid', proposalConfig.city);
+                    url.searchParams.set('p', proposalConfig.basePrice);
+                    if (proposalConfig.hasVideomaker) url.searchParams.set('vm', '1');
+
+                    input.value = url.toString();
+                    return;
+                } catch(e) {}
+            }
+
+            input.value = `https://lumia-marketing.com/proposta.html?modo=c&d=${encodeURIComponent(proposalConfig.doctorName)}&cl=${encodeURIComponent(proposalConfig.clinicName)}&p=${proposalConfig.basePrice}`;
+        }
+
+        function generateClientShareUrl() {
+            const domainInput = document.getElementById('customHostDomainInput');
+            const customHost = domainInput ? domainInput.value.trim() : (proposalConfig.customDomain || 'https://lumia-marketing.com/proposta.html');
+            if (customHost) {
+                try {
+                    let base = customHost.startsWith('http') ? customHost : 'https://' + customHost;
+                    const url = new URL(base);
+                    url.searchParams.set('modo', 'c');
+                    url.searchParams.set('d', proposalConfig.doctorName);
+                    url.searchParams.set('cl', proposalConfig.clinicName);
+                    url.searchParams.set('cid', proposalConfig.city);
+                    url.searchParams.set('p', proposalConfig.basePrice);
+                    if (proposalConfig.hasVideomaker) url.searchParams.set('vm', '1');
+                    return url.toString();
+                } catch(e) {}
+            }
+            return `https://lumia-marketing.com/proposta.html?modo=c&d=${encodeURIComponent(proposalConfig.doctorName)}&cl=${encodeURIComponent(proposalConfig.clinicName)}&p=${proposalConfig.basePrice}`;
+        }
+
+        function copyClientShareUrl() {
+            const input = document.getElementById('clientShareableUrlInput');
+            if (!input.value.startsWith('http')) {
+                showToast('Por favor, informe a URL do seu site no campo acima!');
+                return;
+            }
+            input.select();
+            input.setSelectionRange(0, 99999);
+            document.execCommand('copy');
+            showToast('Link curto do cliente copiado com sucesso!');
+        }
+
+        function dispatchClientWhatsApp() {
+            const shareUrl = generateClientShareUrl();
+            let msg = `Olá, ${proposalConfig.doctorName}! 🦷✨\n\n`;
+            msg += `Conforme combinamos, preparei a apresentação estratégica e a proposta comercial exclusiva para a *${proposalConfig.clinicName}*.\n\n`;
+
+            if (shareUrl) {
+                msg += `🔗 *Acesse sua proposta interativa aqui:*\n${shareUrl}\n\n`;
+            } else {
+                msg += `Estou lhe enviando o arquivo interativo da proposta em anexo por aqui.\n\n`;
+            }
+
+            msg += `Nela você poderá testar nossa simulação de faturamento, conhecer a demonstração ao vivo da LumIA (nossa IA de atendimento 24/7) e conferir o escopo completo da nossa parceria.\n\n`;
+            msg += `Fico à disposição para tirar qualquer dúvida e darmos início ao setup da clínica!`;
+
+            const encoded = encodeURIComponent(msg);
+            const targetPhone = proposalConfig.whatsappPhone || '';
+            const waLink = targetPhone ? `https://wa.me/${targetPhone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+            window.open(waLink, '_blank');
+        }
+
+        function downloadClientHtmlFile() {
+            const clone = document.documentElement.cloneNode(true);
+            const cloneBody = clone.querySelector('body');
+            cloneBody.classList.add('client-view');
+            cloneBody.classList.remove('editor-active');
+
+            // Remove administrative elements completely
+            const adminEls = clone.querySelectorAll('.admin-only, #personalizationModal, #sendProposalModal, #editorActiveToolbar');
+            adminEls.forEach(el => el.remove());
+
+            // Remove contenteditable markers
+            const editableEls = clone.querySelectorAll('[contenteditable], [data-editable]');
+            editableEls.forEach(el => {
+                el.removeAttribute('contenteditable');
+                el.removeAttribute('data-editable');
+            });
+
+            // Make sure client badge is visible
+            const badge = clone.querySelector('#clientStatusBadge');
+            if (badge) badge.classList.remove('hidden');
+
+            const content = '<!DOCTYPE html>\n' + clone.outerHTML;
+            const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
+            const sanitized = (proposalConfig.clinicName || 'Clinica').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const filename = `Proposta_Comercial_${sanitized}_Vivekananda.html`;
+
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+
+            showToast(`Arquivo "${filename}" baixado com sucesso! Pronto para envio.`);
+        }
+
+        function togglePreviewAsClient() {
+            closeSendProposalModal();
+            setClientMode(!isClientMode);
+        }
+
+        function setClientMode(active) {
+            isClientMode = active;
+            const badge = document.getElementById('clientStatusBadge');
+            if (isClientMode) {
+                document.body.classList.add('client-view');
+                if (badge) badge.classList.remove('hidden');
+                if (isEditorActive) toggleInlineEditMode();
+                showToast('Modo Cliente Ativo: Todos os botões de edição foram ocultados!');
+            } else {
+                document.body.classList.remove('client-view');
+                if (badge) badge.classList.add('hidden');
+                showToast('Modo Administrador Restaurado.');
+            }
+        }
+
+        function checkUrlForClientMode() {
+            const params = new URLSearchParams(window.location.search);
+            const isClient = params.get('modo') === 'c' || params.get('modo') === 'cliente' || params.get('mode') === 'client';
+
+            if (isClient) {
+                // Short parameters support
+                if (params.get('d')) proposalConfig.doctorName = params.get('d');
+                if (params.get('cl')) proposalConfig.clinicName = params.get('cl');
+                if (params.get('cid')) proposalConfig.city = params.get('cid');
+                if (params.get('p')) proposalConfig.basePrice = parseFloat(params.get('p')) || proposalConfig.basePrice;
+                if (params.get('vm') === '1') {
+                    proposalConfig.hasVideomaker = true;
+                    const cb = document.getElementById('addonVideomakerCheck');
+                    if (cb) cb.checked = true;
+                }
+
+                // Legacy JSON support if present
+                const dados = params.get('dados');
+                if (dados) {
+                    try {
+                        const parsed = JSON.parse(decodeURIComponent(dados));
+                        proposalConfig = Object.assign(proposalConfig, parsed);
+                        if (parsed.hasVideomaker) {
+                            const cb = document.getElementById('addonVideomakerCheck');
+                            if (cb) cb.checked = true;
+                        }
+                    } catch (e) {
+                        console.error('Erro ao restaurar dados da proposta', e);
+                    }
+                }
+
+                applyConfigToDOM();
+                setClientMode(true);
+            }
+        }
+
+        // WhatsApp Closing Agreement Link
+        function sendContractWhatsApp() {
+            let total = proposalConfig.basePrice;
+            let escopo = `Gestão de Tráfego Pago (Meta, Google e TikTok), Treinamento de Vendas com PNL/Neuromarketing, Rotina de CRM, Roteiros de Criativos e Lançamentos (Meteórico e 360°)`;
+
+            if (proposalConfig.hasVideomaker) {
+                total += proposalConfig.videomakerPrice;
+                escopo += ` + Serviço de Videomaker e Edição Presencial (5 a 10 vídeos gravados na clínica)`;
+            }
+
+            let msg = `Olá, Vivekananda! Aqui é ${proposalConfig.doctorName} da clínica ${proposalConfig.clinicName}.\n\n`;
+            msg += `Gostei da proposta e quero fechar a parceria para acelerar a captação de pacientes da clínica.\n\n`;
+            msg += `📋 *Escopo Selecionado:* ${escopo}\n`;
+            msg += `💰 *Valor Mensal Fechado:* R$ ${total.toLocaleString('pt-BR')}/mês\n\n`;
+            msg += `Podemos enviar o contrato e marcar o alinhamento de onboarding?`;
+
+            const encoded = encodeURIComponent(msg);
+            const phone = proposalConfig.whatsappPhone || '5582999999999';
+            window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
+        }
+
+        let lumiaTimeouts = [];
+
+        function clearLumiaSimulation() {
+            lumiaTimeouts.forEach(id => clearTimeout(id));
+            lumiaTimeouts = [];
+            const typing = document.getElementById('lumiaTypingIndicator');
+            if (typing) typing.classList.add('hidden');
+        }
+
+        function runLumiaDemoSim() {
+            clearLumiaSimulation();
+
+            const container = document.getElementById('lumiaChatWindow');
+            if (!container) return;
+            container.innerHTML = '';
+
+            const typing = document.getElementById('lumiaTypingIndicator');
+
+            const doctor = proposalConfig.doctorName || 'Dr. Especialista';
+            const clinic = proposalConfig.clinicName || 'Nossa Clínica';
+
+            const conversation = [
+                { sender: 'user', time: '21:42', text: 'Boa noite! Vi o anúncio de vocês no Instagram. Gostaria de saber o valor para fazer implante dentário total.' },
+                { sender: 'lumia', time: '21:42', text: `Olá! Que prazer ter você aqui na *${clinic}*. Meu nome é LumIA e vou te ajudar agora mesmo! 🦷✨` },
+                { sender: 'lumia', time: '21:42', text: 'Como cada paciente possui uma estrutura óssea e estética única, trabalhamos com protocolos personalizados para garantir zero dor e fixação definitiva. Você já usa alguma prótese móvel ou precisa repor dentes específicos?' },
+                { sender: 'user', time: '21:43', text: 'Uso prótese móvel em cima há anos, mas machuca muito e tenho vergonha de sorrir em público.' },
+                { sender: 'lumia', time: '21:43', text: `Entendo perfeitamente o seu caso! Mais de 80% dos nossos pacientes chegavam com essa mesma queixa e hoje sorriem com total segurança e dentes fixos com o método do *${doctor}*!` },
+                { sender: 'lumia', time: '21:44', text: 'Temos 2 horários prioritários para avaliação tomográfica digital gratuita nesta semana: Quinta às 15h ou Sexta às 10h. Qual fica melhor para você garantir a sua vaga?' },
+                { sender: 'user', time: '21:44', text: 'Sexta às 10h seria perfeito para mim!' },
+                { sender: 'lumia', time: '21:44', text: 'Excelente! Sua pré-reserva está confirmada para Sexta-feira às 10h. Nossa equipe já reservou a sala e estamos ansiosos para transformar seu sorriso! 🚀' }
+            ];
+
+            let cumulativeDelay = 150;
+
+            conversation.forEach((msg) => {
+                const isUser = msg.sender === 'user';
+
+                // Show typing indicator before LumIA speaks
+                if (msg.sender === 'lumia') {
+                    const typingTimeout = setTimeout(() => {
+                        if (typing) typing.classList.remove('hidden');
+                        container.scrollTop = container.scrollHeight + 100;
+                    }, Math.max(50, cumulativeDelay - 350));
+                    lumiaTimeouts.push(typingTimeout);
+                }
+
+                const msgTimeout = setTimeout(() => {
+                    if (typing) typing.classList.add('hidden');
+
+                    const bubble = document.createElement('div');
+                    bubble.className = `flex ${isUser ? 'justify-end' : 'justify-start'} transition-all duration-300`;
+
+                    bubble.innerHTML = `
+                        <div class="max-w-[88%] rounded-2xl px-3.5 py-2.5 ${isUser ? 'bg-slate-800 text-white border border-slate-700' : 'bg-gradient-to-r from-cyan-950 to-slate-900 border border-ledCyan/30 text-slate-100'} shadow-md">
+                            ${!isUser ? '<div class="text-[10px] text-ledCyan font-bold mb-1 flex items-center gap-1"><i class="fa-solid fa-robot"></i> LumIA</div>' : ''}
+                            <p class="leading-relaxed text-xs">${msg.text}</p>
+                            <div class="text-[9px] text-slate-400 text-right mt-1">${msg.time} ${isUser ? '<i class="fa-solid fa-check-double text-ledCyan"></i>' : ''}</div>
+                        </div>
+                    `;
+                    container.appendChild(bubble);
+
+                    // Dual scroll mechanism for guaranteed mobile support
+                    try {
+                        bubble.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    } catch (e) {
+                        container.scrollTop = container.scrollHeight + 200;
+                    }
+                }, cumulativeDelay);
+
+                lumiaTimeouts.push(msgTimeout);
+                cumulativeDelay += isUser ? 950 : 1200;
+            });
+        }
+
+        function adjustSlider(sliderId, delta) {
+            const slider = document.getElementById(sliderId);
+            if (!slider) return;
+            const current = parseFloat(slider.value) || 0;
+            const min = parseFloat(slider.min);
+            const max = parseFloat(slider.max);
+
+            let next = current + delta;
+            if (next < min) next = min;
+            if (next > max) next = max;
+
+            slider.value = next;
+            calculateSimulator();
+        }
+
+        function setSliderValue(sliderId, value) {
+            const slider = document.getElementById(sliderId);
+            if (!slider) return;
+            slider.value = value;
+            calculateSimulator();
+        }
+
+        function calculateSimulator() {
+            const trafficEl = document.getElementById('sliderTraffic');
+            const ticketEl = document.getElementById('sliderTicket');
+            const convEl = document.getElementById('sliderConversion');
+
+            if (!trafficEl || !ticketEl || !convEl) return;
+
+            const traffic = parseFloat(trafficEl.value) || 3000;
+            const ticket = parseFloat(ticketEl.value) || 4500;
+            const convRate = (parseFloat(convEl.value) || 18) / 100;
+
+            const trafficLabel = document.getElementById('sliderTrafficLabel');
+            const ticketLabel = document.getElementById('sliderTicketLabel');
+            const convLabel = document.getElementById('sliderConversionLabel');
+
+            if (trafficLabel) trafficLabel.innerText = `R$ ${traffic.toLocaleString('pt-BR')}`;
+            if (ticketLabel) ticketLabel.innerText = `R$ ${ticket.toLocaleString('pt-BR')}`;
+            if (convLabel) convLabel.innerText = `${Math.round(convRate * 100)}%`;
+
+            // Dental Lead Benchmark: approx R$ 20 per qualified WhatsApp lead
+            const leads = Math.round(traffic / 20);
+            // Qualified appointments: approx 18% of leads scheduled
+            const appointments = Math.round(leads * 0.18);
+            // Deals closed based on conversion slider
+            const deals = Math.max(1, Math.round(appointments * convRate));
+            // Total estimated revenue
+            const revenue = deals * ticket;
+            const roi = (revenue / traffic).toFixed(1);
+
+            const leadsEl = document.getElementById('calcLeads');
+            const appEl = document.getElementById('calcAppointments');
+            const dealsEl = document.getElementById('calcDeals');
+            const revEl = document.getElementById('calcRevenue');
+            const roiEl = document.getElementById('calcRoi');
+
+            if (leadsEl) leadsEl.innerText = leads.toLocaleString('pt-BR');
+            if (appEl) appEl.innerText = appointments.toLocaleString('pt-BR');
+            if (dealsEl) dealsEl.innerText = deals.toLocaleString('pt-BR');
+            if (revEl) revEl.innerText = `R$ ${revenue.toLocaleString('pt-BR')}`;
+            if (roiEl) roiEl.innerText = `Retorno aprox. ${roi}x sobre o tráfego pago`;
+        }
+
+        // Dedicated Touch Tracker for iPhone/Android Sliders
+        function setupMobileTouchInteractions() {
+            const sliderIds = ['sliderTraffic', 'sliderTicket', 'sliderConversion'];
+
+            sliderIds.forEach(id => {
+                const slider = document.getElementById(id);
+                if (!slider) return;
+
+                function updateFromTouch(touchEvent) {
+                    const touch = touchEvent.touches ? touchEvent.touches[0] : touchEvent;
+                    const rect = slider.getBoundingClientRect();
+                    if (rect.width <= 0) return;
+
+                    const offsetX = Math.max(0, Math.min(touch.clientX - rect.left, rect.width));
+                    const ratio = offsetX / rect.width;
+                    const min = parseFloat(slider.min);
+                    const max = parseFloat(slider.max);
+                    const step = parseFloat(slider.step) || 1;
+
+                    let rawVal = min + (max - min) * ratio;
+                    let stepped = Math.round(rawVal / step) * step;
+                    stepped = Math.max(min, Math.min(max, stepped));
+
+                    slider.value = stepped;
+                    calculateSimulator();
+                }
+
+                // Native input & change
+                slider.addEventListener('input', calculateSimulator, { passive: true });
+                slider.addEventListener('change', calculateSimulator, { passive: true });
+
+                // Direct Touch dragging
+                slider.addEventListener('touchstart', (e) => {
+                    updateFromTouch(e);
+                }, { passive: true });
+
+                slider.addEventListener('touchmove', (e) => {
+                    updateFromTouch(e);
+                }, { passive: true });
+
+                slider.addEventListener('touchend', (e) => {
+                    calculateSimulator();
+                }, { passive: true });
+            });
+
+            // LumIA Restart Button Touch Binding
+            const btnRestart = document.getElementById('btnRestartLumia');
+            if (btnRestart) {
+                let lastTrigger = 0;
+                const onRestartTouch = (e) => {
+                    const now = Date.now();
+                    if (now - lastTrigger < 400) return;
+                    lastTrigger = now;
+                    runLumiaDemoSim();
+                };
+                btnRestart.addEventListener('touchend', onRestartTouch, { passive: true });
+            }
+        }
+
+        // Instant Initialization that does not wait for slow CDN connections
+        function initializeApp() {
+            applyConfigToDOM();
+            calculateSimulator();
+            runLumiaDemoSim();
+            checkUrlForClientMode();
+            setupMobileTouchInteractions();
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeApp);
+        } else {
+            initializeApp();
+        }
+        window.addEventListener('load', initializeApp);
+    </script>
+</body>
+</html>
