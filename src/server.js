@@ -269,11 +269,7 @@ app.delete('/api/admin/tenants/:id', exigirSuperAdmin, async (req, res) => {
 
 app.get('/api/admin/tenants/:id/integracoes', exigirSuperAdmin, async (req, res) => {
   try {
-    const [resumo, propostaConfig] = await Promise.all([
-      tenantConfig.obterResumo(Number(req.params.id)),
-      tenantConfig.obterConfigProposta(Number(req.params.id)),
-    ]);
-    res.json({ ...resumo, propostaPlano: propostaConfig.plano });
+    res.json(await tenantConfig.obterResumo(Number(req.params.id)));
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -363,10 +359,23 @@ app.post('/api/integracoes/sistemas/:sistema/ativo', async (req, res) => {
   }
 });
 
-// ---------- Gerador de Propostas (public/gerador-propostas.html) - qualquer tenant logado usa
-// pra criar propostas pros PROPRIOS clientes; o plano (branded/white_label) so o super_admin muda ----------
+// ---------- Gerador de Propostas (public/gerador-propostas.html) - SO pra tenants cadastrados
+// como assinante desse produto pela aba admin "Gerador de Propostas" (tenant_config.proposta_plano
+// preenchido); um cliente comum da Lumia (proposta_plano null) e barrado com 403 aqui, mesmo
+// logado, sem NENHUMA ligacao com esse produto. O plano em si (branded/white_label) so o
+// super_admin muda. ----------
 
-app.get('/api/minha-proposta/config', async (req, res) => {
+async function exigirAssinantePropostas(req, res, next) {
+  try {
+    const config = await tenantConfig.obterConfigProposta(req.tenantId);
+    if (!config.plano) return res.status(403).json({ erro: 'essa conta nao tem acesso ao Gerador de Propostas' });
+    next();
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+}
+
+app.get('/api/minha-proposta/config', exigirAssinantePropostas, async (req, res) => {
   try {
     res.json(await tenantConfig.obterConfigProposta(req.tenantId));
   } catch (err) {
@@ -374,7 +383,7 @@ app.get('/api/minha-proposta/config', async (req, res) => {
   }
 });
 
-app.post('/api/minha-proposta/config', async (req, res) => {
+app.post('/api/minha-proposta/config', exigirAssinantePropostas, async (req, res) => {
   const { brandName, brandSubtitle, logoText, customDomain } = req.body || {};
   try {
     await tenantConfig.salvarMarcaProposta(req.tenantId, { brandName, brandSubtitle, logoText, customDomain });
@@ -384,7 +393,7 @@ app.post('/api/minha-proposta/config', async (req, res) => {
   }
 });
 
-app.get('/api/minha-proposta/propostas', async (req, res) => {
+app.get('/api/minha-proposta/propostas', exigirAssinantePropostas, async (req, res) => {
   try {
     res.json({ propostas: await propostas.listarPorTenant(req.tenantId) });
   } catch (err) {
@@ -392,7 +401,7 @@ app.get('/api/minha-proposta/propostas', async (req, res) => {
   }
 });
 
-app.delete('/api/minha-proposta/propostas/:id', async (req, res) => {
+app.delete('/api/minha-proposta/propostas/:id', exigirAssinantePropostas, async (req, res) => {
   try {
     const apagou = await propostas.deletar(req.tenantId, req.params.id);
     if (!apagou) return res.status(404).json({ erro: 'proposta nao encontrada' });
@@ -402,7 +411,7 @@ app.delete('/api/minha-proposta/propostas/:id', async (req, res) => {
   }
 });
 
-app.post('/api/minha-proposta/propostas', async (req, res) => {
+app.post('/api/minha-proposta/propostas', exigirAssinantePropostas, async (req, res) => {
   const { doctorName, clinicName } = req.body || {};
   if (!doctorName || !clinicName) return res.status(400).json({ erro: 'nome do cliente e do negocio dele sao obrigatorios' });
   try {
@@ -416,7 +425,7 @@ app.post('/api/minha-proposta/propostas', async (req, res) => {
 
 // modelo de conteudo proprio (Modo Editor de proposta.html, so pra assinantes white_label) -
 // GET usa pro editor carregar o que ja foi salvo, POST salva a versao editada
-app.get('/api/minha-proposta/template', async (req, res) => {
+app.get('/api/minha-proposta/template', exigirAssinantePropostas, async (req, res) => {
   try {
     res.json({ html: await tenantConfig.obterTemplateProposta(req.tenantId) });
   } catch (err) {
@@ -424,7 +433,7 @@ app.get('/api/minha-proposta/template', async (req, res) => {
   }
 });
 
-app.post('/api/minha-proposta/template', async (req, res) => {
+app.post('/api/minha-proposta/template', exigirAssinantePropostas, async (req, res) => {
   try {
     const config = await tenantConfig.obterConfigProposta(req.tenantId);
     if (config.plano !== 'white_label') {

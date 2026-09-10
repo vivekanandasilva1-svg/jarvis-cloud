@@ -42,7 +42,16 @@ async function garantirTabelas() {
   // configurar a propria marca (nome, subtitulo, logo, dominio) pras propostas que ele manda.
   // O PLANO em si so o super_admin muda (corresponde ao que o assinante pagou) - os campos de
   // marca abaixo sao self-service, o proprio tenant edita.
-  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_plano TEXT NOT NULL DEFAULT 'branded';`);
+  // NULL = esse tenant NAO e assinante do Gerador de Propostas (caso de qualquer cliente comum
+  // da Lumia - nao deve ter NENHUMA ligacao com esse produto). So fica com um valor quando o
+  // admin cria/marca ele como assinante pela aba "Gerador de Propostas" - nunca por default.
+  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_plano TEXT;`);
+  // instalacoes antigas tinham NOT NULL DEFAULT 'branded' - isso fazia QUALQUER tenant que
+  // tivesse tenant_config tocado por qualquer motivo (Clinicorp, Meta Ads, etc) ganhar
+  // "branded" de brinde. Remove a constraint pra valer so pra quem for cadastrado como
+  // assinante de verdade (idempotente - nao da erro se ja tiver sido removida antes).
+  await pool.query(`ALTER TABLE tenant_config ALTER COLUMN proposta_plano DROP DEFAULT;`);
+  await pool.query(`ALTER TABLE tenant_config ALTER COLUMN proposta_plano DROP NOT NULL;`);
   await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_brand_name TEXT;`);
   await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_brand_subtitle TEXT;`);
   await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_logo_text TEXT;`);
@@ -188,8 +197,11 @@ export async function salvarTrello(tenantId, { apiKey, token }) {
 
 // ---------- Gerador de Propostas (plano + marca de cada assinante) ----------
 
+// plano null = esse tenant NAO e assinante do Gerador de Propostas (cliente comum da Lumia,
+// ou ninguem configurou ainda) - quem chama isso pra decidir se libera acesso tem que checar
+// "plano" explicitamente, nunca assumir "branded" como default
 export async function obterConfigProposta(tenantId) {
-  if (!pool) return { plano: 'branded', brandName: null, brandSubtitle: null, logoText: null, customDomain: null, templateHtml: null };
+  if (!pool) return { plano: null, brandName: null, brandSubtitle: null, logoText: null, customDomain: null, templateHtml: null };
   await tabelasProntas;
   const { rows } = await pool.query(
     'SELECT proposta_plano, proposta_brand_name, proposta_brand_subtitle, proposta_logo_text, proposta_custom_domain, proposta_template_html FROM tenant_config WHERE tenant_id = $1',
@@ -197,7 +209,7 @@ export async function obterConfigProposta(tenantId) {
   );
   const r = rows[0];
   return {
-    plano: r?.proposta_plano || 'branded',
+    plano: r?.proposta_plano || null,
     brandName: r?.proposta_brand_name || null,
     brandSubtitle: r?.proposta_brand_subtitle || null,
     logoText: r?.proposta_logo_text || null,
@@ -270,13 +282,17 @@ export async function definirPlanoProposta(tenantId, plano) {
 // pra aba admin "Propostas" (lista de assinantes do Gerador de Propostas com o plano de cada
 // um) - 1 query so com JOIN, em vez de listar tenants e depois buscar o plano de cada um em
 // N chamadas separadas
+// so tenants que sao REALMENTE assinantes do Gerador de Propostas (proposta_plano preenchido)
+// - um cliente comum da Lumia nunca aparece aqui, mesmo que tenha tenant_config por outro
+// motivo (Clinicorp, Meta Ads etc)
 export async function listarTenantsComPlano() {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(`
-    SELECT t.id, t.nome, t.username, t.ativo, COALESCE(tc.proposta_plano, 'branded') AS proposta_plano, tc.proposta_acesso_expira_em
+    SELECT t.id, t.nome, t.username, t.ativo, tc.proposta_plano, tc.proposta_acesso_expira_em
     FROM tenants t
-    LEFT JOIN tenant_config tc ON tc.tenant_id = t.id
+    JOIN tenant_config tc ON tc.tenant_id = t.id
+    WHERE tc.proposta_plano IS NOT NULL
     ORDER BY t.nome
   `);
   return rows.map((r) => ({

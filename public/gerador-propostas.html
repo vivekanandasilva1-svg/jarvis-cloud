@@ -327,11 +327,20 @@
             if (!resp.ok) throw new Error('sessao invalida');
             const me = await resp.json();
 
+            // essa conta existe e a senha confere, mas pode nao ser assinante do Gerador de
+            // Propostas (ex: login de um cliente comum da Lumia, sem nenhuma ligacao com esse
+            // produto) - o servidor barra com 403 nesse caso
+            const configResp = await fetch('/api/minha-proposta/config', { headers: { 'x-app-password': appPassword } });
+            if (!configResp.ok) {
+                sessionStorage.removeItem('jarvis_password');
+                throw new Error('Essa conta não tem acesso ao Gerador de Propostas.');
+            }
+            configAtual = await configResp.json();
+
             document.getElementById('telaLogin').classList.add('hidden');
             document.getElementById('painel').classList.remove('hidden');
             document.getElementById('nomeTenant').innerText = me.nome || '';
 
-            configAtual = await (await fetch('/api/minha-proposta/config', { headers: { 'x-app-password': appPassword } })).json();
             if (configAtual.plano === 'white_label') {
                 document.getElementById('secaoMarca').classList.remove('hidden');
                 document.getElementById('marcaBrandName').value = configAtual.brandName || '';
@@ -473,6 +482,7 @@
                 await carregarPainel();
             } catch (e) {
                 sessionStorage.removeItem('jarvis_password');
+                mostrarErroLogin(e.message);
             }
         })();
     </script>

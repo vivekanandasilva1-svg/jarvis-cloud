@@ -119,10 +119,22 @@ export async function obterPorId(id) {
 }
 
 // painel "Clientes" (aba nova, so super_admin ve) - lista todo mundo, do jeito mais simples
+// exclui quem e assinante do Gerador de Propostas (tenant_config.proposta_plano preenchido) -
+// esses aparecem so na aba "Gerador de Propostas" (ver tenantConfig.listarTenantsComPlano), a
+// aba "Clientes" e so pros clientes de verdade da Lumia, sem nenhuma mistura entre os dois.
+// Referencia a tabela tenant_config direto por nome (sem importar o modulo, pra nao criar
+// import circular - tenantConfig.js ja importa daqui) - ela sempre existe nesse ponto, ja que
+// isso so roda depois do boot completo da aplicacao.
 export async function listarTenants() {
   if (!pool) return [];
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT id, slug, nome, username, ativo, acesso_expira_em, criado_em FROM tenants ORDER BY criado_em ASC');
+  const { rows } = await pool.query(`
+    SELECT t.id, t.slug, t.nome, t.username, t.ativo, t.acesso_expira_em, t.criado_em
+    FROM tenants t
+    LEFT JOIN tenant_config tc ON tc.tenant_id = t.id
+    WHERE tc.proposta_plano IS NULL
+    ORDER BY t.criado_em ASC
+  `);
   return rows;
 }
 
