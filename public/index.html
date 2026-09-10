@@ -74,6 +74,7 @@
       <button type="button" class="tab-btn" id="tabBtnRelatorios" data-tab="relatorios">Relatórios</button>
       <button type="button" class="tab-btn" id="tabBtnIntegracoes" data-tab="integracoes">Integrações</button>
       <button type="button" class="tab-btn" id="tabBtnClientes" data-tab="clientes" hidden>Clientes</button>
+      <button type="button" class="tab-btn" id="tabBtnPropostasAdmin" data-tab="propostasAdmin" hidden>Propostas</button>
     </div>
 
     <div class="agent-panel" id="agentPanel" hidden>
@@ -572,6 +573,34 @@
 
       <div class="auto-coluna-dir" id="clienteIntegracoesPainel">
         <p class="agenda-vazia">Selecione um cliente na lista pra ver/configurar as integrações dele.</p>
+      </div>
+    </div>
+
+    <div class="window-body tab-auto" id="tabPropostasAdmin" hidden>
+      <div class="auto-coluna-esq">
+        <div class="auto-aviso">
+          Cadastre aqui quem comprou o Gerador de Propostas e escolha o plano de acesso dele:
+          <strong>Branded</strong> (mais barato, usa sua marca, sem Modo Editor) ou
+          <strong>White Label</strong> (mais completo, marca própria + edição total do conteúdo).
+        </div>
+
+        <label class="auto-label">Cadastrar assinante novo</label>
+        <div class="cliente-form">
+          <input type="text" id="propAdminNomeInput" placeholder="Nome do negócio do assinante" />
+          <input type="text" id="propAdminUsuarioInput" placeholder="Usuario de login" />
+          <input type="password" id="propAdminSenhaInput" placeholder="Senha" />
+          <select id="propAdminPlanoInput">
+            <option value="branded">Branded (mais barato, sem Modo Editor)</option>
+            <option value="white_label">White Label (completo, com Modo Editor)</option>
+          </select>
+          <button type="button" id="propAdminCriarBtn">Criar assinante</button>
+        </div>
+        <p class="agenda-erro" id="propAdminCriarErro" hidden></p>
+
+        <label class="auto-label">Assinantes cadastrados</label>
+        <div class="auto-arquivos-lista" id="propAdminLista">
+          <p class="agenda-vazia">Carregando...</p>
+        </div>
       </div>
     </div>
   </div>

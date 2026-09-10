@@ -364,6 +364,16 @@ app.post('/api/admin/tenants/:id/proposta-plano', exigirSuperAdmin, async (req, 
   }
 });
 
+// aba admin "Propostas" - lista todo mundo com o plano do Gerador de Propostas de cada um,
+// pra cadastrar/gerenciar os assinantes desse produto num lugar so
+app.get('/api/admin/propostas-assinantes', exigirSuperAdmin, async (req, res) => {
+  try {
+    res.json({ assinantes: await tenantConfig.listarTenantsComPlano() });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 // ---------- Stats do sistema (painel do dashboard) ----------
 
 const sessoesVistas = new Set();

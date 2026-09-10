@@ -68,6 +68,7 @@ const tabBtnAuto = document.getElementById('tabBtnAuto');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
 const tabBtnIntegracoes = document.getElementById('tabBtnIntegracoes');
 const tabBtnClientes = document.getElementById('tabBtnClientes');
+const tabBtnPropostasAdmin = document.getElementById('tabBtnPropostasAdmin');
 const tabPainel = document.getElementById('tabPainel');
 const tabAgenda = document.getElementById('tabAgenda');
 const tabWhatsapp = document.getElementById('tabWhatsapp');
@@ -76,6 +77,7 @@ const tabAuto = document.getElementById('tabAuto');
 const tabRelatorios = document.getElementById('tabRelatorios');
 const tabIntegracoes = document.getElementById('tabIntegracoes');
 const tabClientes = document.getElementById('tabClientes');
+const tabPropostasAdmin = document.getElementById('tabPropostasAdmin');
 
 // ---------- Integracoes (Meta Ads / sistemas conectados): elementos ----------
 const integracoesMetaAdsLista = document.getElementById('integracoesMetaAdsLista');
@@ -90,6 +92,15 @@ const clienteCriarBtn = document.getElementById('clienteCriarBtn');
 const clienteCriarErro = document.getElementById('clienteCriarErro');
 const clientesLista = document.getElementById('clientesLista');
 const clienteIntegracoesPainel = document.getElementById('clienteIntegracoesPainel');
+
+// ---------- Propostas (admin - assinantes do Gerador de Propostas): elementos ----------
+const propAdminNomeInput = document.getElementById('propAdminNomeInput');
+const propAdminUsuarioInput = document.getElementById('propAdminUsuarioInput');
+const propAdminSenhaInput = document.getElementById('propAdminSenhaInput');
+const propAdminPlanoInput = document.getElementById('propAdminPlanoInput');
+const propAdminCriarBtn = document.getElementById('propAdminCriarBtn');
+const propAdminCriarErro = document.getElementById('propAdminCriarErro');
+const propAdminLista = document.getElementById('propAdminLista');
 const agendaGoogleStatus = document.getElementById('agendaGoogleStatus');
 const agendaGoogleBtn = document.getElementById('agendaGoogleBtn');
 const agendaForm = document.getElementById('agendaForm');
@@ -286,6 +297,7 @@ function mostrarApp() {
   loginScreen.hidden = true;
   appWindow.hidden = false;
   tabBtnClientes.hidden = !souSuperAdmin;
+  tabBtnPropostasAdmin.hidden = !souSuperAdmin;
   if (!chatLog.childElementCount) {
     addBubble('Lumia pronta. Digite, aperte o microfone ou ative o modo conversa.', 'system');
   }
@@ -1754,6 +1766,7 @@ function mudarAba(aba) {
   tabRelatorios.hidden = aba !== 'relatorios';
   tabIntegracoes.hidden = aba !== 'integracoes';
   tabClientes.hidden = aba !== 'clientes';
+  tabPropostasAdmin.hidden = aba !== 'propostasAdmin';
   tabBtnPainel.classList.toggle('active', aba === 'painel');
   tabBtnAgenda.classList.toggle('active', aba === 'agenda');
   tabBtnWhatsapp.classList.toggle('active', aba === 'whatsapp');
@@ -1762,6 +1775,7 @@ function mudarAba(aba) {
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
   tabBtnIntegracoes.classList.toggle('active', aba === 'integracoes');
   tabBtnClientes.classList.toggle('active', aba === 'clientes');
+  tabBtnPropostasAdmin.classList.toggle('active', aba === 'propostasAdmin');
   if (aba === 'agenda') {
     carregarStatusGoogleAgenda();
     carregarEventosAgenda();
@@ -1779,6 +1793,8 @@ function mudarAba(aba) {
     carregarIntegracoes();
   } else if (aba === 'clientes') {
     carregarClientes();
+  } else if (aba === 'propostasAdmin') {
+    carregarPropostasAssinantes();
   }
   // o polling do CRM (contatos + conversa aberta) so deve rodar com a aba visivel, senao fica
   // batendo na API/banco a toa em segundo plano pra sempre
@@ -1793,6 +1809,7 @@ tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
 tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
 tabBtnClientes.addEventListener('click', () => mudarAba('clientes'));
+tabBtnPropostasAdmin.addEventListener('click', () => mudarAba('propostasAdmin'));
 
 // ---------- Agenda: Google Agenda (conectar/desconectar) ----------
 async function carregarStatusGoogleAgenda() {
@@ -3671,6 +3688,136 @@ clienteCriarBtn.addEventListener('click', async () => {
   } catch (err) {
     clienteCriarErro.textContent = err.message;
     clienteCriarErro.hidden = false;
+  }
+});
+
+// ---------- Propostas (admin - assinantes do Gerador de Propostas) ----------
+async function carregarPropostasAssinantes() {
+  propAdminLista.textContent = '';
+  const carregando = document.createElement('p');
+  carregando.className = 'agenda-vazia';
+  carregando.textContent = 'Carregando...';
+  propAdminLista.appendChild(carregando);
+
+  try {
+    const res = await fetch('/api/admin/propostas-assinantes', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    propAdminLista.textContent = '';
+
+    if (!data.assinantes.length) {
+      const vazio = document.createElement('p');
+      vazio.className = 'agenda-vazia';
+      vazio.textContent = 'Nenhum assinante cadastrado ainda.';
+      propAdminLista.appendChild(vazio);
+      return;
+    }
+
+    for (const a of data.assinantes) {
+      const card = document.createElement('div');
+      card.className = 'cliente-card';
+
+      const nome = document.createElement('div');
+      nome.className = 'cliente-card-nome';
+      nome.textContent = a.nome;
+      card.appendChild(nome);
+
+      const meta = document.createElement('div');
+      meta.className = 'cliente-card-meta';
+      meta.textContent = `usuario: ${a.username} - ${a.ativo ? 'Ativo' : 'Desativado'}`;
+      card.appendChild(meta);
+
+      const row = document.createElement('div');
+      row.className = 'cliente-card-row';
+
+      const planoSelect = document.createElement('select');
+      const optBranded = document.createElement('option'); optBranded.value = 'branded'; optBranded.textContent = 'Branded';
+      const optWhiteLabel = document.createElement('option'); optWhiteLabel.value = 'white_label'; optWhiteLabel.textContent = 'White Label';
+      planoSelect.append(optBranded, optWhiteLabel);
+      planoSelect.value = a.propostaPlano === 'white_label' ? 'white_label' : 'branded';
+      planoSelect.addEventListener('change', async () => {
+        try {
+          const r = await fetch(`/api/admin/tenants/${a.id}/proposta-plano`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+            body: JSON.stringify({ plano: planoSelect.value }),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+          carregarPropostasAssinantes();
+        } catch (err) {
+          addBubble(`Erro mudando plano: ${err.message}`, 'system');
+        }
+      });
+      row.appendChild(planoSelect);
+
+      const toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      toggleBtn.textContent = a.ativo ? 'Desativar' : 'Ativar';
+      toggleBtn.addEventListener('click', async () => {
+        try {
+          await fetch(`/api/admin/tenants/${a.id}/ativo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+            body: JSON.stringify({ ativo: !a.ativo }),
+          });
+          carregarPropostasAssinantes();
+        } catch (err) {
+          addBubble(`Erro atualizando assinante: ${err.message}`, 'system');
+        }
+      });
+      row.appendChild(toggleBtn);
+      card.appendChild(row);
+
+      propAdminLista.appendChild(card);
+    }
+  } catch (err) {
+    propAdminLista.textContent = '';
+    const erro = document.createElement('p');
+    erro.className = 'agenda-vazia';
+    erro.textContent = `Nao consegui carregar os assinantes: ${err.message}`;
+    propAdminLista.appendChild(erro);
+  }
+}
+
+propAdminCriarBtn.addEventListener('click', async () => {
+  const nome = propAdminNomeInput.value.trim();
+  const username = propAdminUsuarioInput.value.trim();
+  const senha = propAdminSenhaInput.value;
+  const plano = propAdminPlanoInput.value;
+  propAdminCriarErro.hidden = true;
+  if (!nome || !username || !senha) {
+    propAdminCriarErro.textContent = 'Preenche nome, usuario e senha.';
+    propAdminCriarErro.hidden = false;
+    return;
+  }
+  try {
+    const res = await fetch('/api/admin/tenants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ nome, username, senha }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+
+    if (plano === 'white_label') {
+      const r2 = await fetch(`/api/admin/tenants/${data.id}/proposta-plano`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ plano }),
+      });
+      const d2 = await r2.json();
+      if (!r2.ok) throw new Error(d2.erro || 'assinante criado, mas erro ao definir o plano');
+    }
+
+    propAdminNomeInput.value = '';
+    propAdminUsuarioInput.value = '';
+    propAdminSenhaInput.value = '';
+    propAdminPlanoInput.value = 'branded';
+    carregarPropostasAssinantes();
+  } catch (err) {
+    propAdminCriarErro.textContent = err.message;
+    propAdminCriarErro.hidden = false;
   }
 });
 

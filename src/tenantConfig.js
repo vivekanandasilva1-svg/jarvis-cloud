@@ -253,6 +253,21 @@ export async function definirPlanoProposta(tenantId, plano) {
   );
 }
 
+// pra aba admin "Propostas" (lista de assinantes do Gerador de Propostas com o plano de cada
+// um) - 1 query so com JOIN, em vez de listar tenants e depois buscar o plano de cada um em
+// N chamadas separadas
+export async function listarTenantsComPlano() {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query(`
+    SELECT t.id, t.nome, t.username, t.ativo, COALESCE(tc.proposta_plano, 'branded') AS proposta_plano
+    FROM tenants t
+    LEFT JOIN tenant_config tc ON tc.tenant_id = t.id
+    ORDER BY t.nome
+  `);
+  return rows.map((r) => ({ id: r.id, nome: r.nome, username: r.username, ativo: r.ativo, propostaPlano: r.proposta_plano }));
+}
+
 // resumo pro painel "Clientes" (aba admin) - so diz O QUE ESTA configurado, nunca devolve o
 // segredo em si de volta pro navegador (o apiUser do Clinicorp e o label de cada conta de Ads
 // nao sao segredo, servem so pra confirmar visualmente qual conta ta conectada). Le os dados
