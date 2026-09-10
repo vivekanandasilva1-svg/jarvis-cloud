@@ -384,6 +384,18 @@ app.get('/api/admin/propostas-assinantes', exigirSuperAdmin, async (req, res) =>
   }
 });
 
+// define o periodo de acesso (1-12 meses, ou vitalicio se "meses" vier vazio/null) e ja
+// reativa o assinante - e assim que se renova/desbloqueia alguem que tinha expirado
+app.post('/api/admin/tenants/:id/proposta-acesso', exigirSuperAdmin, async (req, res) => {
+  const { meses } = req.body || {};
+  try {
+    await tenantConfig.definirAcessoProposta(Number(req.params.id), meses || null);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
 // ---------- Stats do sistema (painel do dashboard) ----------
 
 const sessoesVistas = new Set();
@@ -1371,6 +1383,13 @@ iniciarSchedulerLembretes();
 // acima) - cada tipo so e enviado automaticamente se estiver "Ativado" na aba; por padrao vem
 // desativado, entao reativar esse scheduler geral e seguro.
 relatoriosProgramados.iniciarSchedulerRelatoriosProgramados();
+
+// bloqueia assinantes do Gerador de Propostas cujo periodo pago (1-12 meses) venceu - roda no
+// boot e depois a cada 30min; vitalicio (sem data de expiracao) nunca cai aqui
+tenantConfig.bloquearAssinantesExpirados().catch((err) => console.error('Erro checando acesso expirado:', err.message));
+setInterval(() => {
+  tenantConfig.bloquearAssinantesExpirados().catch((err) => console.error('Erro checando acesso expirado:', err.message));
+}, 30 * 60 * 1000).unref();
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {

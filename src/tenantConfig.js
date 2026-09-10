@@ -8,7 +8,7 @@
 // acesso as contas de anuncio de negocio de cada cliente) - essas tem que ser por tenant.
 import { pool } from './db.js';
 import { encrypt, decrypt } from './crypto.js';
-import { tabelasProntas as tenantsProntos } from './tenants.js';
+import { tabelasProntas as tenantsProntos, definirAtivo } from './tenants.js';
 
 async function garantirTabelas() {
   if (!pool) return;
@@ -51,6 +51,11 @@ async function garantirTabelas() {
   // reescrito por ele via Modo Editor) - fica null pra "branded" e pra quem ainda nao editou
   // nada (nesses casos a proposta.html usa o conteudo padrao do Vivekananda)
   await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_template_html TEXT;`);
+  // periodo de acesso do assinante ao Gerador de Propostas - NULL = vitalicio (nunca expira).
+  // Quando preenchido, um sweep periodico (ver bloquearAssinantesExpirados, chamado no boot do
+  // server.js) desativa o tenant (tenants.ativo = false) assim que a data passa - o mesmo campo
+  // que ja bloqueia login em tenants.autenticar(), reaproveitado em vez de criar outro flag.
+  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_acesso_expira_em TIMESTAMPTZ;`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabela de tenant_config:', err.message);
@@ -260,12 +265,60 @@ export async function listarTenantsComPlano() {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(`
-    SELECT t.id, t.nome, t.username, t.ativo, COALESCE(tc.proposta_plano, 'branded') AS proposta_plano
+    SELECT t.id, t.nome, t.username, t.ativo, COALESCE(tc.proposta_plano, 'branded') AS proposta_plano, tc.proposta_acesso_expira_em
     FROM tenants t
     LEFT JOIN tenant_config tc ON tc.tenant_id = t.id
     ORDER BY t.nome
   `);
-  return rows.map((r) => ({ id: r.id, nome: r.nome, username: r.username, ativo: r.ativo, propostaPlano: r.proposta_plano }));
+  return rows.map((r) => ({
+    id: r.id,
+    nome: r.nome,
+    username: r.username,
+    ativo: r.ativo,
+    propostaPlano: r.proposta_plano,
+    propostaAcessoExpiraEm: r.proposta_acesso_expira_em,
+  }));
+}
+
+// admin define o periodo de acesso ao Gerador de Propostas - meses: 1 a 12, ou null/undefined
+// pra vitalicio (nunca expira). Sempre reativa o tenant junto (renovar/definir um periodo novo
+// e o jeito de desbloquear alguem que tinha expirado, sem precisar de uma acao separada).
+export async function definirAcessoProposta(tenantId, meses) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+
+  let expiraEm = null;
+  if (meses !== null && meses !== undefined && meses !== '') {
+    const n = Number(meses);
+    if (!Number.isInteger(n) || n < 1 || n > 12) throw new Error('periodo invalido - use de 1 a 12 meses, ou vitalicio');
+    expiraEm = new Date();
+    expiraEm.setMonth(expiraEm.getMonth() + n);
+  }
+
+  await pool.query(
+    `INSERT INTO tenant_config (tenant_id, proposta_acesso_expira_em, atualizado_em) VALUES ($1, $2, now())
+     ON CONFLICT (tenant_id) DO UPDATE SET proposta_acesso_expira_em = $2, atualizado_em = now()`,
+    [tenantId, expiraEm],
+  );
+  await definirAtivo(tenantId, true);
+}
+
+// sweep periodico (chamado no boot + de tempos em tempos pelo server.js) - bloqueia quem
+// passou do periodo de acesso pago. Vitalicio (proposta_acesso_expira_em NULL) nunca cai aqui.
+export async function bloquearAssinantesExpirados() {
+  if (!pool) return 0;
+  await tabelasProntas;
+  const { rows } = await pool.query(`
+    SELECT tc.tenant_id FROM tenant_config tc
+    JOIN tenants t ON t.id = tc.tenant_id
+    WHERE tc.proposta_acesso_expira_em IS NOT NULL
+      AND tc.proposta_acesso_expira_em < now()
+      AND t.ativo = true
+  `);
+  for (const r of rows) {
+    await definirAtivo(r.tenant_id, false);
+  }
+  return rows.length;
 }
 
 // resumo pro painel "Clientes" (aba admin) - so diz O QUE ESTA configurado, nunca devolve o

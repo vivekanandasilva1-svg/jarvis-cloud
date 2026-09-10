@@ -98,6 +98,7 @@ const propAdminNomeInput = document.getElementById('propAdminNomeInput');
 const propAdminUsuarioInput = document.getElementById('propAdminUsuarioInput');
 const propAdminSenhaInput = document.getElementById('propAdminSenhaInput');
 const propAdminPlanoInput = document.getElementById('propAdminPlanoInput');
+const propAdminAcessoInput = document.getElementById('propAdminAcessoInput');
 const propAdminCriarBtn = document.getElementById('propAdminCriarBtn');
 const propAdminCriarErro = document.getElementById('propAdminCriarErro');
 const propAdminLista = document.getElementById('propAdminLista');
@@ -3727,6 +3728,19 @@ async function carregarPropostasAssinantes() {
       meta.textContent = `usuario: ${a.username} - ${a.ativo ? 'Ativo' : 'Desativado'}`;
       card.appendChild(meta);
 
+      const acessoMeta = document.createElement('div');
+      acessoMeta.className = 'cliente-card-meta';
+      if (!a.propostaAcessoExpiraEm) {
+        acessoMeta.textContent = 'Acesso: Vitalício';
+      } else {
+        const dataExpira = new Date(a.propostaAcessoExpiraEm);
+        const expirado = dataExpira.getTime() < Date.now();
+        acessoMeta.textContent = expirado
+          ? `Acesso expirado em ${dataExpira.toLocaleDateString('pt-BR')} - bloqueado`
+          : `Acesso até ${dataExpira.toLocaleDateString('pt-BR')}`;
+      }
+      card.appendChild(acessoMeta);
+
       const row = document.createElement('div');
       row.className = 'cliente-card-row';
 
@@ -3769,6 +3783,41 @@ async function carregarPropostasAssinantes() {
       row.appendChild(toggleBtn);
       card.appendChild(row);
 
+      // renovar/definir periodo de acesso - tambem reativa quem tinha expirado
+      const acessoRow = document.createElement('div');
+      acessoRow.className = 'cliente-card-row';
+
+      const acessoSelect = document.createElement('select');
+      const optVitalicio = document.createElement('option'); optVitalicio.value = ''; optVitalicio.textContent = 'Vitalício';
+      acessoSelect.appendChild(optVitalicio);
+      for (let m = 1; m <= 12; m++) {
+        const opt = document.createElement('option');
+        opt.value = String(m);
+        opt.textContent = m === 1 ? '1 mês' : `${m} meses`;
+        acessoSelect.appendChild(opt);
+      }
+      acessoRow.appendChild(acessoSelect);
+
+      const renovarBtn = document.createElement('button');
+      renovarBtn.type = 'button';
+      renovarBtn.textContent = 'Renovar/Definir acesso';
+      renovarBtn.addEventListener('click', async () => {
+        try {
+          const r = await fetch(`/api/admin/tenants/${a.id}/proposta-acesso`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+            body: JSON.stringify({ meses: acessoSelect.value || null }),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+          carregarPropostasAssinantes();
+        } catch (err) {
+          addBubble(`Erro definindo acesso: ${err.message}`, 'system');
+        }
+      });
+      acessoRow.appendChild(renovarBtn);
+      card.appendChild(acessoRow);
+
       propAdminLista.appendChild(card);
     }
   } catch (err) {
@@ -3810,10 +3859,22 @@ propAdminCriarBtn.addEventListener('click', async () => {
       if (!r2.ok) throw new Error(d2.erro || 'assinante criado, mas erro ao definir o plano');
     }
 
+    const meses = propAdminAcessoInput.value;
+    if (meses) {
+      const r3 = await fetch(`/api/admin/tenants/${data.id}/proposta-acesso`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ meses }),
+      });
+      const d3 = await r3.json();
+      if (!r3.ok) throw new Error(d3.erro || 'assinante criado, mas erro ao definir o periodo de acesso');
+    }
+
     propAdminNomeInput.value = '';
     propAdminUsuarioInput.value = '';
     propAdminSenhaInput.value = '';
     propAdminPlanoInput.value = 'branded';
+    propAdminAcessoInput.value = '';
     carregarPropostasAssinantes();
   } catch (err) {
     propAdminCriarErro.textContent = err.message;
