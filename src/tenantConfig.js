@@ -56,7 +56,16 @@ async function garantirTabelas() {
   // server.js) desativa o tenant (tenants.ativo = false) assim que a data passa - o mesmo campo
   // que ja bloqueia login em tenants.autenticar(), reaproveitado em vez de criar outro flag.
   await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_acesso_expira_em TIMESTAMPTZ;`);
+  // quais abas do app o cliente pode ver/usar (Painel, Agenda, WhatsApp, CRM, Auto Atendimento,
+  // Relatorios, Integracoes) - NULL = todas liberadas (comportamento de sempre, nao quebra
+  // cliente antigo). Array JSON com as chaves habilitadas quando o admin restringe algo,
+  // ex: ["painel","agenda","crm"]. Ver TABS_VALIDAS abaixo pra lista completa de chaves.
+  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS tabs_habilitadas JSONB;`);
 }
+
+// chaves == os mesmos "data-tab" usados em index.html/app.js - se um dia adicionar aba nova,
+// precisa incluir a chave aqui tambem pra ela poder ser restringida
+export const TABS_VALIDAS = ['painel', 'agenda', 'whatsapp', 'crm', 'auto', 'relatorios', 'integracoes'];
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabela de tenant_config:', err.message);
 });
@@ -319,6 +328,35 @@ export async function bloquearAssinantesExpirados() {
     await definirAtivo(r.tenant_id, false);
   }
   return rows.length;
+}
+
+// ---------- Quais abas/recursos cada cliente pode usar ----------
+
+// null = tudo liberado (default histórico, ninguem fica restrito sem o admin mexer nisso)
+export async function obterTabsHabilitadas(tenantId) {
+  if (!pool) return null;
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT tabs_habilitadas FROM tenant_config WHERE tenant_id = $1', [tenantId]);
+  return rows[0]?.tabs_habilitadas || null;
+}
+
+// tabs: array de chaves (ver TABS_VALIDAS) ou null/[] pra liberar tudo de novo
+export async function salvarTabsHabilitadas(tenantId, tabs) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+
+  let valor = null;
+  if (Array.isArray(tabs) && tabs.length) {
+    const invalidas = tabs.filter((t) => !TABS_VALIDAS.includes(t));
+    if (invalidas.length) throw new Error(`aba(s) desconhecida(s): ${invalidas.join(', ')}`);
+    valor = tabs;
+  }
+
+  await pool.query(
+    `INSERT INTO tenant_config (tenant_id, tabs_habilitadas, atualizado_em) VALUES ($1, $2::jsonb, now())
+     ON CONFLICT (tenant_id) DO UPDATE SET tabs_habilitadas = $2::jsonb, atualizado_em = now()`,
+    [tenantId, valor ? JSON.stringify(valor) : null],
+  );
 }
 
 // resumo pro painel "Clientes" (aba admin) - so diz O QUE ESTA configurado, nunca devolve o

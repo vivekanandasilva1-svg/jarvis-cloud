@@ -88,6 +88,7 @@ const integracoesEmBreveLista = document.getElementById('integracoesEmBreveLista
 const clienteNomeInput = document.getElementById('clienteNomeInput');
 const clienteUsuarioInput = document.getElementById('clienteUsuarioInput');
 const clienteSenhaInput = document.getElementById('clienteSenhaInput');
+const clienteAcessoInput = document.getElementById('clienteAcessoInput');
 const clienteCriarBtn = document.getElementById('clienteCriarBtn');
 const clienteCriarErro = document.getElementById('clienteCriarErro');
 const clientesLista = document.getElementById('clientesLista');
@@ -277,10 +278,12 @@ async function tentarEntrar(usuario, senha) {
 // so o dono da Lumia (tenant 1) tem isso true - controla se a aba "Clientes" aparece.
 // Preenchido por tokenValido()/mostrarApp() ao consultar /api/me.
 let souSuperAdmin = false;
+let minhasTabsHabilitadas = null; // null = tudo liberado (default); array = so essas abas
 
 // confirma que o token guardado ainda e valido (nao expirou, tenant continua ativo) - chamado
 // no carregamento da pagina, ja que um token velho nao pode mais ser "reenviado como senha"
-// pra revalidar como acontecia antes. Aproveita e guarda se esse tenant e super_admin.
+// pra revalidar como acontecia antes. Aproveita e guarda se esse tenant e super_admin e quais
+// abas o admin liberou pra ele (ver tenantConfig.tabs_habilitadas).
 async function tokenValido() {
   if (!appPassword) return false;
   try {
@@ -288,10 +291,17 @@ async function tokenValido() {
     if (!res.ok) return false;
     const data = await res.json().catch(() => null);
     souSuperAdmin = !!data?.superAdmin;
+    minhasTabsHabilitadas = Array.isArray(data?.tabsHabilitadas) && data.tabsHabilitadas.length ? data.tabsHabilitadas : null;
     return true;
   } catch {
     return false;
   }
+}
+
+// super_admin nunca fica restrito (evita o proprio dono se trancar fora sem querer) -
+// tabsHabilitadas null = tudo liberado, e o comportamento de sempre pra quem o admin nao mexeu
+function abaLiberada(chave) {
+  return souSuperAdmin || !minhasTabsHabilitadas || minhasTabsHabilitadas.includes(chave);
 }
 
 function mostrarApp() {
@@ -299,6 +309,22 @@ function mostrarApp() {
   appWindow.hidden = false;
   tabBtnClientes.hidden = !souSuperAdmin;
   tabBtnPropostasAdmin.hidden = !souSuperAdmin;
+  tabBtnPainel.hidden = !abaLiberada('painel');
+  tabBtnAgenda.hidden = !abaLiberada('agenda');
+  tabBtnWhatsapp.hidden = !abaLiberada('whatsapp');
+  tabBtnCrm.hidden = !abaLiberada('crm');
+  tabBtnAuto.hidden = !abaLiberada('auto');
+  tabBtnRelatorios.hidden = !abaLiberada('relatorios');
+  tabBtnIntegracoes.hidden = !abaLiberada('integracoes');
+  // se a aba visivel por padrao (Painel) foi restringida, pula pra primeira aba liberada em
+  // vez de deixar a tela em branco
+  if (tabBtnPainel.hidden && !tabPainel.hidden) {
+    const primeiraLiberada = [
+      ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm],
+      ['auto', tabBtnAuto], ['relatorios', tabBtnRelatorios], ['integracoes', tabBtnIntegracoes],
+    ].find(([, btn]) => !btn.hidden);
+    if (primeiraLiberada) mudarAba(primeiraLiberada[0]);
+  }
   if (!chatLog.childElementCount) {
     addBubble('Lumia pronta. Digite, aperte o microfone ou ative o modo conversa.', 'system');
   }
@@ -3627,6 +3653,18 @@ async function carregarClientes() {
       meta.textContent = `usuario: ${t.username}`;
       card.appendChild(meta);
 
+      const acessoMeta = document.createElement('div');
+      acessoMeta.className = 'cliente-card-meta';
+      if (!t.acesso_expira_em) {
+        acessoMeta.textContent = 'Acesso: Vitalício';
+      } else {
+        const dataExpira = new Date(t.acesso_expira_em);
+        acessoMeta.textContent = dataExpira.getTime() < Date.now()
+          ? `Acesso expirado em ${dataExpira.toLocaleDateString('pt-BR')} - bloqueado`
+          : `Acesso até ${dataExpira.toLocaleDateString('pt-BR')}`;
+      }
+      card.appendChild(acessoMeta);
+
       const row = document.createElement('div');
       row.className = 'cliente-card-row';
       const status = document.createElement('span');
@@ -3682,9 +3720,22 @@ clienteCriarBtn.addEventListener('click', async () => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+
+    const meses = clienteAcessoInput.value;
+    if (meses) {
+      const r2 = await fetch(`/api/admin/tenants/${data.id}/acesso`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ meses }),
+      });
+      const d2 = await r2.json();
+      if (!r2.ok) throw new Error(d2.erro || 'cliente criado, mas erro ao definir o periodo de acesso');
+    }
+
     clienteNomeInput.value = '';
     clienteUsuarioInput.value = '';
     clienteSenhaInput.value = '';
+    clienteAcessoInput.value = '';
     carregarClientes();
   } catch (err) {
     clienteCriarErro.textContent = err.message;
@@ -3817,6 +3868,24 @@ async function carregarPropostasAssinantes() {
       });
       acessoRow.appendChild(renovarBtn);
       card.appendChild(acessoRow);
+
+      const apagarBtn = document.createElement('button');
+      apagarBtn.type = 'button';
+      apagarBtn.textContent = `Apagar "${a.nome}" permanentemente`;
+      apagarBtn.style.cssText = 'background:rgba(220,38,38,0.16);border:1px solid rgba(220,38,38,0.5);color:#f87171;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;';
+      apagarBtn.addEventListener('click', async () => {
+        const confirmado = confirm(`Apagar "${a.nome}" permanentemente? Isso remove o cadastro e todas as propostas dele e não pode ser desfeito.`);
+        if (!confirmado) return;
+        try {
+          const r = await fetch(`/api/admin/tenants/${a.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+          carregarPropostasAssinantes();
+        } catch (err) {
+          addBubble(`Erro apagando assinante: ${err.message}`, 'system');
+        }
+      });
+      card.appendChild(apagarBtn);
 
       propAdminLista.appendChild(card);
     }
@@ -4079,4 +4148,139 @@ async function selecionarCliente(id, nome) {
   });
   senhaForm.append(novaSenhaInput, senhaSalvar);
   clienteIntegracoesPainel.appendChild(senhaForm);
+
+  // ---- Periodo de Acesso (contratacao) ----
+  const acessoLabel = document.createElement('label'); acessoLabel.className = 'auto-label'; acessoLabel.textContent = 'Período de Acesso (contratação)';
+  clienteIntegracoesPainel.appendChild(acessoLabel);
+  const acessoStatus = document.createElement('p');
+  acessoStatus.className = 'agenda-vazia';
+  acessoStatus.textContent = 'Carregando...';
+  clienteIntegracoesPainel.appendChild(acessoStatus);
+
+  const acessoForm = document.createElement('div');
+  acessoForm.className = 'cliente-form';
+  const acessoSelect = document.createElement('select');
+  const optVital = document.createElement('option'); optVital.value = ''; optVital.textContent = 'Vitalício';
+  acessoSelect.appendChild(optVital);
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement('option');
+    opt.value = String(m);
+    opt.textContent = m === 1 ? '1 mês' : `${m} meses`;
+    acessoSelect.appendChild(opt);
+  }
+  const acessoSalvar = document.createElement('button'); acessoSalvar.type = 'button'; acessoSalvar.textContent = 'Renovar/Definir acesso';
+  acessoSalvar.addEventListener('click', async () => {
+    try {
+      const r = await fetch(`/api/admin/tenants/${id}/acesso`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ meses: acessoSelect.value || null }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+      carregarClientes();
+      selecionarCliente(id, nome);
+    } catch (err) {
+      addBubble(`Erro definindo acesso: ${err.message}`, 'system');
+    }
+  });
+  acessoForm.append(acessoSelect, acessoSalvar);
+  clienteIntegracoesPainel.appendChild(acessoForm);
+
+  (async () => {
+    try {
+      const r = await fetch('/api/admin/tenants', { headers: { 'x-app-password': appPassword } });
+      const d = await r.json();
+      const t = (d.tenants || []).find((x) => x.id === id);
+      if (!t) return;
+      if (!t.acesso_expira_em) {
+        acessoStatus.textContent = 'Acesso atual: Vitalício';
+      } else {
+        const dataExpira = new Date(t.acesso_expira_em);
+        acessoStatus.textContent = dataExpira.getTime() < Date.now()
+          ? `Acesso expirado em ${dataExpira.toLocaleDateString('pt-BR')} - bloqueado`
+          : `Acesso atual: até ${dataExpira.toLocaleDateString('pt-BR')}`;
+      }
+    } catch (e) {}
+  })();
+
+  // ---- Abas/recursos liberados pra esse cliente ----
+  const tabsLabel = document.createElement('label'); tabsLabel.className = 'auto-label'; tabsLabel.textContent = 'Abas/recursos liberados';
+  clienteIntegracoesPainel.appendChild(tabsLabel);
+  const tabsAviso = document.createElement('p');
+  tabsAviso.className = 'agenda-vazia';
+  tabsAviso.textContent = 'Nenhuma marcada = tudo liberado (padrão). Marque só pra restringir.';
+  clienteIntegracoesPainel.appendChild(tabsAviso);
+
+  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', relatorios: 'Relatórios', integracoes: 'Integrações' };
+  const tabsForm = document.createElement('div');
+  tabsForm.className = 'cliente-form';
+  const tabsCheckboxes = {};
+  for (const chave of Object.keys(TABS_LABELS)) {
+    const wrap = document.createElement('label');
+    wrap.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = chave;
+    tabsCheckboxes[chave] = cb;
+    wrap.appendChild(cb);
+    wrap.appendChild(document.createTextNode(TABS_LABELS[chave]));
+    tabsForm.appendChild(wrap);
+  }
+  const tabsSalvar = document.createElement('button'); tabsSalvar.type = 'button'; tabsSalvar.textContent = 'Salvar Abas Liberadas';
+  tabsSalvar.addEventListener('click', async () => {
+    const marcadas = Object.keys(tabsCheckboxes).filter((k) => tabsCheckboxes[k].checked);
+    try {
+      const r = await fetch(`/api/admin/tenants/${id}/tabs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ tabs: marcadas }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+      addBubble(`Abas de "${nome}" atualizadas.`, 'system');
+    } catch (err) {
+      addBubble(`Erro salvando abas: ${err.message}`, 'system');
+    }
+  });
+  tabsForm.appendChild(tabsSalvar);
+  clienteIntegracoesPainel.appendChild(tabsForm);
+
+  (async () => {
+    try {
+      const r = await fetch(`/api/admin/tenants/${id}/tabs`, { headers: { 'x-app-password': appPassword } });
+      const d = await r.json();
+      const habilitadas = Array.isArray(d.tabsHabilitadas) && d.tabsHabilitadas.length ? d.tabsHabilitadas : null;
+      for (const chave of Object.keys(tabsCheckboxes)) {
+        tabsCheckboxes[chave].checked = habilitadas ? habilitadas.includes(chave) : true;
+      }
+    } catch (e) {}
+  })();
+
+  // ---- Apagar cliente (irreversivel) ----
+  const apagarLabel = document.createElement('label'); apagarLabel.className = 'auto-label'; apagarLabel.textContent = 'Zona de risco';
+  clienteIntegracoesPainel.appendChild(apagarLabel);
+  const apagarBtn = document.createElement('button');
+  apagarBtn.type = 'button';
+  apagarBtn.textContent = `Apagar "${nome}" permanentemente`;
+  apagarBtn.style.cssText = 'background:rgba(220,38,38,0.16);border:1px solid rgba(220,38,38,0.5);color:#f87171;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;';
+  apagarBtn.addEventListener('click', async () => {
+    const confirmado = confirm(`Apagar "${nome}" permanentemente? Isso remove TODOS os dados dele (agenda, CRM, conversas, propostas, tudo) e não pode ser desfeito.`);
+    if (!confirmado) return;
+    try {
+      const r = await fetch(`/api/admin/tenants/${id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+      clienteSelecionadoId = null;
+      clienteIntegracoesPainel.textContent = '';
+      const msg = document.createElement('p');
+      msg.className = 'agenda-vazia';
+      msg.textContent = 'Selecione um cliente na lista pra ver/configurar as integrações dele.';
+      clienteIntegracoesPainel.appendChild(msg);
+      carregarClientes();
+    } catch (err) {
+      addBubble(`Erro apagando cliente: ${err.message}`, 'system');
+    }
+  });
+  clienteIntegracoesPainel.appendChild(apagarBtn);
 }

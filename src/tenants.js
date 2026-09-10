@@ -23,6 +23,9 @@ async function garantirTabelas() {
   // Lumia (tenant 1) tem isso; nenhum cliente que comprar o produto deve ver essa aba
   await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS super_admin BOOLEAN NOT NULL DEFAULT false;`);
   await pool.query(`UPDATE tenants SET super_admin = true WHERE id = 1 AND super_admin = false;`);
+  // periodo de contratacao do cliente (acesso geral a Lumia) - NULL = vitalicio. Mesmo modelo
+  // do proposta_acesso_expira_em do Gerador de Propostas, so que pro produto principal.
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS acesso_expira_em TIMESTAMPTZ;`);
   // qual tenant e dono de cada instancia do Evolution API - usado pra rotear mensagem
   // recebida no webhook (que so identifica a instancia, nao tem conceito de tenant) pro
   // tenant certo. 1 instancia so pode pertencer a 1 tenant.
@@ -119,7 +122,7 @@ export async function obterPorId(id) {
 export async function listarTenants() {
   if (!pool) return [];
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT id, slug, nome, username, ativo, criado_em FROM tenants ORDER BY criado_em ASC');
+  const { rows } = await pool.query('SELECT id, slug, nome, username, ativo, acesso_expira_em, criado_em FROM tenants ORDER BY criado_em ASC');
   return rows;
 }
 
@@ -145,6 +148,80 @@ export async function definirAtivo(tenantId, ativo) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
   await pool.query('UPDATE tenants SET ativo = $1 WHERE id = $2', [!!ativo, tenantId]);
+}
+
+// periodo de contratacao (acesso geral a Lumia) - mesmo modelo do Gerador de Propostas
+// (ver tenantConfig.definirAcessoProposta): NULL = vitalicio, senao expira em N meses e um
+// sweep (bloquearClientesExpirados abaixo) desativa sozinho quando passa da data
+export async function definirAcessoCliente(tenantId, meses) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+
+  let expiraEm = null;
+  if (meses !== null && meses !== undefined && meses !== '') {
+    const n = Number(meses);
+    if (!Number.isInteger(n) || n < 1 || n > 12) throw new Error('periodo invalido - use de 1 a 12 meses, ou vitalicio');
+    expiraEm = new Date();
+    expiraEm.setMonth(expiraEm.getMonth() + n);
+  }
+
+  await pool.query('UPDATE tenants SET acesso_expira_em = $1 WHERE id = $2', [expiraEm, tenantId]);
+  await definirAtivo(tenantId, true);
+}
+
+// sweep periodico (chamado pelo server.js) - bloqueia cliente cujo periodo contratado venceu.
+// Vitalicio (acesso_expira_em NULL) nunca cai aqui.
+export async function bloquearClientesExpirados() {
+  if (!pool) return 0;
+  await tabelasProntas;
+  const { rows } = await pool.query(`
+    SELECT id FROM tenants WHERE acesso_expira_em IS NOT NULL AND acesso_expira_em < now() AND ativo = true
+  `);
+  for (const r of rows) {
+    await definirAtivo(r.id, false);
+  }
+  return rows.length;
+}
+
+// apaga um tenant e TODOS os dados dele em qualquer tabela que referencie tenants(id) - usa o
+// catalogo do proprio Postgres (em vez de uma lista fixa de tabelas aqui) pra nunca ficar
+// desatualizado conforme novas tabelas com tenant_id forem criadas. Roda numa transacao: ou
+// apaga tudo, ou nada (se uma tabela falhar no meio, reverte). NAO da pra desfazer.
+export async function deletarTenant(tenantId) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+
+  const tenant = await obterPorId(tenantId);
+  if (!tenant) throw new Error('tenant nao encontrado');
+  if (tenant.super_admin) throw new Error('nao e possivel apagar um super_admin');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: referencias } = await client.query(`
+      SELECT tc.table_name, kcu.column_name
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+      JOIN information_schema.constraint_column_usage ccu
+        ON tc.constraint_name = ccu.constraint_name AND tc.table_schema = ccu.table_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = 'tenants' AND ccu.column_name = 'id'
+        AND tc.table_name <> 'tenants'
+    `);
+
+    for (const { table_name: tabela, column_name: coluna } of referencias) {
+      await client.query(`DELETE FROM "${tabela}" WHERE "${coluna}" = $1`, [tenantId]);
+    }
+
+    await client.query('DELETE FROM tenants WHERE id = $1', [tenantId]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function redefinirSenha(tenantId, novaSenha) {

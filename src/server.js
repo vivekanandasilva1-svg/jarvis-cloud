@@ -48,7 +48,19 @@ app.use(express.json({
 // qualquer um. Os webhooks do WhatsApp ficam de fora porque quem chama e a propria
 // Meta/Evolution (nao da pra mandar nosso token) - eles se protegem sozinhos (assinatura HMAC /
 // mapeamento de instancia pro tenant certo).
-app.use((req, res, next) => {
+// prefixo de rota -> chave da aba (tenantConfig.TABS_VALIDAS) que a protege - usado logo
+// abaixo pra bloquear no SERVIDOR um recurso que o admin restringiu pro cliente, nao so
+// esconder a aba na tela (que sozinho nao impediria uma chamada direta na API)
+const TAB_ROTA_PREFIXO = {
+  agenda: '/api/agenda',
+  whatsapp: '/api/whatsapp',
+  crm: '/api/crm',
+  auto: '/api/auto-atendimento',
+  relatorios: '/api/relatorios',
+  integracoes: '/api/integracoes',
+};
+
+app.use(async (req, res, next) => {
   if (!process.env.SESSION_SECRET) return next(); // sem auth configurada, roda aberto (dev local sem Postgres)
   if (
     req.path === '/api/login' ||
@@ -74,7 +86,25 @@ app.use((req, res, next) => {
     : req.header('x-app-password');
 
   const tenantId = tenants.verificarToken(provided);
-  if (tenantId) { req.tenantId = tenantId; return next(); }
+  if (tenantId) {
+    req.tenantId = tenantId;
+    const abaProtegida = Object.entries(TAB_ROTA_PREFIXO).find(([, prefixo]) => req.path.startsWith(prefixo));
+    if (abaProtegida) {
+      const [aba] = abaProtegida;
+      try {
+        const tenant = await tenants.obterPorId(tenantId);
+        if (!tenant?.super_admin) {
+          const habilitadas = await tenantConfig.obterTabsHabilitadas(tenantId);
+          if (habilitadas && !habilitadas.includes(aba)) {
+            return res.status(403).json({ erro: 'seu acesso nao inclui esse recurso' });
+          }
+        }
+      } catch (err) {
+        console.error('Erro checando tabs habilitadas:', err.message);
+      }
+    }
+    return next();
+  }
 
   if (req.path.startsWith('/api/')) {
     return res.status(401).json({ erro: 'sessao invalida - faca login de novo' });
@@ -101,7 +131,8 @@ app.get('/api/me', async (req, res) => {
   try {
     const tenant = await tenants.obterPorId(req.tenantId);
     if (!tenant || !tenant.ativo) return res.status(401).json({ erro: 'tenant nao encontrado' });
-    res.json({ tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin });
+    const tabsHabilitadas = await tenantConfig.obterTabsHabilitadas(tenant.id);
+    res.json({ tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -186,6 +217,50 @@ app.post('/api/admin/tenants/:id/senha', exigirSuperAdmin, async (req, res) => {
   const { novaSenha } = req.body || {};
   try {
     await tenants.redefinirSenha(Number(req.params.id), novaSenha);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// periodo de contratacao (acesso geral a Lumia) - 1 a 12 meses ou vitalicio (meses vazio/null);
+// tambem reativa o tenant, e assim que se renova/desbloqueia alguem que tinha expirado
+app.post('/api/admin/tenants/:id/acesso', exigirSuperAdmin, async (req, res) => {
+  const { meses } = req.body || {};
+  try {
+    await tenants.definirAcessoCliente(Number(req.params.id), meses || null);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// quais abas/recursos esse cliente pode usar (ver tenantConfig.TABS_VALIDAS) - null/vazio
+// libera tudo de novo
+app.get('/api/admin/tenants/:id/tabs', exigirSuperAdmin, async (req, res) => {
+  try {
+    const habilitadas = await tenantConfig.obterTabsHabilitadas(Number(req.params.id));
+    res.json({ tabsHabilitadas: habilitadas, tabsValidas: tenantConfig.TABS_VALIDAS });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/admin/tenants/:id/tabs', exigirSuperAdmin, async (req, res) => {
+  const { tabs } = req.body || {};
+  try {
+    await tenantConfig.salvarTabsHabilitadas(Number(req.params.id), tabs);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// apaga o tenant e TODOS os dados dele (agenda, CRM, propostas, etc) - irreversivel, usado
+// tanto pra clientes da Lumia quanto assinantes do Gerador de Propostas (mesma tabela tenants)
+app.delete('/api/admin/tenants/:id', exigirSuperAdmin, async (req, res) => {
+  try {
+    await tenants.deletarTenant(Number(req.params.id));
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });
@@ -1384,12 +1459,15 @@ iniciarSchedulerLembretes();
 // desativado, entao reativar esse scheduler geral e seguro.
 relatoriosProgramados.iniciarSchedulerRelatoriosProgramados();
 
-// bloqueia assinantes do Gerador de Propostas cujo periodo pago (1-12 meses) venceu - roda no
-// boot e depois a cada 30min; vitalicio (sem data de expiracao) nunca cai aqui
-tenantConfig.bloquearAssinantesExpirados().catch((err) => console.error('Erro checando acesso expirado:', err.message));
-setInterval(() => {
-  tenantConfig.bloquearAssinantesExpirados().catch((err) => console.error('Erro checando acesso expirado:', err.message));
-}, 30 * 60 * 1000).unref();
+// bloqueia assinantes do Gerador de Propostas E clientes da Lumia cujo periodo contratado
+// (1-12 meses) venceu - roda no boot e depois a cada 30min; vitalicio (sem data de expiracao)
+// nunca cai aqui
+function checarAcessosExpirados() {
+  tenantConfig.bloquearAssinantesExpirados().catch((err) => console.error('Erro checando acesso expirado (propostas):', err.message));
+  tenants.bloquearClientesExpirados().catch((err) => console.error('Erro checando acesso expirado (clientes):', err.message));
+}
+checarAcessosExpirados();
+setInterval(checarAcessosExpirados, 30 * 60 * 1000).unref();
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
