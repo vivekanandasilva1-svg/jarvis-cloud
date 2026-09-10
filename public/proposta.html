@@ -307,6 +307,9 @@
                 <strong class="font-bold">MODO EDITOR ATIVO:</strong> Clique em qualquer texto da página para alterar os textos ao vivo.
             </div>
             <div class="flex items-center gap-2">
+                <button id="btnSalvarModelo" onclick="salvarModelo()" class="hidden px-3 py-1 bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-300 hover:to-gold-500 text-black font-bold rounded-lg transition shadow">
+                    <i class="fa-solid fa-floppy-disk"></i> Salvar como Meu Modelo
+                </button>
                 <button onclick="window.print()" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition border border-slate-600">
                     <i class="fa-solid fa-print"></i> Imprimir / PDF
                 </button>
@@ -1480,6 +1483,13 @@
                     const resp = await fetch(`/api/propostas/${curtoMatch[1]}`);
                     if (resp.ok) {
                         const dados = await resp.json();
+                        // modelo de conteudo proprio do assinante (se tiver salvo um) - troca o
+                        // <main> inteiro ANTES de preencher os campos, pra applyConfigToDOM e os
+                        // sliders acharem os elementos certos dentro do conteudo customizado
+                        if (dados.plano === 'white_label' && dados.templateHtml) {
+                            document.querySelector('main').innerHTML = dados.templateHtml;
+                            setupMobileTouchInteractions();
+                        }
                         ['doctorName', 'clinicName', 'city', 'specialty', 'basePrice', 'videomakerPrice', 'videomakerPlusPrice', 'lumiaImplementationPrice', 'lumiaMonthlyPrice', 'whatsappPhone'].forEach((chave) => {
                             if (dados[chave] !== null && dados[chave] !== undefined) proposalConfig[chave] = dados[chave];
                         });
@@ -1496,6 +1506,7 @@
                             if (dados.logoText) proposalConfig.logoText = dados.logoText;
                         }
                         applyConfigToDOM();
+                        runLumiaDemoSim();
                         setClientMode(true);
                         return;
                     }
@@ -1769,12 +1780,73 @@
             }
         }
 
+        // Modo "editar meu modelo" - aberto a partir do Gerador de Propostas
+        // (?editarModelo=1&token=...) por um assinante white_label. Carrega o modelo ja salvo
+        // (se houver), liga o Modo Editor automaticamente e mostra o botao de salvar. Devolve
+        // true se estava nesse modo, pra initializeApp saber que NAO deve rodar
+        // checkUrlForClientMode em seguida (sao modos mutuamente exclusivos).
+        async function iniciarModoEdicaoDeModelo() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('editarModelo') !== '1') return false;
+
+            const token = params.get('token');
+            if (!token) {
+                showToast('Link inválido - abra pelo Gerador de Propostas.');
+                return true;
+            }
+            sessionStorage.setItem('jarvis_password_propostas', token);
+
+            try {
+                const resp = await fetch('/api/minha-proposta/template', { headers: { 'x-app-password': token } });
+                if (resp.ok) {
+                    const dados = await resp.json();
+                    if (dados.html) {
+                        document.querySelector('main').innerHTML = dados.html;
+                        setupMobileTouchInteractions();
+                        applyConfigToDOM();
+                        runLumiaDemoSim();
+                    }
+                }
+            } catch (e) {
+                console.error('Erro carregando modelo salvo', e);
+            }
+
+            const btn = document.getElementById('btnSalvarModelo');
+            if (btn) btn.classList.remove('hidden');
+            if (!isEditorActive) toggleInlineEditMode();
+            showToast('Editando seu modelo - clique em "Salvar como Meu Modelo" pra guardar as alterações.');
+            return true;
+        }
+
+        async function salvarModelo() {
+            const token = sessionStorage.getItem('jarvis_password_propostas');
+            if (!token) {
+                showToast('Sessão expirada - reabra pelo Gerador de Propostas.');
+                return;
+            }
+            const html = document.querySelector('main').innerHTML;
+            try {
+                const resp = await fetch('/api/minha-proposta/template', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-app-password': token },
+                    body: JSON.stringify({ html }),
+                });
+                const dados = await resp.json();
+                if (!resp.ok) throw new Error(dados.erro || 'falha ao salvar');
+                showToast('Modelo salvo! As próximas propostas que você criar vão usar esse conteúdo.');
+            } catch (e) {
+                console.error('Erro salvando modelo', e);
+                showToast('Não foi possível salvar o modelo: ' + e.message);
+            }
+        }
+
         // Instant Initialization that does not wait for slow CDN connections
-        function initializeApp() {
+        async function initializeApp() {
             applyConfigToDOM();
             calculateSimulator();
             runLumiaDemoSim();
-            checkUrlForClientMode();
+            const emModoEdicao = await iniciarModoEdicaoDeModelo();
+            if (!emModoEdicao) checkUrlForClientMode();
             setupMobileTouchInteractions();
         }
 

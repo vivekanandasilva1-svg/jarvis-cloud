@@ -196,6 +196,15 @@
                 <i class="fa-solid fa-check"></i> Salvar Marca
             </button>
             <p class="text-[11px] text-slate-500">Domínio próprio precisa ser apontado manualmente pra esse servidor - fale com o suporte antes de divulgar.</p>
+
+            <div class="pt-4 border-t border-slate-800 space-y-2">
+                <label class="text-xs font-bold text-white block">Conteúdo da Proposta</label>
+                <p class="text-xs text-slate-400">Reescreva os textos da proposta (pilares, seção de automação, tudo) pra falar do SEU serviço, não do da Vivekananda. Isso vira o modelo usado em toda proposta nova que você criar.</p>
+                <button onclick="abrirEditorConteudo()" class="px-4 py-2.5 bg-gradient-to-r from-gold-500 to-amber-600 text-black text-xs font-bold rounded-xl">
+                    <i class="fa-solid fa-pen-to-square"></i> Abrir Editor de Conteúdo
+                </button>
+                <p class="text-[11px] text-slate-500">Abre em outra aba, com o Modo Editor já ativado. Edite os textos e clique em "Salvar como Meu Modelo" lá dentro.</p>
+            </div>
         </section>
 
         <p id="avisoPlanoBranded" class="hidden text-xs text-slate-400 card rounded-xl p-4">
@@ -365,6 +374,13 @@
             });
             configAtual = { ...configAtual, ...dados };
             alert('Marca salva!');
+        }
+
+        function abrirEditorConteudo() {
+            const url = new URL(window.location.origin + '/proposta.html');
+            url.searchParams.set('editarModelo', '1');
+            url.searchParams.set('token', appPassword);
+            window.open(url.toString(), '_blank');
         }
 
         document.getElementById('formProposta').addEventListener('submit', async (e) => {

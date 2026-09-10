@@ -48,6 +48,10 @@ async function garantirTabela() {
   await pool.query(`ALTER TABLE propostas_comerciais ADD COLUMN IF NOT EXISTS has_lumia BOOLEAN NOT NULL DEFAULT false;`);
   await pool.query(`ALTER TABLE propostas_comerciais ADD COLUMN IF NOT EXISTS lumia_implementation_price NUMERIC;`);
   await pool.query(`ALTER TABLE propostas_comerciais ADD COLUMN IF NOT EXISTS lumia_monthly_price NUMERIC;`);
+  // snapshot do modelo de conteudo do tenant (ver tenantConfig.js proposta_template_html) no
+  // momento da criacao - so preenchido pra assinantes white_label que ja tem um modelo salvo;
+  // fica null pra "branded" (usa o conteudo padrao fixo do Vivekananda)
+  await pool.query(`ALTER TABLE propostas_comerciais ADD COLUMN IF NOT EXISTS template_html TEXT;`);
 }
 export const tabelasProntas = garantirTabela().catch((err) => {
   console.error('Erro criando tabela propostas_comerciais:', err.message);
@@ -102,6 +106,9 @@ export async function criar(tenantId, dados, marca = {}) {
     brand_name: cortar(marca.brandName, LIMITES.brandName),
     brand_subtitle: cortar(marca.brandSubtitle, LIMITES.brandSubtitle),
     logo_text: cortar(marca.logoText, LIMITES.logoText),
+    // so leva o modelo de conteudo pra propostas white_label - "branded" sempre usa o
+    // conteudo padrao fixo, mesmo que o campo venha preenchido por engano
+    template_html: marca.plano === 'white_label' && typeof marca.templateHtml === 'string' ? marca.templateHtml : null,
   };
 
   for (let tentativa = 0; tentativa < 5; tentativa++) {
@@ -109,9 +116,9 @@ export async function criar(tenantId, dados, marca = {}) {
     try {
       await pool.query(
         `INSERT INTO propostas_comerciais
-           (id, tenant_id, doctor_name, clinic_name, city, specialty, base_price, videomaker_price, videomaker_plus_price, addon_nivel, has_videomaker, has_lumia, lumia_implementation_price, lumia_monthly_price, whatsapp_phone, plano, brand_name, brand_subtitle, logo_text)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
-        [id, tenantId || null, linha.doctor_name, linha.clinic_name, linha.city, linha.specialty, linha.base_price, linha.videomaker_price, linha.videomaker_plus_price, linha.addon_nivel, linha.has_videomaker, linha.has_lumia, linha.lumia_implementation_price, linha.lumia_monthly_price, linha.whatsapp_phone, linha.plano, linha.brand_name, linha.brand_subtitle, linha.logo_text]
+           (id, tenant_id, doctor_name, clinic_name, city, specialty, base_price, videomaker_price, videomaker_plus_price, addon_nivel, has_videomaker, has_lumia, lumia_implementation_price, lumia_monthly_price, whatsapp_phone, plano, brand_name, brand_subtitle, logo_text, template_html)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+        [id, tenantId || null, linha.doctor_name, linha.clinic_name, linha.city, linha.specialty, linha.base_price, linha.videomaker_price, linha.videomaker_plus_price, linha.addon_nivel, linha.has_videomaker, linha.has_lumia, linha.lumia_implementation_price, linha.lumia_monthly_price, linha.whatsapp_phone, linha.plano, linha.brand_name, linha.brand_subtitle, linha.logo_text, linha.template_html]
       );
       return id;
     } catch (err) {
@@ -122,13 +129,13 @@ export async function criar(tenantId, dados, marca = {}) {
   throw new Error('nao foi possivel gerar um id unico para a proposta');
 }
 
-function mapearLinha(r) {
+function mapearLinha(r, { incluirTemplate = false } = {}) {
   // linhas criadas antes do addon_nivel existir tem o default 'nenhum' mesmo com
   // has_videomaker=true - cai pro "basico" nesse caso pra nao perder o addon que já tinham
   const addonNivel = r.addon_nivel && r.addon_nivel !== 'nenhum'
     ? r.addon_nivel
     : (r.has_videomaker ? 'basico' : 'nenhum');
-  return {
+  const linha = {
     id: r.id,
     doctorName: r.doctor_name,
     clinicName: r.clinic_name,
@@ -149,16 +156,21 @@ function mapearLinha(r) {
     logoText: r.logo_text,
     criadoEm: r.criado_em,
   };
+  // o HTML do modelo pode ser grande (ate ~300kb) - so entra na resposta quando quem pediu
+  // realmente precisa renderizar a proposta (obter por id); a listagem "minhas propostas" fica
+  // leve de proposito, sem esse campo
+  if (incluirTemplate) linha.templateHtml = r.template_html || null;
+  return linha;
 }
 
 // leitura publica (pagina /p/:id, sem login) - devolve tambem a marca (snapshot) pra pagina
-// saber de quem e essa proposta
+// saber de quem e essa proposta, incluindo o modelo de conteudo customizado (se houver)
 export async function obter(id) {
   if (!pool) return null;
   await tabelasProntas;
   const { rows } = await pool.query(`SELECT * FROM propostas_comerciais WHERE id = $1`, [id]);
   if (!rows.length) return null;
-  return mapearLinha(rows[0]);
+  return mapearLinha(rows[0], { incluirTemplate: true });
 }
 
 // "minhas propostas" - lista as que o tenant logado criou, mais recente primeiro

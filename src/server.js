@@ -329,6 +329,29 @@ app.post('/api/minha-proposta/propostas', async (req, res) => {
   }
 });
 
+// modelo de conteudo proprio (Modo Editor de proposta.html, so pra assinantes white_label) -
+// GET usa pro editor carregar o que ja foi salvo, POST salva a versao editada
+app.get('/api/minha-proposta/template', async (req, res) => {
+  try {
+    res.json({ html: await tenantConfig.obterTemplateProposta(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/minha-proposta/template', async (req, res) => {
+  try {
+    const config = await tenantConfig.obterConfigProposta(req.tenantId);
+    if (config.plano !== 'white_label') {
+      return res.status(403).json({ erro: 'so disponivel no plano white label' });
+    }
+    await tenantConfig.salvarTemplateProposta(req.tenantId, (req.body || {}).html);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
 // admin-only: define se o assinante e "branded" (marca fixa Vivekananda) ou "white_label"
 // (marca propria) - corresponde ao plano que ele pagou, nao e self-service
 app.post('/api/admin/tenants/:id/proposta-plano', exigirSuperAdmin, async (req, res) => {

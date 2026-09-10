@@ -47,6 +47,10 @@ async function garantirTabelas() {
   await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_brand_subtitle TEXT;`);
   await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_logo_text TEXT;`);
   await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_custom_domain TEXT;`);
+  // modelo de conteudo proprio do assinante white_label (o <main> inteiro da proposta.html,
+  // reescrito por ele via Modo Editor) - fica null pra "branded" e pra quem ainda nao editou
+  // nada (nesses casos a proposta.html usa o conteudo padrao do Vivekananda)
+  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS proposta_template_html TEXT;`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabela de tenant_config:', err.message);
@@ -171,10 +175,10 @@ export async function salvarTrello(tenantId, { apiKey, token }) {
 // ---------- Gerador de Propostas (plano + marca de cada assinante) ----------
 
 export async function obterConfigProposta(tenantId) {
-  if (!pool) return { plano: 'branded', brandName: null, brandSubtitle: null, logoText: null, customDomain: null };
+  if (!pool) return { plano: 'branded', brandName: null, brandSubtitle: null, logoText: null, customDomain: null, templateHtml: null };
   await tabelasProntas;
   const { rows } = await pool.query(
-    'SELECT proposta_plano, proposta_brand_name, proposta_brand_subtitle, proposta_logo_text, proposta_custom_domain FROM tenant_config WHERE tenant_id = $1',
+    'SELECT proposta_plano, proposta_brand_name, proposta_brand_subtitle, proposta_logo_text, proposta_custom_domain, proposta_template_html FROM tenant_config WHERE tenant_id = $1',
     [tenantId],
   );
   const r = rows[0];
@@ -184,7 +188,42 @@ export async function obterConfigProposta(tenantId) {
     brandSubtitle: r?.proposta_brand_subtitle || null,
     logoText: r?.proposta_logo_text || null,
     customDomain: r?.proposta_custom_domain || null,
+    templateHtml: r?.proposta_template_html || null,
   };
+}
+
+// remove tags <script> e atributos "on*=" (onclick, onerror etc) e "javascript:" em
+// href/src - protecao basica contra o assinante (sem querer ou de proposito) salvar algo que
+// rode script no navegador de quem abrir o link da proposta. Nao e um sanitizador completo,
+// mas cobre o que da pra colar/digitar num campo contentEditable comum.
+function sanitizarHtmlModelo(html) {
+  return String(html)
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/\son\w+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\son\w+\s*=\s*'[^']*'/gi, '')
+    .replace(/(href|src)\s*=\s*("|')\s*javascript:[^"']*\2/gi, '$1=$2#$2');
+}
+
+const LIMITE_TEMPLATE_HTML = 300000; // ~300kb - generoso pro conteudo de uma pagina, evita abuso
+
+export async function obterTemplateProposta(tenantId) {
+  if (!pool) return null;
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT proposta_template_html FROM tenant_config WHERE tenant_id = $1', [tenantId]);
+  return rows[0]?.proposta_template_html || null;
+}
+
+export async function salvarTemplateProposta(tenantId, html) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  if (typeof html !== 'string' || !html.trim()) throw new Error('conteudo do modelo vazio');
+  if (html.length > LIMITE_TEMPLATE_HTML) throw new Error('conteudo do modelo grande demais');
+  await tabelasProntas;
+  const limpo = sanitizarHtmlModelo(html);
+  await pool.query(
+    `INSERT INTO tenant_config (tenant_id, proposta_template_html, atualizado_em) VALUES ($1, $2, now())
+     ON CONFLICT (tenant_id) DO UPDATE SET proposta_template_html = $2, atualizado_em = now()`,
+    [tenantId, limpo],
+  );
 }
 
 // self-service: SO os campos de marca, nunca o plano (isso e definido por definirPlanoProposta,
