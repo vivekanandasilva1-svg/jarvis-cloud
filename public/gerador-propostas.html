@@ -437,14 +437,34 @@
                 ? new URL(configAtual.customDomain).origin
                 : window.location.origin;
             lista.innerHTML = data.propostas.map(p => `
-                <div class="flex items-center justify-between p-3 bg-slate-900 rounded-xl border border-slate-800">
+                <div class="flex items-center justify-between gap-3 p-3 bg-slate-900 rounded-xl border border-slate-800">
                     <div>
                         <p class="text-white font-semibold">${p.doctorName} • ${p.clinicName}</p>
                         <p class="text-slate-500">${p.city || ''} ${p.basePrice != null ? '• R$ ' + Number(p.basePrice).toLocaleString('pt-BR') : ''}</p>
                     </div>
-                    <a href="${base}/p/${p.id}" target="_blank" class="text-gold-400 hover:underline">${base.replace(/^https?:\/\//, '')}/p/${p.id}</a>
+                    <div class="flex items-center gap-3 flex-shrink-0">
+                        <a href="${base}/p/${p.id}" target="_blank" class="text-gold-400 hover:underline">${base.replace(/^https?:\/\//, '')}/p/${p.id}</a>
+                        <button onclick="apagarProposta('${p.id}')" title="Apagar proposta" class="text-red-400 hover:text-red-300 px-2 py-1">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
                 </div>
             `).join('');
+        }
+
+        async function apagarProposta(id) {
+            const confirmado = confirm('Apagar essa proposta? O link vai parar de funcionar pro cliente que já recebeu e isso não pode ser desfeito.');
+            if (!confirmado) return;
+            try {
+                const resp = await fetch(`/api/minha-proposta/propostas/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'x-app-password': appPassword },
+                });
+                if (!resp.ok) throw new Error('falha ao apagar');
+                await carregarPropostas();
+            } catch (e) {
+                alert('Não foi possível apagar a proposta agora. Tente de novo em instantes.');
+            }
         }
 
         (async () => {

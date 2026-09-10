@@ -317,6 +317,16 @@ app.get('/api/minha-proposta/propostas', async (req, res) => {
   }
 });
 
+app.delete('/api/minha-proposta/propostas/:id', async (req, res) => {
+  try {
+    const apagou = await propostas.deletar(req.tenantId, req.params.id);
+    if (!apagou) return res.status(404).json({ erro: 'proposta nao encontrada' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.post('/api/minha-proposta/propostas', async (req, res) => {
   const { doctorName, clinicName } = req.body || {};
   if (!doctorName || !clinicName) return res.status(400).json({ erro: 'nome do cliente e do negocio dele sao obrigatorios' });

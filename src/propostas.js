@@ -183,3 +183,16 @@ export async function listarPorTenant(tenantId) {
   );
   return rows.map(mapearLinha);
 }
+
+// apaga uma proposta - so se ela pertencer ao tenant que pediu (evita um assinante apagar a
+// proposta de outro so adivinhando/testando ids). Devolve true se apagou, false se a proposta
+// nao existe ou nao e desse tenant.
+export async function deletar(tenantId, id) {
+  if (!pool) throw new Error('banco de dados nao configurado');
+  await tabelasProntas;
+  const { rowCount } = await pool.query(
+    `DELETE FROM propostas_comerciais WHERE id = $1 AND tenant_id = $2`,
+    [id, tenantId]
+  );
+  return rowCount > 0;
+}
