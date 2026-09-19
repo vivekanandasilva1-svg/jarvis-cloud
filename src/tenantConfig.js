@@ -289,7 +289,7 @@ export async function listarTenantsComPlano() {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(`
-    SELECT t.id, t.nome, t.username, t.ativo, tc.proposta_plano, tc.proposta_acesso_expira_em
+    SELECT t.id, t.nome, t.username, t.ativo, t.apagar_em, tc.proposta_plano, tc.proposta_acesso_expira_em
     FROM tenants t
     JOIN tenant_config tc ON tc.tenant_id = t.id
     WHERE tc.proposta_plano IS NOT NULL
@@ -300,6 +300,7 @@ export async function listarTenantsComPlano() {
     nome: r.nome,
     username: r.username,
     ativo: r.ativo,
+    apagarEm: r.apagar_em,
     propostaPlano: r.proposta_plano,
     propostaAcessoExpiraEm: r.proposta_acesso_expira_em,
   }));

@@ -3665,6 +3665,32 @@ async function carregarClientes() {
       }
       card.appendChild(acessoMeta);
 
+      if (t.apagar_em) {
+        // marcado pra exclusao - avisa e oferece restaurar em vez das acoes normais (ativar/
+        // desativar nao fazem sentido pra quem ja esta marcado pra sumir)
+        const aviso = document.createElement('div');
+        aviso.className = 'cliente-card-meta';
+        aviso.style.color = '#f87171';
+        aviso.textContent = `Marcado pra exclusão - apaga de vez em ${new Date(t.apagar_em).toLocaleDateString('pt-BR')}`;
+        card.appendChild(aviso);
+
+        const restaurarBtn = document.createElement('button');
+        restaurarBtn.type = 'button';
+        restaurarBtn.textContent = 'Restaurar';
+        restaurarBtn.addEventListener('click', async (ev) => {
+          ev.stopPropagation();
+          try {
+            await fetch(`/api/admin/tenants/${t.id}/restaurar`, { method: 'POST', headers: { 'x-app-password': appPassword } });
+            carregarClientes();
+          } catch (err) {
+            addBubble(`Erro restaurando cliente: ${err.message}`, 'system');
+          }
+        });
+        card.appendChild(restaurarBtn);
+        clientesLista.appendChild(card);
+        continue;
+      }
+
       const row = document.createElement('div');
       row.className = 'cliente-card-row';
       const status = document.createElement('span');
@@ -3869,23 +3895,47 @@ async function carregarPropostasAssinantes() {
       acessoRow.appendChild(renovarBtn);
       card.appendChild(acessoRow);
 
-      const apagarBtn = document.createElement('button');
-      apagarBtn.type = 'button';
-      apagarBtn.textContent = `Apagar "${a.nome}" permanentemente`;
-      apagarBtn.style.cssText = 'background:rgba(220,38,38,0.16);border:1px solid rgba(220,38,38,0.5);color:#f87171;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;';
-      apagarBtn.addEventListener('click', async () => {
-        const confirmado = confirm(`Apagar "${a.nome}" permanentemente? Isso remove o cadastro e todas as propostas dele e não pode ser desfeito.`);
-        if (!confirmado) return;
-        try {
-          const r = await fetch(`/api/admin/tenants/${a.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
-          const d = await r.json();
-          if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
-          carregarPropostasAssinantes();
-        } catch (err) {
-          addBubble(`Erro apagando assinante: ${err.message}`, 'system');
-        }
-      });
-      card.appendChild(apagarBtn);
+      if (a.apagarEm) {
+        // marcado pra exclusao - mostra o aviso + botao pra desfazer, no lugar do botao de apagar
+        const aviso = document.createElement('p');
+        aviso.className = 'agenda-erro';
+        aviso.textContent = `Marcado pra exclusão - apaga de vez em ${new Date(a.apagarEm).toLocaleDateString('pt-BR')}.`;
+        card.appendChild(aviso);
+
+        const restaurarBtn = document.createElement('button');
+        restaurarBtn.type = 'button';
+        restaurarBtn.textContent = `Restaurar "${a.nome}"`;
+        restaurarBtn.style.cssText = 'background:rgba(212,175,55,0.16);border:1px solid rgba(212,175,55,0.5);color:#d4af37;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;';
+        restaurarBtn.addEventListener('click', async () => {
+          try {
+            const r = await fetch(`/api/admin/tenants/${a.id}/restaurar`, { method: 'POST', headers: { 'x-app-password': appPassword } });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+            carregarPropostasAssinantes();
+          } catch (err) {
+            addBubble(`Erro restaurando assinante: ${err.message}`, 'system');
+          }
+        });
+        card.appendChild(restaurarBtn);
+      } else {
+        const apagarBtn = document.createElement('button');
+        apagarBtn.type = 'button';
+        apagarBtn.textContent = `Apagar "${a.nome}"`;
+        apagarBtn.style.cssText = 'background:rgba(220,38,38,0.16);border:1px solid rgba(220,38,38,0.5);color:#f87171;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;margin-top:6px;';
+        apagarBtn.addEventListener('click', async () => {
+          const confirmado = confirm(`Apagar "${a.nome}"? O acesso dele e desativado na hora, e os dados ficam guardados por 30 dias (da pra restaurar aqui na lista) antes de serem apagados de vez.`);
+          if (!confirmado) return;
+          try {
+            const r = await fetch(`/api/admin/tenants/${a.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+            carregarPropostasAssinantes();
+          } catch (err) {
+            addBubble(`Erro apagando assinante: ${err.message}`, 'system');
+          }
+        });
+        card.appendChild(apagarBtn);
+      }
 
       propAdminLista.appendChild(card);
     }
@@ -4228,15 +4278,16 @@ async function selecionarCliente(id, nome) {
     } catch (e) {}
   })();
 
-  // ---- Apagar cliente (irreversivel) ----
+  // ---- Apagar cliente (marca pra exclusao - so apaga de verdade depois de 30 dias, da pra
+  // restaurar ate la na propria lista) ----
   const apagarLabel = document.createElement('label'); apagarLabel.className = 'auto-label'; apagarLabel.textContent = 'Zona de risco';
   clienteIntegracoesPainel.appendChild(apagarLabel);
   const apagarBtn = document.createElement('button');
   apagarBtn.type = 'button';
-  apagarBtn.textContent = `Apagar "${nome}" permanentemente`;
+  apagarBtn.textContent = `Apagar "${nome}"`;
   apagarBtn.style.cssText = 'background:rgba(220,38,38,0.16);border:1px solid rgba(220,38,38,0.5);color:#f87171;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;';
   apagarBtn.addEventListener('click', async () => {
-    const confirmado = confirm(`Apagar "${nome}" permanentemente? Isso remove TODOS os dados dele (agenda, CRM, conversas, propostas, tudo) e não pode ser desfeito.`);
+    const confirmado = confirm(`Apagar "${nome}"? O acesso dele e desativado na hora, e os dados ficam guardados por 30 dias (da pra restaurar na lista) antes de serem apagados de vez.`);
     if (!confirmado) return;
     try {
       const r = await fetch(`/api/admin/tenants/${id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });

@@ -256,11 +256,22 @@ app.post('/api/admin/tenants/:id/tabs', exigirSuperAdmin, async (req, res) => {
   }
 });
 
-// apaga o tenant e TODOS os dados dele (agenda, CRM, propostas, etc) - irreversivel, usado
-// tanto pra clientes da Lumia quanto assinantes do Gerador de Propostas (mesma tabela tenants)
+// "apaga" o tenant - na verdade so MARCA pra exclusao (desativa na hora, apaga de verdade so
+// depois de 30 dias sem ser restaurado - ver tenants.marcarParaExclusao). Usado tanto pra
+// clientes da Lumia quanto assinantes do Gerador de Propostas (mesma tabela tenants).
 app.delete('/api/admin/tenants/:id', exigirSuperAdmin, async (req, res) => {
   try {
-    await tenants.deletarTenant(Number(req.params.id));
+    const apagarEm = await tenants.marcarParaExclusao(Number(req.params.id));
+    res.json({ ok: true, apagarEm });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// desfaz uma marcacao pra exclusao (ou reativa um tenant desativado por qualquer outro motivo)
+app.post('/api/admin/tenants/:id/restaurar', exigirSuperAdmin, async (req, res) => {
+  try {
+    await tenants.restaurarTenant(Number(req.params.id));
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });
@@ -1477,6 +1488,15 @@ function checarAcessosExpirados() {
 }
 checarAcessosExpirados();
 setInterval(checarAcessosExpirados, 30 * 60 * 1000).unref();
+
+// apaga de verdade quem foi marcado pra exclusao (aba Clientes/Propostas, botao "Apagar") ha
+// mais de 30 dias e nunca foi restaurado - roda 1x no boot e depois 1x por dia, nunca mais
+// seguido que isso (e uma exclusao definitiva, sem pressa nenhuma pra rodar rapido)
+function checarTenantsParaPurgar() {
+  tenants.purgarTenantsMarcados().catch((err) => console.error('Erro purgando tenants marcados pra exclusao:', err.message));
+}
+checarTenantsParaPurgar();
+setInterval(checarTenantsParaPurgar, 24 * 60 * 60 * 1000).unref();
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {

@@ -26,6 +26,12 @@ async function garantirTabelas() {
   // periodo de contratacao do cliente (acesso geral a Lumia) - NULL = vitalicio. Mesmo modelo
   // do proposta_acesso_expira_em do Gerador de Propostas, so que pro produto principal.
   await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS acesso_expira_em TIMESTAMPTZ;`);
+  // exclusao suave - "apagar" na UI so MARCA o tenant (desativa + agenda a exclusao real pra
+  // daqui DIAS_ANTES_DE_APAGAR_DE_VERDADE dias), nunca apaga dado nenhum na hora. So o sweep
+  // purgarTenantsMarcados() (chamado 1x por dia no boot do server.js) apaga de verdade, e so
+  // depois que essa data passar - da tempo de perceber e restaurar (ver restaurarTenant) um
+  // clique errado ou um teste feito sem querer contra producao antes da perda virar definitiva.
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS apagar_em TIMESTAMPTZ;`);
   // qual tenant e dono de cada instancia do Evolution API - usado pra rotear mensagem
   // recebida no webhook (que so identifica a instancia, nao tem conceito de tenant) pro
   // tenant certo. 1 instancia so pode pertencer a 1 tenant.
@@ -129,7 +135,7 @@ export async function listarTenants() {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(`
-    SELECT t.id, t.slug, t.nome, t.username, t.ativo, t.acesso_expira_em, t.criado_em
+    SELECT t.id, t.slug, t.nome, t.username, t.ativo, t.acesso_expira_em, t.apagar_em, t.criado_em
     FROM tenants t
     LEFT JOIN tenant_config tc ON tc.tenant_id = t.id
     WHERE tc.proposta_plano IS NULL
@@ -195,16 +201,46 @@ export async function bloquearClientesExpirados() {
   return rows.length;
 }
 
-// apaga um tenant e TODOS os dados dele em qualquer tabela que referencie tenants(id) - usa o
-// catalogo do proprio Postgres (em vez de uma lista fixa de tabelas aqui) pra nunca ficar
-// desatualizado conforme novas tabelas com tenant_id forem criadas. Roda numa transacao: ou
-// apaga tudo, ou nada (se uma tabela falhar no meio, reverte). NAO da pra desfazer.
-export async function deletarTenant(tenantId) {
+// quantos dias de "carencia" entre marcar um tenant pra exclusao e ele ser apagado de
+// verdade - da tempo real de perceber um clique errado (ou um teste feito sem querer contra
+// producao) e restaurar antes da perda virar definitiva. Existe por causa de um incidente real:
+// 14 tenants foram apagados de vez sem ninguem perceber a tempo, sem nenhum jeito de recuperar
+// porque a exclusao era imediata e nao existia backup do banco.
+const DIAS_ANTES_DE_APAGAR_DE_VERDADE = 30;
+
+// "apagar" na UI so MARCA o tenant - desativa login na hora e agenda a exclusao de verdade pra
+// daqui DIAS_ANTES_DE_APAGAR_DE_VERDADE dias (ver purgarTenantsMarcados). NENHUM dado e
+// removido aqui. Reversivel via restaurarTenant ate a data marcada passar.
+export async function marcarParaExclusao(tenantId) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
 
   const tenant = await obterPorId(tenantId);
   if (!tenant) throw new Error('tenant nao encontrado');
+  if (tenant.super_admin) throw new Error('nao e possivel apagar um super_admin');
+
+  const apagarEm = new Date(Date.now() + DIAS_ANTES_DE_APAGAR_DE_VERDADE * 24 * 60 * 60 * 1000);
+  await pool.query('UPDATE tenants SET apagar_em = $1, ativo = false WHERE id = $2', [apagarEm, tenantId]);
+  return apagarEm;
+}
+
+// desfaz uma marcacao pra exclusao (ou simplesmente reativa um tenant desativado por outro
+// motivo) - limpa apagar_em e reativa o login
+export async function restaurarTenant(tenantId) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  await pool.query('UPDATE tenants SET apagar_em = NULL, ativo = true WHERE id = $1', [tenantId]);
+}
+
+// apaga um tenant e TODOS os dados dele em qualquer tabela que referencie tenants(id) - usa o
+// catalogo do proprio Postgres (em vez de uma lista fixa de tabelas aqui) pra nunca ficar
+// desatualizado conforme novas tabelas com tenant_id forem criadas. Roda numa transacao: ou
+// apaga tudo, ou nada (se uma tabela falhar no meio, reverte). NAO da pra desfazer - por isso
+// NAO e exportada/chamada pela UI diretamente, so pelo sweep purgarTenantsMarcados() abaixo,
+// que so mexe em quem ja passou pelos 30 dias de carencia do marcarParaExclusao.
+async function apagarTenantDeVerdade(tenantId) {
+  const tenant = await obterPorId(tenantId);
+  if (!tenant) return;
   if (tenant.super_admin) throw new Error('nao e possivel apagar um super_admin');
 
   const client = await pool.connect();
@@ -234,6 +270,23 @@ export async function deletarTenant(tenantId) {
   } finally {
     client.release();
   }
+}
+
+// sweep periodico (chamado 1x por dia no boot do server.js, junto dos outros sweeps) - apaga de
+// verdade quem foi marcado ha mais de DIAS_ANTES_DE_APAGAR_DE_VERDADE dias e nunca foi
+// restaurado. So aqui a exclusao definitiva acontece de verdade.
+export async function purgarTenantsMarcados() {
+  if (!pool) return 0;
+  await tabelasProntas;
+  const { rows } = await pool.query(`SELECT id FROM tenants WHERE apagar_em IS NOT NULL AND apagar_em < now()`);
+  for (const r of rows) {
+    try {
+      await apagarTenantDeVerdade(r.id);
+    } catch (err) {
+      console.error(`Erro apagando tenant ${r.id} marcado pra exclusao:`, err.message);
+    }
+  }
+  return rows.length;
 }
 
 export async function redefinirSenha(tenantId, novaSenha) {
