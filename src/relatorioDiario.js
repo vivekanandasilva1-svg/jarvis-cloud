@@ -5,9 +5,10 @@
 import * as metaAds from './metaads.js';
 import * as clinicorp from './clinicorp.js';
 
-// mesmo limite usado pelo alerta de saldo (cloudAgent.js) - ajustavel via env var, sem
-// precisar mexer no codigo se o usuario achar o valor errado
-const LIMITE_SALDO_BAIXO_REAIS = Number(process.env.META_ADS_LIMITE_SALDO_BAIXO_REAIS) || 100;
+// mesmos limites usados no relatorio de saldo (relatoriosProgramados.js) - ajustaveis via env
+// var, sem precisar mexer no codigo se o usuario achar os valores errados
+const LIMITE_ALERTA_AMARELO_REAIS = Number(process.env.META_ADS_LIMITE_ALERTA_AMARELO_REAIS) || 250;
+const LIMITE_ALERTA_VERMELHO_REAIS = Number(process.env.META_ADS_LIMITE_ALERTA_VERMELHO_REAIS) || 100;
 // fatura em aberto acima disso ganha a tag "(Valor alto)" no relatorio
 const LIMITE_FATURA_ALTA_REAIS = Number(process.env.META_ADS_LIMITE_FATURA_ALTA_REAIS) || 1000;
 
@@ -28,12 +29,14 @@ export async function gerarRelatorioDiario(tenantId, { diasClinicorp = 30 } = {}
 
   const esgotadas = [];
   const criticas = [];
+  const atencao = [];
   const saudaveis = [];
 
   for (const c of contas) {
     if (c.tipoConta === 'prepago' && c.saldoDisponivel != null) {
       if (c.saldoDisponivel <= 0) esgotadas.push(c);
-      else if (c.saldoDisponivel <= LIMITE_SALDO_BAIXO_REAIS) criticas.push({ ...c, quaseZerando: true });
+      else if (c.saldoDisponivel <= LIMITE_ALERTA_VERMELHO_REAIS) criticas.push({ ...c, quaseZerando: true });
+      else if (c.saldoDisponivel <= LIMITE_ALERTA_AMARELO_REAIS) atencao.push(c);
       else saudaveis.push(c);
     } else if (c.tipoConta === 'pos-pago (fatura)' && c.valorEmAberto != null) {
       if (c.valorEmAberto > 0) criticas.push({ ...c, valorAlto: c.valorEmAberto > LIMITE_FATURA_ALTA_REAIS });
@@ -63,18 +66,27 @@ export async function gerarRelatorioDiario(tenantId, { diasClinicorp = 30 } = {}
   }
   linhas.push('');
   linhas.push('');
-  linhas.push('🟡 CONTAS COM FATURA EM ABERTO / CRÍTICAS');
+  linhas.push('🔴 CONTAS COM FATURA EM ABERTO / CRÍTICAS');
   linhas.push('');
   if (criticas.length) {
     for (const c of criticas) {
       if (c.quaseZerando) {
-        linhas.push(`* 📉 ${c.name} (${c.empresa}): ${formatarReais(c.saldoDisponivel)} disponível ⚠️ (Quase zerando)`);
+        linhas.push(`* 📉 ${c.name} (${c.empresa}): ${formatarReais(c.saldoDisponivel)} disponível ⚠️ (Crítico, recarregue urgente)`);
       } else {
         linhas.push(`* 💸 ${c.name} (${c.empresa}): ${formatarReais(c.valorEmAberto)} em aberto${c.valorAlto ? ' ⚠️ (Valor alto)' : ''}`);
       }
     }
   } else {
     linhas.push('* Nenhuma conta crítica no momento. ✅');
+  }
+  linhas.push('');
+  linhas.push('');
+  linhas.push('🟡 CONTAS EM ATENÇÃO (saldo baixando)');
+  linhas.push('');
+  if (atencao.length) {
+    for (const c of atencao) linhas.push(`* ⚠️ ${c.name} (${c.empresa}): ${formatarReais(c.saldoDisponivel)} disponível (fique de olho)`);
+  } else {
+    linhas.push('* Nenhuma conta em atenção no momento. ✅');
   }
   linhas.push('');
   linhas.push('');

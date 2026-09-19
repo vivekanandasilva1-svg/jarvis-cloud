@@ -22,7 +22,7 @@ const NOME_TIPO = {
   ads_metricas: 'Meta Ads - Todas as Metricas das Campanhas',
   clinica_financeiro: 'Clinica - Relatorio Financeiro Geral',
   clinica_agendamentos: 'Clinica - Relatorio de Agendamentos Completo',
-  ads_saldo_baixo: 'Meta Ads - Alerta de Saldo Baixo',
+  ads_saldo_baixo: 'Meta Ads - Saldo das Contas (diario, por cor)',
 };
 
 const DIAS_POR_FREQUENCIA = {
@@ -542,48 +542,62 @@ export async function gerarRelatorioClinicaAgendamentosCompleto(tenantId, { dias
   return linhas.join('\n');
 }
 
-// ---------- 5. Meta Ads - Alerta de Saldo Baixo ----------
+// ---------- 5. Meta Ads - Saldo das contas (diario, com sinalizacao por cor) ----------
 
-// mesmo limite usado no antigo scheduler fixo (cloudAgent.js) - ajustavel via env var
-const LIMITE_SALDO_BAIXO_REAIS = Number(process.env.META_ADS_LIMITE_SALDO_BAIXO_REAIS) || 100;
+// pedido explicito do usuario: informa o saldo TODO DIA independente do valor, sinalizado por
+// cor - verde acima de LIMITE_ALERTA_AMARELO, amarelo a partir dai, vermelho a partir de
+// LIMITE_ALERTA_VERMELHO (ambos ajustaveis via env var)
+const LIMITE_ALERTA_AMARELO_REAIS = Number(process.env.META_ADS_LIMITE_ALERTA_AMARELO_REAIS) || 250;
+const LIMITE_ALERTA_VERMELHO_REAIS = Number(process.env.META_ADS_LIMITE_ALERTA_VERMELHO_REAIS) || 100;
 
 // diferente dos outros 4 geradores, esse pode devolver null (nada pra reportar) - e
-// interpretado por enviarRelatorioAgora/o scheduler como "nao manda nada dessa vez". So
-// considera contas PREPAGAS com saldo baixo/esgotado E que tem pelo menos 1 campanha em
-// effective_status ACTIVE - mesmo criterio de "conta ativa" usado em
-// gerarRelatorioAdsFinanceiroCompleto (conta sem nenhum anuncio rodando fica de fora, saldo
-// baixo la nao e urgente e so geraria ruido no WhatsApp).
+// interpretado por enviarRelatorioAgora/o scheduler como "nao manda nada dessa vez", pra quando
+// o tenant nao tem nenhuma conta prepaga com campanha ativa. Fora isso, manda TODO DIA o saldo
+// de cada conta prepaga ativa, sinalizado por cor - nao so quando esta baixo (pedido explicito
+// do usuario: "quero que informe diariamente o saldo atual independente do valor"). So
+// considera contas PREPAGAS com pelo menos 1 campanha em effective_status ACTIVE - mesmo
+// criterio de "conta ativa" usado em gerarRelatorioAdsFinanceiroCompleto (conta sem nenhum
+// anuncio rodando fica de fora, o saldo dela nao importa pro dia a dia).
 export async function gerarAlertaSaldoBaixo(tenantId) {
   const contas = await metaAds.listAdAccounts(tenantId, { apenasAtivas: true });
   const linhas = [];
 
   for (const c of contas) {
     if (c.tipoConta !== 'prepago' || c.saldoDisponivel == null) continue;
-    const esgotado = c.saldoDisponivel <= 0;
-    const baixo = c.saldoDisponivel > 0 && c.saldoDisponivel <= LIMITE_SALDO_BAIXO_REAIS;
-    if (!esgotado && !baixo) continue;
 
     let ativas = 0;
     try {
       const campanhas = await metaAds.listCampaigns(tenantId, { accountId: c.id, status: 'ACTIVE' });
       ativas = campanhas.length;
-    } catch { continue; } // erro pontual na conta - nao arrisca alertar sem confirmar que tem campanha ativa
+    } catch { continue; } // erro pontual na conta - pula, sem arriscar reportar saldo desatualizado
 
-    if (ativas === 0) continue; // sem campanha ativa, saldo baixo aqui nao e urgente
+    if (ativas === 0) continue; // sem campanha ativa, saldo dessa conta nao importa pro dia a dia
 
     const saldoFormatado = formatarReais(c.saldoDisponivel);
-    linhas.push(
-      esgotado
-        ? `🔴 Saldo ESGOTADO na conta "${c.name}" (${c.empresa}) - ${ativas} campanha(s) ativa(s) parada(s) por falta de saldo. Saldo atual: ${saldoFormatado}.`
-        : `🟡 Saldo baixo na conta "${c.name}" (${c.empresa}): ${saldoFormatado} restantes, ${ativas} campanha(s) ativa(s) - recarregue logo pra nao parar de veicular.`,
-    );
+    const esgotado = c.saldoDisponivel <= 0;
+    let cor, rotulo;
+    if (c.saldoDisponivel <= LIMITE_ALERTA_VERMELHO_REAIS) {
+      cor = '🔴';
+      rotulo = esgotado
+        ? `ESGOTADO - ${ativas} campanha(s) ativa(s) parada(s) por falta de saldo`
+        : `critico, recarregue urgente - ${ativas} campanha(s) ativa(s)`;
+    } else if (c.saldoDisponivel <= LIMITE_ALERTA_AMARELO_REAIS) {
+      cor = '🟡';
+      rotulo = `atencao, saldo ficando baixo - ${ativas} campanha(s) ativa(s)`;
+    } else {
+      cor = '🟢';
+      rotulo = `${ativas} campanha(s) ativa(s)`;
+    }
+
+    linhas.push(`${cor} "${c.name}" (${c.empresa}): ${saldoFormatado} - ${rotulo}`);
   }
 
   if (!linhas.length) return null;
 
   return [
-    '💰 ALERTA DE SALDO BAIXO - META ADS 💰',
+    '💰 SALDO DAS CONTAS - META ADS 💰',
     `Verificado em: ${formatarDataHoraBR()}`,
+    `🟢 acima de ${formatarReais(LIMITE_ALERTA_AMARELO_REAIS)}  |  🟡 ate ${formatarReais(LIMITE_ALERTA_AMARELO_REAIS)}  |  🔴 ate ${formatarReais(LIMITE_ALERTA_VERMELHO_REAIS)}`,
     '',
     ...linhas,
   ].join('\n');
