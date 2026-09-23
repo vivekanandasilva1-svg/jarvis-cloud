@@ -66,6 +66,7 @@ const tabBtnWhatsapp = document.getElementById('tabBtnWhatsapp');
 const tabBtnCrm = document.getElementById('tabBtnCrm');
 const tabBtnAuto = document.getElementById('tabBtnAuto');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
+const tabBtnGeradorRelatorios = document.getElementById('tabBtnGeradorRelatorios');
 const tabBtnIntegracoes = document.getElementById('tabBtnIntegracoes');
 const tabBtnClientes = document.getElementById('tabBtnClientes');
 const tabBtnPropostasAdmin = document.getElementById('tabBtnPropostasAdmin');
@@ -75,6 +76,7 @@ const tabWhatsapp = document.getElementById('tabWhatsapp');
 const tabCrm = document.getElementById('tabCrm');
 const tabAuto = document.getElementById('tabAuto');
 const tabRelatorios = document.getElementById('tabRelatorios');
+const tabGeradorRelatorios = document.getElementById('tabGeradorRelatorios');
 const tabIntegracoes = document.getElementById('tabIntegracoes');
 const tabClientes = document.getElementById('tabClientes');
 const tabPropostasAdmin = document.getElementById('tabPropostasAdmin');
@@ -315,13 +317,14 @@ function mostrarApp() {
   tabBtnCrm.hidden = !abaLiberada('crm');
   tabBtnAuto.hidden = !abaLiberada('auto');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
+  tabBtnGeradorRelatorios.hidden = !abaLiberada('geradorRelatorios');
   tabBtnIntegracoes.hidden = !abaLiberada('integracoes');
   // se a aba visivel por padrao (Painel) foi restringida, pula pra primeira aba liberada em
   // vez de deixar a tela em branco
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
     const primeiraLiberada = [
       ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm],
-      ['auto', tabBtnAuto], ['relatorios', tabBtnRelatorios], ['integracoes', tabBtnIntegracoes],
+      ['auto', tabBtnAuto], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
     ].find(([, btn]) => !btn.hidden);
     if (primeiraLiberada) mudarAba(primeiraLiberada[0]);
   }
@@ -1791,6 +1794,7 @@ function mudarAba(aba) {
   tabCrm.hidden = aba !== 'crm';
   tabAuto.hidden = aba !== 'auto';
   tabRelatorios.hidden = aba !== 'relatorios';
+  tabGeradorRelatorios.hidden = aba !== 'geradorRelatorios';
   tabIntegracoes.hidden = aba !== 'integracoes';
   tabClientes.hidden = aba !== 'clientes';
   tabPropostasAdmin.hidden = aba !== 'propostasAdmin';
@@ -1800,6 +1804,7 @@ function mudarAba(aba) {
   tabBtnCrm.classList.toggle('active', aba === 'crm');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
+  tabBtnGeradorRelatorios.classList.toggle('active', aba === 'geradorRelatorios');
   tabBtnIntegracoes.classList.toggle('active', aba === 'integracoes');
   tabBtnClientes.classList.toggle('active', aba === 'clientes');
   tabBtnPropostasAdmin.classList.toggle('active', aba === 'propostasAdmin');
@@ -1816,6 +1821,8 @@ function mudarAba(aba) {
   } else if (aba === 'relatorios') {
     carregarDestinatariosRelatorios();
     carregarConfigsRelatorios();
+  } else if (aba === 'geradorRelatorios') {
+    iniciarGeradorRelatorios();
   } else if (aba === 'integracoes') {
     carregarIntegracoes();
   } else if (aba === 'clientes') {
@@ -1833,6 +1840,7 @@ tabBtnAgenda.addEventListener('click', () => mudarAba('agenda'));
 tabBtnWhatsapp.addEventListener('click', () => mudarAba('whatsapp'));
 tabBtnCrm.addEventListener('click', () => mudarAba('crm'));
 tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
+tabBtnGeradorRelatorios.addEventListener('click', () => mudarAba('geradorRelatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
 tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
 tabBtnClientes.addEventListener('click', () => mudarAba('clientes'));
@@ -3433,6 +3441,275 @@ function criarCardConfigRelatorio(cfg, instancias) {
   return card;
 }
 
+// ---------- Gerador de Relatorios (relatorio HTML com IA + temas de cor, pra baixar e mandar) ----------
+
+const grFonteAuto = document.getElementById('grFonteAuto');
+const grFonteManual = document.getElementById('grFonteManual');
+const grBlocoAuto = document.getElementById('grBlocoAuto');
+const grBlocoManual = document.getElementById('grBlocoManual');
+const grContaSelect = document.getElementById('grContaSelect');
+const grDataDe = document.getElementById('grDataDe');
+const grDataAte = document.getElementById('grDataAte');
+const grArquivoInput = document.getElementById('grArquivoInput');
+const grArquivosLista = document.getElementById('grArquivosLista');
+const grTemaSelect = document.getElementById('grTemaSelect');
+const grNovoTemaBtn = document.getElementById('grNovoTemaBtn');
+const grNovoTemaForm = document.getElementById('grNovoTemaForm');
+const grTemaNome = document.getElementById('grTemaNome');
+const grTemaBg = document.getElementById('grTemaBg');
+const grTemaPanel = document.getElementById('grTemaPanel');
+const grTemaTexto = document.getElementById('grTemaTexto');
+const grTemaMuted = document.getElementById('grTemaMuted');
+const grTemaAccent = document.getElementById('grTemaAccent');
+const grTemaAccent2 = document.getElementById('grTemaAccent2');
+const grSalvarTemaBtn = document.getElementById('grSalvarTemaBtn');
+const grClienteNome = document.getElementById('grClienteNome');
+const grInstrucoes = document.getElementById('grInstrucoes');
+const grGerarBtn = document.getElementById('grGerarBtn');
+const grErro = document.getElementById('grErro');
+const grHistoricoLista = document.getElementById('grHistoricoLista');
+const grPreviewWrap = document.getElementById('grPreviewWrap');
+const grPreviewIframe = document.getElementById('grPreviewIframe');
+const grBaixarBtn = document.getElementById('grBaixarBtn');
+
+let grArquivosPendentes = []; // [{ name, mediaType, base64 }]
+let grHtmlAtual = null;
+let grTituloAtual = null;
+let grIniciado = false;
+
+grFonteAuto.addEventListener('change', () => {
+  grBlocoAuto.hidden = false;
+  grBlocoManual.hidden = true;
+});
+grFonteManual.addEventListener('change', () => {
+  grBlocoAuto.hidden = true;
+  grBlocoManual.hidden = false;
+});
+
+grArquivoInput.addEventListener('change', async () => {
+  for (const file of Array.from(grArquivoInput.files || [])) {
+    try {
+      const base64 = await arquivoParaBase64(file);
+      grArquivosPendentes.push({ name: file.name, mediaType: file.type || 'application/octet-stream', base64 });
+    } catch (err) {
+      console.error('Erro lendo arquivo:', err);
+    }
+  }
+  grArquivoInput.value = '';
+  renderizarArquivosPendentesGerador();
+});
+
+function renderizarArquivosPendentesGerador() {
+  grArquivosLista.innerHTML = '';
+  if (!grArquivosPendentes.length) {
+    grArquivosLista.innerHTML = '<p class="agenda-vazia">Nenhum arquivo anexado.</p>';
+    return;
+  }
+  grArquivosPendentes.forEach((arq, i) => {
+    const row = document.createElement('div');
+    row.className = 'auto-arquivo-item';
+    const nome = document.createElement('span');
+    nome.textContent = arq.name;
+    const remover = document.createElement('button');
+    remover.type = 'button';
+    remover.textContent = 'Remover';
+    remover.addEventListener('click', () => {
+      grArquivosPendentes.splice(i, 1);
+      renderizarArquivosPendentesGerador();
+    });
+    row.append(nome, remover);
+    grArquivosLista.appendChild(row);
+  });
+}
+
+async function carregarContasGerador() {
+  try {
+    const r = await fetch('/api/gerador-relatorios/contas', { headers: { 'x-app-password': appPassword } });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+    grContaSelect.innerHTML = '';
+    for (const conta of d.contas || []) {
+      const opt = document.createElement('option');
+      opt.value = conta.id;
+      opt.textContent = `${conta.empresa || conta.name || conta.id}`;
+      grContaSelect.appendChild(opt);
+    }
+    if (!d.contas?.length) grContaSelect.innerHTML = '<option value="">Nenhuma conta conectada</option>';
+  } catch (err) {
+    grContaSelect.innerHTML = `<option value="">Erro: ${err.message}</option>`;
+  }
+}
+
+async function carregarTemasGerador() {
+  try {
+    const r = await fetch('/api/gerador-relatorios/temas', { headers: { 'x-app-password': appPassword } });
+    const d = await r.json();
+    grTemaSelect.innerHTML = '';
+    for (const tema of d.temas || []) {
+      const opt = document.createElement('option');
+      opt.value = tema.id;
+      opt.textContent = tema.nome;
+      grTemaSelect.appendChild(opt);
+    }
+  } catch (err) {
+    grTemaSelect.innerHTML = '<option value="">Erro ao carregar</option>';
+  }
+}
+
+grNovoTemaBtn.addEventListener('click', () => {
+  grNovoTemaForm.hidden = !grNovoTemaForm.hidden;
+});
+
+grSalvarTemaBtn.addEventListener('click', async () => {
+  if (!grTemaNome.value.trim()) {
+    addBubble('De um nome pro tema antes de salvar.', 'system');
+    return;
+  }
+  try {
+    const r = await fetch('/api/gerador-relatorios/temas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({
+        nome: grTemaNome.value.trim(), bg: grTemaBg.value, panel: grTemaPanel.value,
+        texto: grTemaTexto.value, muted: grTemaMuted.value, accent: grTemaAccent.value, accent2: grTemaAccent2.value,
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+    grTemaNome.value = '';
+    grNovoTemaForm.hidden = true;
+    await carregarTemasGerador();
+    grTemaSelect.value = d.tema.id;
+  } catch (err) {
+    addBubble(`Erro salvando tema: ${err.message}`, 'system');
+  }
+});
+
+function grFormatarData(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+async function carregarHistoricoGerador() {
+  grHistoricoLista.innerHTML = '<p class="agenda-vazia">Carregando...</p>';
+  try {
+    const r = await fetch('/api/gerador-relatorios/lista', { headers: { 'x-app-password': appPassword } });
+    const d = await r.json();
+    grHistoricoLista.innerHTML = '';
+    if (!d.relatorios?.length) {
+      grHistoricoLista.innerHTML = '<p class="agenda-vazia">Nenhum relatorio ainda.</p>';
+      return;
+    }
+    for (const rel of d.relatorios) {
+      const card = document.createElement('div');
+      card.className = 'auto-arquivo-item';
+      const info = document.createElement('span');
+      info.textContent = `${rel.titulo || 'Relatorio'} - ${grFormatarData(rel.criado_em)}`;
+      const abrir = document.createElement('button');
+      abrir.type = 'button';
+      abrir.textContent = 'Abrir';
+      abrir.addEventListener('click', () => abrirRelatorioGerado(rel.id));
+      const apagar = document.createElement('button');
+      apagar.type = 'button';
+      apagar.textContent = 'Apagar';
+      apagar.addEventListener('click', async () => {
+        await fetch(`/api/gerador-relatorios/${rel.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+        carregarHistoricoGerador();
+      });
+      card.append(info, abrir, apagar);
+      grHistoricoLista.appendChild(card);
+    }
+  } catch (err) {
+    grHistoricoLista.innerHTML = `<p class="agenda-erro">Erro: ${err.message}</p>`;
+  }
+}
+
+async function abrirRelatorioGerado(id) {
+  try {
+    const r = await fetch(`/api/gerador-relatorios/${id}`, { headers: { 'x-app-password': appPassword } });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+    grHtmlAtual = d.html;
+    grTituloAtual = d.titulo;
+    grPreviewIframe.srcdoc = d.html;
+    grPreviewWrap.hidden = false;
+  } catch (err) {
+    addBubble(`Erro abrindo relatorio: ${err.message}`, 'system');
+  }
+}
+
+grGerarBtn.addEventListener('click', async () => {
+  grErro.hidden = true;
+  const fonte = grFonteManual.checked ? 'manual' : 'auto';
+  if (fonte === 'auto' && (!grContaSelect.value || !grDataDe.value || !grDataAte.value)) {
+    grErro.textContent = 'Escolha a conta e o periodo.';
+    grErro.hidden = false;
+    return;
+  }
+  if (fonte === 'manual' && !grArquivosPendentes.length) {
+    grErro.textContent = 'Anexe pelo menos um arquivo.';
+    grErro.hidden = false;
+    return;
+  }
+  if (!grTemaSelect.value) {
+    grErro.textContent = 'Escolha um tema.';
+    grErro.hidden = false;
+    return;
+  }
+  grGerarBtn.disabled = true;
+  grGerarBtn.textContent = 'Gerando...';
+  try {
+    const r = await fetch('/api/gerador-relatorios/gerar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({
+        fonte, temaId: grTemaSelect.value,
+        accountId: grContaSelect.value, from: grDataDe.value, to: grDataAte.value,
+        arquivos: fonte === 'manual' ? grArquivosPendentes : undefined,
+        instrucoes: grInstrucoes.value.trim() || undefined,
+        clienteNome: grClienteNome.value.trim() || undefined,
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+    grHtmlAtual = d.html;
+    grTituloAtual = d.titulo;
+    grPreviewIframe.srcdoc = d.html;
+    grPreviewWrap.hidden = false;
+    grArquivosPendentes = [];
+    renderizarArquivosPendentesGerador();
+    carregarHistoricoGerador();
+    addBubble('Relatorio gerado com sucesso.', 'system');
+  } catch (err) {
+    grErro.textContent = err.message;
+    grErro.hidden = false;
+  } finally {
+    grGerarBtn.disabled = false;
+    grGerarBtn.textContent = 'Gerar Relatorio';
+  }
+});
+
+grBaixarBtn.addEventListener('click', () => {
+  if (!grHtmlAtual) return;
+  const blob = new Blob([grHtmlAtual], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(grTituloAtual || 'relatorio').replace(/[^a-z0-9]+/gi, '_')}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+function iniciarGeradorRelatorios() {
+  if (!grIniciado) {
+    grIniciado = true;
+    renderizarArquivosPendentesGerador();
+  }
+  carregarContasGerador();
+  carregarTemasGerador();
+  carregarHistoricoGerador();
+}
+
 // ---------- Integracoes (visivel pra qualquer tenant - so mostra/mexe nas PROPRIAS contas) ----------
 // contas de anuncio Meta Ads (com toggle por conta pra relatorio automatico), sistemas
 // conectados (Clinicorp/Trello/Google - liga/desliga sem apagar credencial) e placeholders
@@ -4233,7 +4510,7 @@ async function selecionarCliente(id, nome) {
   tabsAviso.textContent = 'Nenhuma marcada = tudo liberado (padrão). Marque só pra restringir.';
   clienteIntegracoesPainel.appendChild(tabsAviso);
 
-  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', relatorios: 'Relatórios', integracoes: 'Integrações' };
+  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações' };
   const tabsForm = document.createElement('div');
   tabsForm.className = 'cliente-form';
   const tabsCheckboxes = {};

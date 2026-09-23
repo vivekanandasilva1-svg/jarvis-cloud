@@ -25,6 +25,7 @@ import * as tenants from './tenants.js';
 import * as tenantConfig from './tenantConfig.js';
 import * as metaAds from './metaads.js';
 import * as propostas from './propostas.js';
+import * as relatorioGerador from './relatorioGerador.js';
 
 const execAsync = promisify(exec);
 
@@ -57,6 +58,7 @@ const TAB_ROTA_PREFIXO = {
   crm: '/api/crm',
   auto: '/api/auto-atendimento',
   relatorios: '/api/relatorios',
+  geradorRelatorios: '/api/gerador-relatorios',
   integracoes: '/api/integracoes',
 };
 
@@ -1209,6 +1211,87 @@ app.post('/api/relatorios/configs/:tipo', async (req, res) => {
 app.post('/api/relatorios/enviar-agora/:tipo', async (req, res) => {
   try {
     const resultado = await relatoriosProgramados.enviarRelatorioAgora(req.tenantId, req.params.tipo);
+    res.json({ ok: true, ...resultado });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// ---------- Gerador de Relatorios (aba dedicada, relatorio HTML com IA + temas de cor) ----------
+
+app.get('/api/gerador-relatorios/contas', async (req, res) => {
+  try {
+    res.json({ contas: await metaAds.listAdAccounts(req.tenantId, { apenasAtivas: true }) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/gerador-relatorios/temas', async (req, res) => {
+  try {
+    res.json({ temas: await relatorioGerador.listarTemas(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/gerador-relatorios/temas', async (req, res) => {
+  try {
+    const tema = await relatorioGerador.criarTema(req.tenantId, req.body || {});
+    res.json({ ok: true, tema });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/gerador-relatorios/temas/:id', async (req, res) => {
+  try {
+    const apagou = await relatorioGerador.apagarTema(req.tenantId, req.params.id);
+    if (!apagou) return res.status(404).json({ erro: 'tema nao encontrado' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/gerador-relatorios/lista', async (req, res) => {
+  try {
+    res.json({ relatorios: await relatorioGerador.listarRelatorios(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/gerador-relatorios/:id', async (req, res) => {
+  try {
+    const relatorio = await relatorioGerador.buscarRelatorio(req.tenantId, req.params.id);
+    if (!relatorio) return res.status(404).json({ erro: 'relatorio nao encontrado' });
+    res.json(relatorio);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/gerador-relatorios/:id', async (req, res) => {
+  try {
+    const apagou = await relatorioGerador.apagarRelatorio(req.tenantId, req.params.id);
+    if (!apagou) return res.status(404).json({ erro: 'relatorio nao encontrado' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// arquivos anexados (modo manual) sobem em base64 no corpo do JSON, igual anexo de chat - o
+// limite de 20mb do express.json ja cobre isso
+app.post('/api/gerador-relatorios/gerar', async (req, res) => {
+  const { fonte, temaId, accountId, from, to, arquivos, instrucoes, clienteNome, titulo } = req.body || {};
+  if (!temaId) return res.status(400).json({ erro: 'tema obrigatorio' });
+  if (fonte !== 'manual' && fonte !== 'auto') return res.status(400).json({ erro: 'fonte deve ser "auto" ou "manual"' });
+  try {
+    const resultado = await relatorioGerador.gerarRelatorio(req.tenantId, {
+      fonte, temaId, accountId, from, to, arquivos, instrucoes, clienteNome, titulo,
+    });
     res.json({ ok: true, ...resultado });
   } catch (err) {
     res.status(500).json({ erro: err.message });

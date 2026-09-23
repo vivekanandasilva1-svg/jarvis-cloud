@@ -74,7 +74,7 @@ async function garantirTabelas() {
 
 // chaves == os mesmos "data-tab" usados em index.html/app.js - se um dia adicionar aba nova,
 // precisa incluir a chave aqui tambem pra ela poder ser restringida
-export const TABS_VALIDAS = ['painel', 'agenda', 'whatsapp', 'crm', 'auto', 'relatorios', 'integracoes'];
+export const TABS_VALIDAS = ['painel', 'agenda', 'whatsapp', 'crm', 'auto', 'relatorios', 'geradorRelatorios', 'integracoes'];
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabela de tenant_config:', err.message);
 });

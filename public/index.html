@@ -72,6 +72,7 @@
       <button type="button" class="tab-btn" id="tabBtnCrm" data-tab="crm">CRM</button>
       <button type="button" class="tab-btn" id="tabBtnAuto" data-tab="auto">Auto Atendimento</button>
       <button type="button" class="tab-btn" id="tabBtnRelatorios" data-tab="relatorios">Relatórios</button>
+      <button type="button" class="tab-btn" id="tabBtnGeradorRelatorios" data-tab="geradorRelatorios">Gerador de Relatórios</button>
       <button type="button" class="tab-btn" id="tabBtnIntegracoes" data-tab="integracoes">Integrações</button>
       <button type="button" class="tab-btn" id="tabBtnClientes" data-tab="clientes" hidden>Clientes</button>
       <button type="button" class="tab-btn" id="tabBtnPropostasAdmin" data-tab="propostasAdmin" hidden>Gerador de Propostas</button>
@@ -522,6 +523,88 @@
 
       <div class="auto-coluna-dir" id="relatorioConfigsLista">
         <p class="agenda-vazia">Carregando...</p>
+      </div>
+    </div>
+
+    <div class="window-body tab-auto" id="tabGeradorRelatorios" hidden>
+      <div class="auto-coluna-esq">
+        <div class="auto-aviso">
+          Gere um relatorio de performance em HTML pronto pra baixar e mandar pro cliente, com
+          tema de cor a sua escolha. Fonte "Automatica" puxa os numeros reais direto do Meta Ads
+          conectado; fonte "Manual" deixa voce anexar print/planilha/PDF de outro lugar pra IA
+          extrair os dados de la.
+        </div>
+
+        <label class="auto-label">Fonte dos dados</label>
+        <div class="cliente-form" style="flex-direction: row; gap: 12px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
+            <input type="radio" name="grFonte" id="grFonteAuto" value="auto" checked /> Automatica (Meta Ads)
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;">
+            <input type="radio" name="grFonte" id="grFonteManual" value="manual" /> Manual (anexar arquivo)
+          </label>
+        </div>
+
+        <div id="grBlocoAuto" class="cliente-form">
+          <label class="auto-label">Conta de anuncio</label>
+          <select id="grContaSelect"><option value="">Carregando...</option></select>
+          <label class="auto-label">Periodo</label>
+          <div class="auto-upload-row">
+            <input type="date" id="grDataDe" />
+            <input type="date" id="grDataAte" />
+          </div>
+        </div>
+
+        <div id="grBlocoManual" class="cliente-form" hidden>
+          <label class="auto-label">Arquivos (imagem, PDF, planilha ou Word)</label>
+          <input type="file" id="grArquivoInput" accept="image/*,application/pdf,.csv,.xlsx,.xls,.docx,text/plain" multiple />
+          <div class="auto-arquivos-lista" id="grArquivosLista"></div>
+        </div>
+
+        <label class="auto-label">Tema visual</label>
+        <div class="auto-upload-row">
+          <select id="grTemaSelect"><option value="">Carregando...</option></select>
+          <button type="button" id="grNovoTemaBtn">+ Novo tema</button>
+        </div>
+
+        <div class="cliente-form" id="grNovoTemaForm" hidden>
+          <input type="text" id="grTemaNome" placeholder="Nome do tema (ex: Azul Clinica)" />
+          <div class="auto-upload-row">
+            <label style="font-size:12px;">Fundo <input type="color" id="grTemaBg" value="#020617" /></label>
+            <label style="font-size:12px;">Painel <input type="color" id="grTemaPanel" value="#0f172a" /></label>
+          </div>
+          <div class="auto-upload-row">
+            <label style="font-size:12px;">Texto <input type="color" id="grTemaTexto" value="#f1f5f9" /></label>
+            <label style="font-size:12px;">Texto secund. <input type="color" id="grTemaMuted" value="#94a3b8" /></label>
+          </div>
+          <div class="auto-upload-row">
+            <label style="font-size:12px;">Destaque <input type="color" id="grTemaAccent" value="#f5b942" /></label>
+            <label style="font-size:12px;">Destaque 2 <input type="color" id="grTemaAccent2" value="#b45309" /></label>
+          </div>
+          <button type="button" id="grSalvarTemaBtn">Salvar tema</button>
+        </div>
+
+        <label class="auto-label">Nome do cliente (opcional)</label>
+        <input type="text" id="grClienteNome" placeholder="Preenche automatico se ficar em branco" class="cliente-form" />
+
+        <label class="auto-label">Instrucoes pra IA (opcional)</label>
+        <textarea id="grInstrucoes" class="cliente-form" rows="3" placeholder="Ex: foque na campanha de implantes, cliente esta pedindo mais leads"></textarea>
+
+        <button type="button" id="grGerarBtn">Gerar Relatorio</button>
+        <p class="agenda-erro" id="grErro" hidden></p>
+      </div>
+
+      <div class="auto-coluna-dir">
+        <label class="auto-label">Relatorios gerados</label>
+        <div class="auto-arquivos-lista" id="grHistoricoLista">
+          <p class="agenda-vazia">Nenhum relatorio ainda.</p>
+        </div>
+
+        <div id="grPreviewWrap" hidden>
+          <label class="auto-label">Pre-visualizacao</label>
+          <iframe id="grPreviewIframe" style="width:100%;height:480px;border:1px solid #333;border-radius:8px;background:#fff;"></iframe>
+          <button type="button" id="grBaixarBtn" style="margin-top:8px;">Baixar HTML</button>
+        </div>
       </div>
     </div>
 
