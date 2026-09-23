@@ -65,6 +65,7 @@ const tabBtnAgenda = document.getElementById('tabBtnAgenda');
 const tabBtnWhatsapp = document.getElementById('tabBtnWhatsapp');
 const tabBtnCrm = document.getElementById('tabBtnCrm');
 const tabBtnAuto = document.getElementById('tabBtnAuto');
+const tabBtnFollowUp = document.getElementById('tabBtnFollowUp');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
 const tabBtnGeradorRelatorios = document.getElementById('tabBtnGeradorRelatorios');
 const tabBtnIntegracoes = document.getElementById('tabBtnIntegracoes');
@@ -75,6 +76,7 @@ const tabAgenda = document.getElementById('tabAgenda');
 const tabWhatsapp = document.getElementById('tabWhatsapp');
 const tabCrm = document.getElementById('tabCrm');
 const tabAuto = document.getElementById('tabAuto');
+const tabFollowUp = document.getElementById('tabFollowUp');
 const tabRelatorios = document.getElementById('tabRelatorios');
 const tabGeradorRelatorios = document.getElementById('tabGeradorRelatorios');
 const tabIntegracoes = document.getElementById('tabIntegracoes');
@@ -316,6 +318,7 @@ function mostrarApp() {
   tabBtnWhatsapp.hidden = !abaLiberada('whatsapp');
   tabBtnCrm.hidden = !abaLiberada('crm');
   tabBtnAuto.hidden = !abaLiberada('auto');
+  tabBtnFollowUp.hidden = !abaLiberada('followUp');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
   tabBtnGeradorRelatorios.hidden = !abaLiberada('geradorRelatorios');
   tabBtnIntegracoes.hidden = !abaLiberada('integracoes');
@@ -324,7 +327,7 @@ function mostrarApp() {
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
     const primeiraLiberada = [
       ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm],
-      ['auto', tabBtnAuto], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
+      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
     ].find(([, btn]) => !btn.hidden);
     if (primeiraLiberada) mudarAba(primeiraLiberada[0]);
   }
@@ -1793,6 +1796,7 @@ function mudarAba(aba) {
   tabWhatsapp.hidden = aba !== 'whatsapp';
   tabCrm.hidden = aba !== 'crm';
   tabAuto.hidden = aba !== 'auto';
+  tabFollowUp.hidden = aba !== 'followUp';
   tabRelatorios.hidden = aba !== 'relatorios';
   tabGeradorRelatorios.hidden = aba !== 'geradorRelatorios';
   tabIntegracoes.hidden = aba !== 'integracoes';
@@ -1803,6 +1807,7 @@ function mudarAba(aba) {
   tabBtnWhatsapp.classList.toggle('active', aba === 'whatsapp');
   tabBtnCrm.classList.toggle('active', aba === 'crm');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
+  tabBtnFollowUp.classList.toggle('active', aba === 'followUp');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
   tabBtnGeradorRelatorios.classList.toggle('active', aba === 'geradorRelatorios');
   tabBtnIntegracoes.classList.toggle('active', aba === 'integracoes');
@@ -1818,6 +1823,8 @@ function mudarAba(aba) {
     carregarCrm();
   } else if (aba === 'auto') {
     carregarConfigAutoAtendimento();
+  } else if (aba === 'followUp') {
+    carregarFollowUp();
   } else if (aba === 'relatorios') {
     carregarDestinatariosRelatorios();
     carregarConfigsRelatorios();
@@ -1842,6 +1849,7 @@ tabBtnCrm.addEventListener('click', () => mudarAba('crm'));
 tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnGeradorRelatorios.addEventListener('click', () => mudarAba('geradorRelatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
+tabBtnFollowUp.addEventListener('click', () => mudarAba('followUp'));
 tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
 tabBtnClientes.addEventListener('click', () => mudarAba('clientes'));
 tabBtnPropostasAdmin.addEventListener('click', () => mudarAba('propostasAdmin'));
@@ -3156,6 +3164,306 @@ autoArquivoEnviar.addEventListener('click', async () => {
     autoArquivoEnviar.disabled = false;
   }
 });
+
+// ---------- Follow Up (reengajamento automatico de leads parados, coluna "follow_up" do CRM) ----------
+
+const fuAtivo = document.getElementById('fuAtivo');
+const fuAtivoLabel = document.getElementById('fuAtivoLabel');
+const fuPromptGeral = document.getElementById('fuPromptGeral');
+const fuSalvar = document.getElementById('fuSalvar');
+const fuErro = document.getElementById('fuErro');
+const fuEtapasLista = document.getElementById('fuEtapasLista');
+
+fuAtivo.addEventListener('change', () => {
+  fuAtivoLabel.textContent = fuAtivo.checked ? 'Ativado' : 'Desativado';
+});
+
+async function carregarFollowUp() {
+  fuErro.hidden = true;
+  try {
+    const res = await fetch('/api/follow-up/config', { headers: { 'x-app-password': appPassword } });
+    const config = await res.json();
+    if (!res.ok) throw new Error(config.erro || 'erro desconhecido');
+    fuAtivo.checked = !!config.ativo;
+    fuAtivoLabel.textContent = config.ativo ? 'Ativado' : 'Desativado';
+    fuPromptGeral.value = config.promptGeral || '';
+  } catch (err) {
+    fuErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
+    fuErro.hidden = false;
+  }
+  carregarEtapasFollowUp();
+}
+
+fuSalvar.addEventListener('click', async () => {
+  fuErro.hidden = true;
+  const ativo = fuAtivo.checked;
+  const promptGeral = fuPromptGeral.value.trim();
+  if (ativo && !promptGeral) {
+    fuErro.textContent = 'Pra ativar, escreve o script geral de como a IA deve se comportar.';
+    fuErro.hidden = false;
+    return;
+  }
+  fuSalvar.disabled = true;
+  try {
+    const res = await fetch('/api/follow-up/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ ativo, promptGeral }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    addBubble(`Configurações do Follow Up salvas${ativo ? '' : ' (desativado)'}.`, 'system');
+  } catch (err) {
+    fuErro.textContent = err.message;
+    fuErro.hidden = false;
+  } finally {
+    fuSalvar.disabled = false;
+  }
+});
+
+async function carregarEtapasFollowUp() {
+  fuEtapasLista.textContent = '';
+  const carregando = document.createElement('p');
+  carregando.className = 'agenda-vazia';
+  carregando.textContent = 'Carregando...';
+  fuEtapasLista.appendChild(carregando);
+
+  try {
+    const res = await fetch('/api/follow-up/etapas', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    fuEtapasLista.textContent = '';
+    for (const etapa of data.etapas || []) {
+      fuEtapasLista.appendChild(criarCardEtapaFollowUp(etapa));
+    }
+  } catch (err) {
+    fuEtapasLista.textContent = '';
+    const erro = document.createElement('p');
+    erro.className = 'agenda-vazia';
+    erro.textContent = `Nao consegui carregar as tentativas: ${err.message}`;
+    fuEtapasLista.appendChild(erro);
+  }
+}
+
+function criarCardEtapaFollowUp(etapa) {
+  const card = document.createElement('div');
+  card.className = 'auto-aviso relatorio-config-card';
+
+  const titulo = document.createElement('div');
+  titulo.className = 'relatorio-config-titulo';
+  titulo.textContent = `Tentativa ${etapa.ordem}`;
+  card.appendChild(titulo);
+
+  const toggleRow = document.createElement('div');
+  toggleRow.className = 'auto-toggle-row';
+  const switchLabel = document.createElement('label');
+  switchLabel.className = 'auto-switch';
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = !!etapa.ativo;
+  const track = document.createElement('span');
+  track.className = 'auto-switch-track';
+  const thumb = document.createElement('span');
+  thumb.className = 'auto-switch-thumb';
+  track.appendChild(thumb);
+  switchLabel.appendChild(checkbox);
+  switchLabel.appendChild(track);
+  toggleRow.appendChild(switchLabel);
+  const statusLabel = document.createElement('span');
+  statusLabel.textContent = etapa.ativo ? 'Ativado' : 'Desativado';
+  toggleRow.appendChild(statusLabel);
+  card.appendChild(toggleRow);
+  checkbox.addEventListener('change', () => {
+    statusLabel.textContent = checkbox.checked ? 'Ativado' : 'Desativado';
+  });
+
+  const rotuloDias = document.createElement('label');
+  rotuloDias.className = 'auto-label';
+  rotuloDias.textContent = 'Quantos dias depois de entrar em Follow Up';
+  card.appendChild(rotuloDias);
+  const inputDias = document.createElement('input');
+  inputDias.type = 'number';
+  inputDias.min = '1';
+  inputDias.className = 'relatorio-config-select';
+  inputDias.value = etapa.dias;
+  card.appendChild(inputDias);
+
+  const rotuloScript = document.createElement('label');
+  rotuloScript.className = 'auto-label';
+  rotuloScript.textContent = 'Script dessa tentativa (opcional - some ao script geral)';
+  card.appendChild(rotuloScript);
+  const textareaScript = document.createElement('textarea');
+  textareaScript.placeholder = 'Ex: Pergunte se ainda tem interesse em agendar e ofereça mandar mais informações...';
+  textareaScript.value = etapa.prompt || '';
+  textareaScript.style.minHeight = '80px';
+  card.appendChild(textareaScript);
+
+  const erroCard = document.createElement('p');
+  erroCard.className = 'agenda-erro';
+  erroCard.hidden = true;
+  card.appendChild(erroCard);
+
+  const salvarBtn = document.createElement('button');
+  salvarBtn.type = 'button';
+  salvarBtn.textContent = 'Salvar tentativa';
+  salvarBtn.addEventListener('click', async () => {
+    erroCard.hidden = true;
+    const dias = Number(inputDias.value);
+    if (!dias || dias <= 0) {
+      erroCard.textContent = 'Numero de dias precisa ser maior que zero.';
+      erroCard.hidden = false;
+      return;
+    }
+    salvarBtn.disabled = true;
+    try {
+      const res = await fetch(`/api/follow-up/etapas/${etapa.ordem}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ dias, ativo: checkbox.checked, prompt: textareaScript.value.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+      salvarBtn.textContent = 'Salvo ✓';
+      setTimeout(() => { salvarBtn.textContent = 'Salvar tentativa'; }, 1200);
+    } catch (err) {
+      erroCard.textContent = err.message;
+      erroCard.hidden = false;
+    } finally {
+      salvarBtn.disabled = false;
+    }
+  });
+  card.appendChild(salvarBtn);
+
+  // ---------- anexos dessa tentativa (imagem/pdf/video mandados junto da mensagem) ----------
+  const arquivosWrap = document.createElement('div');
+  arquivosWrap.className = 'auto-arquivos-wrap';
+  const arquivosHeader = document.createElement('div');
+  arquivosHeader.className = 'auto-arquivos-header';
+  arquivosHeader.textContent = 'Anexos dessa tentativa (imagem, PDF ou video)';
+  arquivosWrap.appendChild(arquivosHeader);
+
+  const uploadRow = document.createElement('div');
+  uploadRow.className = 'auto-upload-row';
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/*,application/pdf,video/*';
+  fileInput.hidden = true;
+  const escolherBtn = document.createElement('button');
+  escolherBtn.type = 'button';
+  escolherBtn.textContent = 'Escolher arquivo';
+  const nomeSpan = document.createElement('span');
+  nomeSpan.textContent = 'Nenhum arquivo escolhido';
+  escolherBtn.addEventListener('click', () => fileInput.click());
+  let arquivoSelecionado = null;
+  fileInput.addEventListener('change', () => {
+    arquivoSelecionado = fileInput.files[0] || null;
+    nomeSpan.textContent = arquivoSelecionado ? arquivoSelecionado.name : 'Nenhum arquivo escolhido';
+  });
+  uploadRow.appendChild(fileInput);
+  uploadRow.appendChild(escolherBtn);
+  uploadRow.appendChild(nomeSpan);
+  arquivosWrap.appendChild(uploadRow);
+
+  const enviarArquivoBtn = document.createElement('button');
+  enviarArquivoBtn.type = 'button';
+  enviarArquivoBtn.textContent = 'Enviar arquivo';
+  arquivosWrap.appendChild(enviarArquivoBtn);
+
+  const listaArquivos = document.createElement('div');
+  listaArquivos.className = 'auto-arquivos-lista';
+  arquivosWrap.appendChild(listaArquivos);
+  card.appendChild(arquivosWrap);
+
+  async function carregarArquivosDaEtapa() {
+    listaArquivos.textContent = '';
+    const carregando = document.createElement('p');
+    carregando.className = 'agenda-vazia';
+    carregando.textContent = 'Carregando...';
+    listaArquivos.appendChild(carregando);
+    try {
+      const res = await fetch(`/api/follow-up/etapas/${etapa.ordem}/arquivos`, { headers: { 'x-app-password': appPassword } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+      listaArquivos.textContent = '';
+      const lista = data.arquivos || [];
+      if (!lista.length) {
+        const vazio = document.createElement('p');
+        vazio.className = 'agenda-vazia';
+        vazio.textContent = 'Nenhum anexo cadastrado ainda.';
+        listaArquivos.appendChild(vazio);
+        return;
+      }
+      for (const arq of lista) {
+        const item = document.createElement('div');
+        item.className = 'auto-arquivo-item';
+        const info = document.createElement('div');
+        info.className = 'auto-arquivo-info';
+        const nome = document.createElement('div');
+        nome.className = 'auto-arquivo-nome';
+        nome.textContent = arq.nome_arquivo;
+        const detalhe = document.createElement('div');
+        detalhe.className = 'auto-arquivo-detalhe';
+        detalhe.textContent = formatarTamanho(Number(arq.tamanho));
+        info.appendChild(nome);
+        info.appendChild(detalhe);
+        item.appendChild(info);
+        const apagarBtn = document.createElement('button');
+        apagarBtn.type = 'button';
+        apagarBtn.className = 'agenda-evento-cancelar';
+        apagarBtn.textContent = '✕';
+        apagarBtn.title = 'Apagar anexo';
+        apagarBtn.addEventListener('click', async () => {
+          if (!confirm(`Apagar "${arq.nome_arquivo}"?`)) return;
+          try {
+            await fetch(`/api/follow-up/etapas/${etapa.ordem}/arquivos/${arq.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+            carregarArquivosDaEtapa();
+          } catch (err) {
+            addBubble(`Erro apagando anexo: ${err.message}`, 'system');
+          }
+        });
+        item.appendChild(apagarBtn);
+        listaArquivos.appendChild(item);
+      }
+    } catch (err) {
+      listaArquivos.textContent = '';
+      const erro = document.createElement('p');
+      erro.className = 'agenda-vazia';
+      erro.textContent = `Nao consegui carregar os anexos: ${err.message}`;
+      listaArquivos.appendChild(erro);
+    }
+  }
+
+  enviarArquivoBtn.addEventListener('click', async () => {
+    if (!arquivoSelecionado) { addBubble('Escolhe um arquivo primeiro.', 'system'); return; }
+    enviarArquivoBtn.disabled = true;
+    try {
+      const base64 = await arquivoParaBase64(arquivoSelecionado);
+      const res = await fetch(`/api/follow-up/etapas/${etapa.ordem}/arquivos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({
+          nomeArquivo: arquivoSelecionado.name,
+          mediaType: arquivoSelecionado.type || 'application/octet-stream',
+          base64,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+      arquivoSelecionado = null;
+      fileInput.value = '';
+      nomeSpan.textContent = 'Nenhum arquivo escolhido';
+      carregarArquivosDaEtapa();
+    } catch (err) {
+      addBubble(`Erro enviando anexo: ${err.message}`, 'system');
+    } finally {
+      enviarArquivoBtn.disabled = false;
+    }
+  });
+
+  carregarArquivosDaEtapa();
+
+  return card;
+}
 
 // ---------- Relatorios programados ----------
 
@@ -4630,7 +4938,7 @@ async function selecionarCliente(id, nome) {
   tabsAviso.textContent = 'Nenhuma marcada = tudo liberado (padrão). Marque só pra restringir.';
   clienteIntegracoesPainel.appendChild(tabsAviso);
 
-  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações' };
+  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações' };
   const tabsForm = document.createElement('div');
   tabsForm.className = 'cliente-form';
   const tabsCheckboxes = {};

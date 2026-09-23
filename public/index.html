@@ -71,6 +71,7 @@
       <button type="button" class="tab-btn" id="tabBtnWhatsapp" data-tab="whatsapp">WhatsApp</button>
       <button type="button" class="tab-btn" id="tabBtnCrm" data-tab="crm">CRM</button>
       <button type="button" class="tab-btn" id="tabBtnAuto" data-tab="auto">Auto Atendimento</button>
+      <button type="button" class="tab-btn" id="tabBtnFollowUp" data-tab="followUp">Follow Up</button>
       <button type="button" class="tab-btn" id="tabBtnRelatorios" data-tab="relatorios">Relatórios</button>
       <button type="button" class="tab-btn" id="tabBtnGeradorRelatorios" data-tab="geradorRelatorios">Gerador de Relatórios</button>
       <button type="button" class="tab-btn" id="tabBtnIntegracoes" data-tab="integracoes">Integrações</button>
@@ -499,6 +500,40 @@
       <div class="auto-coluna-dir">
         <label class="auto-label">Prompt de treinamento (como ela deve atender esses contatos)</label>
         <textarea id="autoPrompt" placeholder="Ex: Voce e a recepcionista virtual da Clinica X. Seja cordial, colete nome e motivo do contato, e ofereça horarios disponiveis pra agendar consulta quando pedido..."></textarea>
+      </div>
+    </div>
+
+    <div class="window-body tab-auto" id="tabFollowUp" hidden>
+      <div class="auto-coluna-esq">
+        <div class="auto-aviso">
+          Quando voce arrasta um card do CRM pra coluna "Follow Up", esse agente assume 100% da
+          conversa daquele contato e passa a tentar reengajar ele sozinho, na cadencia configurada
+          abaixo - o Auto Atendimento normal para de responder esse contato enquanto ele estiver
+          nessa coluna. Se o lead demonstrar interesse de verdade em qualquer resposta, o card
+          volta sozinho pra "Em Atendimento" pra continuar manualmente. Se nenhuma tentativa
+          funcionar, depois da ultima ele vai pra "Perdido / Não respondeu".
+        </div>
+
+        <div class="auto-toggle-row">
+          <label class="auto-switch">
+            <input type="checkbox" id="fuAtivo" />
+            <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+          </label>
+          <span id="fuAtivoLabel">Desativado</span>
+        </div>
+
+        <label class="auto-label">Script geral (como a IA deve se comportar em todo acompanhamento)</label>
+        <textarea id="fuPromptGeral" placeholder="Ex: Voce e a recepcionista virtual da Clinica X tentando retomar contato com leads que pararam de responder. Seja cordial e nada insistente, lembre educadamente do assunto que estava sendo tratado e pergunte se ainda tem interesse..."></textarea>
+
+        <button type="button" id="fuSalvar">Salvar Configurações</button>
+        <p class="agenda-erro" id="fuErro" hidden></p>
+      </div>
+
+      <div class="auto-coluna-dir">
+        <label class="auto-label">Tentativas de reengajamento (cadencia + script + anexos de cada uma)</label>
+        <div id="fuEtapasLista">
+          <p class="agenda-vazia">Carregando...</p>
+        </div>
       </div>
     </div>
 

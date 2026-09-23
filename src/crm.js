@@ -20,6 +20,7 @@ eventosCrm.setMaxListeners(50); // cada aba do painel aberta conta como 1 listen
 export const ETAPAS = [
   { id: 'novo_lead', nome: 'Novo Lead' },
   { id: 'em_atendimento', nome: 'Em Atendimento' },
+  { id: 'follow_up', nome: 'Follow Up' },
   { id: 'agendado', nome: 'Agendado' },
   { id: 'compareceu', nome: 'Compareceu' },
   { id: 'perdido', nome: 'Perdido / Não respondeu' },
@@ -206,6 +207,19 @@ export async function alternarAutoAtendimento(tenantId, id, pausado) {
   await tabelasProntas;
   await pool.query(`UPDATE crm_contatos SET auto_pausado = $1 WHERE id = $2 AND tenant_id = $3`, [!!pausado, id, tenantId]);
   eventosCrm.emit('contato-atualizado', { tenantId, contatoId: id });
+}
+
+// consultado pelo webhook (server.js) pra saber a etapa atual do contato antes de decidir se
+// quem responde e o auto-atendimento normal ou o Follow Up (ver processarMensagemEvolution) -
+// null se esse numero/instancia ainda nao tem card nenhum
+export async function obterContato(tenantId, numero, instancia) {
+  if (!pool) return null;
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT id, etapa, auto_pausado FROM crm_contatos WHERE tenant_id = $1 AND numero = $2 AND instancia = $3`,
+    [tenantId, numero, instancia],
+  );
+  return rows[0] || null;
 }
 
 // consultado pelo auto-atendimento (autoAtendimento.js/server.js) antes de gerar qualquer

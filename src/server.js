@@ -26,6 +26,7 @@ import * as tenantConfig from './tenantConfig.js';
 import * as metaAds from './metaads.js';
 import * as propostas from './propostas.js';
 import * as relatorioGerador from './relatorioGerador.js';
+import * as followUp from './followUp.js';
 
 const execAsync = promisify(exec);
 
@@ -57,6 +58,7 @@ const TAB_ROTA_PREFIXO = {
   whatsapp: '/api/whatsapp',
   crm: '/api/crm',
   auto: '/api/auto-atendimento',
+  followUp: '/api/follow-up',
   relatorios: '/api/relatorios',
   geradorRelatorios: '/api/gerador-relatorios',
   integracoes: '/api/integracoes',
@@ -923,6 +925,30 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
     return;
   }
 
+  // se o card desse contato estiver na coluna "Follow Up" do CRM, quem responde e o motor de
+  // Follow Up (followUp.js) - substitui 100% o auto-atendimento normal enquanto estiver nessa
+  // coluna, pra nunca ter os dois motores respondendo a mesma conversa ao mesmo tempo. So volta
+  // a usar o auto-atendimento normal se o lead demonstrar interesse (o proprio followUp.js move
+  // o card pra "em_atendimento" nesse caso) ou for movido manualmente pra outra coluna.
+  const cardCrm = await crm.obterContato(tenantId, numero, instanciaDoWebhook).catch(() => null);
+  if (cardCrm?.etapa === 'follow_up') {
+    if (cardCrm.auto_pausado) return;
+    try {
+      const resultado = await Promise.race([
+        followUp.processarMensagem(tenantId, cardCrm.id, numero, instanciaDoWebhook, { texto, tipo }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Demorou demais pra gerar uma resposta (mais de 55s)')), 55000)),
+      ]);
+      if (!resultado) return;
+      await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, resultado.texto);
+      crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'text', texto: resultado.texto })
+        .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
+    } catch (err) {
+      console.error('Erro no follow up via Evolution/WhatsApp:', err);
+      await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, 'Desculpa, tive um probleminha técnico aqui agora. Pode mandar sua mensagem de novo?').catch(() => {});
+    }
+    return;
+  }
+
   // qualquer outro contato (nao o dono) - so responde se o auto-atendimento estiver ativo
   // NESSA instancia especifica; usa um motor totalmente separado (prompt/historico/ferramentas
   // proprios), nunca a conversa pessoal da Lumia
@@ -1155,6 +1181,77 @@ app.delete('/api/auto-atendimento/arquivos/:id', async (req, res) => {
   }
 });
 
+// ---------- Follow Up (reengajamento automatico de leads parados, na coluna "follow_up" do CRM) ----------
+
+app.get('/api/follow-up/config', async (req, res) => {
+  try {
+    res.json(await followUp.obterConfig(req.tenantId));
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/follow-up/config', async (req, res) => {
+  const { ativo, promptGeral } = req.body || {};
+  if (ativo && !promptGeral) {
+    return res.status(400).json({ erro: 'pra ativar, escreva o script geral de como a IA deve se comportar' });
+  }
+  try {
+    await followUp.salvarConfig(req.tenantId, { ativo, promptGeral });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/follow-up/etapas', async (req, res) => {
+  try {
+    res.json({ etapas: await followUp.listarEtapas(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/follow-up/etapas/:ordem', async (req, res) => {
+  const { dias, ativo, prompt } = req.body || {};
+  try {
+    await followUp.salvarEtapa(req.tenantId, req.params.ordem, { dias, ativo, prompt });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/follow-up/etapas/:ordem/arquivos', async (req, res) => {
+  try {
+    res.json({ arquivos: await followUp.listarArquivos(req.tenantId, req.params.ordem) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/follow-up/etapas/:ordem/arquivos', async (req, res) => {
+  const { nomeArquivo, mediaType, base64 } = req.body || {};
+  if (!nomeArquivo || !mediaType || !base64) {
+    return res.status(400).json({ erro: 'nomeArquivo, mediaType e base64 sao obrigatorios' });
+  }
+  try {
+    const id = await followUp.salvarArquivo(req.tenantId, req.params.ordem, nomeArquivo, Buffer.from(base64, 'base64'), mediaType);
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/follow-up/etapas/:ordem/arquivos/:id', async (req, res) => {
+  try {
+    await followUp.apagarArquivo(req.tenantId, Number(req.params.id));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 // ---------- Relatorios programados (aba "Relatorios") ----------
 
 app.get('/api/relatorios/destinatarios', async (req, res) => {
@@ -1354,7 +1451,15 @@ app.post('/api/crm/contatos/:id/etapa', async (req, res) => {
   const { etapa } = req.body || {};
   if (!etapa) return res.status(400).json({ erro: 'etapa e obrigatoria' });
   try {
-    await crm.moverEtapa(req.tenantId, Number(req.params.id), etapa);
+    const id = Number(req.params.id);
+    await crm.moverEtapa(req.tenantId, id, etapa);
+    // entrando na coluna Follow Up, comeca a cadencia de tentativas do zero; saindo dela (pra
+    // qualquer outra coluna), para o agendador de mandar mais tentativas pra esse contato
+    if (etapa === 'follow_up') {
+      await followUp.iniciarAcompanhamento(req.tenantId, id);
+    } else {
+      await followUp.encerrarAcompanhamento(req.tenantId, id);
+    }
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -1582,6 +1687,10 @@ iniciarSchedulerLembretes();
 // acima) - cada tipo so e enviado automaticamente se estiver "Ativado" na aba; por padrao vem
 // desativado, entao reativar esse scheduler geral e seguro.
 relatoriosProgramados.iniciarSchedulerRelatoriosProgramados();
+// Scheduler do Follow Up (aba "Follow Up") - manda as tentativas de reengajamento configuradas
+// pra cada contato na coluna "follow_up" do CRM; por padrao vem desativado por tenant
+// (follow_up_config.ativo), entao reativar esse scheduler geral e seguro.
+followUp.iniciarSchedulerFollowUp();
 
 // bloqueia assinantes do Gerador de Propostas E clientes da Lumia cujo periodo contratado
 // (1-12 meses) venceu - roda no boot e depois a cada 30min; vitalicio (sem data de expiracao)
