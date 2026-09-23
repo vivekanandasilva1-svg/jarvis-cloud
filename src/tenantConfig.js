@@ -70,6 +70,14 @@ async function garantirTabelas() {
   // cliente antigo). Array JSON com as chaves habilitadas quando o admin restringe algo,
   // ex: ["painel","agenda","crm"]. Ver TABS_VALIDAS abaixo pra lista completa de chaves.
   await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS tabs_habilitadas JSONB;`);
+  // marca (nome + logo) que aparece no HTML gerado pelo Gerador de Relatorios - permite ao
+  // tenant colocar a PROPRIA marca no lugar de "Lumia", pra caso ele revenda essa ferramenta
+  // pros proprios clientes dele (mesma logica do branding do Gerador de Propostas, so que em
+  // campos proprios porque sao produtos diferentes). NULL/vazio = usa o padrao "Lumia".
+  // Logo fica guardada como data URI (base64) direto na coluna - simples e suficiente pro
+  // tamanho de um logo (nao tem storage de arquivo/S3 nesse projeto).
+  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS relatorio_brand_name TEXT;`);
+  await pool.query(`ALTER TABLE tenant_config ADD COLUMN IF NOT EXISTS relatorio_brand_logo TEXT;`);
 }
 
 // chaves == os mesmos "data-tab" usados em index.html/app.js - se um dia adicionar aba nova,
@@ -263,6 +271,29 @@ export async function salvarMarcaProposta(tenantId, { brandName, brandSubtitle, 
      ON CONFLICT (tenant_id) DO UPDATE SET
        proposta_brand_name = $2, proposta_brand_subtitle = $3, proposta_logo_text = $4, proposta_custom_domain = $5, atualizado_em = now()`,
     [tenantId, brandName || null, brandSubtitle || null, logoText || null, customDomain || null],
+  );
+}
+
+// ---------- marca do Gerador de Relatorios (nome + logo que aparecem no HTML gerado) ----------
+
+export async function obterMarcaRelatorio(tenantId) {
+  if (!pool) return { nome: null, logo: null };
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    'SELECT relatorio_brand_name, relatorio_brand_logo FROM tenant_config WHERE tenant_id = $1',
+    [tenantId],
+  );
+  return { nome: rows[0]?.relatorio_brand_name || null, logo: rows[0]?.relatorio_brand_logo || null };
+}
+
+export async function salvarMarcaRelatorio(tenantId, { nome, logo }) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  await pool.query(
+    `INSERT INTO tenant_config (tenant_id, relatorio_brand_name, relatorio_brand_logo, atualizado_em)
+     VALUES ($1, $2, $3, now())
+     ON CONFLICT (tenant_id) DO UPDATE SET relatorio_brand_name = $2, relatorio_brand_logo = $3, atualizado_em = now()`,
+    [tenantId, nome || null, logo || null],
   );
 }
 

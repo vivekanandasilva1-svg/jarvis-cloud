@@ -14,6 +14,7 @@ import { pool } from './db.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
 import * as metaAds from './metaads.js';
 import { extrairTextoWord, extrairTextoExcel } from './leitorDocumentos.js';
+import { obterMarcaRelatorio } from './tenantConfig.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = 'claude-sonnet-5';
@@ -145,6 +146,11 @@ export async function buscarDadosAutomatico(tenantId, { accountId, from, to }) {
   const videoPlay = num(linha.video_play_actions?.[0]?.value);
   const video50 = num(linha.video_p50_watched_actions?.[0]?.value);
   const video95 = num(linha.video_p95_watched_actions?.[0]?.value);
+  const videoRows = videoPlay > 0 ? [
+    { label: 'Iniciaram o vídeo', value: videoPlay },
+    { label: 'Assistiram 50%', value: video50 },
+    { label: 'Assistiram até o fim (95%+)', value: video95 },
+  ] : null;
 
   return {
     clienteNome: conta?.empresa || conta?.name || 'Cliente',
@@ -159,10 +165,7 @@ export async function buscarDadosAutomatico(tenantId, { accountId, from, to }) {
     frequencia: num(linha.frequency),
     cpm: num(linha.cpm),
     ctr: num(linha.ctr),
-    temVideo: videoPlay > 0,
-    videoInicio: videoPlay,
-    video50,
-    video95,
+    videoRows,
   };
 }
 
@@ -191,6 +194,18 @@ const TOOL_DADOS_E_ANALISE = {
       frequencia: { type: 'number', description: 'Frequencia media' },
       cpm: { type: 'number', description: 'CPM medio em reais' },
       ctr: { type: 'number', description: 'CTR em porcentagem (ex: 2.35 pra 2.35%)' },
+      retencaoVideo: {
+        type: 'array',
+        description: 'Se os arquivos tiverem dado de retencao/visualizacao de video, uma linha por marco reportado, NA ORDEM EM QUE APARECEM (ex: se a imagem mostra "Visualizacoes 75%: 3405" e "Completaram 100%: 2585", copie os rotulos exatamente como aparecem). Omita se nao houver dado de video.',
+        items: {
+          type: 'object',
+          properties: {
+            label: { type: 'string', description: 'Rotulo exatamente como aparece na fonte (ex: "Visualizacoes 75%", "Completaram o video")' },
+            valor: { type: 'number' },
+          },
+          required: ['label', 'valor'],
+        },
+      },
       analiseMetricas: { type: 'string', description: 'Paragrafo (3 a 5 frases) em portugues, analisando os resultados apresentados' },
       conclusaoEstrategica: { type: 'string', description: 'Paragrafo (3 a 5 frases) em portugues com a conclusao estrategica do periodo' },
       sugestoes: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 3, description: 'Exatamente 3 sugestoes curtas e acionaveis de proximos passos' },
@@ -258,7 +273,12 @@ async function extrairDadosEAnaliseDeArquivos({ arquivos, instrucoes }) {
 
   const toolUse = resp.content.find((b) => b.type === 'tool_use');
   if (!toolUse) throw new Error('a IA nao conseguiu extrair os dados dos arquivos');
-  return toolUse.input;
+  const dados = toolUse.input;
+  dados.videoRows = Array.isArray(dados.retencaoVideo) && dados.retencaoVideo.length
+    ? dados.retencaoVideo.map((r) => ({ label: r.label, value: r.valor }))
+    : null;
+  delete dados.retencaoVideo;
+  return dados;
 }
 
 async function gerarAnaliseComIA({ dados, instrucoes }) {
@@ -308,19 +328,65 @@ function fmtPct(v) {
   return `${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 }
 
-function montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride }) {
+// icones proprios (nao usa lib externa tipo lucide, senao o HTML baixado dependeria de CDN e
+// quebraria offline) - SVGs simples, so o stroke muda de cor via currentColor
+const ICONES = {
+  sparkles: '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Z"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
+  click: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 9 5 12 1.8-5.2L21 14 9 9Z"/><path d="M7.2 7.2 5.8 5.8M5 12H3m9-9v2M6.5 6.5 5 5"/></svg>',
+  activity: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>',
+  trending: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>',
+  bars: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 20V10M12 20V4M18 20v-7"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>',
+};
+
+// logo padrao (petalas giratorias, igual ao mark original da Lumia) - so entra quando o tenant
+// nao subiu um logo proprio (ver marca.logo)
+const LOGO_PADRAO_SVG = `<svg viewBox="0 0 100 100" width="40" height="40">
+  <defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="var(--accent)"/><stop offset="100%" stop-color="var(--accent2)"/>
+  </linearGradient></defs>
+  ${[0, 60, 120, 180, 240, 300].map((r) => `<path d="M50 50 L50 20 Q70 20 80 40 L50 50" fill="url(#lg)" opacity="0.95" transform="rotate(${r} 50 50)"/>`).join('')}
+  <circle cx="50" cy="50" r="12" fill="var(--panel)"/>
+</svg>`;
+
+// painel da direita: retencao de video quando o anuncio tem video, senao um fallback generico
+// de engajamento (cliques -> resultado, com taxa de conversao estimada) - assim o relatorio
+// nunca fica com um painel vazio so porque a campanha nao usou video
+function montarPainelDireito(dados) {
+  if (Array.isArray(dados.videoRows) && dados.videoRows.length) {
+    return { titulo: 'Retenção de Vídeo', rows: dados.videoRows };
+  }
+  const tipo = dados.tipoResultado || 'Resultados';
+  const taxa = dados.cliques ? (Number(dados.resultados || 0) / dados.cliques) * 100 : null;
+  const rows = [
+    { label: 'Cliques no Link', value: dados.cliques },
+    { label: tipo, value: dados.resultados },
+  ];
+  if (taxa != null) rows.push({ label: `Taxa de Conversão Link/${tipo}`, value: taxa, isPct: true });
+  return { titulo: 'Engajamento Estimado', rows };
+}
+
+function montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride, marca }) {
   const clienteNome = esc(clienteNomeOverride || dados.clienteNome || 'Cliente');
   const periodo = esc(dados.periodo || '-');
   const sugestoes = (analise.sugestoes || []).slice(0, 3);
-  const videoBlock = dados.temVideo ? `
-        <section class="panel">
-          <h3 class="panel-title"><span class="bar"></span>Retencao de Video</h3>
-          <div class="video-rows">
-            <div class="video-row"><span>Iniciaram o video</span><b>${fmtNum(dados.videoInicio)}</b></div>
-            <div class="video-row"><span>Assistiram 50%</span><b>${fmtNum(dados.video50)}</b></div>
-            <div class="video-row"><span>Assistiram ate o fim (95%+)</span><b>${fmtNum(dados.video95)}</b></div>
-          </div>
-        </section>` : '';
+  const brandNome = esc(marca?.nome || 'Lumia');
+  const logoHtml = marca?.logo
+    ? `<img src="${esc(marca.logo)}" alt="${brandNome}" style="width:40px;height:40px;border-radius:10px;object-fit:cover;" />`
+    : LOGO_PADRAO_SVG;
+
+  const painelDir = montarPainelDireito(dados);
+  const maiorValor = Math.max(1, ...painelDir.rows.map((r) => Number(r.value) || 0));
+  const painelDirRows = painelDir.rows.map((r) => {
+    const largura = Math.max(6, Math.min(100, ((Number(r.value) || 0) / maiorValor) * 100));
+    const valorFmt = r.isPct ? fmtPct(r.value) : fmtNum(r.value);
+    return `
+          <div class="row-item">
+            <div class="row-top"><span>${esc(r.label)}</span><b>${valorFmt}</b></div>
+            <div class="row-track"><div class="row-fill" style="width:${largura}%"></div></div>
+          </div>`;
+  }).join('');
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -344,11 +410,16 @@ function montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride }) {
     display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px;
     border-bottom: 1px solid ${tema.accent}33; padding-bottom: 24px; margin-bottom: 32px;
   }
-  .logo { font-size: 26px; font-weight: 900; letter-spacing: -0.03em; }
-  .logo span { color: var(--accent); }
-  .sub { font-size: 11px; text-transform: uppercase; letter-spacing: 0.3em; color: var(--muted); margin-top: 2px; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-name { font-size: 26px; font-weight: 900; letter-spacing: -0.03em; line-height: 1; }
+  .brand-name span { color: var(--accent); }
+  .sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.35em; color: var(--muted); margin-top: 4px; }
   .titulo { text-align: right; }
-  .titulo h1 { font-size: 22px; margin: 4px 0; font-weight: 900; }
+  .excelencia { display: flex; align-items: center; justify-content: flex-end; gap: 6px; color: var(--accent);
+    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.25em; margin-bottom: 6px; }
+  .excelencia svg { width: 13px; height: 13px; }
+  .titulo h1 { font-size: 22px; margin: 4px 0 10px; font-weight: 900; }
+  .titulo h1 span { background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .pill { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
     background: ${tema.accent}1a; color: var(--accent); border: 1px solid ${tema.accent}44; border-radius: 999px;
     padding: 4px 12px; margin-left: 6px; }
@@ -362,27 +433,40 @@ function montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride }) {
   .panel-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.15em; margin: 0 0 20px; display: flex; align-items: center; gap: 10px; }
   .bar { width: 24px; height: 4px; border-radius: 4px; background: var(--accent); display: inline-block; }
   .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-  .metric span { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
-  .metric b { font-size: 18px; }
+  .metric { display: flex; flex-direction: column; gap: 8px; }
+  .metric .icon-row { display: flex; align-items: center; gap: 8px; }
+  .icon-badge { width: 26px; height: 26px; border-radius: 8px; background: ${tema.accent}18; color: var(--accent);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .icon-badge svg { width: 14px; height: 14px; }
+  .metric span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+  .metric b { font-size: 18px; padding-left: 34px; }
   .ctr-box { grid-column: 1 / -1; background: ${tema.accent}12; border: 1px solid ${tema.accent}33; border-radius: 14px; padding: 14px 16px; }
+  .ctr-box .icon-row { display: flex; align-items: center; gap: 8px; color: var(--accent); }
+  .ctr-box .icon-row svg { width: 14px; height: 14px; }
   .ctr-box span { font-size: 10px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.1em; }
   .ctr-box b { display: block; font-size: 26px; color: var(--accent); margin-top: 4px; }
-  .video-rows { display: flex; flex-direction: column; gap: 14px; }
-  .video-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
-  .video-row b { color: var(--text); font-size: 15px; }
+  .row-item { margin-bottom: 18px; }
+  .row-item:last-child { margin-bottom: 0; }
+  .row-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; font-size: 12px; color: var(--muted); }
+  .row-top b { color: var(--text); font-size: 16px; font-weight: 800; }
+  .row-track { height: 4px; border-radius: 4px; background: ${tema.accent}1f; overflow: hidden; }
+  .row-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
   .analise { background: var(--panel); border: 1px solid ${tema.accent}22; border-radius: 24px; padding: 32px; margin-bottom: 24px; }
-  .analise h2 { text-align: center; font-size: 20px; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 24px; }
+  .analise h2 { text-align: center; font-size: 20px; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 12px; }
+  .analise .bar-centro { width: 60px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent2)); margin: 0 auto 24px; }
   .analise-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
   @media (max-width: 760px) { .analise-grid { grid-template-columns: 1fr; } }
   .analise-item { display: flex; gap: 14px; margin-bottom: 20px; }
-  .num { width: 36px; height: 36px; border-radius: 10px; background: var(--accent); color: var(--bg); font-weight: 900;
+  .num { width: 36px; height: 36px; border-radius: 10px; background: var(--text); color: var(--panel); font-weight: 900;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .analise-item h4 { margin: 0 0 6px; font-size: 14px; text-transform: uppercase; }
   .analise-item p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
   .sugestoes { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 20px; padding: 24px; color: var(--bg); }
-  .sugestoes h4 { margin: 0 0 16px; font-size: 15px; text-transform: uppercase; }
+  .sugestoes h4 { margin: 0 0 16px; font-size: 15px; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+  .sugestoes h4 svg { width: 16px; height: 16px; }
   .sugestoes ul { margin: 0; padding: 0; list-style: none; }
-  .sugestoes li { padding: 10px 0; border-bottom: 1px solid rgba(0,0,0,0.15); font-size: 13px; font-weight: 600; }
+  .sugestoes li { display: flex; gap: 8px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid rgba(0,0,0,0.15); font-size: 13px; font-weight: 600; }
+  .sugestoes li svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
   .sugestoes li:last-child { border-bottom: none; }
   footer { text-align: center; font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--muted); opacity: 0.6; padding-top: 24px; }
 </style>
@@ -390,14 +474,18 @@ function montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride }) {
 <body>
 <div class="wrap">
   <header>
-    <div>
-      <div class="logo">Lumia<span>.</span></div>
-      <div class="sub">Performance de Excelencia</div>
+    <div class="brand">
+      ${logoHtml}
+      <div>
+        <div class="brand-name">${brandNome}<span>.</span></div>
+        <div class="sub">Performance de Excelência</div>
+      </div>
     </div>
     <div class="titulo">
-      <h1>Relatorio Estrategico</h1>
+      <div class="excelencia">${ICONES.sparkles}Performance de Excelência</div>
+      <h1>Relatório <span>Estratégico</span></h1>
       <span class="pill">Cliente: ${clienteNome}</span>
-      <span class="pill">Periodo: ${periodo}</span>
+      <span class="pill">Período: ${periodo}</span>
     </div>
   </header>
 
@@ -405,38 +493,42 @@ function montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride }) {
     <div class="kpi"><div class="label">Investimento Total</div><div class="value">${fmtReais(dados.investimento)}</div></div>
     <div class="kpi"><div class="label">${esc(dados.tipoResultado || 'Resultados')}</div><div class="value">${fmtNum(dados.resultados)}</div></div>
     <div class="kpi"><div class="label">Custo por Resultado</div><div class="value">${fmtReais(dados.custoPorResultado)}</div></div>
-    <div class="kpi"><div class="label">Alcance Unico</div><div class="value">${fmtNum(dados.alcance)}</div></div>
+    <div class="kpi"><div class="label">Alcance Único</div><div class="value">${fmtNum(dados.alcance)}</div></div>
   </section>
 
   <div class="grid2">
     <section class="panel">
-      <h3 class="panel-title"><span class="bar"></span>Eficiencia e Trafego</h3>
+      <h3 class="panel-title"><span class="bar"></span>Eficiência e Tráfego</h3>
       <div class="metrics">
-        <div class="metric"><span>Impressoes</span><b>${fmtNum(dados.impressoes)}</b></div>
-        <div class="metric"><span>Cliques Totais</span><b>${fmtNum(dados.cliques)}</b></div>
-        <div class="metric"><span>Frequencia</span><b>${fmtNum(dados.frequencia, 2)}</b></div>
-        <div class="metric"><span>CPM Medio</span><b>${fmtReais(dados.cpm)}</b></div>
-        <div class="ctr-box"><span>Taxa de Clique (CTR)</span><b>${fmtPct(dados.ctr)}</b></div>
+        <div class="metric"><div class="icon-row"><span class="icon-badge">${ICONES.eye}</span><span>Impressões</span></div><b>${fmtNum(dados.impressoes)}</b></div>
+        <div class="metric"><div class="icon-row"><span class="icon-badge">${ICONES.click}</span><span>Cliques Totais</span></div><b>${fmtNum(dados.cliques)}</b></div>
+        <div class="metric"><div class="icon-row"><span class="icon-badge">${ICONES.activity}</span><span>Frequência</span></div><b>${fmtNum(dados.frequencia, 2)}</b></div>
+        <div class="metric"><div class="icon-row"><span class="icon-badge">${ICONES.trending}</span><span>CPM Médio</span></div><b>${fmtReais(dados.cpm)}</b></div>
+        <div class="ctr-box"><div class="icon-row">${ICONES.bars}<span>Taxa de Clique (CTR)</span></div><b>${fmtPct(dados.ctr)}</b></div>
       </div>
     </section>
-${videoBlock || '<section></section>'}
+    <section class="panel">
+      <h3 class="panel-title"><span class="bar"></span>${esc(painelDir.titulo)}</h3>
+      ${painelDirRows}
+    </section>
   </div>
 
   <section class="analise">
-    <h2>Analise Executiva e Plano de Acao</h2>
+    <h2>Análise Executiva e Plano de Ação</h2>
+    <div class="bar-centro"></div>
     <div class="analise-grid">
       <div>
-        <div class="analise-item"><div class="num">01</div><div><h4>Analise das Metricas</h4><p>${esc(analise.analiseMetricas)}</p></div></div>
-        <div class="analise-item"><div class="num">02</div><div><h4>Conclusoes Estrategicas</h4><p>${esc(analise.conclusaoEstrategica)}</p></div></div>
+        <div class="analise-item"><div class="num">01</div><div><h4>Análise das Métricas</h4><p>${esc(analise.analiseMetricas)}</p></div></div>
+        <div class="analise-item"><div class="num">02</div><div><h4>Conclusões Estratégicas</h4><p>${esc(analise.conclusaoEstrategica)}</p></div></div>
       </div>
       <div class="sugestoes">
-        <h4>Diretrizes de Crescimento</h4>
-        <ul>${sugestoes.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>
+        <h4>${ICONES.trending}Diretrizes de Crescimento</h4>
+        <ul>${sugestoes.map((s) => `<li>${ICONES.check}<span>${esc(s)}</span></li>`).join('')}</ul>
       </div>
     </div>
   </section>
 
-  <footer>Relatorio gerado pela Lumia</footer>
+  <footer>Impulsionando resultados · ${brandNome}</footer>
 </div>
 </body>
 </html>`;
@@ -446,6 +538,7 @@ ${videoBlock || '<section></section>'}
 
 export async function gerarRelatorio(tenantId, { fonte, temaId, accountId, from, to, arquivos, instrucoes, clienteNome, titulo }) {
   const tema = await obterTema(tenantId, temaId);
+  const marca = await obterMarcaRelatorio(tenantId);
 
   let dados;
   let analise;
@@ -458,7 +551,7 @@ export async function gerarRelatorio(tenantId, { fonte, temaId, accountId, from,
     analise = await gerarAnaliseComIA({ dados, instrucoes });
   }
 
-  const html = montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride: clienteNome });
+  const html = montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride: clienteNome, marca });
 
   const id = novoId();
   const tituloFinal = titulo || `Relatorio - ${clienteNome || dados.clienteNome || 'Cliente'} - ${new Date().toLocaleDateString('pt-BR')}`;

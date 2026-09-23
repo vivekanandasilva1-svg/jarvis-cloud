@@ -1227,6 +1227,27 @@ app.get('/api/gerador-relatorios/contas', async (req, res) => {
   }
 });
 
+// marca (nome + logo) que aparece no HTML gerado - permite ao tenant colocar a propria marca
+// no lugar de "Lumia", pra revender essa ferramenta pros proprios clientes dele
+app.get('/api/gerador-relatorios/marca', async (req, res) => {
+  try {
+    res.json(await tenantConfig.obterMarcaRelatorio(req.tenantId));
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/gerador-relatorios/marca', async (req, res) => {
+  const { nome, logo } = req.body || {};
+  if (logo && logo.length > 3_000_000) return res.status(400).json({ erro: 'logo muito grande (maximo ~2MB)' });
+  try {
+    await tenantConfig.salvarMarcaRelatorio(req.tenantId, { nome, logo });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.get('/api/gerador-relatorios/temas', async (req, res) => {
   try {
     res.json({ temas: await relatorioGerador.listarTemas(req.tenantId) });

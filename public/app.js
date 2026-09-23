@@ -3476,6 +3476,60 @@ let grArquivosPendentes = []; // [{ name, mediaType, base64 }]
 let grHtmlAtual = null;
 let grTituloAtual = null;
 let grIniciado = false;
+let grLogoAtual = null; // data URI, ou null
+
+const grMarcaNome = document.getElementById('grMarcaNome');
+const grMarcaLogoInput = document.getElementById('grMarcaLogoInput');
+const grMarcaLogoRemover = document.getElementById('grMarcaLogoRemover');
+const grMarcaLogoPreview = document.getElementById('grMarcaLogoPreview');
+const grMarcaSalvarBtn = document.getElementById('grMarcaSalvarBtn');
+
+async function carregarMarcaGerador() {
+  try {
+    const r = await fetch('/api/gerador-relatorios/marca', { headers: { 'x-app-password': appPassword } });
+    const d = await r.json();
+    grMarcaNome.value = d.nome || '';
+    grLogoAtual = d.logo || null;
+    if (grLogoAtual) {
+      grMarcaLogoPreview.src = grLogoAtual;
+      grMarcaLogoPreview.hidden = false;
+    } else {
+      grMarcaLogoPreview.hidden = true;
+    }
+  } catch (err) {
+    console.error('Erro carregando marca do gerador:', err);
+  }
+}
+
+grMarcaLogoInput.addEventListener('change', async () => {
+  const file = grMarcaLogoInput.files?.[0];
+  if (!file) return;
+  const base64 = await arquivoParaBase64(file);
+  grLogoAtual = `data:${file.type};base64,${base64}`;
+  grMarcaLogoPreview.src = grLogoAtual;
+  grMarcaLogoPreview.hidden = false;
+  grMarcaLogoInput.value = '';
+});
+
+grMarcaLogoRemover.addEventListener('click', () => {
+  grLogoAtual = null;
+  grMarcaLogoPreview.hidden = true;
+});
+
+grMarcaSalvarBtn.addEventListener('click', async () => {
+  try {
+    const r = await fetch('/api/gerador-relatorios/marca', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ nome: grMarcaNome.value.trim() || null, logo: grLogoAtual }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+    addBubble('Marca do relatorio salva.', 'system');
+  } catch (err) {
+    addBubble(`Erro salvando marca: ${err.message}`, 'system');
+  }
+});
 
 grFonteAuto.addEventListener('change', () => {
   grBlocoAuto.hidden = false;
@@ -3708,6 +3762,7 @@ function iniciarGeradorRelatorios() {
   carregarContasGerador();
   carregarTemasGerador();
   carregarHistoricoGerador();
+  carregarMarcaGerador();
 }
 
 // ---------- Integracoes (visivel pra qualquer tenant - so mostra/mexe nas PROPRIAS contas) ----------
