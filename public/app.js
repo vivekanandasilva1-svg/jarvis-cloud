@@ -3470,7 +3470,9 @@ const grErro = document.getElementById('grErro');
 const grHistoricoLista = document.getElementById('grHistoricoLista');
 const grPreviewWrap = document.getElementById('grPreviewWrap');
 const grPreviewIframe = document.getElementById('grPreviewIframe');
-const grBaixarBtn = document.getElementById('grBaixarBtn');
+const grBaixarPdfBtn = document.getElementById('grBaixarPdfBtn');
+const grBaixarJpgBtn = document.getElementById('grBaixarJpgBtn');
+const grBaixarErro = document.getElementById('grBaixarErro');
 
 let grArquivosPendentes = []; // [{ name, mediaType, base64 }]
 let grHtmlAtual = null;
@@ -3743,16 +3745,79 @@ grGerarBtn.addEventListener('click', async () => {
   }
 });
 
-grBaixarBtn.addEventListener('click', () => {
+// html2canvas + jsPDF sao carregados so quando o usuario realmente for baixar (a maioria das
+// visitas na aba nem chega a gerar relatorio) - evita pesar o carregamento inicial do app pra
+// uma funcionalidade que so entra em uso as vezes
+function carregarScriptUmaVez(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error(`Falha carregando biblioteca (${src})`));
+    document.head.appendChild(s);
+  });
+}
+
+async function garantirLibsDownloadRelatorio() {
+  if (!window.html2canvas) {
+    await carregarScriptUmaVez('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+  }
+  if (!window.jspdf) {
+    await carregarScriptUmaVez('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  }
+}
+
+// tira uma "foto" em alta resolucao do relatorio renderizado dentro do iframe de
+// pre-visualizacao - serve tanto pro JPG (direto) quanto pro PDF (a imagem vira o conteudo
+// de uma unica pagina do tamanho do relatorio, ja que o layout usa cores/gradiente que um PDF
+// "de texto" gerado na mao (via pdfkit) nao reproduziria fielmente)
+async function capturarCanvasRelatorio() {
+  await garantirLibsDownloadRelatorio();
+  const doc = grPreviewIframe.contentDocument;
+  if (!doc?.body) throw new Error('pre-visualizacao ainda nao carregou');
+  return window.html2canvas(doc.body, { backgroundColor: null, scale: 2, useCORS: true });
+}
+
+function nomeArquivoRelatorio(extensao) {
+  return `${(grTituloAtual || 'relatorio').replace(/[^a-z0-9]+/gi, '_')}.${extensao}`;
+}
+
+async function baixarComoRelatorio(botao, extensao, gerar) {
   if (!grHtmlAtual) return;
-  const blob = new Blob([grHtmlAtual], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
+  grBaixarErro.hidden = true;
+  const textoOriginal = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = 'Gerando...';
+  try {
+    const canvas = await capturarCanvasRelatorio();
+    gerar(canvas);
+  } catch (err) {
+    grBaixarErro.textContent = `Erro gerando ${extensao.toUpperCase()}: ${err.message}`;
+    grBaixarErro.hidden = false;
+  } finally {
+    botao.disabled = false;
+    botao.textContent = textoOriginal;
+  }
+}
+
+grBaixarJpgBtn.addEventListener('click', () => baixarComoRelatorio(grBaixarJpgBtn, 'jpg', (canvas) => {
   const a = document.createElement('a');
-  a.href = url;
-  a.download = `${(grTituloAtual || 'relatorio').replace(/[^a-z0-9]+/gi, '_')}.html`;
+  a.href = canvas.toDataURL('image/jpeg', 0.92);
+  a.download = nomeArquivoRelatorio('jpg');
   a.click();
-  URL.revokeObjectURL(url);
-});
+}));
+
+grBaixarPdfBtn.addEventListener('click', () => baixarComoRelatorio(grBaixarPdfBtn, 'pdf', (canvas) => {
+  const { jsPDF } = window.jspdf;
+  // jsPDF com unit:"px" da erro interno de escala em varias versoes - converte pra pt (1px =
+  // 0.75pt a 96dpi) e usa unit:"pt", que e o caminho estavel da biblioteca
+  const wPt = canvas.width * 0.75;
+  const hPt = canvas.height * 0.75;
+  const pdf = new jsPDF({ unit: 'pt', format: [wPt, hPt] });
+  pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, wPt, hPt);
+  pdf.save(nomeArquivoRelatorio('pdf'));
+}));
 
 function iniciarGeradorRelatorios() {
   if (!grIniciado) {
