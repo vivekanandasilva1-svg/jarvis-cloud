@@ -3170,6 +3170,8 @@ autoArquivoEnviar.addEventListener('click', async () => {
 const fuAtivo = document.getElementById('fuAtivo');
 const fuAtivoLabel = document.getElementById('fuAtivoLabel');
 const fuPromptGeral = document.getElementById('fuPromptGeral');
+const fuHoraInicio = document.getElementById('fuHoraInicio');
+const fuHoraFim = document.getElementById('fuHoraFim');
 const fuSalvar = document.getElementById('fuSalvar');
 const fuErro = document.getElementById('fuErro');
 const fuEtapasLista = document.getElementById('fuEtapasLista');
@@ -3187,6 +3189,8 @@ async function carregarFollowUp() {
     fuAtivo.checked = !!config.ativo;
     fuAtivoLabel.textContent = config.ativo ? 'Ativado' : 'Desativado';
     fuPromptGeral.value = config.promptGeral || '';
+    fuHoraInicio.value = config.horaInicio || '08:00';
+    fuHoraFim.value = config.horaFim || '20:00';
   } catch (err) {
     fuErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
     fuErro.hidden = false;
@@ -3198,8 +3202,15 @@ fuSalvar.addEventListener('click', async () => {
   fuErro.hidden = true;
   const ativo = fuAtivo.checked;
   const promptGeral = fuPromptGeral.value.trim();
+  const horaInicio = fuHoraInicio.value;
+  const horaFim = fuHoraFim.value;
   if (ativo && !promptGeral) {
     fuErro.textContent = 'Pra ativar, escreve o script geral de como a IA deve se comportar.';
+    fuErro.hidden = false;
+    return;
+  }
+  if (horaInicio && horaFim && horaInicio >= horaFim) {
+    fuErro.textContent = 'O horario de inicio precisa ser antes do horario de fim.';
     fuErro.hidden = false;
     return;
   }
@@ -3208,7 +3219,7 @@ fuSalvar.addEventListener('click', async () => {
     const res = await fetch('/api/follow-up/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-      body: JSON.stringify({ ativo, promptGeral }),
+      body: JSON.stringify({ ativo, promptGeral, horaInicio, horaFim }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');

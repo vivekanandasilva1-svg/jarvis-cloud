@@ -522,6 +522,23 @@
           <span id="fuAtivoLabel">Desativado</span>
         </div>
 
+        <label class="auto-label">Horario de funcionamento do agente</label>
+        <p class="agenda-vazia" style="margin: 0 0 4px;">
+          Fora desse horario, o agente nao manda nenhuma tentativa nova e nem responde o lead que
+          escrever - evita incomodar o paciente de madrugada ou fora do expediente. As mensagens
+          continuam sendo respondidas normalmente assim que o horario abrir de novo.
+        </p>
+        <div class="auto-upload-row">
+          <div>
+            <label class="auto-label">Comeca as</label>
+            <input type="time" id="fuHoraInicio" />
+          </div>
+          <div>
+            <label class="auto-label">Termina as</label>
+            <input type="time" id="fuHoraFim" />
+          </div>
+        </div>
+
         <label class="auto-label">Script geral (como a IA deve se comportar em todo acompanhamento)</label>
         <textarea id="fuPromptGeral" placeholder="Ex: Voce e a recepcionista virtual da Clinica X tentando retomar contato com leads que pararam de responder. Seja cordial e nada insistente, lembre educadamente do assunto que estava sendo tratado e pergunte se ainda tem interesse..."></textarea>
 

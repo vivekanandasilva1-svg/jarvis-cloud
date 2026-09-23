@@ -47,6 +47,12 @@ async function garantirTabelas() {
       atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // horario de funcionamento (fuso America/Maceio) - fora dessa janela o agente nao manda
+  // tentativa proativa NEM responde o lead que escrever, pra nunca incomodar o paciente de
+  // madrugada ou fora do expediente. "HH:MM" em texto simples (mesmo formato do <input
+  // type="time">, sem precisar converter nada no front).
+  await pool.query(`ALTER TABLE follow_up_config ADD COLUMN IF NOT EXISTS hora_inicio TEXT NOT NULL DEFAULT '08:00';`);
+  await pool.query(`ALTER TABLE follow_up_config ADD COLUMN IF NOT EXISTS hora_fim TEXT NOT NULL DEFAULT '20:00';`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS follow_up_etapas (
       tenant_id INT NOT NULL REFERENCES tenants(id),
@@ -94,22 +100,44 @@ const tabelasProntas = garantirTabelas().catch((err) => {
 
 // ---------- configuracao geral ----------
 
+const HORA_PADRAO_INICIO = '08:00';
+const HORA_PADRAO_FIM = '20:00';
+const CONFIG_VAZIA = { ativo: false, promptGeral: '', horaInicio: HORA_PADRAO_INICIO, horaFim: HORA_PADRAO_FIM };
+
 export async function obterConfig(tenantId) {
-  if (!pool) return { ativo: false, promptGeral: '' };
+  if (!pool) return CONFIG_VAZIA;
   await tabelasProntas;
-  const { rows } = await pool.query(`SELECT ativo, prompt_geral FROM follow_up_config WHERE tenant_id = $1`, [tenantId]);
-  if (!rows.length) return { ativo: false, promptGeral: '' };
-  return { ativo: !!rows[0].ativo, promptGeral: rows[0].prompt_geral || '' };
+  const { rows } = await pool.query(`SELECT ativo, prompt_geral, hora_inicio, hora_fim FROM follow_up_config WHERE tenant_id = $1`, [tenantId]);
+  if (!rows.length) return CONFIG_VAZIA;
+  return {
+    ativo: !!rows[0].ativo,
+    promptGeral: rows[0].prompt_geral || '',
+    horaInicio: rows[0].hora_inicio || HORA_PADRAO_INICIO,
+    horaFim: rows[0].hora_fim || HORA_PADRAO_FIM,
+  };
 }
 
-export async function salvarConfig(tenantId, { ativo, promptGeral }) {
+const HORA_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export async function salvarConfig(tenantId, { ativo, promptGeral, horaInicio, horaFim }) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
+  const hi = horaInicio || HORA_PADRAO_INICIO;
+  const hf = horaFim || HORA_PADRAO_FIM;
+  if (!HORA_RE.test(hi) || !HORA_RE.test(hf)) throw new Error('Horario invalido (use o formato HH:MM).');
+  if (hi >= hf) throw new Error('O horario de inicio precisa ser antes do horario de fim.');
   await tabelasProntas;
   await pool.query(
-    `INSERT INTO follow_up_config (tenant_id, ativo, prompt_geral, atualizado_em) VALUES ($1, $2, $3, now())
-     ON CONFLICT (tenant_id) DO UPDATE SET ativo = $2, prompt_geral = $3, atualizado_em = now()`,
-    [tenantId, !!ativo, promptGeral || ''],
+    `INSERT INTO follow_up_config (tenant_id, ativo, prompt_geral, hora_inicio, hora_fim, atualizado_em) VALUES ($1, $2, $3, $4, $5, now())
+     ON CONFLICT (tenant_id) DO UPDATE SET ativo = $2, prompt_geral = $3, hora_inicio = $4, hora_fim = $5, atualizado_em = now()`,
+    [tenantId, !!ativo, promptGeral || '', hi, hf],
   );
+}
+
+// fuso fixo America/Maceio (mesmo padrao usado no resto do app - relatoriosProgramados.js,
+// autoAtendimento.js) - true quando o horario ATUAL esta dentro do expediente configurado
+function dentroDoHorarioFuncionamento(config) {
+  const horaAtual = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit', hour12: false });
+  return horaAtual >= (config.horaInicio || HORA_PADRAO_INICIO) && horaAtual < (config.horaFim || HORA_PADRAO_FIM);
 }
 
 // ---------- etapas (as "tentativas" configuraveis: a cada quantos dias, com que script) ----------
@@ -293,6 +321,16 @@ export async function processarMensagem(tenantId, contatoId, numero, instancia, 
   }
   if (!textoContato.trim()) return null;
 
+  // fora do horario de funcionamento configurado - guarda a mensagem no historico (o contexto
+  // nao se perde) mas NAO gera nem manda resposta agora, pra nao incomodar o paciente de
+  // madrugada ou fora do expediente. Quando ele escrever de novo dentro do horario, o agente ve
+  // essa mensagem no historico e retoma normalmente.
+  if (!dentroDoHorarioFuncionamento(config)) {
+    const historicoComEspera = [...historico, { autor: 'contato', texto: textoContato, quando: new Date().toISOString() }];
+    await pool.query(`UPDATE follow_up_contatos SET historico = $1 WHERE contato_id = $2 AND tenant_id = $3`, [JSON.stringify(historicoComEspera), contatoId, tenantId]);
+    return null;
+  }
+
   const etapas = await listarEtapas(tenantId);
   const etapaAtual = etapas.find((e) => e.ordem === (registro?.ultima_etapa_enviada || 0));
 
@@ -330,6 +368,10 @@ export async function processarMensagem(tenantId, contatoId, numero, instancia, 
 // ---------- agendador (envio proativo das tentativas, na cadencia configurada) ----------
 
 async function processarContato(tenantId, contato, etapas, config) {
+  // fora do horario de funcionamento - nao manda tentativa nenhuma agora; o proprio agendador
+  // (roda a cada 15min) pega essa tentativa vencida assim que o horario configurado abrir
+  if (!dentroDoHorarioFuncionamento(config)) return;
+
   const diasDesdeEntrada = (Date.now() - new Date(contato.entrou_em).getTime()) / (24 * 60 * 60 * 1000);
   const ultimaOrdem = contato.ultima_etapa_enviada || 0;
 
