@@ -20,9 +20,9 @@ eventosCrm.setMaxListeners(50); // cada aba do painel aberta conta como 1 listen
 export const ETAPAS = [
   { id: 'novo_lead', nome: 'Novo Lead' },
   { id: 'em_atendimento', nome: 'Em Atendimento' },
-  { id: 'follow_up', nome: 'Follow Up' },
   { id: 'agendado', nome: 'Agendado' },
   { id: 'compareceu', nome: 'Compareceu' },
+  { id: 'follow_up', nome: 'Follow Up' },
   { id: 'perdido', nome: 'Perdido / Não respondeu' },
 ];
 const IDS_ETAPAS = new Set(ETAPAS.map((e) => e.id));
