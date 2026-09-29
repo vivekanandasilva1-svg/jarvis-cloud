@@ -5,6 +5,8 @@ const passwordInput = document.getElementById('passwordInput');
 adicionarOlhinho(passwordInput);
 const loginError = document.getElementById('loginError');
 const appWindow = document.getElementById('appWindow');
+const sidebarToggle = document.getElementById('sidebarToggle');
+const appMain = document.querySelector('.app-main');
 
 const chatLog = document.getElementById('chatLog');
 const composer = document.getElementById('composer');
@@ -1847,7 +1849,21 @@ function mudarAba(aba) {
   // batendo na API/banco a toa em segundo plano pra sempre
   pararPollingCrm();
   if (aba === 'crm') iniciarPollingCrm();
+  fecharSidebarMobile(); // no celular, escolher uma aba ja fecha a gaveta sozinho
 }
+
+// ---------- Barra lateral em tela estreita (gaveta) ----------
+function abrirSidebarMobile() { appWindow.classList.add('sidebar-aberta'); }
+function fecharSidebarMobile() { appWindow.classList.remove('sidebar-aberta'); }
+sidebarToggle.addEventListener('click', () => {
+  appWindow.classList.contains('sidebar-aberta') ? fecharSidebarMobile() : abrirSidebarMobile();
+});
+// clicar no fundo escurecido (fora da gaveta) fecha ela - o proprio conteudo da aba continua
+// clicavel normalmente quando a gaveta esta fechada, esse listener so age enquanto ela ta aberta
+appMain.addEventListener('click', () => {
+  if (appWindow.classList.contains('sidebar-aberta')) fecharSidebarMobile();
+});
+
 tabBtnPainel.addEventListener('click', () => mudarAba('painel'));
 tabBtnAgenda.addEventListener('click', () => mudarAba('agenda'));
 tabBtnWhatsapp.addEventListener('click', () => mudarAba('whatsapp'));

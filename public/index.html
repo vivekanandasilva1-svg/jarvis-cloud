@@ -49,66 +49,111 @@
   </div>
 
   <div class="app-window" id="appWindow" hidden>
-    <div class="window-titlebar">
-      <span class="brand">L.U.M.I.A</span>
-      <span class="online-pill"><span class="dot"></span>Online</span>
-      <span class="clock" id="clock"></span>
-      <span class="window-status" id="status">pronto</span>
-      <span class="weather-badge" id="weatherBadge" hidden>
-        <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M6 19a5 5 0 0 1-.6-9.97A6 6 0 0 1 17 8a4.5 4.5 0 0 1 .5 9H6z"/></svg>
-        <span id="weatherBadgeTemp">--°</span>
-      </span>
-      <button type="button" class="agent-btn" id="agentBtn" title="Conectar agente local (controle do PC)">
-        <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M4 4h16v11H4V4zm0 13h16v2H4v-2zm6 2h4v1h-4v-1z"/></svg>
-        <span class="agent-dot" id="agentDot"></span>
-      </button>
-      <button type="button" class="logout-btn" id="logoutBtn" title="Sair">Sair</button>
-    </div>
+    <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Abrir menu">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/></svg>
+    </button>
 
-    <div class="tab-bar">
-      <button type="button" class="tab-btn active" id="tabBtnPainel" data-tab="painel">Painel</button>
-      <button type="button" class="tab-btn" id="tabBtnAgenda" data-tab="agenda">Agenda</button>
-      <button type="button" class="tab-btn" id="tabBtnWhatsapp" data-tab="whatsapp">WhatsApp</button>
-      <button type="button" class="tab-btn" id="tabBtnCrm" data-tab="crm">CRM</button>
-      <button type="button" class="tab-btn" id="tabBtnAuto" data-tab="auto">Auto Atendimento</button>
-      <button type="button" class="tab-btn" id="tabBtnFollowUp" data-tab="followUp">Follow Up</button>
-      <button type="button" class="tab-btn" id="tabBtnRelatorios" data-tab="relatorios">Relatórios</button>
-      <button type="button" class="tab-btn" id="tabBtnGeradorRelatorios" data-tab="geradorRelatorios">Gerador de Relatórios</button>
-      <button type="button" class="tab-btn" id="tabBtnIntegracoes" data-tab="integracoes">Integrações</button>
-      <button type="button" class="tab-btn" id="tabBtnClientes" data-tab="clientes" hidden>Clientes</button>
-      <button type="button" class="tab-btn" id="tabBtnPropostasAdmin" data-tab="propostasAdmin" hidden>Gerador de Propostas</button>
-    </div>
+    <nav class="app-sidebar" id="appSidebar">
+      <div class="sidebar-brand">
+        <img class="sidebar-logo" src="icon.svg" alt="" />
+        <span class="sidebar-brand-text">LUMIA</span>
+      </div>
+      <div class="sidebar-nav">
+        <button type="button" class="nav-btn active" id="tabBtnPainel" data-tab="painel">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3h8v8H3V3zm10 0h8v5h-8V3zm0 7h8v11h-8V10zM3 13h8v8H3v-8z"/></svg>
+          <span>Painel</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnAgenda" data-tab="agenda">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zM5 9h14v11H5V9z"/></svg>
+          <span>Agenda</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnWhatsapp" data-tab="whatsapp">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.4A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.1-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8 8 0 1 1 12 20z"/></svg>
+          <span>WhatsApp</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnCrm" data-tab="crm">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3h6v18H3V3zm8 0h6v10h-6V3zm8 0h2v18h-2V3zm-8 12h6v6h-6v-6z"/></svg>
+          <span>CRM</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnAuto" data-tab="auto">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a2 2 0 0 1 2 2v1h2a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3h2V4a2 2 0 0 1 2-2zM8 10a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm8 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm-8 6v1.5h8V16H8z"/></svg>
+          <span>Auto Atendimento</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnFollowUp" data-tab="followUp">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-8z"/></svg>
+          <span>Follow Up</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnRelatorios" data-tab="relatorios">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 20V10h4v10H4zm6 0V4h4v16h-4zm6 0v-7h4v7h-4z"/></svg>
+          <span>Relatórios</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnGeradorRelatorios" data-tab="geradorRelatorios">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 2h9l5 5v15H6V2zm8 1.5V8h4.5L14 3.5zM8 12h8v2H8v-2zm0 4h8v2H8v-2z"/></svg>
+          <span>Gerador de Relatórios</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnIntegracoes" data-tab="integracoes">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 2h2v4H7V2zm8 0h2v4h-2V2zM5 8h14a1 1 0 0 1 1 1v3a7 7 0 0 1-6 6.9V21h-4v-2.1A7 7 0 0 1 4 12V9a1 1 0 0 1 1-1z"/></svg>
+          <span>Integrações</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnClientes" data-tab="clientes" hidden>
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-8 1.7-8 5v2h16v-2c0-3.3-4.7-5-8-5zm8.5-6a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM17 14.2c1.8.9 3 2.4 3 4.3V20h4v-1.5c0-2.6-3.3-4-7-4.3z"/></svg>
+          <span>Clientes</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnPropostasAdmin" data-tab="propostasAdmin" hidden>
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 2h9l5 5v15H6V2zm2 12v2.5c0 .8.7 1.5 1.5 1.5H11v-1.6l4.6-4.6a1 1 0 0 1 1.4 0l.6.6a1 1 0 0 1 0 1.4L13 18.5V20h1.5a1.5 1.5 0 0 0 1.5-1.5V16"/></svg>
+          <span>Gerador de Propostas</span>
+        </button>
+      </div>
+      <div class="sidebar-footer">
+        <button type="button" class="agent-btn" id="agentBtn" title="Conectar agente local (controle do PC)">
+          <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M4 4h16v11H4V4zm0 13h16v2H4v-2zm6 2h4v1h-4v-1z"/></svg>
+          <span class="agent-dot" id="agentDot"></span>
+        </button>
+        <button type="button" class="logout-btn" id="logoutBtn" title="Sair">Sair</button>
+      </div>
 
-    <div class="agent-panel" id="agentPanel" hidden>
-      <div class="agent-panel-header">
-        <span>Agente local (controle do computador)</span>
-        <button type="button" id="agentPanelClose">✕</button>
-      </div>
-      <p>
-        Pra Lumia abrir/editar arquivos e programas no seu computador, roda
-        <code>npm run local-agent</code> nesta maquina e cola aqui o token que aparecer no
-        terminal. So funciona enquanto essa aba estiver aberta neste PC - nunca pela internet.
-      </p>
-      <div class="agent-panel-row">
-        <input type="text" id="agentTokenInput" placeholder="Cole o token do agente local" autocomplete="off" />
-        <button type="button" id="agentSaveBtn">Salvar</button>
-      </div>
-      <p class="agent-status" id="agentStatus">Nao conectado.</p>
+      <div class="agent-panel" id="agentPanel" hidden>
+        <div class="agent-panel-header">
+          <span>Agente local (controle do computador)</span>
+          <button type="button" id="agentPanelClose">✕</button>
+        </div>
+        <p>
+          Pra Lumia abrir/editar arquivos e programas no seu computador, roda
+          <code>npm run local-agent</code> nesta maquina e cola aqui o token que aparecer no
+          terminal. So funciona enquanto essa aba estiver aberta neste PC - nunca pela internet.
+        </p>
+        <div class="agent-panel-row">
+          <input type="text" id="agentTokenInput" placeholder="Cole o token do agente local" autocomplete="off" />
+          <button type="button" id="agentSaveBtn">Salvar</button>
+        </div>
+        <p class="agent-status" id="agentStatus">Nao conectado.</p>
 
-      <div class="agent-panel-divisor"></div>
-      <div class="auto-toggle-row">
-        <label class="auto-switch">
-          <input type="checkbox" id="controleAbasToggle" />
-          <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
-        </label>
-        <span>Controle de abas do navegador</span>
+        <div class="agent-panel-divisor"></div>
+        <div class="auto-toggle-row">
+          <label class="auto-switch">
+            <input type="checkbox" id="controleAbasToggle" />
+            <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+          </label>
+          <span>Controle de abas do navegador</span>
+        </div>
+        <p class="agent-status">
+          Quando ativado, a Lumia pode abrir aba nova e mudar de aba no Chrome quando voce pedir
+          (precisa do Chrome aberto com <code>--remote-debugging-port=9222</code>). Desativado por
+          padrao - liga so quando quiser.
+        </p>
       </div>
-      <p class="agent-status">
-        Quando ativado, a Lumia pode abrir aba nova e mudar de aba no Chrome quando voce pedir
-        (precisa do Chrome aberto com <code>--remote-debugging-port=9222</code>). Desativado por
-        padrao - liga so quando quiser.
-      </p>
-    </div>
+    </nav>
+
+    <div class="app-main">
+      <div class="window-titlebar">
+        <span class="online-pill"><span class="dot"></span>Online</span>
+        <span class="clock" id="clock"></span>
+        <span class="window-status" id="status">pronto</span>
+        <span class="weather-badge" id="weatherBadge" hidden>
+          <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M6 19a5 5 0 0 1-.6-9.97A6 6 0 0 1 17 8a4.5 4.5 0 0 1 .5 9H6z"/></svg>
+          <span id="weatherBadgeTemp">--°</span>
+        </span>
+      </div>
 
     <div class="window-body" id="tabPainel">
       <aside class="sidebar">
@@ -786,6 +831,7 @@
           <p class="agenda-vazia">Carregando...</p>
         </div>
       </div>
+    </div>
     </div>
   </div>
 
