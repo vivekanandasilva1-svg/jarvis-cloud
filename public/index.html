@@ -519,8 +519,28 @@
           </div>
         </div>
 
+        <div class="auto-audio-row">
+          <div>
+            <label class="auto-label">Reiniciar atendimento sozinho quando o lead ficar sem responder por:</label>
+            <div class="auto-reinicio-row">
+              <input type="number" id="autoReiniciarValor" min="1" step="1" placeholder="Ex: 24" />
+              <select id="autoReiniciarUnidade">
+                <option value="horas">Horas</option>
+                <option value="dias">Dias</option>
+              </select>
+            </div>
+            <p class="wa-hint">Passado esse tempo sem o lead mandar nada, a proxima mensagem dele comeca do zero, como se fosse a primeira conversa. Deixe em branco pra nunca reiniciar sozinha.</p>
+          </div>
+        </div>
+
         <button type="button" id="autoSalvar">Salvar Configurações</button>
         <p class="agenda-erro" id="autoErro" hidden></p>
+
+        <div class="auto-reset-wrap">
+          <label class="auto-label">Reiniciar conversas agora</label>
+          <p class="wa-hint">Apaga a memoria de conversa de TODOS os leads desse numero de uma vez - a proxima mensagem de qualquer contato comeca do zero, como se nunca tivesse falado com ela antes. Nao afeta o cadastro no CRM, so a memoria da IA.</p>
+          <button type="button" id="autoResetarHistorico" class="auto-btn-perigo">Resetar histórico de todas as conversas</button>
+        </div>
 
         <div class="auto-arquivos-wrap">
           <div class="auto-arquivos-header">

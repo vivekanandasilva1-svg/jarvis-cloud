@@ -191,6 +191,9 @@ const autoFrequenciaAudio = document.getElementById('autoFrequenciaAudio');
 const autoAudioSeReceberAudio = document.getElementById('autoAudioSeReceberAudio');
 const autoAgendarInterna = document.getElementById('autoAgendarInterna');
 const autoAgendarClinicorp = document.getElementById('autoAgendarClinicorp');
+const autoReiniciarValor = document.getElementById('autoReiniciarValor');
+const autoReiniciarUnidade = document.getElementById('autoReiniciarUnidade');
+const autoResetarHistorico = document.getElementById('autoResetarHistorico');
 const autoSalvar = document.getElementById('autoSalvar');
 const autoErro = document.getElementById('autoErro');
 const autoArquivoInput = document.getElementById('autoArquivoInput');
@@ -2978,7 +2981,7 @@ function marcarAlteracoesNaoSalvas() {
   autoSalvar.classList.remove('salvo-pulso');
   autoSalvar.textContent = 'Salvar Configurações *';
 }
-[autoAtivo, autoInstancia, autoPrompt, autoFrequenciaAudio, autoAudioSeReceberAudio, autoAgendarInterna, autoAgendarClinicorp]
+[autoAtivo, autoInstancia, autoPrompt, autoFrequenciaAudio, autoAudioSeReceberAudio, autoAgendarInterna, autoAgendarClinicorp, autoReiniciarValor, autoReiniciarUnidade]
   .forEach((el) => {
     // 'input' pega cada tecla digitada no prompt; 'change' cobre checkbox/select (que nem
     // sempre disparam 'input' de forma consistente entre navegadores)
@@ -3018,6 +3021,20 @@ async function carregarConfigAutoAtendimento() {
     autoAgendarInterna.checked = !!config.agendarAgendaInterna;
     autoAgendarClinicorp.checked = !!config.agendarClinicorp;
 
+    // horas guardadas no banco -> mostra na unidade mais legivel (dias quando da exato, senao horas)
+    if (config.reiniciarAposHoras && config.reiniciarAposHoras > 0) {
+      if (config.reiniciarAposHoras % 24 === 0) {
+        autoReiniciarValor.value = String(config.reiniciarAposHoras / 24);
+        autoReiniciarUnidade.value = 'dias';
+      } else {
+        autoReiniciarValor.value = String(config.reiniciarAposHoras);
+        autoReiniciarUnidade.value = 'horas';
+      }
+    } else {
+      autoReiniciarValor.value = '';
+      autoReiniciarUnidade.value = 'horas';
+    }
+
     // acabou de carregar do servidor - nao tem nada "nao salvo" ainda
     autoSalvar.classList.remove('nao-salvo', 'salvo-pulso');
     autoSalvar.textContent = 'Salvar Configurações';
@@ -3040,6 +3057,8 @@ autoSalvar.addEventListener('click', async () => {
   const audioSeReceberAudio = autoAudioSeReceberAudio.checked;
   const agendarAgendaInterna = autoAgendarInterna.checked;
   const agendarClinicorp = autoAgendarClinicorp.checked;
+  const reiniciarValor = Number(autoReiniciarValor.value) || 0;
+  const reiniciarAposHoras = reiniciarValor > 0 ? (autoReiniciarUnidade.value === 'dias' ? reiniciarValor * 24 : reiniciarValor) : null;
   if (ativo && (!instancia || !prompt)) {
     autoErro.textContent = 'Pra ativar, escolhe o numero e escreve o prompt de treinamento.';
     autoErro.hidden = false;
@@ -3050,7 +3069,7 @@ autoSalvar.addEventListener('click', async () => {
     const res = await fetch('/api/auto-atendimento/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-      body: JSON.stringify({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarAgendaInterna, agendarClinicorp }),
+      body: JSON.stringify({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarAgendaInterna, agendarClinicorp, reiniciarAposHoras }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
@@ -3071,6 +3090,28 @@ autoSalvar.addEventListener('click', async () => {
     autoErro.hidden = false;
   } finally {
     autoSalvar.disabled = false;
+  }
+});
+
+// botao "Resetar histórico de todas as conversas" - apaga a memoria de TODOS os leads do tenant
+// de uma vez so, pedindo confirmacao explicita antes ja que nao tem como desfazer
+autoResetarHistorico.addEventListener('click', async () => {
+  const ok = confirm('Isso apaga a memoria de conversa de TODOS os leads desse numero. A proxima mensagem de qualquer contato vai comecar do zero, como se nunca tivesse falado com ela antes. Nao da pra desfazer. Confirma?');
+  if (!ok) return;
+  autoResetarHistorico.disabled = true;
+  try {
+    const res = await fetch('/api/auto-atendimento/resetar-historico', {
+      method: 'POST',
+      headers: { 'x-app-password': appPassword },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    addBubble(`Histórico de conversas resetado (${data.apagadas || 0} conversa(s) apagada(s)). Todo lead vai comecar do zero na proxima mensagem.`, 'system');
+  } catch (err) {
+    autoErro.textContent = err.message;
+    autoErro.hidden = false;
+  } finally {
+    autoResetarHistorico.disabled = false;
   }
 });
 

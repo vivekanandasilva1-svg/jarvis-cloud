@@ -1182,13 +1182,24 @@ app.get('/api/auto-atendimento/config', async (req, res) => {
 });
 
 app.post('/api/auto-atendimento/config', async (req, res) => {
-  const { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna } = req.body || {};
+  const { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras } = req.body || {};
   if (ativo && (!instancia || !prompt)) {
     return res.status(400).json({ erro: 'pra ativar, precisa escolher a instancia e escrever o prompt' });
   }
   try {
-    await autoAtendimento.salvarConfig(req.tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna });
+    await autoAtendimento.salvarConfig(req.tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras });
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// botao "resetar historico" do painel - apaga a memoria de conversa de TODOS os leads do
+// tenant, entao o bot reinicia com todo mundo como se fosse a primeira conversa
+app.post('/api/auto-atendimento/resetar-historico', async (req, res) => {
+  try {
+    const resultado = await autoAtendimento.resetarTodasSessoes(req.tenantId);
+    res.json({ ok: true, ...resultado });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -1756,6 +1767,17 @@ function checarTenantsParaPurgar() {
 }
 checarTenantsParaPurgar();
 setInterval(checarTenantsParaPurgar, 24 * 60 * 60 * 1000).unref();
+
+// pra tenants com "reiniciar atendimento apos X horas" configurado (aba Auto Atendimento) -
+// apaga a sessao de qualquer lead que ficou esse tanto de tempo sem responder, entao a proxima
+// mensagem dele comeca do zero sozinha, sem precisar clicar no botao manual. Roda a cada 15min
+// (mais frequente que os outros sweeps porque aqui atraso vira o bot "lembrando" de mais tempo
+// do que o cliente configurou).
+function checarSessoesAutoAtendimentoInativas() {
+  autoAtendimento.resetarSessoesInativas().catch((err) => console.error('Erro resetando sessoes inativas do auto-atendimento:', err.message));
+}
+checarSessoesAutoAtendimentoInativas();
+setInterval(checarSessoesAutoAtendimentoInativas, 15 * 60 * 1000).unref();
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {

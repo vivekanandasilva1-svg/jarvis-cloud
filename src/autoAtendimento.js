@@ -37,6 +37,11 @@ async function garantirTabelas() {
   // mesmo tempo (cria nos dois lugares)
   await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS agendar_clinicorp BOOLEAN NOT NULL DEFAULT false;`);
   await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS agendar_agenda_interna BOOLEAN NOT NULL DEFAULT true;`);
+  // depois de um lead ficar esse tanto de horas SEM RESPONDER (updated_at da sessao dele
+  // parado), o sweep resetarSessoesInativas() (chamado periodicamente no boot do server.js)
+  // apaga a sessao - a proxima mensagem dele comeca do zero, como se fosse a primeira vez.
+  // NULL = nunca reinicia sozinho (comportamento de sempre, nao quebra quem ja usava).
+  await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS reiniciar_apos_horas INT;`);
   // instalacao que ja tinha essa tabela ANTES da conversao multi-tenant (schema antigo: "id
   // INT PK DEFAULT 1") - o CREATE TABLE acima e no-op nesse caso. Indice unico exigido pelo
   // ON CONFLICT (tenant_id) em salvarConfig.
@@ -66,12 +71,12 @@ const tabelasProntas = garantirTabelas().catch((err) => {
 export async function obterConfig(tenantId) {
   const vazio = {
     ativo: false, instancia: null, prompt: '', frequenciaAudio: 0, audioSeReceberAudio: false,
-    agendarClinicorp: false, agendarAgendaInterna: true,
+    agendarClinicorp: false, agendarAgendaInterna: true, reiniciarAposHoras: null,
   };
   if (!pool) return vazio;
   await tabelasProntas;
   const { rows } = await pool.query(
-    'SELECT ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna FROM auto_atendimento_config WHERE tenant_id = $1',
+    'SELECT ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, reiniciar_apos_horas FROM auto_atendimento_config WHERE tenant_id = $1',
     [tenantId],
   );
   if (!rows.length) return vazio;
@@ -83,20 +88,22 @@ export async function obterConfig(tenantId) {
     audioSeReceberAudio: !!rows[0].audio_se_receber_audio,
     agendarClinicorp: !!rows[0].agendar_clinicorp,
     agendarAgendaInterna: !!rows[0].agendar_agenda_interna,
+    reiniciarAposHoras: rows[0].reiniciar_apos_horas ?? null,
   };
 }
 
-export async function salvarConfig(tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna }) {
+export async function salvarConfig(tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras }) {
   if (!pool) throw new Error('Precisa do Postgres configurado (DATABASE_URL) pra guardar essa configuracao.');
   await tabelasProntas;
 
+  const horas = Number(reiniciarAposHoras) > 0 ? Math.round(Number(reiniciarAposHoras)) : null;
   await pool.query(
-    `INSERT INTO auto_atendimento_config (tenant_id, ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, atualizado_em)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+    `INSERT INTO auto_atendimento_config (tenant_id, ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, reiniciar_apos_horas, atualizado_em)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
      ON CONFLICT (tenant_id) DO UPDATE SET
        ativo = $2, instancia = $3, prompt = $4, frequencia_audio = $5, audio_se_receber_audio = $6,
-       agendar_clinicorp = $7, agendar_agenda_interna = $8, atualizado_em = now()`,
-    [tenantId, !!ativo, instancia || null, prompt || '', Number(frequenciaAudio) || 0, !!audioSeReceberAudio, !!agendarClinicorp, !!agendarAgendaInterna],
+       agendar_clinicorp = $7, agendar_agenda_interna = $8, reiniciar_apos_horas = $9, atualizado_em = now()`,
+    [tenantId, !!ativo, instancia || null, prompt || '', Number(frequenciaAudio) || 0, !!audioSeReceberAudio, !!agendarClinicorp, !!agendarAgendaInterna, horas],
   );
   // NAO chama mais /settings/set aqui - ver nota grande em evolutionApi.js sobre o porque
   // (causou pelo menos uma desconexao real por "conflict/device_removed" logo depois de
@@ -564,6 +571,38 @@ async function salvarSessao(tenantId, numero, history, contagem) {
      ON CONFLICT (tenant_id, numero) DO UPDATE SET history = $3, contagem_mensagens = $4, updated_at = now()`,
     [tenantId, numero, JSON.stringify(cortado), contagem],
   );
+}
+
+// botao "resetar historico" do painel: apaga a sessao de TODOS os leads do tenant de uma vez,
+// entao a proxima mensagem de qualquer contato comeca do zero, como se fosse a primeira vez.
+export async function resetarTodasSessoes(tenantId) {
+  if (!pool) return { apagadas: 0 };
+  await tabelasProntas;
+  const { rowCount } = await pool.query('DELETE FROM auto_atendimento_sessions WHERE tenant_id = $1', [tenantId]);
+  return { apagadas: rowCount };
+}
+
+// sweep periodico (chamado no boot do server.js, igual checarAcessosExpirados/checarTenantsParaPurgar):
+// para tenants com reiniciar_apos_horas configurado, apaga a sessao de qualquer lead cuja
+// ultima mensagem (updated_at) ja passou desse tanto de horas sem novidade - a proxima mensagem
+// dele reinicia o atendimento do zero, sem precisar de acao manual.
+export async function resetarSessoesInativas() {
+  if (!pool) return { apagadas: 0 };
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT tenant_id FROM auto_atendimento_config WHERE reiniciar_apos_horas IS NOT NULL AND reiniciar_apos_horas > 0`,
+  );
+  let apagadas = 0;
+  for (const { tenant_id: tenantId } of rows) {
+    const { rowCount } = await pool.query(
+      `DELETE FROM auto_atendimento_sessions s USING auto_atendimento_config c
+       WHERE s.tenant_id = $1 AND c.tenant_id = s.tenant_id
+         AND s.updated_at < now() - (c.reiniciar_apos_horas || ' hours')::interval`,
+      [tenantId],
+    );
+    apagadas += rowCount;
+  }
+  return { apagadas };
 }
 
 // aviso dinamico, colocado no FIM do prompt (maior prioridade/recencia) - o prompt customizado
