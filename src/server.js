@@ -906,6 +906,15 @@ async function registrarMensagemComMidia(tenantId, { numero, instancia, direcao,
 }
 
 async function processarMensagemEvolution(instanciaDoWebhook, data) {
+  // Status do WhatsApp (stories) chegam no webhook com remoteJid "status@broadcast" - e o
+  // MESMO remoteJid pra QUALQUER contato que postou um status, nao um numero de contato de
+  // verdade. Sem esse filtro, extrairMensagemEvolution() pegava "status" como se fosse o
+  // numero, entao o status de contatos totalmente diferentes virava tudo UMA UNICA "conversa"
+  // falsa (numero "status") misturada no CRM - bug real reportado pelo usuario. Ignora
+  // qualquer coisa de "@broadcast" de proposito (inclui listas de transmissao tambem, mesmo
+  // motivo: nao sao uma conversa 1-pra-1 de verdade).
+  if ((data?.key?.remoteJid || '').endsWith('@broadcast')) return;
+
   // primeira coisa: descobre de qual tenant e essa instancia - sem mapeamento, ignora a
   // mensagem silenciosamente (mesmo padrao ja usado pra numero fora da allowlist). Isso
   // impede uma instancia nao cadastrada de "vazar" pra dentro de um tenant qualquer.
