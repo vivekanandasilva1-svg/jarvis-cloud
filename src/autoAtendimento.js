@@ -42,6 +42,11 @@ async function garantirTabelas() {
   // ligacao/WhatsApp (false) - nao afeta a agenda interna, so o Clinicorp. Default true pra nao
   // mudar o comportamento de quem ja usa isso.
   await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS agendamento_direto_clinicorp BOOLEAN NOT NULL DEFAULT true;`);
+  // espera minima (em segundos) entre receber a mensagem do lead e mandar a resposta - o
+  // "digitando..."/"gravando audio..." do WhatsApp fica ligado o tempo todo (ver server.js), pra
+  // parecer uma pessoa de verdade escrevendo, nao uma IA respondendo instantaneo. 0 = manda assim
+  // que a resposta ficar pronta (comportamento de sempre, sem espera artificial).
+  await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS resposta_espera_segundos INT NOT NULL DEFAULT 0;`);
   // depois de um lead ficar esse tanto de horas SEM RESPONDER (updated_at da sessao dele
   // parado), o sweep resetarSessoesInativas() (chamado periodicamente no boot do server.js)
   // apaga a sessao - a proxima mensagem dele comeca do zero, como se fosse a primeira vez.
@@ -85,11 +90,12 @@ export async function obterConfig(tenantId) {
   const vazio = {
     ativo: false, instancia: null, prompt: '', frequenciaAudio: 0, audioSeReceberAudio: false,
     agendarClinicorp: false, agendarAgendaInterna: true, reiniciarAposHoras: null, agendamentoDiretoClinicorp: true,
+    respostaEsperaSegundos: 0,
   };
   if (!pool) return vazio;
   await tabelasProntas;
   const { rows } = await pool.query(
-    'SELECT ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, reiniciar_apos_horas, agendamento_direto_clinicorp FROM auto_atendimento_config WHERE tenant_id = $1',
+    'SELECT ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, reiniciar_apos_horas, agendamento_direto_clinicorp, resposta_espera_segundos FROM auto_atendimento_config WHERE tenant_id = $1',
     [tenantId],
   );
   if (!rows.length) return vazio;
@@ -103,21 +109,26 @@ export async function obterConfig(tenantId) {
     agendarAgendaInterna: !!rows[0].agendar_agenda_interna,
     reiniciarAposHoras: rows[0].reiniciar_apos_horas ?? null,
     agendamentoDiretoClinicorp: rows[0].agendamento_direto_clinicorp !== false,
+    respostaEsperaSegundos: rows[0].resposta_espera_segundos || 0,
   };
 }
 
-export async function salvarConfig(tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras, agendamentoDiretoClinicorp }) {
+export async function salvarConfig(tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras, agendamentoDiretoClinicorp, respostaEsperaSegundos }) {
   if (!pool) throw new Error('Precisa do Postgres configurado (DATABASE_URL) pra guardar essa configuracao.');
   await tabelasProntas;
 
   const horas = Number(reiniciarAposHoras) > 0 ? Math.round(Number(reiniciarAposHoras)) : null;
+  // limite de 3 minutos - espera maior que isso vira suspeito (e pode ate expirar o webhook em
+  // alguma integracao), nao ajuda em nada o objetivo de "parecer natural"
+  const espera = Math.max(0, Math.min(180, Math.round(Number(respostaEsperaSegundos) || 0)));
   await pool.query(
-    `INSERT INTO auto_atendimento_config (tenant_id, ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, reiniciar_apos_horas, agendamento_direto_clinicorp, atualizado_em)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+    `INSERT INTO auto_atendimento_config (tenant_id, ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, reiniciar_apos_horas, agendamento_direto_clinicorp, resposta_espera_segundos, atualizado_em)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
      ON CONFLICT (tenant_id) DO UPDATE SET
        ativo = $2, instancia = $3, prompt = $4, frequencia_audio = $5, audio_se_receber_audio = $6,
-       agendar_clinicorp = $7, agendar_agenda_interna = $8, reiniciar_apos_horas = $9, agendamento_direto_clinicorp = $10, atualizado_em = now()`,
-    [tenantId, !!ativo, instancia || null, prompt || '', Number(frequenciaAudio) || 0, !!audioSeReceberAudio, !!agendarClinicorp, !!agendarAgendaInterna, horas, agendamentoDiretoClinicorp !== false],
+       agendar_clinicorp = $7, agendar_agenda_interna = $8, reiniciar_apos_horas = $9, agendamento_direto_clinicorp = $10,
+       resposta_espera_segundos = $11, atualizado_em = now()`,
+    [tenantId, !!ativo, instancia || null, prompt || '', Number(frequenciaAudio) || 0, !!audioSeReceberAudio, !!agendarClinicorp, !!agendarAgendaInterna, horas, agendamentoDiretoClinicorp !== false, espera],
   );
   // NAO chama mais /settings/set aqui - ver nota grande em evolutionApi.js sobre o porque
   // (causou pelo menos uma desconexao real por "conflict/device_removed" logo depois de

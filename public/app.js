@@ -189,6 +189,7 @@ const autoInstancia = document.getElementById('autoInstancia');
 const autoPrompt = document.getElementById('autoPrompt');
 const autoFrequenciaAudio = document.getElementById('autoFrequenciaAudio');
 const autoAudioSeReceberAudio = document.getElementById('autoAudioSeReceberAudio');
+const autoEsperaSegundos = document.getElementById('autoEsperaSegundos');
 const autoAgendarInterna = document.getElementById('autoAgendarInterna');
 const autoAgendarClinicorp = document.getElementById('autoAgendarClinicorp');
 const autoAgendamentoDiretoWrap = document.getElementById('autoAgendamentoDiretoWrap');
@@ -2994,7 +2995,7 @@ function marcarAlteracoesNaoSalvas() {
   autoSalvar.classList.remove('salvo-pulso');
   autoSalvar.textContent = 'Salvar Configurações *';
 }
-[autoAtivo, autoInstancia, autoPrompt, autoFrequenciaAudio, autoAudioSeReceberAudio, autoAgendarInterna, autoAgendarClinicorp, autoAgendamentoDireto, autoReiniciarValor, autoReiniciarUnidade]
+[autoAtivo, autoInstancia, autoPrompt, autoFrequenciaAudio, autoAudioSeReceberAudio, autoEsperaSegundos, autoAgendarInterna, autoAgendarClinicorp, autoAgendamentoDireto, autoReiniciarValor, autoReiniciarUnidade]
   .forEach((el) => {
     // 'input' pega cada tecla digitada no prompt; 'change' cobre checkbox/select (que nem
     // sempre disparam 'input' de forma consistente entre navegadores)
@@ -3031,6 +3032,7 @@ async function carregarConfigAutoAtendimento() {
     autoPrompt.value = config.prompt || '';
     autoFrequenciaAudio.value = String(config.frequenciaAudio || 0);
     autoAudioSeReceberAudio.checked = !!config.audioSeReceberAudio;
+    autoEsperaSegundos.value = config.respostaEsperaSegundos > 0 ? String(config.respostaEsperaSegundos) : '';
     autoAgendarInterna.checked = !!config.agendarAgendaInterna;
     autoAgendarClinicorp.checked = !!config.agendarClinicorp;
     autoAgendamentoDireto.checked = config.agendamentoDiretoClinicorp !== false;
@@ -3071,6 +3073,7 @@ autoSalvar.addEventListener('click', async () => {
   const prompt = autoPrompt.value.trim();
   const frequenciaAudio = Number(autoFrequenciaAudio.value) || 0;
   const audioSeReceberAudio = autoAudioSeReceberAudio.checked;
+  const respostaEsperaSegundos = Number(autoEsperaSegundos.value) || 0;
   const agendarAgendaInterna = autoAgendarInterna.checked;
   const agendarClinicorp = autoAgendarClinicorp.checked;
   const agendamentoDiretoClinicorp = autoAgendamentoDireto.checked;
@@ -3086,7 +3089,7 @@ autoSalvar.addEventListener('click', async () => {
     const res = await fetch('/api/auto-atendimento/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-      body: JSON.stringify({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarAgendaInterna, agendarClinicorp, agendamentoDiretoClinicorp, reiniciarAposHoras }),
+      body: JSON.stringify({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, respostaEsperaSegundos, agendarAgendaInterna, agendarClinicorp, agendamentoDiretoClinicorp, reiniciarAposHoras }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');

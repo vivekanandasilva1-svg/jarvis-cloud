@@ -1016,6 +1016,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
     evolutionApi.enviarPresenca(instanciaDoWebhook, numero, tipoPresenca).catch(() => {});
   }, 4000);
   evolutionApi.enviarPresenca(instanciaDoWebhook, numero, tipoPresenca).catch(() => {});
+  const inicioAtendimento = Date.now();
 
   try {
     // trava de seguranca: mesmo com os timeouts internos (Clinicorp, Evolution), algo
@@ -1027,6 +1028,19 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
       new Promise((_, reject) => setTimeout(() => reject(new Error('Demorou demais pra gerar uma resposta (mais de 55s)')), 55000)),
     ]);
     if (!resultado) return;
+
+    // espera minima configurada (aba Auto Atendimento) antes de mandar - a resposta ja esta
+    // pronta aqui, mas so envia depois de completar esse tempo total desde a mensagem do lead
+    // (descontando o que ja levou pra pensar), com uma variacao aleatoria de alguns segundos
+    // pra nao ficar sempre no mesmo numero redondo. O "digitando"/"gravando audio" continua
+    // renovando sozinho nesse meio tempo (setInterval acima), entao pro lead parece alguem
+    // digitando de verdade, nao uma IA respondendo instantaneo.
+    const esperaMinMs = (configAuto.respostaEsperaSegundos || 0) * 1000;
+    if (esperaMinMs > 0) {
+      const alvoMs = esperaMinMs + Math.floor(Math.random() * 3000);
+      const faltaMs = alvoMs - (Date.now() - inicioAtendimento);
+      if (faltaMs > 0) await new Promise((r) => setTimeout(r, faltaMs));
+    }
 
     clearInterval(manterPresenca); // para de renovar bem no instante de mandar a mensagem
 
@@ -1182,12 +1196,12 @@ app.get('/api/auto-atendimento/config', async (req, res) => {
 });
 
 app.post('/api/auto-atendimento/config', async (req, res) => {
-  const { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras, agendamentoDiretoClinicorp } = req.body || {};
+  const { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras, agendamentoDiretoClinicorp, respostaEsperaSegundos } = req.body || {};
   if (ativo && (!instancia || !prompt)) {
     return res.status(400).json({ erro: 'pra ativar, precisa escolher a instancia e escrever o prompt' });
   }
   try {
-    await autoAtendimento.salvarConfig(req.tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras, agendamentoDiretoClinicorp });
+    await autoAtendimento.salvarConfig(req.tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras, agendamentoDiretoClinicorp, respostaEsperaSegundos });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });

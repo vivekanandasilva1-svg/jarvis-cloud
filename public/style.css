@@ -1619,6 +1619,19 @@ html, body {
 }
 .auto-checkbox-row input { accent-color: var(--gold); width: 16px; height: 16px; flex: 0 0 auto; }
 
+.auto-input-curto {
+  width: 90px;
+  margin-top: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 12.5px;
+  outline: none;
+}
+.auto-input-curto:focus { border-color: var(--gold); }
+
 .auto-reinicio-row { display: flex; gap: 8px; margin-top: 6px; }
 .auto-reinicio-row input[type="number"] {
   width: 90px;
