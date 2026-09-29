@@ -42,6 +42,14 @@ async function garantirTabelas() {
   // apaga a sessao - a proxima mensagem dele comeca do zero, como se fosse a primeira vez.
   // NULL = nunca reinicia sozinho (comportamento de sempre, nao quebra quem ja usava).
   await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS reiniciar_apos_horas INT;`);
+  // iniciado_em: quando essa "rodada" de conversa com o lead comecou (nunca sobrescrito depois
+  // do insert - ver salvarSessao) - da pra IA a nocao de "faz quanto tempo que comecei a falar
+  // com essa pessoa". fatos_agendamento/fatos_agendamento_em: cache do ultimo agendamento
+  // PASSADO encontrado pra esse contato (Clinicorp e/ou agenda interna), populado por
+  // buscarUltimoAgendamentoPassado() - evita bater na API do Clinicorp a cada mensagem.
+  await pool.query(`ALTER TABLE auto_atendimento_sessions ADD COLUMN IF NOT EXISTS iniciado_em TIMESTAMPTZ NOT NULL DEFAULT now();`);
+  await pool.query(`ALTER TABLE auto_atendimento_sessions ADD COLUMN IF NOT EXISTS fatos_agendamento JSONB;`);
+  await pool.query(`ALTER TABLE auto_atendimento_sessions ADD COLUMN IF NOT EXISTS fatos_agendamento_em TIMESTAMPTZ;`);
   // instalacao que ja tinha essa tabela ANTES da conversao multi-tenant (schema antigo: "id
   // INT PK DEFAULT 1") - o CREATE TABLE acima e no-op nesse caso. Indice unico exigido pelo
   // ON CONFLICT (tenant_id) em salvarConfig.
@@ -447,9 +455,12 @@ async function runTool(name, input, contexto) {
           if (sobrepoe) {
             resultado.agendaInterna = { erro: 'Ja existe outro compromisso nesse horario na agenda interna - escolha outro horario.' };
           } else {
+            // marcador no fim da descricao (nao aparece pro paciente, e so interno) - e o que
+            // permite depois buscarUltimoAgendamentoPassado() achar de volta esse evento pelo
+            // numero de WhatsApp, ja que a agenda interna nao tem campo proprio de contato
             const r = await agenda.criarEvento(tenantId, {
               titulo: `${input.pacienteNome}${input.medico ? ` - ${input.medico}` : ''}`,
-              descricao: input.resumo,
+              descricao: `${input.resumo}\n\n[contato:${contexto.numero}]`,
               inicio: input.inicio,
               fim: input.fim,
             });
@@ -552,24 +563,44 @@ function repararHistorico(history) {
 }
 
 async function obterSessao(tenantId, numero) {
-  if (!pool) return { history: [], contagem: 0 };
+  if (!pool) return { history: [], contagem: 0, iniciadoEm: null, fatosAgendamento: null, fatosAgendamentoEm: null };
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT history, contagem_mensagens FROM auto_atendimento_sessions WHERE tenant_id = $1 AND numero = $2', [tenantId, numero]);
-  if (!rows.length) return { history: [], contagem: 0 };
+  const { rows } = await pool.query(
+    'SELECT history, contagem_mensagens, iniciado_em, fatos_agendamento, fatos_agendamento_em FROM auto_atendimento_sessions WHERE tenant_id = $1 AND numero = $2',
+    [tenantId, numero],
+  );
+  if (!rows.length) return { history: [], contagem: 0, iniciadoEm: null, fatosAgendamento: null, fatosAgendamentoEm: null };
   // repara aqui tambem: contatos que ja ficaram com um tool_result orfao salvo no banco (de
   // antes desse fix, ou de uma interrupcao a meio do loop) precisam disso pra sair do estado
   // quebrado, senao toda mensagem seguinte volta a falhar do mesmo jeito, pra sempre.
-  return { history: repararHistorico(rows[0].history || []), contagem: rows[0].contagem_mensagens || 0 };
+  return {
+    history: repararHistorico(rows[0].history || []),
+    contagem: rows[0].contagem_mensagens || 0,
+    iniciadoEm: rows[0].iniciado_em,
+    fatosAgendamento: rows[0].fatos_agendamento,
+    fatosAgendamentoEm: rows[0].fatos_agendamento_em,
+  };
 }
 
 const MAX_HISTORICO = 30;
 async function salvarSessao(tenantId, numero, history, contagem) {
   if (!pool) return;
   const cortado = repararHistorico(history.length > MAX_HISTORICO ? history.slice(history.length - MAX_HISTORICO) : history);
+  // NAO mexe em fatos_agendamento/fatos_agendamento_em aqui de proposito - quem atualiza esse
+  // cache e salvarFatosAgendamento (so quando buscarUltimoAgendamentoPassado roda de verdade),
+  // senao reescrever com o mesmo valor a cada mensagem enganaria o TTL do cache
   await pool.query(
     `INSERT INTO auto_atendimento_sessions (tenant_id, numero, history, contagem_mensagens, updated_at) VALUES ($1, $2, $3, $4, now())
      ON CONFLICT (tenant_id, numero) DO UPDATE SET history = $3, contagem_mensagens = $4, updated_at = now()`,
     [tenantId, numero, JSON.stringify(cortado), contagem],
+  );
+}
+
+async function salvarFatosAgendamento(tenantId, numero, fatos) {
+  if (!pool) return;
+  await pool.query(
+    'UPDATE auto_atendimento_sessions SET fatos_agendamento = $3, fatos_agendamento_em = now() WHERE tenant_id = $1 AND numero = $2',
+    [tenantId, numero, JSON.stringify(fatos)],
   );
 }
 
@@ -603,6 +634,140 @@ export async function resetarSessoesInativas() {
     apagadas += rowCount;
   }
   return { apagadas };
+}
+
+// classifica a descricao de status do Clinicorp (ex: "8-Faltou", "4-Atendido") num dos 4 baldes
+// que o prompt sabe reagir - qualquer coisa que nao bater em nenhuma palavra-chave conhecida
+// fica "incerto" de proposito (melhor perguntar pro contato do que a IA supor errado)
+function classificarStatusAgendamento(statusDesc, cancelado) {
+  if (cancelado) return 'cancelado';
+  const s = (statusDesc || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  if (s.includes('falt')) return 'faltou';
+  if (s.includes('atend') || s.includes('compare') || s.includes('realizad') || s.includes('concluid')) return 'compareceu';
+  if (s.includes('cancel')) return 'cancelado';
+  return 'incerto';
+}
+
+// varre os ultimos 60 dias (Clinicorp e/ou agenda interna, conforme o que estiver configurado)
+// procurando o agendamento mais recente desse contato que JA PASSOU, pra alimentar o contexto
+// automatico injetado no prompt (ver montarContextoTemporal) - e o mesmo dado que a ferramenta
+// verificar_comparecimento devolve pra IA sob demanda, so que aqui roda sozinho, sem depender
+// da IA lembrar de perguntar. Na agenda interna so da pra achar o evento certo porque
+// criar_agendamento grava um marcador "[contato:NUMERO]" na descricao (ver runTool) - eventos
+// criados antes desse marcador existir, ou criados manualmente sem o marcador, nao aparecem
+// aqui (a agenda interna tambem nunca tem status de comparecimento, so o Clinicorp tem isso).
+async function buscarUltimoAgendamentoPassado(tenantId, numero, config) {
+  const agora = new Date();
+  const from = new Date(agora.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const to = agora.toISOString().slice(0, 10);
+  const candidatos = [];
+
+  if (config.agendarClinicorp) {
+    try {
+      const paciente = await clinicorp.findPatient(tenantId, { phone: numero });
+      const patientId = paciente?.Id ?? paciente?.PersonId ?? paciente?.PatientId ?? paciente?.id;
+      if (patientId) {
+        const [agendamentosPaciente, statusList] = await Promise.all([
+          clinicorp.listAppointments(tenantId, { patientId, from, to, includeCanceled: 'X' }),
+          obterStatusAgendamento(tenantId),
+        ]);
+        const statusPorId = new Map(statusList.map((s) => [String(s.id), s.Description]));
+        for (const a of agendamentosPaciente) {
+          const dataStr = a.date?.slice(0, 10);
+          const quando = new Date(`${dataStr}T${a.toTime || a.fromTime || '00:00'}:00`);
+          if (!dataStr || Number.isNaN(quando.getTime()) || quando >= agora) continue;
+          const statusDesc = statusPorId.get(String(a.StatusId)) || '';
+          candidatos.push({
+            origem: 'Clinicorp',
+            data: dataStr,
+            hora: a.fromTime,
+            quando,
+            statusTexto: a.Canceled === 'X' ? `Cancelado${a.CancelReason ? ` (${a.CancelReason})` : ''}` : (statusDesc || 'sem status registrado no Clinicorp'),
+            status: classificarStatusAgendamento(statusDesc, a.Canceled === 'X'),
+          });
+        }
+      }
+    } catch { /* Clinicorp instavel/indisponivel - segue sem esse dado, nao quebra a resposta */ }
+  }
+
+  if (config.agendarAgendaInterna) {
+    try {
+      const marcador = `[contato:${numero}]`;
+      const eventos = await agenda.listarEventos(tenantId, from, to);
+      for (const e of eventos) {
+        if (!e.descricao || !e.descricao.includes(marcador)) continue;
+        const quando = new Date(e.fim || e.inicio);
+        if (Number.isNaN(quando.getTime()) || quando >= agora) continue;
+        candidatos.push({
+          origem: 'agenda interna',
+          data: (e.inicio || '').slice(0, 10),
+          hora: (e.inicio || '').slice(11, 16),
+          quando,
+          statusTexto: 'sem confirmacao de comparecimento registrada no sistema',
+          status: 'incerto',
+        });
+      }
+    } catch { /* idem */ }
+  }
+
+  if (!candidatos.length) return { encontrado: false };
+  candidatos.sort((a, b) => b.quando - a.quando);
+  const { origem, data, hora, statusTexto, status } = candidatos[0];
+  return { encontrado: true, origem, data, hora, statusTexto, status };
+}
+
+function instrucaoConformeStatusAgendamento(status) {
+  if (status === 'faltou') {
+    return 'Ele FALTOU nessa consulta (nao compareceu). Antes de qualquer outro assunto, pergunte com empatia (sem cobranca) o motivo da falta e direcione a conversa pra remarcar - priorize resgatar esse agendamento.';
+  }
+  if (status === 'compareceu') {
+    return 'Ele COMPARECEU nessa consulta. Pergunte como foi a experiencia dele. Se ele ja fechou o tratamento, comemore e veja se precisa de mais alguma coisa. Se NAO fechou, descubra com cuidado o motivo (preco, duvida, indecisao, precisa pensar etc), quebre as objecoes com empatia e tente reengajar pra fechar.';
+  }
+  if (status === 'cancelado') {
+    return 'Esse agendamento foi cancelado antes da data (nao trate como falta) - verifique se ele ainda tem interesse e, se sim, ofereça remarcar.';
+  }
+  return 'O sistema NAO tem confirmacao clara se ele compareceu ou faltou nessa consulta - NUNCA presuma nenhum dos dois. Antes de qualquer outro assunto, pergunte diretamente pro contato se ele compareceu, e so depois direcione a conversa (se faltou: busque remarcar com empatia; se compareceu: pergunte como foi e se fechou o tratamento).';
+}
+
+// monta o bloco de fatos que vai no FIM do prompt (fora do texto configuravel pelo usuario) -
+// diferente do AVISO_DATAS_PASSADAS (que so instrui a IA a checar quando ELA perceber sozinha),
+// isso aqui entrega o dado ja verificado de antemao, pra ela nunca depender de "lembrar" de
+// checar nem de adivinhar a partir do historico da conversa. Reaproveita o cache salvo na
+// sessao (TTL de 4h) pra nao bater na API do Clinicorp em toda mensagem - so busca de novo
+// quando o cache expira ou ainda nao existe.
+const TTL_CACHE_AGENDAMENTO_MS = 4 * 60 * 60 * 1000;
+async function montarContextoTemporal(tenantId, numero, config, sessao) {
+  const temAgenda = config.agendarAgendaInterna || config.agendarClinicorp;
+  if (!temAgenda) return { texto: '', fatosFrescos: undefined };
+
+  const cacheValido = sessao.fatosAgendamento != null && sessao.fatosAgendamentoEm
+    && (Date.now() - new Date(sessao.fatosAgendamentoEm).getTime()) < TTL_CACHE_AGENDAMENTO_MS;
+
+  let fatos = cacheValido ? sessao.fatosAgendamento : undefined;
+  let fatosFrescos;
+  if (!cacheValido) {
+    fatos = await buscarUltimoAgendamentoPassado(tenantId, numero, config).catch(() => undefined);
+    // so grava no cache o que realmente conseguiu buscar - se deu erro/instabilidade, deixa
+    // undefined pra tentar de novo na proxima mensagem em vez de "travar" um cache vazio
+    if (fatos !== undefined) fatosFrescos = fatos;
+  }
+
+  let texto = '\n\nFATOS REAIS DESSA CONVERSA (ja conferidos no sistema - nunca invente nada diferente disso, e nunca diga que "nao tem acesso" a essa informacao, porque voce tem):';
+  if (sessao.contagem === 0) {
+    texto += '\n- Essa e a PRIMEIRA mensagem dessa conversa com esse contato.';
+  } else if (sessao.iniciadoEm) {
+    const dias = Math.floor((Date.now() - new Date(sessao.iniciadoEm).getTime()) / (24 * 60 * 60 * 1000));
+    texto += dias >= 1 ? `\n- Essa conversa com esse contato comecou ha ${dias} dia(s).` : '\n- Essa conversa com esse contato comecou hoje mesmo.';
+  }
+
+  if (fatos?.encontrado) {
+    texto += `\n- Agendamento anterior mais recente encontrado: ${fatos.data} as ${fatos.hora} (${fatos.origem}). Status no sistema: ${fatos.statusTexto}.`;
+    texto += `\n- ${instrucaoConformeStatusAgendamento(fatos.status)}`;
+  } else if (fatos && fatos.encontrado === false) {
+    texto += '\n- Nao foi encontrado nenhum agendamento anterior desse contato nos ultimos 60 dias.';
+  }
+
+  return { texto, fatosFrescos };
 }
 
 // aviso dinamico, colocado no FIM do prompt (maior prioridade/recencia) - o prompt customizado
@@ -714,7 +879,8 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   }
   if (!textoFinal.trim() && !imagemRecebida) return null;
 
-  const { history, contagem } = await obterSessao(tenantId, numero);
+  const sessao = await obterSessao(tenantId, numero);
+  const { history, contagem } = sessao;
   const conteudoUsuario = imagemRecebida
     ? [
         ...(textoFinal.trim() ? [{ type: 'text', text: textoFinal.trim() }] : []),
@@ -744,7 +910,8 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   }
   TOOLS.push(toolEnviarArquivo(listaArquivos));
   const contexto = { tenantId, instancia, numero, config };
-  const system = systemPromptComHoje(config.prompt, vaiSerAudio, config.agendarClinicorp || config.agendarAgendaInterna);
+  const contextoTemporal = await montarContextoTemporal(tenantId, numero, config, sessao);
+  const system = systemPromptComHoje(config.prompt, vaiSerAudio, config.agendarClinicorp || config.agendarAgendaInterna) + contextoTemporal.texto;
 
   // thinking adaptive + effort medio: sem isso, o modelo as vezes gasta o max_tokens inteiro
   // "pensando" internamente (bloco thinking) e nao sobra nada pro texto de verdade da resposta
@@ -770,6 +937,9 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   history.push({ role: 'assistant', content: respostaTexto });
 
   await salvarSessao(tenantId, numero, history, novaContagem);
+  if (contextoTemporal.fatosFrescos !== undefined) {
+    await salvarFatosAgendamento(tenantId, numero, contextoTemporal.fatosFrescos);
+  }
 
   return { texto: respostaTexto, respondeComAudio: vaiSerAudio };
 }
