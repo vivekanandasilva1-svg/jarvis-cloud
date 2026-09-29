@@ -4168,6 +4168,39 @@ function criarSwitch(id, marcado) {
   return { label, input };
 }
 
+// botao "Apagar definitivamente" (pedido explicito do usuario, alem do "Apagar" normal que so
+// marca por 30 dias) - a friccao contra clique errado e o proprio usuario ter que DIGITAR o
+// nome exato do tenant pra confirmar, nao um simples OK/Cancelar. O servidor confere o nome de
+// novo antes de apagar (ver rota DELETE /api/admin/tenants/:id/definitivo).
+function criarBotaoApagarDefinitivo(id, nome, aoTerminar) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = `Apagar "${nome}" definitivamente`;
+  btn.style.cssText = 'background:rgba(220,38,38,0.28);border:1px solid #dc2626;color:#fca5a5;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;margin-top:6px;';
+  btn.addEventListener('click', async (ev) => {
+    ev.stopPropagation();
+    const digitado = prompt(`Isso apaga "${nome}" e TODOS os dados dele AGORA, sem os 30 dias de espera - não dá pra desfazer.\n\nPra confirmar, digite o nome exato: ${nome}`);
+    if (digitado === null) return;
+    if (digitado.trim() !== nome) {
+      alert('Nome digitado não bate - nada foi apagado.');
+      return;
+    }
+    try {
+      const r = await fetch(`/api/admin/tenants/${id}/definitivo`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ confirmarNome: digitado.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+      aoTerminar();
+    } catch (err) {
+      addBubble(`Erro apagando "${nome}" definitivamente: ${err.message}`, 'system');
+    }
+  });
+  return btn;
+}
+
 async function carregarIntegracoes() {
   integracoesMetaAdsLista.innerHTML = '<p class="agenda-vazia">Carregando...</p>';
   integracoesSistemasLista.innerHTML = '<p class="agenda-vazia">Carregando...</p>';
@@ -4403,6 +4436,7 @@ async function carregarClientes() {
           }
         });
         card.appendChild(restaurarBtn);
+        card.appendChild(criarBotaoApagarDefinitivo(t.id, t.nome, carregarClientes));
         clientesLista.appendChild(card);
         continue;
       }
@@ -4432,6 +4466,7 @@ async function carregarClientes() {
       });
       row.appendChild(toggleBtn);
       card.appendChild(row);
+      card.appendChild(criarBotaoApagarDefinitivo(t.id, t.nome, carregarClientes));
 
       clientesLista.appendChild(card);
     }
@@ -4633,6 +4668,7 @@ async function carregarPropostasAssinantes() {
           }
         });
         card.appendChild(restaurarBtn);
+        card.appendChild(criarBotaoApagarDefinitivo(a.id, a.nome, carregarPropostasAssinantes));
       } else {
         const apagarBtn = document.createElement('button');
         apagarBtn.type = 'button';
@@ -4651,6 +4687,7 @@ async function carregarPropostasAssinantes() {
           }
         });
         card.appendChild(apagarBtn);
+        card.appendChild(criarBotaoApagarDefinitivo(a.id, a.nome, carregarPropostasAssinantes));
       }
 
       propAdminLista.appendChild(card);
@@ -5021,4 +5058,14 @@ async function selecionarCliente(id, nome) {
     }
   });
   clienteIntegracoesPainel.appendChild(apagarBtn);
+
+  clienteIntegracoesPainel.appendChild(criarBotaoApagarDefinitivo(id, nome, () => {
+    clienteSelecionadoId = null;
+    clienteIntegracoesPainel.textContent = '';
+    const msg = document.createElement('p');
+    msg.className = 'agenda-vazia';
+    msg.textContent = 'Selecione um cliente na lista pra ver/configurar as integrações dele.';
+    clienteIntegracoesPainel.appendChild(msg);
+    carregarClientes();
+  }));
 }

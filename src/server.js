@@ -203,7 +203,13 @@ app.post('/api/admin/tenants', exigirSuperAdmin, async (req, res) => {
     const id = await tenants.criarTenant({ nome, username, senha, slug });
     res.json({ ok: true, id });
   } catch (err) {
-    res.status(400).json({ erro: err.message });
+    // traduz o erro cru do Postgres (constraint de username unico) pra algo que a pessoa
+    // entenda - inclusive quando o dono do username e um tenant marcado pra exclusao mas ainda
+    // nao apagado de verdade (ele continua ocupando o username ate ser restaurado/purgado)
+    const mensagem = err.code === '23505' && err.constraint === 'tenants_username_key'
+      ? `Ja existe um cliente/assinante com o usuario "${username}" (pode estar marcado pra exclusao, ainda nao apagado de verdade - confira a lista). Escolha outro usuario.`
+      : err.message;
+    res.status(400).json({ erro: mensagem });
   }
 });
 
@@ -276,6 +282,26 @@ app.delete('/api/admin/tenants/:id', exigirSuperAdmin, async (req, res) => {
 app.post('/api/admin/tenants/:id/restaurar', exigirSuperAdmin, async (req, res) => {
   try {
     await tenants.restaurarTenant(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// apaga de vez NA HORA, sem esperar os 30 dias do "Apagar" normal - pedido explicito do usuario
+// pra ter essa opcao disponivel em qualquer tenant (ex: duplicata/teste que ele ja tem certeza
+// que quer sumir). Exige mandar o NOME do tenant de volta no corpo (o front pede pra digitar) -
+// confere aqui de novo no servidor, nao so confia na confirmacao do navegador, exatamente pelo
+// historico de perda de dados que motivou a exclusao suave em primeiro lugar.
+app.delete('/api/admin/tenants/:id/definitivo', exigirSuperAdmin, async (req, res) => {
+  try {
+    const tenantId = Number(req.params.id);
+    const tenant = await tenants.obterPorId(tenantId);
+    if (!tenant) return res.status(404).json({ erro: 'tenant nao encontrado' });
+    if ((req.body?.confirmarNome || '').trim() !== tenant.nome) {
+      return res.status(400).json({ erro: 'nome de confirmacao nao bate - nada foi apagado' });
+    }
+    await tenants.apagarTenantDeVerdade(tenantId);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });

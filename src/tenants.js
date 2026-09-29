@@ -154,7 +154,20 @@ export async function criarTenant({ slug, nome, username, senha }) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   if (!nome || !username || !senha) throw new Error('nome, username e senha sao obrigatorios');
   await tabelasProntas;
-  const slugFinal = slug || gerarSlug(nome);
+  // slug precisa ser unico (mesmo pra um tenant marcado pra exclusao mas ainda nao apagado de
+  // verdade - ele continua ocupando o slug ate os 30 dias passarem ou ser apagado
+  // definitivamente). Sem isso, criar um cliente novo com o MESMO nome de um que ja foi
+  // "apagado" (marcado) dava um erro cru de constraint do Postgres direto na tela - agora so
+  // acrescenta um sufixo numerico ate achar um slug livre.
+  const base = slug || gerarSlug(nome);
+  let slugFinal = base;
+  let tentativa = 2;
+  while (true) {
+    const { rows: existentes } = await pool.query('SELECT 1 FROM tenants WHERE slug = $1', [slugFinal]);
+    if (!existentes.length) break;
+    slugFinal = `${base}-${tentativa}`;
+    tentativa += 1;
+  }
   const { rows } = await pool.query(
     'INSERT INTO tenants (slug, nome, username, password_hash) VALUES ($1, $2, $3, $4) RETURNING id',
     [slugFinal, nome, username, hashSenha(senha)],
@@ -235,10 +248,12 @@ export async function restaurarTenant(tenantId) {
 // apaga um tenant e TODOS os dados dele em qualquer tabela que referencie tenants(id) - usa o
 // catalogo do proprio Postgres (em vez de uma lista fixa de tabelas aqui) pra nunca ficar
 // desatualizado conforme novas tabelas com tenant_id forem criadas. Roda numa transacao: ou
-// apaga tudo, ou nada (se uma tabela falhar no meio, reverte). NAO da pra desfazer - por isso
-// NAO e exportada/chamada pela UI diretamente, so pelo sweep purgarTenantsMarcados() abaixo,
-// que so mexe em quem ja passou pelos 30 dias de carencia do marcarParaExclusao.
-async function apagarTenantDeVerdade(tenantId) {
+// apaga tudo, ou nada (se uma tabela falhar no meio, reverte). NAO da pra desfazer.
+// Exportada (chamada tanto pelo sweep purgarTenantsMarcados() abaixo quanto direto pela rota
+// "Apagar definitivamente" da UI, pedido explicito do usuario pra nao precisar esperar os 30
+// dias quando ele ja tem certeza) - a friccao contra clique errado fica no FRONTEND (exige
+// digitar o nome do tenant pra confirmar), nao aqui.
+export async function apagarTenantDeVerdade(tenantId) {
   const tenant = await obterPorId(tenantId);
   if (!tenant) return;
   if (tenant.super_admin) throw new Error('nao e possivel apagar um super_admin');
