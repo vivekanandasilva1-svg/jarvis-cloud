@@ -4201,6 +4201,28 @@ function criarBotaoApagarDefinitivo(id, nome, aoTerminar) {
   return btn;
 }
 
+// botaozinho "copiar" ao lado do usuario de login - a senha em si NUNCA fica visivel de novo
+// depois de criada (guardada como hash irreversivel, nao em texto legivel), entao "ver login"
+// na pratica vira "copiar o usuario facil" + "redefinir senha" (ja existe em cada card/painel)
+function criarBotaoCopiarUsuario(username) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = 'Copiar usuário';
+  btn.style.cssText = 'font-size:11px;padding:3px 8px;margin-left:6px;';
+  btn.addEventListener('click', async (ev) => {
+    ev.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(username);
+      const original = btn.textContent;
+      btn.textContent = 'Copiado!';
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    } catch {
+      addBubble(`Usuário: ${username}`, 'system');
+    }
+  });
+  return btn;
+}
+
 async function carregarIntegracoes() {
   integracoesMetaAdsLista.innerHTML = '<p class="agenda-vazia">Carregando...</p>';
   integracoesSistemasLista.innerHTML = '<p class="agenda-vazia">Carregando...</p>';
@@ -4390,7 +4412,7 @@ async function carregarClientes() {
     for (const t of data.tenants) {
       const card = document.createElement('div');
       card.className = 'cliente-card' + (t.id === clienteSelecionadoId ? ' selecionado' : '');
-      card.addEventListener('click', () => selecionarCliente(t.id, t.nome));
+      card.addEventListener('click', () => selecionarCliente(t.id, t.nome, t.username));
 
       const nome = document.createElement('div');
       nome.className = 'cliente-card-nome';
@@ -4400,6 +4422,7 @@ async function carregarClientes() {
       const meta = document.createElement('div');
       meta.className = 'cliente-card-meta';
       meta.textContent = `usuario: ${t.username}`;
+      meta.appendChild(criarBotaoCopiarUsuario(t.username));
       card.appendChild(meta);
 
       const acessoMeta = document.createElement('div');
@@ -4554,6 +4577,7 @@ async function carregarPropostasAssinantes() {
       const meta = document.createElement('div');
       meta.className = 'cliente-card-meta';
       meta.textContent = `usuario: ${a.username} - ${a.ativo ? 'Ativo' : 'Desativado'}`;
+      meta.appendChild(criarBotaoCopiarUsuario(a.username));
       card.appendChild(meta);
 
       const acessoMeta = document.createElement('div');
@@ -4645,6 +4669,37 @@ async function carregarPropostasAssinantes() {
       });
       acessoRow.appendChild(renovarBtn);
       card.appendChild(acessoRow);
+
+      // redefinir senha (nao da pra "ver" a senha ja cadastrada - fica guardada como hash
+      // irreversivel, nunca em texto legivel; redefinir e o equivalente seguro disso)
+      const senhaRow = document.createElement('div');
+      senhaRow.className = 'cliente-card-row';
+      const novaSenhaInput = document.createElement('input');
+      novaSenhaInput.type = 'password';
+      novaSenhaInput.placeholder = 'Nova senha';
+      novaSenhaInput.style.cssText = 'flex:1;min-width:0;';
+      senhaRow.appendChild(novaSenhaInput);
+      const senhaBtn = document.createElement('button');
+      senhaBtn.type = 'button';
+      senhaBtn.textContent = 'Redefinir senha';
+      senhaBtn.addEventListener('click', async () => {
+        if (!novaSenhaInput.value) return;
+        try {
+          const r = await fetch(`/api/admin/tenants/${a.id}/senha`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+            body: JSON.stringify({ novaSenha: novaSenhaInput.value }),
+          });
+          const d = await r.json();
+          if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+          novaSenhaInput.value = '';
+          addBubble(`Senha de "${a.nome}" redefinida.`, 'system');
+        } catch (err) {
+          addBubble(`Erro redefinindo senha: ${err.message}`, 'system');
+        }
+      });
+      senhaRow.appendChild(senhaBtn);
+      card.appendChild(senhaRow);
 
       if (a.apagarEm) {
         // marcado pra exclusao - mostra o aviso + botao pra desfazer, no lugar do botao de apagar
@@ -4755,7 +4810,7 @@ propAdminCriarBtn.addEventListener('click', async () => {
   }
 });
 
-async function selecionarCliente(id, nome) {
+async function selecionarCliente(id, nome, username) {
   clienteSelecionadoId = id;
   carregarClientes(); // redesenha pra marcar o card selecionado
   clienteIntegracoesPainel.textContent = '';
@@ -4897,7 +4952,17 @@ async function selecionarCliente(id, nome) {
   // exclusivamente pela aba "Gerador de Propostas" (tenant_config.proposta_plano so e
   // preenchido por la, e listarTenants() ja exclui esses tenants desta lista de Clientes).
 
-  // ---- Redefinir senha ----
+  // ---- Login e senha ----
+  // a senha nunca fica visivel de novo depois de criada (guardada como hash irreversivel) -
+  // o usuario e visivel/copiavel aqui, redefinir senha e o equivalente seguro de "trocar a senha"
+  const loginLabel = document.createElement('label'); loginLabel.className = 'auto-label'; loginLabel.textContent = 'Login';
+  clienteIntegracoesPainel.appendChild(loginLabel);
+  const loginInfo = document.createElement('p');
+  loginInfo.className = 'agenda-vazia';
+  loginInfo.textContent = `usuário: ${username}`;
+  loginInfo.appendChild(criarBotaoCopiarUsuario(username));
+  clienteIntegracoesPainel.appendChild(loginInfo);
+
   const senhaLabel = document.createElement('label'); senhaLabel.className = 'auto-label'; senhaLabel.textContent = 'Redefinir senha de acesso';
   clienteIntegracoesPainel.appendChild(senhaLabel);
   const senhaForm = document.createElement('div');
