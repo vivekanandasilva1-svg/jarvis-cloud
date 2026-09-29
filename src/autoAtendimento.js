@@ -37,6 +37,11 @@ async function garantirTabelas() {
   // mesmo tempo (cria nos dois lugares)
   await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS agendar_clinicorp BOOLEAN NOT NULL DEFAULT false;`);
   await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS agendar_agenda_interna BOOLEAN NOT NULL DEFAULT true;`);
+  // liga/desliga se o agendamento no Clinicorp e criado de verdade (true, comportamento de
+  // sempre) ou so um PRE-agendamento que uma atendente humana confirma depois por
+  // ligacao/WhatsApp (false) - nao afeta a agenda interna, so o Clinicorp. Default true pra nao
+  // mudar o comportamento de quem ja usa isso.
+  await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS agendamento_direto_clinicorp BOOLEAN NOT NULL DEFAULT true;`);
   // depois de um lead ficar esse tanto de horas SEM RESPONDER (updated_at da sessao dele
   // parado), o sweep resetarSessoesInativas() (chamado periodicamente no boot do server.js)
   // apaga a sessao - a proxima mensagem dele comeca do zero, como se fosse a primeira vez.
@@ -79,12 +84,12 @@ const tabelasProntas = garantirTabelas().catch((err) => {
 export async function obterConfig(tenantId) {
   const vazio = {
     ativo: false, instancia: null, prompt: '', frequenciaAudio: 0, audioSeReceberAudio: false,
-    agendarClinicorp: false, agendarAgendaInterna: true, reiniciarAposHoras: null,
+    agendarClinicorp: false, agendarAgendaInterna: true, reiniciarAposHoras: null, agendamentoDiretoClinicorp: true,
   };
   if (!pool) return vazio;
   await tabelasProntas;
   const { rows } = await pool.query(
-    'SELECT ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, reiniciar_apos_horas FROM auto_atendimento_config WHERE tenant_id = $1',
+    'SELECT ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, reiniciar_apos_horas, agendamento_direto_clinicorp FROM auto_atendimento_config WHERE tenant_id = $1',
     [tenantId],
   );
   if (!rows.length) return vazio;
@@ -97,21 +102,22 @@ export async function obterConfig(tenantId) {
     agendarClinicorp: !!rows[0].agendar_clinicorp,
     agendarAgendaInterna: !!rows[0].agendar_agenda_interna,
     reiniciarAposHoras: rows[0].reiniciar_apos_horas ?? null,
+    agendamentoDiretoClinicorp: rows[0].agendamento_direto_clinicorp !== false,
   };
 }
 
-export async function salvarConfig(tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras }) {
+export async function salvarConfig(tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras, agendamentoDiretoClinicorp }) {
   if (!pool) throw new Error('Precisa do Postgres configurado (DATABASE_URL) pra guardar essa configuracao.');
   await tabelasProntas;
 
   const horas = Number(reiniciarAposHoras) > 0 ? Math.round(Number(reiniciarAposHoras)) : null;
   await pool.query(
-    `INSERT INTO auto_atendimento_config (tenant_id, ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, reiniciar_apos_horas, atualizado_em)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+    `INSERT INTO auto_atendimento_config (tenant_id, ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, reiniciar_apos_horas, agendamento_direto_clinicorp, atualizado_em)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
      ON CONFLICT (tenant_id) DO UPDATE SET
        ativo = $2, instancia = $3, prompt = $4, frequencia_audio = $5, audio_se_receber_audio = $6,
-       agendar_clinicorp = $7, agendar_agenda_interna = $8, reiniciar_apos_horas = $9, atualizado_em = now()`,
-    [tenantId, !!ativo, instancia || null, prompt || '', Number(frequenciaAudio) || 0, !!audioSeReceberAudio, !!agendarClinicorp, !!agendarAgendaInterna, horas],
+       agendar_clinicorp = $7, agendar_agenda_interna = $8, reiniciar_apos_horas = $9, agendamento_direto_clinicorp = $10, atualizado_em = now()`,
+    [tenantId, !!ativo, instancia || null, prompt || '', Number(frequenciaAudio) || 0, !!audioSeReceberAudio, !!agendarClinicorp, !!agendarAgendaInterna, horas, agendamentoDiretoClinicorp !== false],
   );
   // NAO chama mais /settings/set aqui - ver nota grande em evolutionApi.js sobre o porque
   // (causou pelo menos uma desconexao real por "conflict/device_removed" logo depois de
@@ -199,13 +205,16 @@ const TOOL_CLINICORP_CADASTRAR_PACIENTE = {
   },
 };
 
-function toolCriarAgendamento({ agendarClinicorp, agendarAgendaInterna }) {
+function toolCriarAgendamento({ agendarClinicorp, agendarAgendaInterna, agendamentoDiretoClinicorp }) {
+  const clinicorpDireto = agendarClinicorp && agendamentoDiretoClinicorp !== false;
+  const clinicorpPreAgendamento = agendarClinicorp && agendamentoDiretoClinicorp === false;
   const destinos = [];
-  if (agendarClinicorp) destinos.push('na agenda do Clinicorp (precisa informar o medico)');
+  if (clinicorpDireto) destinos.push('na agenda do Clinicorp (precisa informar o medico)');
+  if (clinicorpPreAgendamento) destinos.push('como PRE-agendamento pro Clinicorp (precisa informar o medico) - NAO cria o compromisso de verdade la, so registra a intencao combinada com o contato');
   if (agendarAgendaInterna) destinos.push('na agenda interna');
   return {
     name: 'criar_agendamento',
-    description: `Marca um agendamento/consulta ${destinos.join(' e ')} DE VERDADE (chamada real na API, nao e so um texto de confirmacao) - so diga pro contato que esta confirmado DEPOIS de ver no resultado desta ferramenta que deu certo (ok: true no destino configurado); se vier erro, NUNCA finja que deu certo, explique o problema pro contato ou tente resolver (ex: escolher outro horario). ${agendarClinicorp ? 'Pro Clinicorp: se o contato for paciente novo (sem cadastro), use clinicorp_buscar_paciente e, se nao achar, clinicorp_cadastrar_paciente ANTES de chamar essa ferramenta, e passe o patientId encontrado/criado aqui - nao deixe so pro campo pacienteNome tentar criar um cadastro incompleto sozinho.' : ''} Sempre inclua um resumo do que foi conversado com o contato nas observacoes. Calcule inicio/fim como data/hora absoluta ISO 8601 usando o "agora" informado - NUNCA um horario que ja passou (o sistema rejeita e devolve erro se tentar). Antes de chamar essa ferramenta, SEMPRE consulte a disponibilidade primeiro (agenda_listar_eventos e/ou clinicorp_consultar_agenda_medico) pra nao sugerir um horario ocupado. Regras que o sistema aplica automaticamente: nunca duplica o mesmo paciente no mesmo horario, e no Clinicorp um mesmo horario aceita no maximo 2 pacientes diferentes com o mesmo medico (a partir do 3º, rejeita).`,
+    description: `Marca um agendamento/consulta ${destinos.join(' e ')}${clinicorpDireto || agendarAgendaInterna ? ' DE VERDADE (chamada real na API, nao e so um texto de confirmacao)' : ''} - ${clinicorpDireto || agendarAgendaInterna ? 'so diga pro contato que esta confirmado DEPOIS de ver no resultado desta ferramenta que deu certo (ok: true no destino configurado)' : ''}${clinicorpDireto || agendarAgendaInterna ? '; se vier erro, NUNCA finja que deu certo, explique o problema pro contato ou tente resolver (ex: escolher outro horario).' : ''} ${clinicorpPreAgendamento ? 'IMPORTANTE sobre o Clinicorp: o agendamento direto esta DESLIGADO pra essa clinica - essa ferramenta so registra um PRE-agendamento (confere a disponibilidade real e evita sugerir horario ocupado/duplicado, mas nao cria o compromisso de verdade no Clinicorp). Depois de ver preAgendamento:true no resultado, diga pro contato que foi feito um PRE-agendamento pra data/horario combinado e que uma atendente humana vai confirmar em breve por ligacao ou WhatsApp - NUNCA diga que esta confirmado, marcado ou garantido.' : ''} ${agendarClinicorp ? 'Pro Clinicorp: se o contato for paciente novo (sem cadastro), use clinicorp_buscar_paciente e, se nao achar, clinicorp_cadastrar_paciente ANTES de chamar essa ferramenta, e passe o patientId encontrado/criado aqui - nao deixe so pro campo pacienteNome tentar criar um cadastro incompleto sozinho.' : ''} Sempre inclua um resumo do que foi conversado com o contato nas observacoes. Calcule inicio/fim como data/hora absoluta ISO 8601 usando o "agora" informado - NUNCA um horario que ja passou (o sistema rejeita e devolve erro se tentar). Antes de chamar essa ferramenta, SEMPRE consulte a disponibilidade primeiro (agenda_listar_eventos e/ou clinicorp_consultar_agenda_medico) pra nao sugerir um horario ocupado. Regras que o sistema aplica automaticamente: nunca duplica o mesmo paciente no mesmo horario, e no Clinicorp um mesmo horario aceita no maximo 2 pacientes diferentes com o mesmo medico (a partir do 3º, rejeita).`,
     input_schema: {
       type: 'object',
       properties: {
@@ -425,6 +434,11 @@ async function runTool(name, input, contexto) {
             const pacientesDiferentes = new Set(mesmoHorario.map((a) => normalizarNome(a.PatientName)));
             if (pacientesDiferentes.size >= 2) {
               resultado.clinicorp = { erro: `Esse horario com ${medico.name} ja tem 2 pessoas diferentes marcadas - escolha outro horario.` };
+            } else if (config.agendamentoDiretoClinicorp === false) {
+              // agendamento direto desligado - ja conferiu disponibilidade/duplicidade real
+              // acima, mas nao cria o compromisso de verdade no Clinicorp; so devolve os dados
+              // pra IA anunciar o PRE-agendamento e uma atendente humana confirmar depois
+              resultado.clinicorp = { preAgendamento: true, medico: medico.name, data, de, ate };
             } else {
               await clinicorp.createAppointment(tenantId, {
                 patientId: input.patientId || undefined,
@@ -471,10 +485,14 @@ async function runTool(name, input, contexto) {
         }
       }
 
-      // pula o card do contato pro "Agendado" no CRM se qualquer um dos dois destinos deu certo
-      // - best-effort, nunca deve quebrar a resposta pro contato se o CRM falhar
+      // pula o card do contato no CRM - "Agendado" se algum dos destinos criou o compromisso DE
+      // VERDADE, ou "Pre-agendado" se so ficou o pre-agendamento do Clinicorp (agendamento
+      // direto desligado) sem nenhum agendamento real em paralelo. Best-effort, nunca deve
+      // quebrar a resposta pro contato se o CRM falhar.
       if (resultado.clinicorp?.ok || resultado.agendaInterna?.ok) {
         crm.marcarAgendado(tenantId, contexto.numero, contexto.instancia).catch((err) => console.error('Erro movendo card no CRM:', err.message));
+      } else if (resultado.clinicorp?.preAgendamento) {
+        crm.marcarPreAgendado(tenantId, contexto.numero, contexto.instancia).catch((err) => console.error('Erro movendo card no CRM:', err.message));
       }
 
       return resultado;
@@ -770,6 +788,14 @@ async function montarContextoTemporal(tenantId, numero, config, sessao) {
   return { texto, fatosFrescos };
 }
 
+// so entra no prompt quando o Clinicorp esta ativo E o agendamento direto foi DESLIGADO no
+// painel - reforca a regra crucial de nunca prometer confirmacao, mesmo que o prompt
+// customizado do usuario (editavel livremente) diga algo tipo "sempre confirme o horario"
+function avisoAgendamentoClinicorp(config) {
+  if (!config.agendarClinicorp || config.agendamentoDiretoClinicorp !== false) return '';
+  return '\n\nIMPORTANTE sobre agendar no Clinicorp: o agendamento direto esta DESLIGADO pra essa clinica. Voce pode consultar disponibilidade normalmente (clinicorp_consultar_agenda_medico) e combinar data/horario com o contato, mas criar_agendamento so registra um PRE-agendamento - NAO cria o compromisso de verdade no Clinicorp. Depois de chamar a ferramenta e ver preAgendamento:true no resultado, diga pro contato algo como "Show, deixei pré-agendado pra [data] às [hora] - uma de nossas atendentes vai te confirmar em breve por ligação ou WhatsApp." NUNCA diga que esta confirmado, marcado ou garantido - use sempre a palavra "pré-agendamento" e deixe claro que falta a confirmacao humana.';
+}
+
 // aviso dinamico, colocado no FIM do prompt (maior prioridade/recencia) - o prompt customizado
 // do usuario pode ter instrucoes gerais tipo "use uns emojis" (pensando em texto) que colidem
 // com a regra de audio; como aqui a gente ja sabe ANTES de gerar se essa resposta especifica
@@ -911,7 +937,7 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   TOOLS.push(toolEnviarArquivo(listaArquivos));
   const contexto = { tenantId, instancia, numero, config };
   const contextoTemporal = await montarContextoTemporal(tenantId, numero, config, sessao);
-  const system = systemPromptComHoje(config.prompt, vaiSerAudio, config.agendarClinicorp || config.agendarAgendaInterna) + contextoTemporal.texto;
+  const system = systemPromptComHoje(config.prompt, vaiSerAudio, config.agendarClinicorp || config.agendarAgendaInterna) + contextoTemporal.texto + avisoAgendamentoClinicorp(config);
 
   // thinking adaptive + effort medio: sem isso, o modelo as vezes gasta o max_tokens inteiro
   // "pensando" internamente (bloco thinking) e nao sobra nada pro texto de verdade da resposta

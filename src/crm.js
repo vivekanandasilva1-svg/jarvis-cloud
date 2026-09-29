@@ -20,6 +20,7 @@ eventosCrm.setMaxListeners(50); // cada aba do painel aberta conta como 1 listen
 export const ETAPAS = [
   { id: 'novo_lead', nome: 'Novo Lead' },
   { id: 'em_atendimento', nome: 'Em Atendimento' },
+  { id: 'pre_agendado', nome: 'Pré-agendado (confirmar)' },
   { id: 'agendado', nome: 'Agendado' },
   { id: 'compareceu', nome: 'Compareceu' },
   { id: 'follow_up', nome: 'Follow Up' },
@@ -137,6 +138,19 @@ export async function marcarAgendado(tenantId, numero, instancia) {
   await tabelasProntas;
   await pool.query(
     `UPDATE crm_contatos SET etapa = 'agendado' WHERE tenant_id = $1 AND numero = $2 AND instancia = $3`,
+    [tenantId, numero, instancia],
+  );
+}
+
+// chamado pelo auto-atendimento quando o "agendamento direto no Clinicorp" esta DESLIGADO e um
+// pre-agendamento e combinado com o lead - pula o card pra uma etapa propria (diferente de
+// "agendado" de proposito) pra deixar claro pra atendente humana que esse aqui ainda precisa
+// de uma ligacao/WhatsApp pra confirmar de verdade antes de virar um agendamento real
+export async function marcarPreAgendado(tenantId, numero, instancia) {
+  if (!pool) return;
+  await tabelasProntas;
+  await pool.query(
+    `UPDATE crm_contatos SET etapa = 'pre_agendado' WHERE tenant_id = $1 AND numero = $2 AND instancia = $3`,
     [tenantId, numero, instancia],
   );
 }

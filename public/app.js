@@ -191,6 +191,9 @@ const autoFrequenciaAudio = document.getElementById('autoFrequenciaAudio');
 const autoAudioSeReceberAudio = document.getElementById('autoAudioSeReceberAudio');
 const autoAgendarInterna = document.getElementById('autoAgendarInterna');
 const autoAgendarClinicorp = document.getElementById('autoAgendarClinicorp');
+const autoAgendamentoDiretoWrap = document.getElementById('autoAgendamentoDiretoWrap');
+const autoAgendamentoDireto = document.getElementById('autoAgendamentoDireto');
+const autoAgendamentoDiretoLabel = document.getElementById('autoAgendamentoDiretoLabel');
 const autoReiniciarValor = document.getElementById('autoReiniciarValor');
 const autoReiniciarUnidade = document.getElementById('autoReiniciarUnidade');
 const autoResetarHistorico = document.getElementById('autoResetarHistorico');
@@ -2973,6 +2976,16 @@ autoAtivo.addEventListener('change', () => {
   autoAtivoLabel.textContent = autoAtivo.checked ? 'Ativado' : 'Desativado';
 });
 
+// o toggle "Agendar direto no Clinicorp" so faz sentido com o Clinicorp ligado - fica escondido
+// senao. Nao mexe no valor salvo (checked) so por esconder/mostrar, so na visibilidade.
+function atualizarVisibilidadeAgendamentoDireto() {
+  autoAgendamentoDiretoWrap.hidden = !autoAgendarClinicorp.checked;
+}
+autoAgendarClinicorp.addEventListener('change', atualizarVisibilidadeAgendamentoDireto);
+autoAgendamentoDireto.addEventListener('change', () => {
+  autoAgendamentoDiretoLabel.textContent = autoAgendamentoDireto.checked ? 'Agendar direto no Clinicorp' : 'So pre-agendar (atendente confirma depois)';
+});
+
 // o botao "Salvar Configurações" fica vermelho assim que qualquer campo da aba muda (avisa que
 // tem alteracao pendente) e volta pro dourado (com um "pulso" rapido) so depois de salvar de
 // verdade com sucesso - assim fica visivelmente claro quando ainda falta salvar
@@ -2981,7 +2994,7 @@ function marcarAlteracoesNaoSalvas() {
   autoSalvar.classList.remove('salvo-pulso');
   autoSalvar.textContent = 'Salvar Configurações *';
 }
-[autoAtivo, autoInstancia, autoPrompt, autoFrequenciaAudio, autoAudioSeReceberAudio, autoAgendarInterna, autoAgendarClinicorp, autoReiniciarValor, autoReiniciarUnidade]
+[autoAtivo, autoInstancia, autoPrompt, autoFrequenciaAudio, autoAudioSeReceberAudio, autoAgendarInterna, autoAgendarClinicorp, autoAgendamentoDireto, autoReiniciarValor, autoReiniciarUnidade]
   .forEach((el) => {
     // 'input' pega cada tecla digitada no prompt; 'change' cobre checkbox/select (que nem
     // sempre disparam 'input' de forma consistente entre navegadores)
@@ -3020,6 +3033,9 @@ async function carregarConfigAutoAtendimento() {
     autoAudioSeReceberAudio.checked = !!config.audioSeReceberAudio;
     autoAgendarInterna.checked = !!config.agendarAgendaInterna;
     autoAgendarClinicorp.checked = !!config.agendarClinicorp;
+    autoAgendamentoDireto.checked = config.agendamentoDiretoClinicorp !== false;
+    autoAgendamentoDiretoLabel.textContent = autoAgendamentoDireto.checked ? 'Agendar direto no Clinicorp' : 'So pre-agendar (atendente confirma depois)';
+    atualizarVisibilidadeAgendamentoDireto();
 
     // horas guardadas no banco -> mostra na unidade mais legivel (dias quando da exato, senao horas)
     if (config.reiniciarAposHoras && config.reiniciarAposHoras > 0) {
@@ -3057,6 +3073,7 @@ autoSalvar.addEventListener('click', async () => {
   const audioSeReceberAudio = autoAudioSeReceberAudio.checked;
   const agendarAgendaInterna = autoAgendarInterna.checked;
   const agendarClinicorp = autoAgendarClinicorp.checked;
+  const agendamentoDiretoClinicorp = autoAgendamentoDireto.checked;
   const reiniciarValor = Number(autoReiniciarValor.value) || 0;
   const reiniciarAposHoras = reiniciarValor > 0 ? (autoReiniciarUnidade.value === 'dias' ? reiniciarValor * 24 : reiniciarValor) : null;
   if (ativo && (!instancia || !prompt)) {
@@ -3069,7 +3086,7 @@ autoSalvar.addEventListener('click', async () => {
     const res = await fetch('/api/auto-atendimento/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-      body: JSON.stringify({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarAgendaInterna, agendarClinicorp, reiniciarAposHoras }),
+      body: JSON.stringify({ ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarAgendaInterna, agendarClinicorp, agendamentoDiretoClinicorp, reiniciarAposHoras }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
