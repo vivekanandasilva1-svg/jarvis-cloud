@@ -233,6 +233,17 @@ app.post('/api/admin/tenants/:id/senha', exigirSuperAdmin, async (req, res) => {
   }
 });
 
+// devolve a senha em texto legivel (pedido explicito do usuario) - so existe pra senha criada/
+// redefinida depois dessa funcionalidade ter sido adicionada; conta antiga devolve senha: null
+app.get('/api/admin/tenants/:id/senha', exigirSuperAdmin, async (req, res) => {
+  try {
+    const senha = await tenants.obterSenhaVisivel(Number(req.params.id));
+    res.json({ senha });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 // periodo de contratacao (acesso geral a Lumia) - 1 a 12 meses ou vitalicio (meses vazio/null);
 // tambem reativa o tenant, e assim que se renova/desbloqueia alguem que tinha expirado
 app.post('/api/admin/tenants/:id/acesso', exigirSuperAdmin, async (req, res) => {

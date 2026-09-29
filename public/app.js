@@ -2,6 +2,7 @@ const loginScreen = document.getElementById('loginScreen');
 const loginForm = document.getElementById('loginForm');
 const usernameInput = document.getElementById('usernameInput');
 const passwordInput = document.getElementById('passwordInput');
+adicionarOlhinho(passwordInput);
 const loginError = document.getElementById('loginError');
 const appWindow = document.getElementById('appWindow');
 
@@ -92,6 +93,7 @@ const integracoesEmBreveLista = document.getElementById('integracoesEmBreveLista
 const clienteNomeInput = document.getElementById('clienteNomeInput');
 const clienteUsuarioInput = document.getElementById('clienteUsuarioInput');
 const clienteSenhaInput = document.getElementById('clienteSenhaInput');
+adicionarOlhinho(clienteSenhaInput);
 const clienteAcessoInput = document.getElementById('clienteAcessoInput');
 const clienteCriarBtn = document.getElementById('clienteCriarBtn');
 const clienteCriarErro = document.getElementById('clienteCriarErro');
@@ -102,6 +104,7 @@ const clienteIntegracoesPainel = document.getElementById('clienteIntegracoesPain
 const propAdminNomeInput = document.getElementById('propAdminNomeInput');
 const propAdminUsuarioInput = document.getElementById('propAdminUsuarioInput');
 const propAdminSenhaInput = document.getElementById('propAdminSenhaInput');
+adicionarOlhinho(propAdminSenhaInput);
 const propAdminPlanoInput = document.getElementById('propAdminPlanoInput');
 const propAdminAcessoInput = document.getElementById('propAdminAcessoInput');
 const propAdminCriarBtn = document.getElementById('propAdminCriarBtn');
@@ -164,12 +167,15 @@ const crmOcultasTrocarSenhaBtn = document.getElementById('crmOcultasTrocarSenhaB
 const crmOcultasSenhaGate = document.getElementById('crmOcultasSenhaGate');
 const crmOcultasSenhaTexto = document.getElementById('crmOcultasSenhaTexto');
 const crmOcultasSenhaInput = document.getElementById('crmOcultasSenhaInput');
+adicionarOlhinho(crmOcultasSenhaInput);
 const crmOcultasSenhaEntrar = document.getElementById('crmOcultasSenhaEntrar');
 const crmOcultasSenhaErro = document.getElementById('crmOcultasSenhaErro');
 const crmOcultasTrocarSenha = document.getElementById('crmOcultasTrocarSenha');
 const crmOcultasTrocarTexto = document.getElementById('crmOcultasTrocarTexto');
 const crmOcultasSenhaAtualInput = document.getElementById('crmOcultasSenhaAtualInput');
+adicionarOlhinho(crmOcultasSenhaAtualInput);
 const crmOcultasSenhaNovaInput = document.getElementById('crmOcultasSenhaNovaInput');
+adicionarOlhinho(crmOcultasSenhaNovaInput);
 const crmOcultasSenhaSalvar = document.getElementById('crmOcultasSenhaSalvar');
 const crmOcultasSenhaCancelar = document.getElementById('crmOcultasSenhaCancelar');
 const crmOcultasTrocarErro = document.getElementById('crmOcultasTrocarErro');
@@ -4223,6 +4229,60 @@ function criarBotaoCopiarUsuario(username) {
   return btn;
 }
 
+// botao "Ver senha" - so funciona pra senha criada/redefinida depois dessa funcionalidade
+// existir (guardada cifrada de proposito, ver tenants.js). Mostra num prompt (facil de
+// selecionar/copiar) em vez de deixar exposta na tela o tempo todo.
+function criarBotaoVerSenha(id, nome) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = 'Ver senha';
+  btn.style.cssText = 'font-size:11px;padding:3px 8px;margin-left:6px;';
+  btn.addEventListener('click', async (ev) => {
+    ev.stopPropagation();
+    try {
+      const r = await fetch(`/api/admin/tenants/${id}/senha`, { headers: { 'x-app-password': appPassword } });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+      if (d.senha == null) {
+        alert(`Não tenho a senha de "${nome}" guardada de um jeito reversível (ela foi criada antes dessa função existir). Use "Redefinir senha" pra colocar uma nova.`);
+      } else {
+        prompt(`Senha de "${nome}" (Ctrl+C pra copiar):`, d.senha);
+      }
+    } catch (err) {
+      addBubble(`Erro consultando senha: ${err.message}`, 'system');
+    }
+  });
+  return btn;
+}
+
+// insere um botaozinho "olho" ao lado de um <input type="password"> pra mostrar/ocultar o que
+// esta sendo digitado - funciona tanto num input ja no DOM quanto num recem-criado (nesse caso
+// devolve um wrapper <span> que o chamador deve appendar NO LUGAR do input sozinho)
+function adicionarOlhinho(input) {
+  const wrap = document.createElement('span');
+  wrap.style.cssText = 'position:relative;display:inline-flex;flex:1;min-width:0;';
+  const parent = input.parentNode;
+  const proximo = input.nextSibling;
+  wrap.appendChild(input);
+  input.style.paddingRight = '34px';
+  input.style.boxSizing = 'border-box';
+  input.style.width = '100%';
+  const olho = document.createElement('button');
+  olho.type = 'button';
+  olho.textContent = '👁';
+  olho.title = 'Mostrar/ocultar senha';
+  olho.style.cssText = 'position:absolute;right:2px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:13px;padding:2px 6px;line-height:1;';
+  olho.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    input.type = input.type === 'password' ? 'text' : 'password';
+    olho.textContent = input.type === 'password' ? '👁' : '🙈';
+  });
+  wrap.appendChild(olho);
+  if (parent) parent.insertBefore(wrap, proximo);
+  return wrap;
+}
+
 async function carregarIntegracoes() {
   integracoesMetaAdsLista.innerHTML = '<p class="agenda-vazia">Carregando...</p>';
   integracoesSistemasLista.innerHTML = '<p class="agenda-vazia">Carregando...</p>';
@@ -4423,6 +4483,7 @@ async function carregarClientes() {
       meta.className = 'cliente-card-meta';
       meta.textContent = `usuario: ${t.username}`;
       meta.appendChild(criarBotaoCopiarUsuario(t.username));
+      meta.appendChild(criarBotaoVerSenha(t.id, t.nome));
       card.appendChild(meta);
 
       const acessoMeta = document.createElement('div');
@@ -4677,8 +4738,7 @@ async function carregarPropostasAssinantes() {
       const novaSenhaInput = document.createElement('input');
       novaSenhaInput.type = 'password';
       novaSenhaInput.placeholder = 'Nova senha';
-      novaSenhaInput.style.cssText = 'flex:1;min-width:0;';
-      senhaRow.appendChild(novaSenhaInput);
+      senhaRow.appendChild(adicionarOlhinho(novaSenhaInput));
       const senhaBtn = document.createElement('button');
       senhaBtn.type = 'button';
       senhaBtn.textContent = 'Redefinir senha';
@@ -4699,6 +4759,7 @@ async function carregarPropostasAssinantes() {
         }
       });
       senhaRow.appendChild(senhaBtn);
+      senhaRow.appendChild(criarBotaoVerSenha(a.id, a.nome));
       card.appendChild(senhaRow);
 
       if (a.apagarEm) {
@@ -4985,7 +5046,8 @@ async function selecionarCliente(id, nome, username) {
       addBubble(`Erro redefinindo senha: ${err.message}`, 'system');
     }
   });
-  senhaForm.append(novaSenhaInput, senhaSalvar);
+  senhaForm.appendChild(adicionarOlhinho(novaSenhaInput));
+  senhaForm.append(senhaSalvar, criarBotaoVerSenha(id, nome));
   clienteIntegracoesPainel.appendChild(senhaForm);
 
   // ---- Periodo de Acesso (contratacao) ----

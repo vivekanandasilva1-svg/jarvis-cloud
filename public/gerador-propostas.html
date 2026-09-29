@@ -148,7 +148,10 @@
             </div>
             <div>
                 <label class="block text-xs text-slate-400 mb-1.5">Senha</label>
-                <input required type="password" id="loginSenha" class="w-full rounded-xl p-3 text-sm transition-all">
+                <div class="relative">
+                    <input required type="password" id="loginSenha" class="w-full rounded-xl p-3 pr-10 text-sm transition-all">
+                    <button type="button" id="loginSenhaOlho" class="absolute right-2 top-1/2 -translate-y-1/2 bg-transparent border-0 cursor-pointer text-sm" title="Mostrar/ocultar senha">👁</button>
+                </div>
             </div>
             <p id="loginErro" class="hidden text-xs text-red-400"></p>
             <button type="submit" class="login-submit w-full py-3 bg-gradient-to-r from-gold-500 to-amber-600 text-black font-bold rounded-xl text-sm">Entrar</button>
@@ -353,6 +356,13 @@
 
             await carregarPropostas();
         }
+
+        document.getElementById('loginSenhaOlho').addEventListener('click', () => {
+            const input = document.getElementById('loginSenha');
+            const olho = document.getElementById('loginSenhaOlho');
+            input.type = input.type === 'password' ? 'text' : 'password';
+            olho.textContent = input.type === 'password' ? '👁' : '🙈';
+        });
 
         document.getElementById('formLogin').addEventListener('submit', async (e) => {
             e.preventDefault();

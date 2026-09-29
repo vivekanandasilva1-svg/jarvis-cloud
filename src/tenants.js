@@ -3,6 +3,7 @@
 // da conversao multi-tenant (ver plano salvo em .claude/plans na epoca dessa mudanca).
 import crypto from 'node:crypto';
 import { pool } from './db.js';
+import { encrypt, decrypt } from './crypto.js';
 
 const SCRYPT_KEYLEN = 64;
 
@@ -32,6 +33,12 @@ async function garantirTabelas() {
   // depois que essa data passar - da tempo de perceber e restaurar (ver restaurarTenant) um
   // clique errado ou um teste feito sem querer contra producao antes da perda virar definitiva.
   await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS apagar_em TIMESTAMPTZ;`);
+  // copia CIFRADA (reversivel, diferente do password_hash que e um hash de verdade e nunca
+  // volta a virar texto) da senha, pra o super_admin poder consultar depois - pedido explicito
+  // do usuario. So existe pra senha criada/redefinida a PARTIR de agora (criarTenant/
+  // redefinirSenha abaixo); conta antiga nunca teve a senha original guardada em lugar nenhum,
+  // entao nao tem como "aparecer" retroativamente - so redefinindo de novo.
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS senha_visivel_enc BYTEA;`);
   // qual tenant e dono de cada instancia do Evolution API - usado pra rotear mensagem
   // recebida no webhook (que so identifica a instancia, nao tem conceito de tenant) pro
   // tenant certo. 1 instancia so pode pertencer a 1 tenant.
@@ -169,8 +176,8 @@ export async function criarTenant({ slug, nome, username, senha }) {
     tentativa += 1;
   }
   const { rows } = await pool.query(
-    'INSERT INTO tenants (slug, nome, username, password_hash) VALUES ($1, $2, $3, $4) RETURNING id',
-    [slugFinal, nome, username, hashSenha(senha)],
+    'INSERT INTO tenants (slug, nome, username, password_hash, senha_visivel_enc) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+    [slugFinal, nome, username, hashSenha(senha), encrypt(senha)],
   );
   return rows[0].id;
 }
@@ -308,7 +315,22 @@ export async function redefinirSenha(tenantId, novaSenha) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   if (!novaSenha) throw new Error('Nova senha obrigatoria.');
   await tabelasProntas;
-  await pool.query('UPDATE tenants SET password_hash = $1 WHERE id = $2', [hashSenha(novaSenha), tenantId]);
+  await pool.query(
+    'UPDATE tenants SET password_hash = $1, senha_visivel_enc = $2 WHERE id = $3',
+    [hashSenha(novaSenha), encrypt(novaSenha), tenantId],
+  );
+}
+
+// devolve a senha em texto legivel pro super_admin consultar - so funciona pra senha
+// criada/redefinida DEPOIS que essa funcionalidade foi adicionada (ver senha_visivel_enc
+// acima); conta antiga (so tem o hash de sempre, que e irreversivel por design) devolve null.
+export async function obterSenhaVisivel(tenantId) {
+  if (!pool) return null;
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT senha_visivel_enc FROM tenants WHERE id = $1', [tenantId]);
+  const bruto = rows[0]?.senha_visivel_enc;
+  if (!bruto) return null;
+  return decrypt(bruto);
 }
 
 export { hashSenha };
