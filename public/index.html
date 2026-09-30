@@ -784,6 +784,21 @@
 
         <label class="auto-label" style="margin-top: 16px;">Em breve</label>
         <div class="auto-arquivos-lista" id="integracoesEmBreveLista"></div>
+
+        <div id="colaboradoresWrap" hidden style="margin-top: 16px;">
+          <label class="auto-label">Colaboradores (login extra pra sua equipe)</label>
+          <p class="wa-hint">Cada colaborador tem acesso completo à sua conta, com login próprio - útil pra não precisar compartilhar sua senha principal com a equipe.</p>
+          <div class="cliente-form">
+            <input type="text" id="colabNomeInput" placeholder="Nome do colaborador" />
+            <input type="text" id="colabUsuarioInput" placeholder="Usuario de login" />
+            <input type="password" id="colabSenhaInput" placeholder="Senha" />
+            <button type="button" id="colabCriarBtn">Criar acesso</button>
+          </div>
+          <p class="agenda-erro" id="colabCriarErro" hidden></p>
+          <div class="auto-arquivos-lista" id="colaboradoresLista">
+            <p class="agenda-vazia">Carregando...</p>
+          </div>
+        </div>
       </div>
     </div>
 

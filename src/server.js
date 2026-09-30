@@ -136,7 +136,65 @@ app.get('/api/me', async (req, res) => {
     const tenant = await tenants.obterPorId(req.tenantId);
     if (!tenant || !tenant.ativo) return res.status(401).json({ erro: 'tenant nao encontrado' });
     const tabsHabilitadas = await tenantConfig.obterTabsHabilitadas(tenant.id);
-    res.json({ tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas });
+    res.json({ tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas, permiteColaboradores: !!tenant.permite_colaboradores });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// ---------- Colaboradores (logins extras dentro da PROPRIA conta - qualquer tenant autenticado
+// mexe so nos dele; o beneficio em si so o super_admin liga/desliga, ver /api/admin/tenants/:id/
+// permite-colaboradores acima) ----------
+app.get('/api/colaboradores', async (req, res) => {
+  try {
+    res.json({ colaboradores: await tenants.listarColaboradores(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/colaboradores', async (req, res) => {
+  const { nome, username, senha } = req.body || {};
+  try {
+    const id = await tenants.criarColaborador(req.tenantId, { nome, username, senha });
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/colaboradores/:id/ativo', async (req, res) => {
+  try {
+    await tenants.alternarColaboradorAtivo(req.tenantId, Number(req.params.id), !!req.body?.ativo);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/colaboradores/:id/redefinir-senha', async (req, res) => {
+  const { novaSenha } = req.body || {};
+  try {
+    await tenants.redefinirSenhaColaborador(req.tenantId, Number(req.params.id), novaSenha);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/colaboradores/:id/senha', async (req, res) => {
+  try {
+    const senha = await tenants.obterSenhaVisivelColaborador(req.tenantId, Number(req.params.id));
+    res.json({ senha });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/colaboradores/:id', async (req, res) => {
+  try {
+    await tenants.apagarColaborador(req.tenantId, Number(req.params.id));
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -274,6 +332,17 @@ app.post('/api/admin/tenants/:id/tabs', exigirSuperAdmin, async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });
+  }
+});
+
+// liga/desliga o beneficio de "esse cliente pode criar logins de colaborador pra propria
+// equipe" - so o super_admin decide isso, por cliente (aba Clientes)
+app.post('/api/admin/tenants/:id/permite-colaboradores', exigirSuperAdmin, async (req, res) => {
+  try {
+    await tenants.definirPermiteColaboradores(Number(req.params.id), !!req.body?.permitido);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
   }
 });
 

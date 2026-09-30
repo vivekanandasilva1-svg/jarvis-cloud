@@ -48,6 +48,29 @@ async function garantirTabelas() {
       tenant_id INT NOT NULL REFERENCES tenants(id)
     );
   `);
+  // beneficio que so o super_admin liga/desliga por cliente (aba Clientes) - quando true, o
+  // PROPRIO cliente pode criar logins extras (colaboradores) pra equipe dele, sem precisar
+  // compartilhar a senha principal da conta. Default false (nao muda nada pra quem ja usa,
+  // precisa ser liberado explicitamente).
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS permite_colaboradores BOOLEAN NOT NULL DEFAULT false;`);
+  // logins extras dentro da conta de um tenant (ex: recepcionista, atendente) - resolvem pro
+  // MESMO tenant_id do dono na hora de autenticar (ver autenticar abaixo), acesso completo
+  // identico ao login principal, so pra nao precisar compartilhar a senha da conta com a
+  // equipe toda. username e global (mesma unicidade do username em "tenants" - checada na
+  // aplicacao em vez de UNIQUE composto, ja que sao tabelas diferentes).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tenant_colaboradores (
+      id SERIAL PRIMARY KEY,
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      nome TEXT NOT NULL,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      senha_visivel_enc BYTEA,
+      ativo BOOLEAN NOT NULL DEFAULT true,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS tenant_colaboradores_tenant_idx ON tenant_colaboradores (tenant_id);`);
 }
 // exportado pra outros modulos poderem esperar a tabela "tenants" existir antes de criar as
 // PROPRIAS tabelas (que tem REFERENCES tenants(id)) - sem isso, como cada modulo cria sua
@@ -119,15 +142,28 @@ export async function autenticar(username, senha) {
   await tabelasProntas;
   const { rows } = await pool.query('SELECT id, password_hash, ativo FROM tenants WHERE username = $1', [username]);
   const tenant = rows[0];
-  if (!tenant || !tenant.ativo) return null;
-  if (!senhaConfere(senha, tenant.password_hash)) return null;
-  return tenant.id;
+  if (tenant && tenant.ativo && senhaConfere(senha, tenant.password_hash)) return tenant.id;
+
+  // login de colaborador (criado pelo proprio cliente, se o super_admin liberou esse
+  // beneficio pra ele) - resolve pro MESMO tenant_id do dono, acesso completo identico ao
+  // login principal, so um jeito de nao precisar compartilhar a senha da conta com a equipe
+  const { rows: colabRows } = await pool.query(
+    `SELECT c.password_hash, c.ativo AS colaborador_ativo, c.tenant_id, t.ativo AS tenant_ativo
+     FROM tenant_colaboradores c JOIN tenants t ON t.id = c.tenant_id
+     WHERE c.username = $1`,
+    [username],
+  );
+  const colaborador = colabRows[0];
+  if (colaborador && colaborador.colaborador_ativo && colaborador.tenant_ativo && senhaConfere(senha, colaborador.password_hash)) {
+    return colaborador.tenant_id;
+  }
+  return null;
 }
 
 export async function obterPorId(id) {
   if (!pool) return null;
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT id, slug, nome, username, ativo, super_admin FROM tenants WHERE id = $1', [id]);
+  const { rows } = await pool.query('SELECT id, slug, nome, username, ativo, super_admin, permite_colaboradores FROM tenants WHERE id = $1', [id]);
   return rows[0] || null;
 }
 
@@ -142,7 +178,7 @@ export async function listarTenants() {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(`
-    SELECT t.id, t.slug, t.nome, t.username, t.ativo, t.acesso_expira_em, t.apagar_em, t.criado_em
+    SELECT t.id, t.slug, t.nome, t.username, t.ativo, t.acesso_expira_em, t.apagar_em, t.criado_em, t.permite_colaboradores
     FROM tenants t
     LEFT JOIN tenant_config tc ON tc.tenant_id = t.id
     WHERE tc.proposta_plano IS NULL
@@ -334,6 +370,84 @@ export async function obterSenhaVisivel(tenantId) {
 }
 
 export { hashSenha };
+
+// ---------- colaboradores (logins extras dentro da conta de um cliente) ----------
+
+// so o super_admin chama isso (aba Clientes) - liga/desliga o beneficio de criar colaboradores
+// pra um cliente especifico. Nao apaga colaboradores ja criados se for desligado depois (so
+// impede criar NOVOS) - login de quem ja existe continua funcionando ate ser apagado a mao.
+export async function definirPermiteColaboradores(tenantId, permitido) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  await pool.query('UPDATE tenants SET permite_colaboradores = $1 WHERE id = $2', [!!permitido, tenantId]);
+}
+
+async function usernameDisponivel(username) {
+  const { rows: r1 } = await pool.query('SELECT 1 FROM tenants WHERE username = $1', [username]);
+  if (r1.length) return false;
+  const { rows: r2 } = await pool.query('SELECT 1 FROM tenant_colaboradores WHERE username = $1', [username]);
+  return !r2.length;
+}
+
+export async function listarColaboradores(tenantId) {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    'SELECT id, nome, username, ativo, criado_em FROM tenant_colaboradores WHERE tenant_id = $1 ORDER BY criado_em ASC',
+    [tenantId],
+  );
+  return rows;
+}
+
+// chamado pelo PROPRIO cliente (nao precisa ser super_admin) - so funciona se o super_admin ja
+// liberou o beneficio permite_colaboradores pra essa conta; checado aqui de novo (nao so no
+// frontend) pra nunca depender so da tela escondendo o botao.
+export async function criarColaborador(tenantId, { nome, username, senha }) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  if (!nome || !username || !senha) throw new Error('nome, usuario e senha sao obrigatorios');
+  await tabelasProntas;
+
+  const tenant = await obterPorId(tenantId);
+  if (!tenant?.permite_colaboradores) throw new Error('Sua conta ainda nao tem permissao pra criar colaboradores - fale com o administrador da Lumia.');
+  if (!(await usernameDisponivel(username))) throw new Error(`O usuario "${username}" ja esta em uso.`);
+
+  const { rows } = await pool.query(
+    'INSERT INTO tenant_colaboradores (tenant_id, nome, username, password_hash, senha_visivel_enc) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+    [tenantId, nome, username, hashSenha(senha), encrypt(senha)],
+  );
+  return rows[0].id;
+}
+
+export async function alternarColaboradorAtivo(tenantId, colaboradorId, ativo) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  await pool.query('UPDATE tenant_colaboradores SET ativo = $1 WHERE id = $2 AND tenant_id = $3', [!!ativo, colaboradorId, tenantId]);
+}
+
+export async function apagarColaborador(tenantId, colaboradorId) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  await pool.query('DELETE FROM tenant_colaboradores WHERE id = $1 AND tenant_id = $2', [colaboradorId, tenantId]);
+}
+
+export async function redefinirSenhaColaborador(tenantId, colaboradorId, novaSenha) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  if (!novaSenha) throw new Error('Nova senha obrigatoria.');
+  await tabelasProntas;
+  await pool.query(
+    'UPDATE tenant_colaboradores SET password_hash = $1, senha_visivel_enc = $2 WHERE id = $3 AND tenant_id = $4',
+    [hashSenha(novaSenha), encrypt(novaSenha), colaboradorId, tenantId],
+  );
+}
+
+export async function obterSenhaVisivelColaborador(tenantId, colaboradorId) {
+  if (!pool) return null;
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT senha_visivel_enc FROM tenant_colaboradores WHERE id = $1 AND tenant_id = $2', [colaboradorId, tenantId]);
+  const bruto = rows[0]?.senha_visivel_enc;
+  if (!bruto) return null;
+  return decrypt(bruto);
+}
 
 // ---------- roteamento de WhatsApp (Evolution API) por instancia -> tenant ----------
 

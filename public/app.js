@@ -90,6 +90,14 @@ const tabPropostasAdmin = document.getElementById('tabPropostasAdmin');
 const integracoesMetaAdsLista = document.getElementById('integracoesMetaAdsLista');
 const integracoesSistemasLista = document.getElementById('integracoesSistemasLista');
 const integracoesEmBreveLista = document.getElementById('integracoesEmBreveLista');
+const colaboradoresWrap = document.getElementById('colaboradoresWrap');
+const colabNomeInput = document.getElementById('colabNomeInput');
+const colabUsuarioInput = document.getElementById('colabUsuarioInput');
+const colabSenhaInput = document.getElementById('colabSenhaInput');
+adicionarOlhinho(colabSenhaInput);
+const colabCriarBtn = document.getElementById('colabCriarBtn');
+const colabCriarErro = document.getElementById('colabCriarErro');
+const colaboradoresLista = document.getElementById('colaboradoresLista');
 
 // ---------- Clientes (admin - so super_admin ve): elementos ----------
 const clienteNomeInput = document.getElementById('clienteNomeInput');
@@ -298,6 +306,7 @@ async function tentarEntrar(usuario, senha) {
 // Preenchido por tokenValido()/mostrarApp() ao consultar /api/me.
 let souSuperAdmin = false;
 let minhasTabsHabilitadas = null; // null = tudo liberado (default); array = so essas abas
+let meuPermiteColaboradores = false; // beneficio liberado pelo super_admin (aba Clientes) - ver tenants.permite_colaboradores
 
 // confirma que o token guardado ainda e valido (nao expirou, tenant continua ativo) - chamado
 // no carregamento da pagina, ja que um token velho nao pode mais ser "reenviado como senha"
@@ -311,6 +320,7 @@ async function tokenValido() {
     const data = await res.json().catch(() => null);
     souSuperAdmin = !!data?.superAdmin;
     minhasTabsHabilitadas = Array.isArray(data?.tabsHabilitadas) && data.tabsHabilitadas.length ? data.tabsHabilitadas : null;
+    meuPermiteColaboradores = !!data?.permiteColaboradores;
     return true;
   } catch {
     return false;
@@ -1847,6 +1857,7 @@ function mudarAba(aba) {
     iniciarGeradorRelatorios();
   } else if (aba === 'integracoes') {
     carregarIntegracoes();
+    carregarColaboradores();
   } else if (aba === 'clientes') {
     carregarClientes();
   } else if (aba === 'propostasAdmin') {
@@ -4509,6 +4520,132 @@ function renderizarSistemasConectados(data) {
   integracoesSistemasLista.appendChild(itemGoogle);
 }
 
+// ---------- Colaboradores (logins extras dentro da PROPRIA conta - so aparece se o
+// super_admin liberou esse beneficio, ver meuPermiteColaboradores) ----------
+async function carregarColaboradores() {
+  colaboradoresWrap.hidden = !meuPermiteColaboradores;
+  if (!meuPermiteColaboradores) return;
+
+  colaboradoresLista.innerHTML = '<p class="agenda-vazia">Carregando...</p>';
+  try {
+    const r = await fetch('/api/colaboradores', { headers: { 'x-app-password': appPassword } });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+
+    colaboradoresLista.innerHTML = '';
+    if (!d.colaboradores?.length) {
+      colaboradoresLista.innerHTML = '<p class="agenda-vazia">Nenhum colaborador criado ainda.</p>';
+      return;
+    }
+    for (const c of d.colaboradores) {
+      const item = document.createElement('div');
+      item.className = 'auto-arquivo-item';
+      const info = document.createElement('div');
+      info.className = 'auto-arquivo-info';
+      info.innerHTML = `<div class="auto-arquivo-nome">${c.nome}</div><div class="auto-arquivo-detalhe">usuário: ${c.username} - ${c.ativo ? 'ativo' : 'desativado'}</div>`;
+      item.appendChild(info);
+
+      const verSenhaBtn = document.createElement('button');
+      verSenhaBtn.type = 'button'; verSenhaBtn.textContent = 'Ver senha';
+      verSenhaBtn.style.cssText = 'font-size:11px;padding:3px 8px;margin-left:6px;';
+      verSenhaBtn.addEventListener('click', async () => {
+        try {
+          const rs = await fetch(`/api/colaboradores/${c.id}/senha`, { headers: { 'x-app-password': appPassword } });
+          const ds = await rs.json();
+          if (!rs.ok) throw new Error(ds.erro || 'erro desconhecido');
+          if (ds.senha == null) alert('Nao tenho essa senha guardada de um jeito reversivel.');
+          else prompt(`Senha de "${c.nome}" (Ctrl+C pra copiar):`, ds.senha);
+        } catch (err) { addBubble(`Erro: ${err.message}`, 'system'); }
+      });
+      item.appendChild(verSenhaBtn);
+
+      const redefinirBtn = document.createElement('button');
+      redefinirBtn.type = 'button'; redefinirBtn.textContent = 'Redefinir senha';
+      redefinirBtn.style.cssText = 'font-size:11px;padding:3px 8px;margin-left:6px;';
+      redefinirBtn.addEventListener('click', async () => {
+        const novaSenha = prompt(`Nova senha pra "${c.nome}":`);
+        if (!novaSenha) return;
+        try {
+          const rs = await fetch(`/api/colaboradores/${c.id}/redefinir-senha`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+            body: JSON.stringify({ novaSenha }),
+          });
+          const ds = await rs.json();
+          if (!rs.ok) throw new Error(ds.erro || 'erro desconhecido');
+          addBubble(`Senha de "${c.nome}" redefinida.`, 'system');
+        } catch (err) { addBubble(`Erro: ${err.message}`, 'system'); }
+      });
+      item.appendChild(redefinirBtn);
+
+      const ativoBtn = document.createElement('button');
+      ativoBtn.type = 'button'; ativoBtn.textContent = c.ativo ? 'Desativar' : 'Ativar';
+      ativoBtn.style.cssText = 'font-size:11px;padding:3px 8px;margin-left:6px;';
+      ativoBtn.addEventListener('click', async () => {
+        try {
+          const rs = await fetch(`/api/colaboradores/${c.id}/ativo`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+            body: JSON.stringify({ ativo: !c.ativo }),
+          });
+          const ds = await rs.json();
+          if (!rs.ok) throw new Error(ds.erro || 'erro desconhecido');
+          carregarColaboradores();
+        } catch (err) { addBubble(`Erro: ${err.message}`, 'system'); }
+      });
+      item.appendChild(ativoBtn);
+
+      const apagarBtn = document.createElement('button');
+      apagarBtn.type = 'button'; apagarBtn.textContent = 'Apagar';
+      apagarBtn.style.cssText = 'font-size:11px;padding:3px 8px;margin-left:6px;color:#f87171;';
+      apagarBtn.addEventListener('click', async () => {
+        if (!confirm(`Apagar o acesso de "${c.nome}"? Ele nao vai mais conseguir logar.`)) return;
+        try {
+          const rs = await fetch(`/api/colaboradores/${c.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+          const ds = await rs.json();
+          if (!rs.ok) throw new Error(ds.erro || 'erro desconhecido');
+          carregarColaboradores();
+        } catch (err) { addBubble(`Erro: ${err.message}`, 'system'); }
+      });
+      item.appendChild(apagarBtn);
+
+      colaboradoresLista.appendChild(item);
+    }
+  } catch (err) {
+    colaboradoresLista.innerHTML = `<p class="agenda-erro">${err.message}</p>`;
+  }
+}
+
+colabCriarBtn.addEventListener('click', async () => {
+  colabCriarErro.hidden = true;
+  const nome = colabNomeInput.value.trim();
+  const username = colabUsuarioInput.value.trim();
+  const senha = colabSenhaInput.value;
+  if (!nome || !username || !senha) {
+    colabCriarErro.textContent = 'Preenche nome, usuario e senha.';
+    colabCriarErro.hidden = false;
+    return;
+  }
+  colabCriarBtn.disabled = true;
+  try {
+    const r = await fetch('/api/colaboradores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ nome, username, senha }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+    colabNomeInput.value = '';
+    colabUsuarioInput.value = '';
+    colabSenhaInput.value = '';
+    addBubble(`Acesso de "${nome}" criado.`, 'system');
+    carregarColaboradores();
+  } catch (err) {
+    colabCriarErro.textContent = err.message;
+    colabCriarErro.hidden = false;
+  } finally {
+    colabCriarBtn.disabled = false;
+  }
+});
+
 function renderizarEmBreve() {
   integracoesEmBreveLista.innerHTML = '';
   for (const nome of ['Google Ads', 'TikTok Ads']) {
@@ -5233,6 +5370,58 @@ async function selecionarCliente(id, nome, username) {
         tabsCheckboxes[chave].checked = habilitadas ? habilitadas.includes(chave) : true;
       }
     } catch (e) {}
+  })();
+
+  // ---- Beneficio: cliente pode criar logins de colaborador pra propria equipe ----
+  const colabLabel = document.createElement('label'); colabLabel.className = 'auto-label'; colabLabel.textContent = 'Colaboradores (login extra pra equipe do cliente)';
+  clienteIntegracoesPainel.appendChild(colabLabel);
+  const colabAviso = document.createElement('p');
+  colabAviso.className = 'agenda-vazia';
+  colabAviso.textContent = 'Quando ligado, o proprio cliente pode criar logins extras (ex: recepcionista) com acesso completo a conta dele, na aba Integracoes.';
+  clienteIntegracoesPainel.appendChild(colabAviso);
+  const colabToggleWrap = document.createElement('label');
+  colabToggleWrap.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);margin:6px 0;';
+  const colabToggle = document.createElement('input');
+  colabToggle.type = 'checkbox';
+  colabToggle.disabled = true;
+  const colabToggleTexto = document.createElement('span');
+  colabToggleTexto.textContent = 'Carregando...';
+  colabToggleTexto.textContent = colabToggle.checked ? 'Permitido' : 'Nao permitido';
+  colabToggle.addEventListener('change', async () => {
+    colabToggle.disabled = true;
+    try {
+      const r = await fetch(`/api/admin/tenants/${id}/permite-colaboradores`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ permitido: colabToggle.checked }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+      colabToggleTexto.textContent = colabToggle.checked ? 'Permitido' : 'Nao permitido';
+      addBubble(`Colaboradores ${colabToggle.checked ? 'liberados' : 'bloqueados'} pra "${nome}".`, 'system');
+    } catch (err) {
+      colabToggle.checked = !colabToggle.checked;
+      addBubble(`Erro: ${err.message}`, 'system');
+    } finally {
+      colabToggle.disabled = false;
+    }
+  });
+  colabToggleWrap.appendChild(colabToggle);
+  colabToggleWrap.appendChild(colabToggleTexto);
+  clienteIntegracoesPainel.appendChild(colabToggleWrap);
+
+  (async () => {
+    try {
+      const r = await fetch('/api/admin/tenants', { headers: { 'x-app-password': appPassword } });
+      const d = await r.json();
+      const t = (d.tenants || []).find((x) => x.id === id);
+      colabToggle.checked = !!t?.permite_colaboradores;
+      colabToggleTexto.textContent = colabToggle.checked ? 'Permitido' : 'Nao permitido';
+    } catch (e) {
+      colabToggleTexto.textContent = 'Erro ao carregar';
+    } finally {
+      colabToggle.disabled = false;
+    }
   })();
 
   // ---- Apagar cliente (marca pra exclusao - so apaga de verdade depois de 30 dias, da pra
