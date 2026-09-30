@@ -65,6 +65,17 @@ async function garantirTabelas() {
   // ON CONFLICT (tenant_id) em salvarConfig.
   await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS auto_atendimento_config_tenant_idx ON auto_atendimento_config (tenant_id);`);
+  // a coluna "id" antiga (schema pre-multi-tenant: PRIMARY KEY DEFAULT 1, CHECK id=1 - so
+  // existia uma linha global) ficou pra tras depois da conversao acima e nunca foi removida.
+  // Como ela nunca foi passada no INSERT do salvarConfig, todo INSERT (1a vez que um tenant
+  // NOVO salva a config) tentava "id=1" de novo por causa do DEFAULT, colidindo com a linha do
+  // primeiro tenant que ja existia - "duplicate key value violates unique constraint
+  // auto_atendimento_config_pkey" pra qualquer tenant que nao fosse o primeiro a usar essa
+  // tabela. tenant_id (com o indice unico acima) e a identidade real de cada linha agora - "id"
+  // e essas duas constraints antigas nao servem mais pra nada, so causam esse bug.
+  await pool.query(`ALTER TABLE auto_atendimento_config DROP CONSTRAINT IF EXISTS auto_atendimento_config_pkey;`);
+  await pool.query(`ALTER TABLE auto_atendimento_config DROP CONSTRAINT IF EXISTS auto_atendimento_config_id_check;`);
+  await pool.query(`ALTER TABLE auto_atendimento_config DROP COLUMN IF EXISTS id;`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS auto_atendimento_sessions (
@@ -81,6 +92,13 @@ async function garantirTabelas() {
   // indice unico composto, exigido pelo ON CONFLICT (tenant_id, numero) em salvarSessao
   await pool.query(`ALTER TABLE auto_atendimento_sessions ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS auto_atendimento_sessions_tenant_numero_idx ON auto_atendimento_sessions (tenant_id, numero);`);
+  // mesma classe de bug do auto_atendimento_config acima: a PK antiga era so "numero" (schema
+  // pre-multi-tenant, 1 sessao por numero no sistema inteiro). Se dois tenants DIFERENTES
+  // recebessem mensagem do mesmo numero de telefone, o INSERT do segundo colidia nessa PK
+  // antiga mesmo com ON CONFLICT (tenant_id, numero) certo no salvarSessao (que so enxerga o
+  // indice novo, nao a PK antiga). O indice unico (tenant_id, numero) acima e quem garante
+  // unicidade de verdade agora.
+  await pool.query(`ALTER TABLE auto_atendimento_sessions DROP CONSTRAINT IF EXISTS auto_atendimento_sessions_pkey;`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas de auto-atendimento:', err.message);
