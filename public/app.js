@@ -4542,7 +4542,14 @@ async function carregarColaboradores() {
       item.className = 'auto-arquivo-item';
       const info = document.createElement('div');
       info.className = 'auto-arquivo-info';
-      info.innerHTML = `<div class="auto-arquivo-nome">${c.nome}</div><div class="auto-arquivo-detalhe">usuário: ${c.username} - ${c.ativo ? 'ativo' : 'desativado'}</div>`;
+      const infoNome = document.createElement('div');
+      infoNome.className = 'auto-arquivo-nome';
+      infoNome.textContent = c.nome;
+      const infoDetalhe = document.createElement('div');
+      infoDetalhe.className = 'auto-arquivo-detalhe';
+      infoDetalhe.textContent = `usuário: ${c.username} - ${c.ativo ? 'ativo' : 'desativado'}`;
+      info.appendChild(infoNome);
+      info.appendChild(infoDetalhe);
       item.appendChild(info);
 
       const verSenhaBtn = document.createElement('button');
