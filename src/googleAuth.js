@@ -25,6 +25,14 @@ async function garantirTabela() {
   // (tenant_id) usado em trocarCodigoPorToken - sem esse indice o INSERT... ON CONFLICT falha.
   await pool.query(`ALTER TABLE google_calendar_tokens ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS google_calendar_tokens_tenant_idx ON google_calendar_tokens (tenant_id);`);
+  // a coluna "id" antiga (schema pre-multi-tenant: PRIMARY KEY DEFAULT 1, CHECK id=1 - so
+  // existia 1 linha global) ficou pra tras e nunca foi removida. Como ela nunca e passada no
+  // INSERT de trocarCodigoPorToken, todo INSERT (1o tenant NOVO a conectar o Google Agenda)
+  // tentava "id=1" de novo pelo DEFAULT, colidindo com a linha do primeiro tenant que ja
+  // existia (mesmo bug ja corrigido em auto_atendimento_config, ver autoAtendimento.js).
+  await pool.query(`ALTER TABLE google_calendar_tokens DROP CONSTRAINT IF EXISTS google_calendar_tokens_pkey;`);
+  await pool.query(`ALTER TABLE google_calendar_tokens DROP CONSTRAINT IF EXISTS google_calendar_tokens_id_check;`);
+  await pool.query(`ALTER TABLE google_calendar_tokens DROP COLUMN IF EXISTS id;`);
 }
 const tabelaPronta = garantirTabela().catch((err) => {
   console.error('Erro criando tabela google_calendar_tokens:', err.message);

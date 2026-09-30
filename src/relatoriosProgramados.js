@@ -92,6 +92,13 @@ async function garantirTabelas() {
 
   await pool.query(`ALTER TABLE relatorio_configs ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS relatorio_configs_tenant_tipo_idx ON relatorio_configs (tenant_id, tipo);`);
+  // a PK antiga (schema pre-multi-tenant: so "tipo", ja que so existia 1 tenant) ficou pra tras
+  // e nunca foi removida. Como o ON CONFLICT (tenant_id, tipo) em garantirConfigsDoTenant so
+  // enxerga o indice novo (nao essa PK antiga), todo INSERT de um tenant NOVO tentando criar a
+  // linha de um "tipo" que outro tenant ja tem (ex: "ads_financeiro") colidia nessa PK - mesma
+  // classe de bug ja corrigida em auto_atendimento_config (ver autoAtendimento.js). Bloqueava a
+  // propria aba Relatorios pra qualquer tenant que nao fosse o primeiro a abri-la.
+  await pool.query(`ALTER TABLE relatorio_configs DROP CONSTRAINT IF EXISTS relatorio_configs_pkey;`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas de relatorios programados:', err.message);

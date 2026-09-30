@@ -92,6 +92,14 @@ async function garantirTabelas() {
   await pool.query(`ALTER TABLE crm_contatos DROP CONSTRAINT IF EXISTS crm_contatos_numero_instancia_key;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS crm_contatos_tenant_numero_instancia_idx ON crm_contatos (tenant_id, numero, instancia);`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS crm_seguranca_tenant_idx ON crm_seguranca (tenant_id);`);
+  // a coluna "id" antiga (schema pre-multi-tenant: PRIMARY KEY DEFAULT 1, CHECK id=1 - so
+  // existia 1 linha global) ficou pra tras e nunca foi removida. Como ela nunca e passada no
+  // INSERT de definirSenhaOcultas, todo INSERT (1o tenant NOVO a definir a senha de "Ocultas")
+  // tentava "id=1" de novo pelo DEFAULT, colidindo com a linha do primeiro tenant que ja
+  // existia (mesmo bug ja corrigido em auto_atendimento_config, ver autoAtendimento.js).
+  await pool.query(`ALTER TABLE crm_seguranca DROP CONSTRAINT IF EXISTS crm_seguranca_pkey;`);
+  await pool.query(`ALTER TABLE crm_seguranca DROP CONSTRAINT IF EXISTS crm_seguranca_id_check;`);
+  await pool.query(`ALTER TABLE crm_seguranca DROP COLUMN IF EXISTS id;`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas do CRM:', err.message);

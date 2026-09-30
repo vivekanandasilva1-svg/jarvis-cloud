@@ -22,6 +22,16 @@ async function garantirTabela() {
   await pool.query(`ALTER TABLE whatsapp_config ADD COLUMN IF NOT EXISTS tenant_id INT REFERENCES tenants(id);`);
   // exigido pelo ON CONFLICT (tenant_id) usado em salvar() abaixo
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS whatsapp_config_tenant_idx ON whatsapp_config (tenant_id);`);
+  // a coluna "id" antiga (schema pre-multi-tenant: PRIMARY KEY DEFAULT 1, CHECK id=1 - so
+  // existia 1 linha global) ficou pra tras e nunca foi removida. Como ela nunca e passada no
+  // INSERT de salvar() abaixo, todo INSERT (1a vez que um tenant NOVO salva essa config) tenta
+  // "id=1" de novo pelo DEFAULT, colidindo com a linha do primeiro tenant que ja existia -
+  // "duplicate key value violates unique constraint whatsapp_config_pkey" pra qualquer tenant
+  // que nao fosse o primeiro a configurar o WhatsApp (mesmo bug ja corrigido em
+  // auto_atendimento_config, ver autoAtendimento.js).
+  await pool.query(`ALTER TABLE whatsapp_config DROP CONSTRAINT IF EXISTS whatsapp_config_pkey;`);
+  await pool.query(`ALTER TABLE whatsapp_config DROP CONSTRAINT IF EXISTS whatsapp_config_id_check;`);
+  await pool.query(`ALTER TABLE whatsapp_config DROP COLUMN IF EXISTS id;`);
 }
 const tabelaPronta = garantirTabela().catch((err) => {
   console.error('Erro criando tabela whatsapp_config:', err.message);
