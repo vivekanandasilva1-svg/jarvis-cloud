@@ -3876,6 +3876,13 @@ const grTemaMuted = document.getElementById('grTemaMuted');
 const grTemaAccent = document.getElementById('grTemaAccent');
 const grTemaAccent2 = document.getElementById('grTemaAccent2');
 const grSalvarTemaBtn = document.getElementById('grSalvarTemaBtn');
+const grTemaPreviewWrap = document.getElementById('grTemaPreviewWrap');
+const grTemaPreviewHeader = document.getElementById('grTemaPreviewHeader');
+const grTemaPreviewBody = document.getElementById('grTemaPreviewBody');
+const grTemaPreviewCard = document.getElementById('grTemaPreviewCard');
+const grTemaPreviewMuted = document.getElementById('grTemaPreviewMuted');
+const grTemaPreviewTexto = document.getElementById('grTemaPreviewTexto');
+const grTemaPreviewAccentBtn = document.getElementById('grTemaPreviewAccentBtn');
 const grClienteNome = document.getElementById('grClienteNome');
 const grInstrucoes = document.getElementById('grInstrucoes');
 const grGerarBtn = document.getElementById('grGerarBtn');
@@ -4025,8 +4032,29 @@ async function carregarTemasGerador() {
   }
 }
 
+// mockup simples (sem gerar relatorio de verdade) que reflete as 6 cores escolhidas em tempo
+// real - existe porque o seletor de cor nativo (<input type="color">) e controlado pelo proprio
+// navegador/sistema operacional, sem jeito do app confirmar ou mostrar feedback por dentro dele;
+// o 'input' dispara a cada mudanca (inclusive arrastando dentro do seletor nativo, antes de
+// fechar), entao o preview atualiza a medida que a pessoa escolhe, nao so depois de fechar
+function atualizarPreviewTema() {
+  grTemaPreviewHeader.style.background = grTemaBg.value;
+  grTemaPreviewHeader.style.color = grTemaTexto.value;
+  grTemaPreviewBody.style.background = grTemaBg.value;
+  grTemaPreviewCard.style.background = grTemaPanel.value;
+  grTemaPreviewMuted.style.color = grTemaMuted.value;
+  grTemaPreviewTexto.style.color = grTemaTexto.value;
+  grTemaPreviewAccentBtn.style.background = grTemaAccent.value;
+  grTemaPreviewAccentBtn.style.color = grTemaBg.value;
+  grTemaPreviewAccentBtn.style.border = `1px solid ${grTemaAccent2.value}`;
+}
+[grTemaBg, grTemaPanel, grTemaTexto, grTemaMuted, grTemaAccent, grTemaAccent2]
+  .forEach((input) => input.addEventListener('input', atualizarPreviewTema));
+
 grNovoTemaBtn.addEventListener('click', () => {
   grNovoTemaForm.hidden = !grNovoTemaForm.hidden;
+  grTemaPreviewWrap.hidden = grNovoTemaForm.hidden;
+  if (!grNovoTemaForm.hidden) atualizarPreviewTema();
 });
 
 grSalvarTemaBtn.addEventListener('click', async () => {
@@ -4047,6 +4075,7 @@ grSalvarTemaBtn.addEventListener('click', async () => {
     if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
     grTemaNome.value = '';
     grNovoTemaForm.hidden = true;
+    grTemaPreviewWrap.hidden = true;
     await carregarTemasGerador();
     grTemaSelect.value = d.tema.id;
   } catch (err) {
