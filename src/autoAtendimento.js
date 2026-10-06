@@ -493,7 +493,7 @@ async function runTool(name, input, contexto) {
               // agendamento direto desligado - ja conferiu disponibilidade/duplicidade real
               // acima, mas nao cria o compromisso de verdade no Clinicorp; so devolve os dados
               // pra IA anunciar o PRE-agendamento e uma atendente humana confirmar depois
-              resultado.clinicorp = { preAgendamento: true, medico: medico.name, data, de, ate };
+              resultado.clinicorp = { preAgendamento: true, medico: medico.name, data, de, ate, paciente: input.pacienteNome, telefone: input.pacienteTelefone || contexto.numero, resumo: input.resumo };
             } else {
               await clinicorp.createAppointment(tenantId, {
                 patientId: input.patientId || undefined,
@@ -514,7 +514,10 @@ async function runTool(name, input, contexto) {
         }
       }
 
-      if (config.agendarAgendaInterna) {
+      // modo so pre-agendar (Clinicorp com agendamento direto desligado): quem confirma e agenda de
+      // verdade e a atendente humana - nao cria nada confirmado na agenda interna por cima disso
+      const modoPreAgendar = config.agendarClinicorp && config.agendamentoDiretoClinicorp === false;
+      if (config.agendarAgendaInterna && !modoPreAgendar) {
         try {
           // agenda interna e de uso pessoal (1 coisa de cada vez) - nunca sobrepoe outro
           // compromisso ja marcado, ao contrario do Clinicorp que aceita ate 2 pessoas
@@ -544,10 +547,11 @@ async function runTool(name, input, contexto) {
       // VERDADE, ou "Pre-agendado" se so ficou o pre-agendamento do Clinicorp (agendamento
       // direto desligado) sem nenhum agendamento real em paralelo. Best-effort, nunca deve
       // quebrar a resposta pro contato se o CRM falhar.
-      if (resultado.clinicorp?.ok || resultado.agendaInterna?.ok) {
+      if (resultado.clinicorp?.preAgendamento) {
+        const { medico, data, de, ate, paciente, telefone, resumo } = resultado.clinicorp;
+        crm.marcarPreAgendado(tenantId, contexto.numero, contexto.instancia, { medico, data, de, ate, paciente, telefone, resumo }).catch((err) => console.error('Erro movendo card no CRM:', err.message));
+      } else if (resultado.clinicorp?.ok || resultado.agendaInterna?.ok) {
         crm.marcarAgendado(tenantId, contexto.numero, contexto.instancia).catch((err) => console.error('Erro movendo card no CRM:', err.message));
-      } else if (resultado.clinicorp?.preAgendamento) {
-        crm.marcarPreAgendado(tenantId, contexto.numero, contexto.instancia).catch((err) => console.error('Erro movendo card no CRM:', err.message));
       }
 
       return resultado;
@@ -895,7 +899,7 @@ async function montarContextoTemporal(tenantId, numero, config, sessao) {
 // customizado do usuario (editavel livremente) diga algo tipo "sempre confirme o horario"
 function avisoAgendamentoClinicorp(config) {
   if (!config.agendarClinicorp || config.agendamentoDiretoClinicorp !== false) return '';
-  return '\n\nIMPORTANTE sobre agendar no Clinicorp: o agendamento direto esta DESLIGADO pra essa clinica. Voce pode consultar disponibilidade normalmente (clinicorp_consultar_agenda_medico) e combinar data/horario com o contato, mas criar_agendamento so registra um PRE-agendamento - NAO cria o compromisso de verdade no Clinicorp. Depois de chamar a ferramenta e ver preAgendamento:true no resultado, diga pro contato algo como "Show, deixei pré-agendado pra [data] às [hora] - uma de nossas atendentes vai te confirmar em breve por ligação ou WhatsApp." NUNCA diga que esta confirmado, marcado ou garantido - use sempre a palavra "pré-agendamento" e deixe claro que falta a confirmacao humana.';
+  return '\n\nIMPORTANTE sobre agendar no Clinicorp: o agendamento direto esta DESLIGADO pra essa clinica. Voce pode consultar disponibilidade normalmente (clinicorp_consultar_agenda_medico) e combinar data/horario com o contato, mas criar_agendamento so registra um PRE-agendamento - NAO cria o compromisso de verdade no Clinicorp. Depois de chamar a ferramenta e ver preAgendamento:true no resultado, diga pro contato algo como "Show, deixei pré-agendado pra [data] às [hora] - uma de nossas atendentes vai te confirmar em breve por ligação ou WhatsApp." NUNCA diga que esta confirmado, marcado ou garantido - use sempre a palavra "pré-agendamento" e deixe claro que falta a confirmacao humana. Fluxo: quando o contato demonstrar que quer agendar, consulte os horarios livres reais, ofereca 2 ou 3 opcoes de dia/horario, e assim que ele escolher uma (e voce tiver o nome completo dele), chame criar_agendamento NA HORA - e isso que coloca o contato na coluna "Pré-agendamento" do CRM com dia/horario/medico anotados pra atendente confirmar. Nao deixe de chamar a ferramenta so porque nao vai ser confirmado agora.';
 }
 
 // aviso dinamico, colocado no FIM do prompt (maior prioridade/recencia) - o prompt customizado

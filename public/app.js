@@ -2419,6 +2419,17 @@ function crmCriarCard(contato) {
   numero.textContent = `${contato.numero} · ${contato.instancia}`;
   card.appendChild(numero);
 
+  // pre-agendamento combinado pela IA, aguardando a atendente confirmar (dia/hora/medico)
+  if (contato.etapa === 'pre_agendado' && contato.pre_agendamento) {
+    const pa = contato.pre_agendamento;
+    const [ano, mes, dia] = (pa.data || '').split('-');
+    const pre = document.createElement('div');
+    pre.className = 'crm-card-preagendamento';
+    pre.textContent = `📅 ${dia && mes ? `${dia}/${mes}` : (pa.data || '')} ${pa.de || ''}${pa.medico ? ` - ${pa.medico}` : ''} · aguardando confirmação`;
+    pre.title = [pa.paciente && `Paciente: ${pa.paciente}`, pa.telefone && `Telefone: ${pa.telefone}`, pa.resumo && `Resumo: ${pa.resumo}`].filter(Boolean).join(' | ');
+    card.appendChild(pre);
+  }
+
   if (contato.ultima_mensagem) {
     const preview = document.createElement('div');
     preview.className = 'crm-card-preview';

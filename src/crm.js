@@ -20,7 +20,7 @@ eventosCrm.setMaxListeners(50); // cada aba do painel aberta conta como 1 listen
 export const ETAPAS = [
   { id: 'novo_lead', nome: 'Novo Lead' },
   { id: 'em_atendimento', nome: 'Em Atendimento' },
-  { id: 'pre_agendado', nome: 'Pré-agendado (confirmar)' },
+  { id: 'pre_agendado', nome: 'Pré-agendamento' },
   { id: 'agendado', nome: 'Agendado' },
   { id: 'compareceu', nome: 'Compareceu' },
   { id: 'follow_up', nome: 'Follow Up' },
@@ -88,6 +88,9 @@ async function garantirTabelas() {
   // oculto = o dono escolheu manualmente esconder essa conversa do funil (ex: numero pessoal
   // de um fornecedor, engano, spam) - nao apaga nada, so tira da visualizacao padrao
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS oculto BOOLEAN NOT NULL DEFAULT false;`);
+  // dados do pre-agendamento combinado pela IA (dia/hora/medico/paciente/telefone/resumo) - a
+  // atendente humana usa isso pra confirmar (ver marcarPreAgendado)
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS pre_agendamento JSONB;`);
 
   await pool.query(`ALTER TABLE crm_contatos DROP CONSTRAINT IF EXISTS crm_contatos_numero_instancia_key;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS crm_contatos_tenant_numero_instancia_idx ON crm_contatos (tenant_id, numero, instancia);`);
@@ -144,23 +147,27 @@ export async function registrarMensagem(tenantId, { numero, instancia, direcao, 
 export async function marcarAgendado(tenantId, numero, instancia) {
   if (!pool) return;
   await tabelasProntas;
-  await pool.query(
-    `UPDATE crm_contatos SET etapa = 'agendado' WHERE tenant_id = $1 AND numero = $2 AND instancia = $3`,
+  const { rows } = await pool.query(
+    `UPDATE crm_contatos SET etapa = 'agendado', pre_agendamento = NULL WHERE tenant_id = $1 AND numero = $2 AND instancia = $3 RETURNING id`,
     [tenantId, numero, instancia],
   );
+  if (rows[0]) eventosCrm.emit('contato-atualizado', { tenantId, contatoId: rows[0].id });
 }
 
 // chamado pelo auto-atendimento quando o "agendamento direto no Clinicorp" esta DESLIGADO e um
 // pre-agendamento e combinado com o lead - pula o card pra uma etapa propria (diferente de
 // "agendado" de proposito) pra deixar claro pra atendente humana que esse aqui ainda precisa
-// de uma ligacao/WhatsApp pra confirmar de verdade antes de virar um agendamento real
-export async function marcarPreAgendado(tenantId, numero, instancia) {
+// de uma ligacao/WhatsApp pra confirmar de verdade antes de virar um agendamento real. Guarda
+// tambem o que foi combinado (dia, hora, medico, paciente...) pra ela ver direto no card, e
+// avisa o painel em tempo real (SSE) pro card trocar de coluna sem recarregar a pagina.
+export async function marcarPreAgendado(tenantId, numero, instancia, detalhes = null) {
   if (!pool) return;
   await tabelasProntas;
-  await pool.query(
-    `UPDATE crm_contatos SET etapa = 'pre_agendado' WHERE tenant_id = $1 AND numero = $2 AND instancia = $3`,
-    [tenantId, numero, instancia],
+  const { rows } = await pool.query(
+    `UPDATE crm_contatos SET etapa = 'pre_agendado', pre_agendamento = $4 WHERE tenant_id = $1 AND numero = $2 AND instancia = $3 RETURNING id`,
+    [tenantId, numero, instancia, detalhes ? JSON.stringify({ ...detalhes, em: new Date().toISOString() }) : null],
   );
+  if (rows[0]) eventosCrm.emit('contato-atualizado', { tenantId, contatoId: rows[0].id });
 }
 
 // so os NAO ocultos - o padrao do board (ver listarContatosOcultos pra tela de gerenciar)
@@ -168,7 +175,7 @@ export async function listarContatos(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado
+    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento
      FROM crm_contatos WHERE tenant_id = $1 AND oculto = false ORDER BY ultima_mensagem_em DESC NULLS LAST`,
     [tenantId],
   );
@@ -179,7 +186,7 @@ export async function listarContatosOcultos(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado
+    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento
      FROM crm_contatos WHERE tenant_id = $1 AND oculto = true ORDER BY ultima_mensagem_em DESC NULLS LAST`,
     [tenantId],
   );
