@@ -47,6 +47,11 @@ async function garantirTabelas() {
   // parecer uma pessoa de verdade escrevendo, nao uma IA respondendo instantaneo. 0 = manda assim
   // que a resposta ficar pronta (comportamento de sempre, sem espera artificial).
   await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS resposta_espera_segundos INT NOT NULL DEFAULT 0;`);
+  // horario de funcionamento (HH:MM, fuso Maceio) - fora dele a IA nao responde (a mensagem
+  // fica guardada no historico e no CRM). NULL nos dois = sem limite, 24h (comportamento de
+  // sempre, nao muda nada pra quem ja usava).
+  await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS hora_inicio TEXT;`);
+  await pool.query(`ALTER TABLE auto_atendimento_config ADD COLUMN IF NOT EXISTS hora_fim TEXT;`);
   // depois de um lead ficar esse tanto de horas SEM RESPONDER (updated_at da sessao dele
   // parado), o sweep resetarSessoesInativas() (chamado periodicamente no boot do server.js)
   // apaga a sessao - a proxima mensagem dele comeca do zero, como se fosse a primeira vez.
@@ -104,16 +109,26 @@ const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas de auto-atendimento:', err.message);
 });
 
+const HORA_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+// true quando nao ha limite configurado (24h) ou o horario ATUAL (fuso Maceio, igual ao Follow
+// Up) esta dentro de [horaInicio, horaFim)
+export function dentroDoHorario(config) {
+  if (!config.horaInicio || !config.horaFim) return true;
+  const agora = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit', hour12: false });
+  return agora >= config.horaInicio && agora < config.horaFim;
+}
+
 export async function obterConfig(tenantId) {
   const vazio = {
     ativo: false, instancia: null, prompt: '', frequenciaAudio: 0, audioSeReceberAudio: false,
     agendarClinicorp: false, agendarAgendaInterna: true, reiniciarAposHoras: null, agendamentoDiretoClinicorp: true,
-    respostaEsperaSegundos: 0,
+    respostaEsperaSegundos: 0, horaInicio: null, horaFim: null,
   };
   if (!pool) return vazio;
   await tabelasProntas;
   const { rows } = await pool.query(
-    'SELECT ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, reiniciar_apos_horas, agendamento_direto_clinicorp, resposta_espera_segundos FROM auto_atendimento_config WHERE tenant_id = $1',
+    'SELECT ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, reiniciar_apos_horas, agendamento_direto_clinicorp, resposta_espera_segundos, hora_inicio, hora_fim FROM auto_atendimento_config WHERE tenant_id = $1',
     [tenantId],
   );
   if (!rows.length) return vazio;
@@ -128,10 +143,12 @@ export async function obterConfig(tenantId) {
     reiniciarAposHoras: rows[0].reiniciar_apos_horas ?? null,
     agendamentoDiretoClinicorp: rows[0].agendamento_direto_clinicorp !== false,
     respostaEsperaSegundos: rows[0].resposta_espera_segundos || 0,
+    horaInicio: rows[0].hora_inicio || null,
+    horaFim: rows[0].hora_fim || null,
   };
 }
 
-export async function salvarConfig(tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras, agendamentoDiretoClinicorp, respostaEsperaSegundos }) {
+export async function salvarConfig(tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras, agendamentoDiretoClinicorp, respostaEsperaSegundos, horaInicio, horaFim }) {
   if (!pool) throw new Error('Precisa do Postgres configurado (DATABASE_URL) pra guardar essa configuracao.');
   await tabelasProntas;
 
@@ -139,14 +156,19 @@ export async function salvarConfig(tenantId, { ativo, instancia, prompt, frequen
   // limite de 3 minutos - espera maior que isso vira suspeito (e pode ate expirar o webhook em
   // alguma integracao), nao ajuda em nada o objetivo de "parecer natural"
   const espera = Math.max(0, Math.min(180, Math.round(Number(respostaEsperaSegundos) || 0)));
+  const hi = horaInicio || null;
+  const hf = horaFim || null;
+  if ((hi && !hf) || (!hi && hf)) throw new Error('Preencha o horario de inicio E o de fim (ou deixe os dois em branco pra atender 24h).');
+  if (hi && (!HORA_RE.test(hi) || !HORA_RE.test(hf))) throw new Error('Horario invalido (use o formato HH:MM).');
+  if (hi && hi >= hf) throw new Error('O horario de inicio precisa ser antes do horario de fim.');
   await pool.query(
-    `INSERT INTO auto_atendimento_config (tenant_id, ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, reiniciar_apos_horas, agendamento_direto_clinicorp, resposta_espera_segundos, atualizado_em)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+    `INSERT INTO auto_atendimento_config (tenant_id, ativo, instancia, prompt, frequencia_audio, audio_se_receber_audio, agendar_clinicorp, agendar_agenda_interna, reiniciar_apos_horas, agendamento_direto_clinicorp, resposta_espera_segundos, hora_inicio, hora_fim, atualizado_em)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
      ON CONFLICT (tenant_id) DO UPDATE SET
        ativo = $2, instancia = $3, prompt = $4, frequencia_audio = $5, audio_se_receber_audio = $6,
        agendar_clinicorp = $7, agendar_agenda_interna = $8, reiniciar_apos_horas = $9, agendamento_direto_clinicorp = $10,
-       resposta_espera_segundos = $11, atualizado_em = now()`,
-    [tenantId, !!ativo, instancia || null, prompt || '', Number(frequenciaAudio) || 0, !!audioSeReceberAudio, !!agendarClinicorp, !!agendarAgendaInterna, horas, agendamentoDiretoClinicorp !== false, espera],
+       resposta_espera_segundos = $11, hora_inicio = $12, hora_fim = $13, atualizado_em = now()`,
+    [tenantId, !!ativo, instancia || null, prompt || '', Number(frequenciaAudio) || 0, !!audioSeReceberAudio, !!agendarClinicorp, !!agendarAgendaInterna, horas, agendamentoDiretoClinicorp !== false, espera, hi, hf],
   );
   // NAO chama mais /settings/set aqui - ver nota grande em evolutionApi.js sobre o porque
   // (causou pelo menos uma desconexao real por "conflict/device_removed" logo depois de
@@ -649,6 +671,19 @@ async function salvarFatosAgendamento(tenantId, numero, fatos) {
     'UPDATE auto_atendimento_sessions SET fatos_agendamento = $3, fatos_agendamento_em = now() WHERE tenant_id = $1 AND numero = $2',
     [tenantId, numero, JSON.stringify(fatos)],
   );
+}
+
+// fora do horario de funcionamento: nao responde, mas guarda a mensagem no historico da IA (como
+// turno do contato, sem contar como resposta) pra ela ver quando o horario abrir e o lead
+// escrever de novo - igual ao Follow Up. Midia vira so um marcador de texto.
+export async function guardarMensagemForaDoHorario(tenantId, numero, { texto, tipo }) {
+  const conteudo = (texto || '').trim()
+    || (tipo === 'image' ? '[o contato mandou uma imagem]' : tipo === 'audio' ? '[o contato mandou um audio]' : tipo === 'video' ? '[o contato mandou um video]' : '');
+  if (!conteudo) return;
+  const { history, contagem } = await obterSessao(tenantId, numero);
+  history.push({ role: 'user', content: `${conteudo}
+[mensagem recebida fora do horario de atendimento - ainda nao respondida]` });
+  await salvarSessao(tenantId, numero, history, contagem);
 }
 
 // botao "resetar historico" do painel: apaga a sessao de TODOS os leads do tenant de uma vez,

@@ -1644,6 +1644,18 @@ html, body {
   outline: none;
 }
 .auto-reinicio-row input[type="number"]:focus { border-color: var(--gold); }
+.auto-reinicio-row input[type="time"] {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 12.5px;
+  outline: none;
+  color-scheme: dark;
+}
+.auto-reinicio-row input[type="time"]:focus { border-color: var(--gold); }
+.auto-reinicio-row { flex-wrap: wrap; }
 .auto-reinicio-row select {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border);

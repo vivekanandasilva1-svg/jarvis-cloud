@@ -507,6 +507,24 @@
 
         <div class="auto-audio-row">
           <div>
+            <label class="auto-label">Horario de funcionamento da IA</label>
+            <p class="wa-hint">Fora desse horario a IA nao responde ninguem (a mensagem fica guardada no historico e no CRM) - evita responder lead de madrugada ou fora do expediente. Deixe os dois campos em branco pra atender 24h.</p>
+            <div class="auto-reinicio-row">
+              <div>
+                <label class="auto-label">Comeca as</label>
+                <input type="time" id="autoHoraInicio" />
+              </div>
+              <div>
+                <label class="auto-label">Termina as</label>
+                <input type="time" id="autoHoraFim" />
+              </div>
+              <button type="button" id="autoHoraLimpar" class="relatorio-config-enviar" style="align-self:flex-end;" title="Limpar horarios (atender 24h)">Atender 24h</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="auto-audio-row">
+          <div>
             <label class="auto-label">Esperar quantos segundos antes de responder?</label>
             <input type="number" id="autoEsperaSegundos" class="auto-input-curto" min="0" max="180" step="1" placeholder="Ex: 15" />
             <p class="wa-hint">Enquanto esse tempo passa, o WhatsApp mostra "digitando..." (ou "gravando áudio..."), pra parecer alguém de verdade escrevendo em vez de uma resposta instantânea. Deixe em branco ou 0 pra mandar assim que a resposta ficar pronta.</p>

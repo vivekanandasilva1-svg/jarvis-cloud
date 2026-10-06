@@ -1104,6 +1104,12 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   // pausa pontual por conversa (aba CRM) - tem prioridade sobre a config global estar ativa;
   // a mensagem do contato ja foi registrada no CRM acima, so nao gera resposta automatica
   if (await crm.estaPausado(tenantId, numero, instanciaDoWebhook).catch(() => false)) return;
+  // fora do horario de funcionamento configurado (aba Auto Atendimento): nao responde, so guarda
+  // a mensagem no historico da IA (ja foi registrada no CRM acima)
+  if (!autoAtendimento.dentroDoHorario(configAuto)) {
+    return processarEmFila(`${tenantId}:${numero}`, () => autoAtendimento.guardarMensagemForaDoHorario(tenantId, numero, { texto, tipo })
+      .catch((err) => console.error('Erro guardando mensagem fora do horario:', err.message)));
+  }
 
   // serializado por contato (ver processarEmFila) - sem isso, duas mensagens seguidas do
   // mesmo lead rodavam processarMensagem() em paralelo e uma podia sobrescrever a memoria da
@@ -1303,12 +1309,12 @@ app.get('/api/auto-atendimento/config', async (req, res) => {
 });
 
 app.post('/api/auto-atendimento/config', async (req, res) => {
-  const { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras, agendamentoDiretoClinicorp, respostaEsperaSegundos } = req.body || {};
+  const { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras, agendamentoDiretoClinicorp, respostaEsperaSegundos, horaInicio, horaFim } = req.body || {};
   if (ativo && (!instancia || !prompt)) {
     return res.status(400).json({ erro: 'pra ativar, precisa escolher a instancia e escrever o prompt' });
   }
   try {
-    await autoAtendimento.salvarConfig(req.tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras, agendamentoDiretoClinicorp, respostaEsperaSegundos });
+    await autoAtendimento.salvarConfig(req.tenantId, { ativo, instancia, prompt, frequenciaAudio, audioSeReceberAudio, agendarClinicorp, agendarAgendaInterna, reiniciarAposHoras, agendamentoDiretoClinicorp, respostaEsperaSegundos, horaInicio, horaFim });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
