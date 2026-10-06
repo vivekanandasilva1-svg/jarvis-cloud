@@ -64,6 +64,10 @@ async function garantirTabelas() {
   // buscarUltimoAgendamentoPassado() - evita bater na API do Clinicorp a cada mensagem.
   await pool.query(`ALTER TABLE auto_atendimento_sessions ADD COLUMN IF NOT EXISTS iniciado_em TIMESTAMPTZ NOT NULL DEFAULT now();`);
   await pool.query(`ALTER TABLE auto_atendimento_sessions ADD COLUMN IF NOT EXISTS fatos_agendamento JSONB;`);
+  // quando o lead escreveu pela 1a vez fora do horario de funcionamento e ainda NAO foi
+  // respondido - o verificador (ver listarTenantsComPendentes/server.js) responde quando o
+  // horario abre. NULL = nada pendente.
+  await pool.query(`ALTER TABLE auto_atendimento_sessions ADD COLUMN IF NOT EXISTS pendente_desde TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE auto_atendimento_sessions ADD COLUMN IF NOT EXISTS fatos_agendamento_em TIMESTAMPTZ;`);
   // instalacao que ja tinha essa tabela ANTES da conversao multi-tenant (schema antigo: "id
   // INT PK DEFAULT 1") - o CREATE TABLE acima e no-op nesse caso. Indice unico exigido pelo
@@ -684,6 +688,40 @@ export async function guardarMensagemForaDoHorario(tenantId, numero, { texto, ti
   history.push({ role: 'user', content: `${conteudo}
 [mensagem recebida fora do horario de atendimento - ainda nao respondida]` });
   await salvarSessao(tenantId, numero, history, contagem);
+  await pool.query('UPDATE auto_atendimento_sessions SET pendente_desde = COALESCE(pendente_desde, now()) WHERE tenant_id = $1 AND numero = $2', [tenantId, numero]);
+}
+
+// ---------- fila de quem escreveu fora do horario (respondido quando o horario abre) ----------
+
+// pendentes mais velhos que isso sao descartados sem resposta - responder uma mensagem de 3
+// dias atras como se fosse recente soaria estranho (ex: clinica fechada o fim de semana todo)
+const PENDENTE_VALIDADE_HORAS = 48;
+
+export async function listarTenantsComPendentes() {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT DISTINCT tenant_id FROM auto_atendimento_sessions WHERE pendente_desde IS NOT NULL');
+  return rows.map((r) => r.tenant_id);
+}
+
+export async function listarPendentes(tenantId) {
+  const { rows } = await pool.query('SELECT numero, pendente_desde FROM auto_atendimento_sessions WHERE tenant_id = $1 AND pendente_desde IS NOT NULL ORDER BY pendente_desde ASC', [tenantId]);
+  return rows;
+}
+
+export async function limparPendente(tenantId, numero) {
+  await pool.query('UPDATE auto_atendimento_sessions SET pendente_desde = NULL WHERE tenant_id = $1 AND numero = $2', [tenantId, numero]);
+}
+
+// true se alguem (atendente humana pelo WhatsApp/CRM) ja mandou mensagem pra esse contato
+// depois que ele ficou pendente - nesse caso a IA nao deve responder por cima
+export async function pendenteJaRespondido(tenantId, numero, instancia, desde) {
+  const { rows } = await pool.query("SELECT 1 FROM crm_mensagens WHERE tenant_id = $1 AND numero = $2 AND instancia = $3 AND direcao = 'saida' AND criado_em > $4 LIMIT 1", [tenantId, numero, instancia, desde]);
+  return rows.length > 0;
+}
+
+export function pendenteExpirado(desde) {
+  return Date.now() - new Date(desde).getTime() > PENDENTE_VALIDADE_HORAS * 60 * 60 * 1000;
 }
 
 // botao "resetar historico" do painel: apaga a sessao de TODOS os leads do tenant de uma vez,
@@ -951,8 +989,10 @@ export async function preverVaiSerAudio(tenantId, numero, tipo) {
   return decidirSeAudio(config, contagem + 1, tipo);
 }
 
+const AVISO_RETOMADA = '\n\nCONTEXTO: o contato escreveu FORA do horario de atendimento (as mensagens estao no fim do historico, marcadas como "ainda nao respondida") e so agora o horario abriu. Responda a elas de uma vez, de forma natural - pode mencionar de leve que viu a mensagem so agora (ex: "bom dia, vi sua mensagem de ontem a noite"), sem se desculpar demais nem repetir o marcador.';
+
 // tipo: 'text' | 'image' | 'audio' | 'video' (o que o CONTATO mandou, se nao for so texto)
-export async function processarMensagem(tenantId, numero, instancia, { texto, tipo, mensagemBruta }) {
+export async function processarMensagem(tenantId, numero, instancia, { texto, tipo, mensagemBruta, retomarPendente = false }) {
   const config = await obterConfig(tenantId);
   if (!config.ativo || !config.prompt) throw new Error('Auto atendimento nao esta ativo.');
 
@@ -967,7 +1007,7 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
       textoFinal += `\n\n[Nao consegui processar a midia que o contato mandou: ${err.message}]`;
     }
   }
-  if (!textoFinal.trim() && !imagemRecebida) return null;
+  if (!textoFinal.trim() && !imagemRecebida && !retomarPendente) return null;
 
   const sessao = await obterSessao(tenantId, numero);
   const { history, contagem } = sessao;
@@ -977,7 +1017,9 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
         { type: 'image', source: { type: 'base64', media_type: imagemRecebida.mediaType, data: imagemRecebida.data } },
       ]
     : textoFinal.trim();
-  history.push({ role: 'user', content: conteudoUsuario });
+  // retomarPendente: a(s) mensagem(ns) do lead ja estao no historico (guardadas fora do
+  // horario) - so gera a resposta, sem empilhar outro turno do usuario
+  if (!retomarPendente) history.push({ role: 'user', content: conteudoUsuario });
 
   // decide ANTES de gerar se essa resposta vai por audio - sempre que o contato mandou audio
   // (se a opcao estiver ligada), ou a cada N mensagens (cadencia configurada). Precisa saber
@@ -1001,7 +1043,7 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   TOOLS.push(toolEnviarArquivo(listaArquivos));
   const contexto = { tenantId, instancia, numero, config };
   const contextoTemporal = await montarContextoTemporal(tenantId, numero, config, sessao);
-  const system = systemPromptComHoje(config.prompt, vaiSerAudio, config.agendarClinicorp || config.agendarAgendaInterna) + contextoTemporal.texto + avisoAgendamentoClinicorp(config);
+  const system = systemPromptComHoje(config.prompt, vaiSerAudio, config.agendarClinicorp || config.agendarAgendaInterna) + contextoTemporal.texto + avisoAgendamentoClinicorp(config) + (retomarPendente ? AVISO_RETOMADA : '');
 
   // thinking adaptive + effort medio: sem isso, o modelo as vezes gasta o max_tokens inteiro
   // "pensando" internamente (bloco thinking) e nao sobra nada pro texto de verdade da resposta
@@ -1027,6 +1069,8 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   history.push({ role: 'assistant', content: respostaTexto });
 
   await salvarSessao(tenantId, numero, history, novaContagem);
+  // respondido de verdade agora - nada mais pendente pra esse contato
+  await pool.query('UPDATE auto_atendimento_sessions SET pendente_desde = NULL WHERE tenant_id = $1 AND numero = $2', [tenantId, numero]);
   if (contextoTemporal.fatosFrescos !== undefined) {
     await salvarFatosAgendamento(tenantId, numero, contextoTemporal.fatosFrescos);
   }

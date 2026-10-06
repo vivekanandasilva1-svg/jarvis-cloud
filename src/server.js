@@ -1005,6 +1005,75 @@ function processarEmFila(chave, tarefa) {
   return atual;
 }
 
+// gera e manda a resposta do Auto Atendimento pra um contato (presenca "digitando", IA, espera
+// configurada, envio em texto/audio, registro no CRM). Usado pelo webhook (mensagem nova) e pelo
+// verificador de pendentes (lead que escreveu fora do horario - retomarPendente=true). Quem chama
+// e responsavel por serializar via processarEmFila.
+async function atenderContato(tenantId, numero, instanciaDoWebhook, configAuto, { texto, tipo, data, retomarPendente = false }) {
+  // "digitando..."/"gravando audio..." no WhatsApp expira sozinho depois de poucos segundos
+  // (o app do contato esconde o indicador se nao renovar) - como pensar a resposta (chamar a
+  // IA, rodar ferramenta de agenda/Clinicorp etc) pode levar bem mais que isso, reenvia o
+  // sinal em loop ate o instante exato de mandar a mensagem de verdade, sem deixar "apagar" no
+  // meio do caminho. Ja sabe de antemao se vai ser audio ou texto, pra mostrar o icone certo
+  // desde o comeco (nao so "digitando" ate o fim e "gravando" so no ultimo segundo).
+  const provavelAudio = await autoAtendimento.preverVaiSerAudio(tenantId, numero, tipo).catch(() => false);
+  const tipoPresenca = provavelAudio ? 'recording' : 'composing';
+  const manterPresenca = setInterval(() => {
+    evolutionApi.enviarPresenca(instanciaDoWebhook, numero, tipoPresenca).catch(() => {});
+  }, 4000);
+  evolutionApi.enviarPresenca(instanciaDoWebhook, numero, tipoPresenca).catch(() => {});
+  const inicioAtendimento = Date.now();
+
+  try {
+    // trava de seguranca: mesmo com os timeouts internos (Clinicorp, Evolution), algo
+    // inesperado (ex: a propria API da Anthropic pendurada) ainda podia deixar o contato sem
+    // resposta pra sempre - "travado" do lado de quem manda mensagem. Isso garante um limite
+    // maximo de espera; se estourar, cai no catch abaixo e manda um aviso em vez de silencio.
+    const resultado = await Promise.race([
+      autoAtendimento.processarMensagem(tenantId, numero, instanciaDoWebhook, { texto, tipo, mensagemBruta: data, retomarPendente }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Demorou demais pra gerar uma resposta (mais de 55s)')), 55000)),
+    ]);
+    if (!resultado) return;
+
+    // espera minima configurada (aba Auto Atendimento) antes de mandar - a resposta ja esta
+    // pronta aqui, mas so envia depois de completar esse tempo total desde a mensagem do lead
+    // (descontando o que ja levou pra pensar), com uma variacao aleatoria de alguns segundos
+    // pra nao ficar sempre no mesmo numero redondo. O "digitando"/"gravando audio" continua
+    // renovando sozinho nesse meio tempo (setInterval acima), entao pro lead parece alguem
+    // digitando de verdade, nao uma IA respondendo instantaneo.
+    const esperaMinMs = (configAuto.respostaEsperaSegundos || 0) * 1000;
+    if (esperaMinMs > 0) {
+      const alvoMs = esperaMinMs + Math.floor(Math.random() * 3000);
+      const faltaMs = alvoMs - (Date.now() - inicioAtendimento);
+      if (faltaMs > 0) await new Promise((r) => setTimeout(r, faltaMs));
+    }
+
+    clearInterval(manterPresenca); // para de renovar bem no instante de mandar a mensagem
+
+    if (resultado.respondeComAudio) {
+      try {
+        await autoAtendimento.enviarRespostaEmAudio(instanciaDoWebhook, numero, resultado.texto);
+        crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'audio', texto: resultado.texto })
+          .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
+        return;
+      } catch (err) {
+        console.error('Erro mandando resposta em audio, caindo pra texto:', err.message);
+      }
+    }
+    await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, resultado.texto);
+    crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'text', texto: resultado.texto })
+      .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
+  } catch (err) {
+    console.error('Erro no auto-atendimento via Evolution/WhatsApp:', err);
+    // nunca deixa o contato literalmente sem resposta nenhuma por causa de um erro tecnico -
+    // antes disso, um erro (Anthropic sobrecarregada, Clinicorp fora do ar etc) resultava em
+    // silencio total, o que parecia a Lumia ter "travado" pra quem estava mandando mensagem
+    await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, 'Desculpa, tive um probleminha técnico aqui agora. Pode mandar sua mensagem de novo?').catch(() => {});
+  } finally {
+    clearInterval(manterPresenca);
+  }
+}
+
 async function processarMensagemEvolution(instanciaDoWebhook, data) {
   // Status do WhatsApp (stories) chegam no webhook com remoteJid "status@broadcast" - e o
   // MESMO remoteJid pra QUALQUER contato que postou um status, nao um numero de contato de
@@ -1115,70 +1184,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   // mesmo lead rodavam processarMensagem() em paralelo e uma podia sobrescrever a memoria da
   // outra; com a espera configuravel antes de responder, a janela pra isso acontecer ficou
   // grande o suficiente pra ser bem provavel de acontecer de verdade
-  return processarEmFila(`${tenantId}:${numero}`, async () => {
-    // "digitando..."/"gravando audio..." no WhatsApp expira sozinho depois de poucos segundos
-    // (o app do contato esconde o indicador se nao renovar) - como pensar a resposta (chamar a
-    // IA, rodar ferramenta de agenda/Clinicorp etc) pode levar bem mais que isso, reenvia o
-    // sinal em loop ate o instante exato de mandar a mensagem de verdade, sem deixar "apagar" no
-    // meio do caminho. Ja sabe de antemao se vai ser audio ou texto, pra mostrar o icone certo
-    // desde o comeco (nao so "digitando" ate o fim e "gravando" so no ultimo segundo).
-    const provavelAudio = await autoAtendimento.preverVaiSerAudio(tenantId, numero, tipo).catch(() => false);
-    const tipoPresenca = provavelAudio ? 'recording' : 'composing';
-    const manterPresenca = setInterval(() => {
-      evolutionApi.enviarPresenca(instanciaDoWebhook, numero, tipoPresenca).catch(() => {});
-    }, 4000);
-    evolutionApi.enviarPresenca(instanciaDoWebhook, numero, tipoPresenca).catch(() => {});
-    const inicioAtendimento = Date.now();
-
-    try {
-      // trava de seguranca: mesmo com os timeouts internos (Clinicorp, Evolution), algo
-      // inesperado (ex: a propria API da Anthropic pendurada) ainda podia deixar o contato sem
-      // resposta pra sempre - "travado" do lado de quem manda mensagem. Isso garante um limite
-      // maximo de espera; se estourar, cai no catch abaixo e manda um aviso em vez de silencio.
-      const resultado = await Promise.race([
-        autoAtendimento.processarMensagem(tenantId, numero, instanciaDoWebhook, { texto, tipo, mensagemBruta: data }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Demorou demais pra gerar uma resposta (mais de 55s)')), 55000)),
-      ]);
-      if (!resultado) return;
-
-      // espera minima configurada (aba Auto Atendimento) antes de mandar - a resposta ja esta
-      // pronta aqui, mas so envia depois de completar esse tempo total desde a mensagem do lead
-      // (descontando o que ja levou pra pensar), com uma variacao aleatoria de alguns segundos
-      // pra nao ficar sempre no mesmo numero redondo. O "digitando"/"gravando audio" continua
-      // renovando sozinho nesse meio tempo (setInterval acima), entao pro lead parece alguem
-      // digitando de verdade, nao uma IA respondendo instantaneo.
-      const esperaMinMs = (configAuto.respostaEsperaSegundos || 0) * 1000;
-      if (esperaMinMs > 0) {
-        const alvoMs = esperaMinMs + Math.floor(Math.random() * 3000);
-        const faltaMs = alvoMs - (Date.now() - inicioAtendimento);
-        if (faltaMs > 0) await new Promise((r) => setTimeout(r, faltaMs));
-      }
-
-      clearInterval(manterPresenca); // para de renovar bem no instante de mandar a mensagem
-
-      if (resultado.respondeComAudio) {
-        try {
-          await autoAtendimento.enviarRespostaEmAudio(instanciaDoWebhook, numero, resultado.texto);
-          crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'audio', texto: resultado.texto })
-            .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
-          return;
-        } catch (err) {
-          console.error('Erro mandando resposta em audio, caindo pra texto:', err.message);
-        }
-      }
-      await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, resultado.texto);
-      crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'text', texto: resultado.texto })
-        .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
-    } catch (err) {
-      console.error('Erro no auto-atendimento via Evolution/WhatsApp:', err);
-      // nunca deixa o contato literalmente sem resposta nenhuma por causa de um erro tecnico -
-      // antes disso, um erro (Anthropic sobrecarregada, Clinicorp fora do ar etc) resultava em
-      // silencio total, o que parecia a Lumia ter "travado" pra quem estava mandando mensagem
-      await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, 'Desculpa, tive um probleminha técnico aqui agora. Pode mandar sua mensagem de novo?').catch(() => {});
-    } finally {
-      clearInterval(manterPresenca);
-    }
-  });
+  return processarEmFila(`${tenantId}:${numero}`, () => atenderContato(tenantId, numero, instanciaDoWebhook, configAuto, { texto, tipo, data }));
 }
 
 // o Evolution API tambem espera resposta rapida - responde 200 na hora e processa depois
@@ -1905,6 +1911,47 @@ function checarSessoesAutoAtendimentoInativas() {
 }
 checarSessoesAutoAtendimentoInativas();
 setInterval(checarSessoesAutoAtendimentoInativas, 15 * 60 * 1000).unref();
+
+// responde quem escreveu FORA do horario de funcionamento do Auto Atendimento assim que o horario
+// abre (a mensagem foi guardada no historico + marcada como pendente - ver
+// autoAtendimento.guardarMensagemForaDoHorario). Roda a cada 2min; espaca os envios (20-40s entre
+// um lead e outro) pra nao disparar tudo no mesmo segundo quando acumulou gente de madrugada.
+// Descarta sem responder: pendente com mais de 48h, conversa pausada no CRM, ou lead que uma
+// atendente humana ja respondeu depois de ele ficar pendente.
+let verificandoPendentes = false;
+async function checarPendentesForaDoHorario() {
+  if (verificandoPendentes) return;
+  verificandoPendentes = true;
+  try {
+    for (const tenantId of await autoAtendimento.listarTenantsComPendentes()) {
+      const config = await autoAtendimento.obterConfig(tenantId);
+      if (!config.ativo || !config.instancia || !autoAtendimento.dentroDoHorario(config)) continue;
+      for (const { numero, pendente_desde: desde } of await autoAtendimento.listarPendentes(tenantId)) {
+        try {
+          const pausado = await crm.estaPausado(tenantId, numero, config.instancia).catch(() => false);
+          if (pausado || autoAtendimento.pendenteExpirado(desde) || await autoAtendimento.pendenteJaRespondido(tenantId, numero, config.instancia, desde)) {
+            await autoAtendimento.limparPendente(tenantId, numero);
+            continue;
+          }
+          await processarEmFila(`${tenantId}:${numero}`, () => atenderContato(tenantId, numero, config.instancia, config, { texto: '', tipo: 'text', data: null, retomarPendente: true }));
+          // limpa de qualquer jeito (atenderContato ja trata erro mandando aviso ao lead) - senao um erro
+          // repetia a mesma tentativa a cada 2min
+          await autoAtendimento.limparPendente(tenantId, numero);
+          await new Promise((r) => setTimeout(r, 20000 + Math.floor(Math.random() * 20000)));
+        } catch (err) {
+          console.error(`Erro respondendo pendente fora do horario (tenant ${tenantId}):`, err.message);
+          // evita ficar tentando pra sempre (e repetindo erro) se algo estiver quebrado nesse contato
+          await autoAtendimento.limparPendente(tenantId, numero).catch(() => {});
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Erro checando pendentes fora do horario:', err.message);
+  } finally {
+    verificandoPendentes = false;
+  }
+}
+setInterval(checarPendentesForaDoHorario, 2 * 60 * 1000).unref();
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
