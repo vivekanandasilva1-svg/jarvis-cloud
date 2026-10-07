@@ -20,6 +20,7 @@ import * as whatsappInstances from './whatsappInstances.js';
 import * as autoAtendimento from './autoAtendimento.js';
 import * as autoArquivos from './autoAtendimentoArquivos.js';
 import * as crm from './crm.js';
+import * as clinicorp from './clinicorp.js';
 import * as relatoriosProgramados from './relatoriosProgramados.js';
 import * as tenants from './tenants.js';
 import * as tenantConfig from './tenantConfig.js';
@@ -1048,7 +1049,7 @@ function processarEmFila(chave, tarefa) {
 // configurada, envio em texto/audio, registro no CRM). Usado pelo webhook (mensagem nova) e pelo
 // verificador de pendentes (lead que escreveu fora do horario - retomarPendente=true). Quem chama
 // e responsavel por serializar via processarEmFila.
-async function atenderContato(tenantId, numero, instanciaDoWebhook, configAuto, { texto, tipo, data, retomarPendente = false }) {
+async function atenderContato(tenantId, numero, instanciaDoWebhook, configAuto, { texto, tipo, data, retomarPendente = false, retomadaRetorno = null }) {
   // "digitando..."/"gravando audio..." no WhatsApp expira sozinho depois de poucos segundos
   // (o app do contato esconde o indicador se nao renovar) - como pensar a resposta (chamar a
   // IA, rodar ferramenta de agenda/Clinicorp etc) pode levar bem mais que isso, reenvia o
@@ -1069,7 +1070,7 @@ async function atenderContato(tenantId, numero, instanciaDoWebhook, configAuto, 
     // resposta pra sempre - "travado" do lado de quem manda mensagem. Isso garante um limite
     // maximo de espera; se estourar, cai no catch abaixo e manda um aviso em vez de silencio.
     const resultado = await Promise.race([
-      autoAtendimento.processarMensagem(tenantId, numero, instanciaDoWebhook, { texto, tipo, mensagemBruta: data, retomarPendente }),
+      autoAtendimento.processarMensagem(tenantId, numero, instanciaDoWebhook, { texto, tipo, mensagemBruta: data, retomarPendente, retomadaRetorno }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Demorou demais pra gerar uma resposta (mais de 55s)')), 55000)),
     ]);
     if (!resultado) return;
@@ -1107,7 +1108,7 @@ async function atenderContato(tenantId, numero, instanciaDoWebhook, configAuto, 
     // nunca deixa o contato literalmente sem resposta nenhuma por causa de um erro tecnico -
     // antes disso, um erro (Anthropic sobrecarregada, Clinicorp fora do ar etc) resultava em
     // silencio total, o que parecia a Lumia ter "travado" pra quem estava mandando mensagem
-    await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, 'Desculpa, tive um probleminha técnico aqui agora. Pode mandar sua mensagem de novo?').catch(() => {});
+    if (!retomadaRetorno) await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, 'Desculpa, tive um probleminha técnico aqui agora. Pode mandar sua mensagem de novo?').catch(() => {});
   } finally {
     clearInterval(manterPresenca);
   }
@@ -1695,6 +1696,70 @@ app.post('/api/crm/contatos/:id/etapa', async (req, res) => {
   }
 });
 
+// ---------- Alerta de retorno (lead pediu pra retomar o contato depois) + sino de notificacoes ----------
+
+app.post('/api/crm/contatos/:id/retorno', async (req, res) => {
+  const { quando, nota } = req.body || {};
+  try {
+    await crm.definirRetorno(req.tenantId, { id: Number(req.params.id) }, { quando, nota, origem: 'humano' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/crm/contatos/:id/retorno', async (req, res) => {
+  try {
+    await crm.removerRetorno(req.tenantId, Number(req.params.id));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/contatos/:id/lido', async (req, res) => {
+  try {
+    await crm.marcarLido(req.tenantId, Number(req.params.id));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// faltas (Clinicorp, ontem e hoje) - cache de 10min por tenant pra o sino nao bater na API do
+// Clinicorp a cada atualizacao; qualquer erro (Clinicorp nao conectado, fora do ar) vira lista vazia
+const faltasCache = new Map();
+async function faltasRecentes(tenantId) {
+  const cache = faltasCache.get(tenantId);
+  if (cache && Date.now() - cache.em < 10 * 60 * 1000) return cache.lista;
+  let lista = [];
+  try {
+    const fmt = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/Maceio' });
+    const hoje = new Date();
+    const ontem = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [agendamentos, statusList] = await Promise.all([
+      clinicorp.listAppointments(tenantId, { from: fmt(ontem), to: fmt(hoje), includeCanceled: 'X' }),
+      clinicorp.getAppointmentStatusList(tenantId),
+    ]);
+    const statusPorId = new Map(statusList.map((st) => [String(st.id), String(st.Description || '')]));
+    lista = agendamentos
+      .filter((a) => statusPorId.get(String(a.StatusId)).toLowerCase().includes('falt'))
+      .map((a) => ({ paciente: a.PatientName, data: (a.date || '').slice(0, 10), hora: a.fromTime }));
+  } catch { /* Clinicorp indisponivel/nao conectado - sem faltas no sino */ }
+  faltasCache.set(tenantId, { em: Date.now(), lista });
+  return lista;
+}
+
+app.get('/api/notificacoes', async (req, res) => {
+  try {
+    const [resumo, faltas] = await Promise.all([crm.resumoNotificacoes(req.tenantId), faltasRecentes(req.tenantId)]);
+    const total = resumo.naoLidas.length + resumo.retornos.length + resumo.preAgendamentos.length + faltas.length;
+    res.json({ total, ...resumo, faltas });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.post('/api/crm/contatos/:id/auto', async (req, res) => {
   const { pausado } = req.body || {};
   try {
@@ -2040,6 +2105,38 @@ async function checarPendentesForaDoHorario() {
   }
 }
 setInterval(checarPendentesForaDoHorario, 2 * 60 * 1000).unref();
+
+// alerta de retorno: quando chega a data/hora combinada, devolve o card pra "Em atendimento" e a IA
+// retoma a conversa sozinha (mensagem proativa). Roda a cada minuto. Se a IA nao puder retomar
+// (Auto Atendimento desligado, outra instancia ou conversa pausada), so marca como disparado - o
+// card fica laranja e o sino avisa, e a atendente humana retoma. Fora do horario de funcionamento
+// da IA, espera abrir. Espaca 20-40s entre contatos quando varios vencem juntos.
+let verificandoRetornos = false;
+async function checarRetornosVencidos() {
+  if (verificandoRetornos) return;
+  verificandoRetornos = true;
+  try {
+    for (const c of await crm.listarRetornosVencidos()) {
+      try {
+        const config = await autoAtendimento.obterConfig(c.tenant_id);
+        const pausado = await crm.estaPausado(c.tenant_id, c.numero, c.instancia).catch(() => false);
+        const iaPodeRetomar = config.ativo && config.instancia === c.instancia && !pausado;
+        if (iaPodeRetomar && !autoAtendimento.dentroDoHorario(config)) continue;
+        await crm.marcarRetornoDisparado(c.tenant_id, c.id);
+        if (!iaPodeRetomar) continue;
+        await processarEmFila(`${c.tenant_id}:${c.numero}`, () => atenderContato(c.tenant_id, c.numero, c.instancia, config, { texto: '', tipo: 'text', data: null, retomadaRetorno: { nota: c.retorno_nota } }));
+        await new Promise((r) => setTimeout(r, 20000 + Math.floor(Math.random() * 20000)));
+      } catch (err) {
+        console.error(`Erro disparando retorno (tenant ${c.tenant_id}, contato ${c.id}):`, err.message);
+      }
+    }
+  } catch (err) {
+    console.error('Erro checando retornos vencidos:', err.message);
+  } finally {
+    verificandoRetornos = false;
+  }
+}
+setInterval(checarRetornosVencidos, 60 * 1000).unref();
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {

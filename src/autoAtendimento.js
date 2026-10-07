@@ -221,6 +221,19 @@ const TOOL_VERIFICAR_COMPARECIMENTO = {
   },
 };
 
+const TOOL_CRIAR_ALERTA_RETORNO = {
+  name: 'criar_alerta_retorno',
+  description: 'Cria um ALERTA DE RETORNO pra esse contato: na data/hora combinada o sistema te acorda e voce retoma a conversa sozinha, e enquanto isso o contato fica na coluna "Em negociacao" do CRM. Use quando o contato disser que precisa de um tempo / vai pensar / pede pra falar de novo outro dia ou outra hora. NUNCA invente a data: se ele nao disse um dia e horario especificos, pergunte qual dia e que horas prefere ser procurado, e so entao chame essa ferramenta. Calcule "quando" como data/hora absoluta ISO 8601 (com fuso -03:00) a partir do "agora" informado - tem que ser no futuro. So diga pro contato que combinou o retorno DEPOIS de ver ok:true.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      quando: { type: 'string', description: 'Data/hora do retorno, ISO 8601 com fuso (ex: 2026-10-15T14:00:00-03:00)' },
+      motivo: { type: 'string', description: 'Resumo curto do que ficou combinado/pendente (ex: "vai conversar com a esposa sobre o valor do implante")' },
+    },
+    required: ['quando'],
+  },
+};
+
 const TOOL_CANCELAR_AGENDAMENTO = {
   name: 'cancelar_agendamento',
   description: 'Cancela um agendamento DE VERDADE (chamada real na API - Clinicorp e/ou agenda interna, conforme configurado), removendo-o de vez da agenda. Use os ids que vieram de verificar_comparecimento (campo "id" de cada agendamento) - ache o agendamento certo primeiro com verificar_comparecimento antes de cancelar. Se o contato tiver mais de um agendamento proximo, confirme qual exatamente antes de cancelar. So diga pro contato que foi cancelado DEPOIS de ver ok:true no resultado - nunca diga "vou sinalizar pra equipe" ou finja que cancelou, voce tem essa ferramenta de verdade.',
@@ -555,6 +568,11 @@ async function runTool(name, input, contexto) {
       }
 
       return resultado;
+    }
+
+    if (name === 'criar_alerta_retorno') {
+      await crm.definirRetorno(tenantId, { numero: contexto.numero, instancia: contexto.instancia }, { quando: input.quando, nota: input.motivo, origem: 'ia' });
+      return { ok: true, retornoEm: input.quando };
     }
 
     if (name === 'enviar_arquivo_referencia') {
@@ -993,10 +1011,14 @@ export async function preverVaiSerAudio(tenantId, numero, tipo) {
   return decidirSeAudio(config, contagem + 1, tipo);
 }
 
+const AVISO_ALERTA_RETORNO = '\n\nSe o contato disser que precisa de um tempo, vai pensar, quer conversar com alguem antes ou pedir pra falar de novo em outro dia/horario: NAO encerre a conversa. Pergunte qual dia e horario ele prefere ser procurado (se ele ainda nao disse), calcule a data/hora a partir do "agora", chame criar_alerta_retorno e confirme pra ele quando voce vai chamar. Nesse dia/horario o sistema te acorda sozinho pra retomar a conversa.';
+
+const AVISO_RETORNO = '\n\nCONTEXTO: chegou o dia/horario de retorno combinado com esse contato (veja a mensagem de aviso do sistema no fim do historico - ela NAO foi escrita pelo contato). Escreva AGORA a primeira mensagem retomando o assunto de onde pararam, de forma natural e curta, sem soar cobranca (ex: "oi, tudo bem? voce tinha pedido pra falarmos hoje sobre..."). Nao cite o aviso do sistema.';
+
 const AVISO_RETOMADA = '\n\nCONTEXTO: o contato escreveu FORA do horario de atendimento (as mensagens estao no fim do historico, marcadas como "ainda nao respondida") e so agora o horario abriu. Responda a elas de uma vez, de forma natural - pode mencionar de leve que viu a mensagem so agora (ex: "bom dia, vi sua mensagem de ontem a noite"), sem se desculpar demais nem repetir o marcador.';
 
 // tipo: 'text' | 'image' | 'audio' | 'video' (o que o CONTATO mandou, se nao for so texto)
-export async function processarMensagem(tenantId, numero, instancia, { texto, tipo, mensagemBruta, retomarPendente = false }) {
+export async function processarMensagem(tenantId, numero, instancia, { texto, tipo, mensagemBruta, retomarPendente = false, retomadaRetorno = null }) {
   const config = await obterConfig(tenantId);
   if (!config.ativo || !config.prompt) throw new Error('Auto atendimento nao esta ativo.');
 
@@ -1011,7 +1033,7 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
       textoFinal += `\n\n[Nao consegui processar a midia que o contato mandou: ${err.message}]`;
     }
   }
-  if (!textoFinal.trim() && !imagemRecebida && !retomarPendente) return null;
+  if (!textoFinal.trim() && !imagemRecebida && !retomarPendente && !retomadaRetorno) return null;
 
   const sessao = await obterSessao(tenantId, numero);
   const { history, contagem } = sessao;
@@ -1023,7 +1045,11 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
     : textoFinal.trim();
   // retomarPendente: a(s) mensagem(ns) do lead ja estao no historico (guardadas fora do
   // horario) - so gera a resposta, sem empilhar outro turno do usuario
-  if (!retomarPendente) history.push({ role: 'user', content: conteudoUsuario });
+  if (retomadaRetorno) {
+    // turno sintetico (nao e mensagem do contato) pra IA ter o que "responder" e escrever a
+    // primeira mensagem da retomada - marcado de forma explicita no historico
+    history.push({ role: 'user', content: `[AVISO DO SISTEMA - nao foi o contato que escreveu] Chegou a data/hora de retorno combinada com esse contato.${retomadaRetorno.nota ? ` Anotacao do que ficou pendente: ${retomadaRetorno.nota}.` : ''} Retome a conversa agora.` });
+  } else if (!retomarPendente) history.push({ role: 'user', content: conteudoUsuario });
 
   // decide ANTES de gerar se essa resposta vai por audio - sempre que o contato mandou audio
   // (se a opcao estiver ligada), ou a cada N mensagens (cadencia configurada). Precisa saber
@@ -1044,10 +1070,11 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
     TOOLS.push(TOOL_VERIFICAR_COMPARECIMENTO);
     TOOLS.push(TOOL_CANCELAR_AGENDAMENTO);
   }
+  TOOLS.push(TOOL_CRIAR_ALERTA_RETORNO);
   TOOLS.push(toolEnviarArquivo(listaArquivos));
   const contexto = { tenantId, instancia, numero, config };
   const contextoTemporal = await montarContextoTemporal(tenantId, numero, config, sessao);
-  const system = systemPromptComHoje(config.prompt, vaiSerAudio, config.agendarClinicorp || config.agendarAgendaInterna) + contextoTemporal.texto + avisoAgendamentoClinicorp(config) + (retomarPendente ? AVISO_RETOMADA : '');
+  const system = systemPromptComHoje(config.prompt, vaiSerAudio, config.agendarClinicorp || config.agendarAgendaInterna) + contextoTemporal.texto + avisoAgendamentoClinicorp(config) + (retomarPendente ? AVISO_RETOMADA : '') + (retomadaRetorno ? AVISO_RETORNO : '') + AVISO_ALERTA_RETORNO;
 
   // thinking adaptive + effort medio: sem isso, o modelo as vezes gasta o max_tokens inteiro
   // "pensando" internamente (bloco thinking) e nao sobra nada pro texto de verdade da resposta

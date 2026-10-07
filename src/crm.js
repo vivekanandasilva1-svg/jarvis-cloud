@@ -20,6 +20,7 @@ eventosCrm.setMaxListeners(50); // cada aba do painel aberta conta como 1 listen
 export const ETAPAS = [
   { id: 'novo_lead', nome: 'Novo Lead' },
   { id: 'em_atendimento', nome: 'Em Atendimento' },
+  { id: 'em_negociacao', nome: 'Em negociação' },
   { id: 'pre_agendado', nome: 'Pré-agendamento' },
   { id: 'agendado', nome: 'Agendado' },
   { id: 'compareceu', nome: 'Compareceu' },
@@ -91,6 +92,17 @@ async function garantirTabelas() {
   // dados do pre-agendamento combinado pela IA (dia/hora/medico/paciente/telefone/resumo) - a
   // atendente humana usa isso pra confirmar (ver marcarPreAgendado)
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS pre_agendamento JSONB;`);
+  // alerta de retorno: o lead pediu pra retomar o contato mais tarde. retorno_em = quando; ao criar,
+  // o card vai pra "Em negociacao"; na hora, o verificador (server.js) devolve pra "Em atendimento"
+  // e a IA retoma (retorno_disparado_em marca que ja disparou). Limpa quando o lead responde.
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS retorno_em TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS retorno_nota TEXT;`);
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS retorno_origem TEXT;`);
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS retorno_disparado_em TIMESTAMPTZ;`);
+  // controle de "mensagem nao lida" pro sino de notificacoes: ultima_entrada_em = ultima mensagem
+  // que o CONTATO mandou; lido_em = quando alguem abriu a conversa no app pela ultima vez
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS ultima_entrada_em TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS lido_em TIMESTAMPTZ;`);
 
   await pool.query(`ALTER TABLE crm_contatos DROP CONSTRAINT IF EXISTS crm_contatos_numero_instancia_key;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS crm_contatos_tenant_numero_instancia_idx ON crm_contatos (tenant_id, numero, instancia);`);
@@ -119,12 +131,17 @@ export async function registrarMensagem(tenantId, { numero, instancia, direcao, 
   const preview = (texto || '').slice(0, 200) || (tipo !== 'text' ? `[${tipo}]` : '');
 
   const { rows } = await pool.query(
-    `INSERT INTO crm_contatos (tenant_id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em)
-     VALUES ($1, $2, $3, $4, 'novo_lead', $5, now())
+    `INSERT INTO crm_contatos (tenant_id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, ultima_entrada_em)
+     VALUES ($1, $2, $3, $4, 'novo_lead', $5, now(), CASE WHEN $6 = 'entrada' THEN now() ELSE NULL END)
      ON CONFLICT (tenant_id, numero, instancia) DO UPDATE SET
        nome = COALESCE(EXCLUDED.nome, crm_contatos.nome),
        ultima_mensagem = $5,
        ultima_mensagem_em = now(),
+       ultima_entrada_em = CASE WHEN $6 = 'entrada' THEN now() ELSE crm_contatos.ultima_entrada_em END,
+       retorno_em = CASE WHEN $6 = 'entrada' AND crm_contatos.retorno_disparado_em IS NOT NULL THEN NULL ELSE crm_contatos.retorno_em END,
+       retorno_nota = CASE WHEN $6 = 'entrada' AND crm_contatos.retorno_disparado_em IS NOT NULL THEN NULL ELSE crm_contatos.retorno_nota END,
+       retorno_origem = CASE WHEN $6 = 'entrada' AND crm_contatos.retorno_disparado_em IS NOT NULL THEN NULL ELSE crm_contatos.retorno_origem END,
+       retorno_disparado_em = CASE WHEN $6 = 'entrada' AND crm_contatos.retorno_disparado_em IS NOT NULL THEN NULL ELSE crm_contatos.retorno_disparado_em END,
        etapa = CASE WHEN crm_contatos.etapa = 'novo_lead' AND $6 = 'saida' THEN 'em_atendimento' ELSE crm_contatos.etapa END
      RETURNING id`,
     [tenantId, numero, instancia, nome || null, preview, direcao],
@@ -175,7 +192,10 @@ export async function listarContatos(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento
+    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento,
+            retorno_em, retorno_nota, retorno_origem, retorno_disparado_em,
+            (retorno_em IS NOT NULL AND (retorno_em AT TIME ZONE 'America/Maceio')::date <= (now() AT TIME ZONE 'America/Maceio')::date) AS retorno_hoje,
+            (ultima_entrada_em IS NOT NULL AND (lido_em IS NULL OR ultima_entrada_em > lido_em)) AS nao_lida
      FROM crm_contatos WHERE tenant_id = $1 AND oculto = false ORDER BY ultima_mensagem_em DESC NULLS LAST`,
     [tenantId],
   );
@@ -186,7 +206,10 @@ export async function listarContatosOcultos(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento
+    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento,
+            retorno_em, retorno_nota, retorno_origem, retorno_disparado_em,
+            (retorno_em IS NOT NULL AND (retorno_em AT TIME ZONE 'America/Maceio')::date <= (now() AT TIME ZONE 'America/Maceio')::date) AS retorno_hoje,
+            (ultima_entrada_em IS NOT NULL AND (lido_em IS NULL OR ultima_entrada_em > lido_em)) AS nao_lida
      FROM crm_contatos WHERE tenant_id = $1 AND oculto = true ORDER BY ultima_mensagem_em DESC NULLS LAST`,
     [tenantId],
   );
@@ -236,6 +259,92 @@ export async function alternarAutoAtendimento(tenantId, id, pausado) {
   await tabelasProntas;
   await pool.query(`UPDATE crm_contatos SET auto_pausado = $1 WHERE id = $2 AND tenant_id = $3`, [!!pausado, id, tenantId]);
   eventosCrm.emit('contato-atualizado', { tenantId, contatoId: id });
+}
+
+// ---------- alerta de retorno + notificacoes ----------
+
+const NOTA_MAX = 500;
+
+// define (ou troca) o alerta de retorno de um contato e move o card pra "Em negociacao".
+// origem: 'humano' (botao na conversa) ou 'ia' (ferramenta criar_alerta_retorno). Identifica o
+// contato por id (painel) ou por numero+instancia (IA).
+export async function definirRetorno(tenantId, { id, numero, instancia }, { quando, nota, origem }) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const data = new Date(quando);
+  if (Number.isNaN(data.getTime())) throw new Error('Data/hora invalida.');
+  if (data.getTime() <= Date.now()) throw new Error('A data/hora do retorno precisa ser no futuro.');
+  const notaFinal = (nota || '').slice(0, NOTA_MAX) || null;
+  const origemFinal = origem === 'ia' ? 'ia' : 'humano';
+  const filtro = id ? 'id = $5' : 'numero = $5 AND instancia = $6';
+  const params = [tenantId, data, notaFinal, origemFinal, id || numero];
+  if (!id) params.push(instancia);
+  const { rows } = await pool.query(
+    `UPDATE crm_contatos SET etapa = 'em_negociacao', retorno_em = $2, retorno_nota = $3, retorno_origem = $4, retorno_disparado_em = NULL
+     WHERE tenant_id = $1 AND ${filtro} RETURNING id`,
+    params,
+  );
+  if (!rows[0]) throw new Error('Contato nao encontrado no CRM.');
+  eventosCrm.emit('contato-atualizado', { tenantId, contatoId: rows[0].id });
+  return rows[0].id;
+}
+
+// remove o alerta; se o card estava em "Em negociacao" por causa dele, volta pra "Em atendimento"
+export async function removerRetorno(tenantId, id) {
+  if (!pool) return;
+  await tabelasProntas;
+  await pool.query(
+    `UPDATE crm_contatos SET retorno_em = NULL, retorno_nota = NULL, retorno_origem = NULL, retorno_disparado_em = NULL,
+       etapa = CASE WHEN etapa = 'em_negociacao' THEN 'em_atendimento' ELSE etapa END
+     WHERE id = $1 AND tenant_id = $2`,
+    [id, tenantId],
+  );
+  eventosCrm.emit('contato-atualizado', { tenantId, contatoId: id });
+}
+
+// retornos que ja chegaram na hora e ainda nao dispararam - de TODOS os tenants (o verificador do
+// server.js roda isso a cada minuto)
+export async function listarRetornosVencidos() {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT id, tenant_id, numero, instancia, nome, retorno_nota, retorno_origem FROM crm_contatos
+     WHERE retorno_em IS NOT NULL AND retorno_em <= now() AND retorno_disparado_em IS NULL ORDER BY retorno_em ASC`,
+  );
+  return rows;
+}
+
+// marca o retorno como disparado e devolve o card pra "Em atendimento" (mantem retorno_em pra
+// continuar aparecendo em laranja ate o lead responder ou alguem remover)
+export async function marcarRetornoDisparado(tenantId, id) {
+  if (!pool) return;
+  await tabelasProntas;
+  await pool.query(
+    `UPDATE crm_contatos SET retorno_disparado_em = now(), etapa = CASE WHEN etapa = 'em_negociacao' THEN 'em_atendimento' ELSE etapa END
+     WHERE id = $1 AND tenant_id = $2`,
+    [id, tenantId],
+  );
+  eventosCrm.emit('contato-atualizado', { tenantId, contatoId: id });
+}
+
+export async function marcarLido(tenantId, id) {
+  if (!pool) return;
+  await tabelasProntas;
+  await pool.query('UPDATE crm_contatos SET lido_em = now() WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
+}
+
+// dados do sino de notificacoes (ver /api/notificacoes) - so o que vem do proprio CRM; faltas do
+// Clinicorp sao somadas na rota
+export async function resumoNotificacoes(tenantId) {
+  if (!pool) return { naoLidas: [], retornos: [], preAgendamentos: [] };
+  await tabelasProntas;
+  const base = `FROM crm_contatos WHERE tenant_id = $1 AND oculto = false`;
+  const [naoLidas, retornos, pre] = await Promise.all([
+    pool.query(`SELECT id, numero, instancia, nome, ultima_mensagem, ultima_entrada_em ${base} AND ultima_entrada_em IS NOT NULL AND (lido_em IS NULL OR ultima_entrada_em > lido_em) ORDER BY ultima_entrada_em DESC LIMIT 30`, [tenantId]),
+    pool.query(`SELECT id, numero, instancia, nome, retorno_em, retorno_nota, retorno_disparado_em ${base} AND retorno_em IS NOT NULL AND (retorno_em AT TIME ZONE 'America/Maceio')::date <= (now() AT TIME ZONE 'America/Maceio')::date ORDER BY retorno_em ASC LIMIT 30`, [tenantId]),
+    pool.query(`SELECT id, numero, instancia, nome, pre_agendamento ${base} AND etapa = 'pre_agendado' ORDER BY ultima_mensagem_em DESC LIMIT 30`, [tenantId]),
+  ]);
+  return { naoLidas: naoLidas.rows, retornos: retornos.rows, preAgendamentos: pre.rows };
 }
 
 // consultado pelo webhook (server.js) pra saber a etapa atual do contato antes de decidir se

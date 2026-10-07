@@ -375,6 +375,7 @@ function mostrarApp() {
   ajustarTamanhoCanvas();
   iniciarPainelSistema();
   iniciarClima();
+  iniciarSino();
   testarConexaoAgenteLocal();
 }
 
@@ -2450,6 +2451,20 @@ function crmCriarCard(contato) {
   numero.textContent = `${contato.numero} · ${contato.instancia}`;
   card.appendChild(numero);
 
+  if (contato.retorno_hoje) card.classList.add('crm-card-retorno-hoje');
+  if (contato.nao_lida) {
+    const ponto = document.createElement('span');
+    ponto.className = 'crm-card-nao-lida';
+    ponto.title = 'Mensagem nova';
+    nome.appendChild(ponto);
+  }
+  if (contato.retorno_em) {
+    const ret = document.createElement('div');
+    ret.className = `crm-card-retorno${contato.retorno_hoje ? ' hoje' : ''}`;
+    ret.textContent = `⏰ ${contato.retorno_hoje ? 'Retorno HOJE' : 'Retorno'} ${crmFormatarRetorno(contato.retorno_em)}`;
+    if (contato.retorno_nota) ret.title = contato.retorno_nota;
+    card.appendChild(ret);
+  }
   // pre-agendamento combinado pela IA, aguardando a atendente confirmar (dia/hora/medico)
   if (contato.etapa === 'pre_agendado' && contato.pre_agendamento) {
     const pa = contato.pre_agendamento;
@@ -2492,6 +2507,14 @@ async function carregarCrm() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
     renderizarCrmBoard(data.etapas || [], data.contatos || []);
+    if (crmContatoAberto) {
+      const atualizado = (data.contatos || []).find((c) => c.id === crmContatoAberto.id);
+      if (atualizado) {
+        crmContatoAberto = { ...crmContatoAberto, ...atualizado };
+        crmAtualizarRetorno();
+        crmAtualizarBotaoPausar();
+      }
+    }
   } catch (err) {
     crmBoard.textContent = '';
     const erro = document.createElement('p');
@@ -2581,9 +2604,12 @@ function conectarEventosCrm() {
       carregarCrm(); // preview/ordem dos cards muda a cada mensagem nova
       if (crmContatoAberto && data.numero === crmContatoAberto.numero && data.instancia === crmContatoAberto.instancia) {
         carregarMensagensCrm();
+        crmMarcarLido(crmContatoAberto.id);
       }
+      atualizarSino();
     } else if (data.tipo === 'contato-atualizado') {
       carregarCrm();
+      atualizarSino();
       if (data.apagado && crmContatoAberto?.id === data.contatoId) {
         crmConversa.hidden = true;
         crmContatoAberto = null;
@@ -2748,11 +2774,216 @@ function abrirConversaCrm(contato) {
   crmAtualizarAvatar(contato);
   crmAtualizarBotaoPausar();
   crmAtualizarBotaoOcultar();
+  crmAtualizarRetorno();
+  crmRetornoPainel.hidden = true;
+  crmMarcarLido(contato.id);
   carregarMensagensCrm();
   pararPollingConversaCrm();
   // o SSE (conectarEventosCrm) e a fonte principal de atualizacao em tempo real - isso aqui e
   // so uma rede de seguranca bem espacada, caso a conexao caia sem reconectar
   crmPollingConversa = setInterval(carregarMensagensCrm, 20000);
+}
+
+// ---------- Alerta de retorno (conversa do CRM) ----------
+const crmConversaRetorno = document.getElementById('crmConversaRetorno');
+const crmRetornoBanner = document.getElementById('crmRetornoBanner');
+const crmRetornoPainel = document.getElementById('crmRetornoPainel');
+const crmRetornoQuando = document.getElementById('crmRetornoQuando');
+const crmRetornoNota = document.getElementById('crmRetornoNota');
+const crmRetornoSalvar = document.getElementById('crmRetornoSalvar');
+const crmRetornoRemover = document.getElementById('crmRetornoRemover');
+const crmRetornoFechar = document.getElementById('crmRetornoFechar');
+const crmRetornoErro = document.getElementById('crmRetornoErro');
+
+function crmFormatarRetorno(iso) {
+  return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function crmParaInputLocal(data) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${data.getFullYear()}-${pad(data.getMonth() + 1)}-${pad(data.getDate())}T${pad(data.getHours())}:${pad(data.getMinutes())}`;
+}
+
+function crmMarcarLido(id) {
+  fetch(`/api/crm/contatos/${id}/lido`, { method: 'POST', headers: { 'x-app-password': appPassword } })
+    .then(() => atualizarSino())
+    .catch(() => {});
+}
+
+function crmAtualizarRetorno() {
+  const c = crmContatoAberto;
+  crmConversaRetorno.textContent = c?.retorno_em ? 'Alerta de retorno ✓' : 'Alerta de retorno';
+  crmConversaRetorno.classList.toggle('crm-btn-ativo', !!c?.retorno_em);
+  if (!c?.retorno_em) { crmRetornoBanner.hidden = true; return; }
+  const quando = crmFormatarRetorno(c.retorno_em);
+  const nota = c.retorno_nota ? ` - ${c.retorno_nota}` : '';
+  const ia = c.retorno_origem === 'ia' ? ' (combinado pela IA)' : '';
+  const retomou = c.retorno_disparado_em ? ' · a IA já retomou o contato' : '';
+  crmRetornoBanner.textContent = c.retorno_hoje
+    ? `⏰ HOJE é o dia do retorno (${quando})${nota}${ia}${retomou}`
+    : `⏰ Retorno agendado para ${quando}${nota}${ia}`;
+  crmRetornoBanner.classList.toggle('hoje', !!c.retorno_hoje);
+  crmRetornoBanner.hidden = false;
+}
+
+crmConversaRetorno.addEventListener('click', () => {
+  if (!crmContatoAberto) return;
+  crmRetornoErro.hidden = true;
+  if (!crmRetornoPainel.hidden) { crmRetornoPainel.hidden = true; return; }
+  if (crmContatoAberto.retorno_em) {
+    crmRetornoQuando.value = crmParaInputLocal(new Date(crmContatoAberto.retorno_em));
+    crmRetornoNota.value = crmContatoAberto.retorno_nota || '';
+  } else {
+    const amanha = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    amanha.setHours(9, 0, 0, 0);
+    crmRetornoQuando.value = crmParaInputLocal(amanha);
+    crmRetornoNota.value = '';
+  }
+  crmRetornoRemover.hidden = !crmContatoAberto.retorno_em;
+  crmRetornoPainel.hidden = false;
+});
+crmRetornoFechar.addEventListener('click', () => { crmRetornoPainel.hidden = true; });
+
+crmRetornoSalvar.addEventListener('click', async () => {
+  if (!crmContatoAberto) return;
+  crmRetornoErro.hidden = true;
+  if (!crmRetornoQuando.value) {
+    crmRetornoErro.textContent = 'Escolha a data e a hora do retorno.';
+    crmRetornoErro.hidden = false;
+    return;
+  }
+  crmRetornoSalvar.disabled = true;
+  try {
+    const res = await fetch(`/api/crm/contatos/${crmContatoAberto.id}/retorno`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ quando: new Date(crmRetornoQuando.value).toISOString(), nota: crmRetornoNota.value.trim() }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    crmRetornoPainel.hidden = true;
+    await carregarCrm();
+    atualizarSino();
+  } catch (err) {
+    crmRetornoErro.textContent = err.message;
+    crmRetornoErro.hidden = false;
+  } finally {
+    crmRetornoSalvar.disabled = false;
+  }
+});
+
+crmRetornoRemover.addEventListener('click', async () => {
+  if (!crmContatoAberto) return;
+  try {
+    const res = await fetch(`/api/crm/contatos/${crmContatoAberto.id}/retorno`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+    if (!res.ok) throw new Error((await res.json()).erro || 'erro desconhecido');
+    crmContatoAberto.retorno_em = null;
+    crmRetornoPainel.hidden = true;
+    await carregarCrm();
+    atualizarSino();
+  } catch (err) {
+    crmRetornoErro.textContent = err.message;
+    crmRetornoErro.hidden = false;
+  }
+});
+
+// ---------- Sino de notificacoes (barra do topo) ----------
+const sinoBtn = document.getElementById('sinoBtn');
+const sinoBadge = document.getElementById('sinoBadge');
+const sinoPainel = document.getElementById('sinoPainel');
+const sinoLista = document.getElementById('sinoLista');
+const sinoTotal = document.getElementById('sinoTotal');
+let sinoIniciado = false;
+
+function sinoSecao(titulo) {
+  const h = document.createElement('div');
+  h.className = 'sino-secao';
+  h.textContent = titulo;
+  sinoLista.appendChild(h);
+}
+
+function sinoItem(titulo, detalhe, classe, aoClicar) {
+  const el = document.createElement('div');
+  el.className = `sino-item ${classe || ''}`;
+  el.textContent = titulo;
+  if (detalhe) {
+    const small = document.createElement('small');
+    small.textContent = detalhe;
+    el.appendChild(small);
+  }
+  if (aoClicar) el.addEventListener('click', aoClicar);
+  sinoLista.appendChild(el);
+}
+
+async function sinoAbrirContato(id) {
+  sinoPainel.hidden = true;
+  mudarAba('crm');
+  try {
+    const res = await fetch('/api/crm/contatos', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    const contato = (data.contatos || []).find((c) => c.id === id);
+    if (contato) abrirConversaCrm(contato);
+  } catch { /* o board ja carrega sozinho ao entrar na aba */ }
+}
+
+async function atualizarSino() {
+  if (appWindow.hidden) return;
+  try {
+    const res = await fetch('/api/notificacoes', { headers: { 'x-app-password': appPassword } });
+    if (!res.ok) return;
+    const d = await res.json();
+    sinoBadge.hidden = !d.total;
+    sinoTotal.textContent = d.total ? `${d.total} pendente(s)` : '';
+    sinoLista.textContent = '';
+    if (!d.total) {
+      const vazio = document.createElement('p');
+      vazio.className = 'agenda-vazia';
+      vazio.textContent = 'Tudo em dia - nenhuma pendência.';
+      sinoLista.appendChild(vazio);
+      return;
+    }
+    if (d.retornos.length) {
+      sinoSecao('Alertas de retorno de hoje');
+      for (const r of d.retornos) {
+        sinoItem(`⏰ ${r.nome || r.numero}`, `${crmFormatarRetorno(r.retorno_em)}${r.retorno_nota ? ` - ${r.retorno_nota}` : ''}${r.retorno_disparado_em ? ' · IA já retomou' : ''}`, 'laranja', () => sinoAbrirContato(r.id));
+      }
+    }
+    if (d.naoLidas.length) {
+      sinoSecao('Mensagens novas');
+      for (const m of d.naoLidas) sinoItem(m.nome || m.numero, m.ultima_mensagem, '', () => sinoAbrirContato(m.id));
+    }
+    if (d.preAgendamentos.length) {
+      sinoSecao('Pré-agendamentos aguardando confirmação');
+      for (const p of d.preAgendamentos) {
+        const pa = p.pre_agendamento || {};
+        const [, mes, dia] = (pa.data || '').split('-');
+        sinoItem(p.nome || p.numero, pa.data ? `${dia}/${mes} ${pa.de || ''}${pa.medico ? ` - ${pa.medico}` : ''}` : 'sem horário anotado', '', () => sinoAbrirContato(p.id));
+      }
+    }
+    if (d.faltas.length) {
+      sinoSecao('Faltas recentes (Clinicorp)');
+      for (const f of d.faltas) {
+        const [, mes, dia] = (f.data || '').split('-');
+        sinoItem(f.paciente || 'Paciente', `faltou em ${dia}/${mes} ${f.hora || ''} - vale tentar reagendar`, 'vermelho');
+      }
+    }
+  } catch { /* sem rede / sessao expirada - tenta de novo no proximo ciclo */ }
+}
+
+sinoBtn.addEventListener('click', (ev) => {
+  ev.stopPropagation();
+  sinoPainel.hidden = !sinoPainel.hidden;
+  if (!sinoPainel.hidden) atualizarSino();
+});
+document.addEventListener('click', (ev) => {
+  if (!sinoPainel.hidden && !document.getElementById('sinoWrap').contains(ev.target)) sinoPainel.hidden = true;
+});
+
+function iniciarSino() {
+  atualizarSino();
+  if (sinoIniciado) return;
+  sinoIniciado = true;
+  setInterval(atualizarSino, 30000);
 }
 
 crmConversaFechar.addEventListener('click', () => {
