@@ -71,6 +71,9 @@
       .crb-corpo { flex: 1 1 auto; min-height: 0; display: flex; gap: 12px; }
       .crb-grafo { position: relative; flex: 1 1 auto; min-width: 0; min-height: 0; border: 1px solid var(--border-soft); border-radius: 12px;
         overflow: hidden; background: radial-gradient(ellipse at center, #15122a 0%, #07060d 70%); }
+      /* o 3D desenha num div PROPRIO: a biblioteca apaga tudo que estiver dentro do container dela,
+         e levava junto a mensagem de "cerebro vazio" que fica por cima */
+      .crb-grafo-tela { position: absolute; inset: 0; }
       .crb-grafo-vazio { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
         padding: 24px; color: var(--text-dim); font-size: 13px; line-height: 1.6; pointer-events: none; }
       .crb-painel { flex: 0 0 340px; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
@@ -121,7 +124,7 @@
       </div>
       <div class="crb-filtros" data-r="filtros"></div>
       <div class="crb-corpo">
-        <div class="crb-grafo" data-r="grafo"><div class="crb-grafo-vazio" data-r="vazio">Carregando o cérebro...</div></div>
+        <div class="crb-grafo"><div class="crb-grafo-tela" data-r="grafo"></div><div class="crb-grafo-vazio" data-r="vazio">Carregando o cérebro...</div></div>
         <div class="crb-painel" data-r="painel"></div>
       </div>`;
     raiz.querySelectorAll('[data-r]').forEach((n) => { el[n.dataset.r] = n; });
@@ -179,7 +182,7 @@
     const links = dados.links.filter((l) => ids.has(idDe(l.source)) && ids.has(idDe(l.target)));
     grafo.graphData({ nodes: nos, links });
     el.vazio.hidden = nos.length > 0;
-    if (!nos.length) el.vazio.textContent = dados.nos.length ? 'Nenhuma memória com esses filtros.' : 'O cérebro ainda está vazio. Conecte uma IA em "Conectar IAs" ou crie a primeira memória em "+ Memória".';
+    if (!nos.length) el.vazio.textContent = dados.nos.length ? 'Nenhuma memória com esses filtros.' : 'O cérebro ainda está vazio. Conecte uma IA em "Conectar IAs" (ela vai salvando sozinha o que for importante) ou crie a primeira memória em "+ Memória".';
   }
 
   function corNo(n) {
