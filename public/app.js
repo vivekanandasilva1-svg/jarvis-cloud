@@ -72,6 +72,7 @@ const tabBtnFollowUp = document.getElementById('tabBtnFollowUp');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
 const tabBtnGeradorRelatorios = document.getElementById('tabBtnGeradorRelatorios');
 const tabBtnIntegracoes = document.getElementById('tabBtnIntegracoes');
+const tabBtnCerebro = document.getElementById('tabBtnCerebro');
 const tabBtnClientes = document.getElementById('tabBtnClientes');
 const tabBtnPropostasAdmin = document.getElementById('tabBtnPropostasAdmin');
 const tabPainel = document.getElementById('tabPainel');
@@ -83,6 +84,7 @@ const tabFollowUp = document.getElementById('tabFollowUp');
 const tabRelatorios = document.getElementById('tabRelatorios');
 const tabGeradorRelatorios = document.getElementById('tabGeradorRelatorios');
 const tabIntegracoes = document.getElementById('tabIntegracoes');
+const tabCerebro = document.getElementById('tabCerebro');
 const tabClientes = document.getElementById('tabClientes');
 const tabPropostasAdmin = document.getElementById('tabPropostasAdmin');
 
@@ -310,6 +312,8 @@ async function tentarEntrar(usuario, senha) {
 let souSuperAdmin = false;
 let minhasTabsHabilitadas = null; // null = tudo liberado (default); array = so essas abas
 let meuPermiteColaboradores = false; // beneficio liberado pelo super_admin (aba Clientes) - ver tenants.permite_colaboradores
+// Cerebro de IA e recurso pago a parte - false ate o admin liberar (super_admin sempre tem)
+let meuCerebroLiberado = false;
 
 // confirma que o token guardado ainda e valido (nao expirou, tenant continua ativo) - chamado
 // no carregamento da pagina, ja que um token velho nao pode mais ser "reenviado como senha"
@@ -324,6 +328,7 @@ async function tokenValido() {
     souSuperAdmin = !!data?.superAdmin;
     minhasTabsHabilitadas = Array.isArray(data?.tabsHabilitadas) && data.tabsHabilitadas.length ? data.tabsHabilitadas : null;
     meuPermiteColaboradores = !!data?.permiteColaboradores;
+    meuCerebroLiberado = !!data?.cerebroLiberado;
     return true;
   } catch {
     return false;
@@ -350,6 +355,7 @@ function mostrarApp() {
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
   tabBtnGeradorRelatorios.hidden = !abaLiberada('geradorRelatorios');
   tabBtnIntegracoes.hidden = !abaLiberada('integracoes');
+  tabBtnCerebro.hidden = !meuCerebroLiberado;
   // se a aba visivel por padrao (Painel) foi restringida, pula pra primeira aba liberada em
   // vez de deixar a tela em branco
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
@@ -1828,6 +1834,7 @@ function mudarAba(aba) {
   tabRelatorios.hidden = aba !== 'relatorios';
   tabGeradorRelatorios.hidden = aba !== 'geradorRelatorios';
   tabIntegracoes.hidden = aba !== 'integracoes';
+  tabCerebro.hidden = aba !== 'cerebro';
   tabClientes.hidden = aba !== 'clientes';
   tabPropostasAdmin.hidden = aba !== 'propostasAdmin';
   tabBtnPainel.classList.toggle('active', aba === 'painel');
@@ -1839,6 +1846,7 @@ function mudarAba(aba) {
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
   tabBtnGeradorRelatorios.classList.toggle('active', aba === 'geradorRelatorios');
   tabBtnIntegracoes.classList.toggle('active', aba === 'integracoes');
+  tabBtnCerebro.classList.toggle('active', aba === 'cerebro');
   tabBtnClientes.classList.toggle('active', aba === 'clientes');
   tabBtnPropostasAdmin.classList.toggle('active', aba === 'propostasAdmin');
   if (aba === 'agenda') {
@@ -1871,6 +1879,28 @@ function mudarAba(aba) {
   pararPollingCrm();
   if (aba === 'crm') iniciarPollingCrm();
   fecharSidebarMobile(); // no celular, escolher uma aba ja fecha a gaveta sozinho
+  // o grafo 3D do Cerebro para de renderizar quando a aba nao esta visivel (nao gasta GPU/bateria a toa)
+  if (aba === 'cerebro') abrirCerebro();
+  else if (window.cerebroPausar) window.cerebroPausar();
+}
+
+// cerebro.js (+ a biblioteca do grafo 3D) so e baixado na PRIMEIRA vez que a aba e aberta -
+// quem nunca abre (ex: cliente que nao contratou) nao baixa nada e o app continua leve
+let cerebroCarregando = null;
+function abrirCerebro() {
+  if (window.cerebroAbrir) return window.cerebroAbrir(tabCerebro, appPassword);
+  if (!cerebroCarregando) {
+    cerebroCarregando = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = '/cerebro.js?v=8';
+      s.onload = resolve;
+      s.onerror = () => { cerebroCarregando = null; reject(new Error('falha ao carregar o Cerebro')); };
+      document.head.appendChild(s);
+    });
+  }
+  cerebroCarregando
+    .then(() => { if (!tabCerebro.hidden) window.cerebroAbrir(tabCerebro, appPassword); })
+    .catch((err) => addBubble(err.message, 'system'));
 }
 
 // ---------- Barra lateral em tela estreita (gaveta) ----------
@@ -1894,6 +1924,7 @@ tabBtnGeradorRelatorios.addEventListener('click', () => mudarAba('geradorRelator
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
 tabBtnFollowUp.addEventListener('click', () => mudarAba('followUp'));
 tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
+tabBtnCerebro.addEventListener('click', () => mudarAba('cerebro'));
 tabBtnClientes.addEventListener('click', () => mudarAba('clientes'));
 tabBtnPropostasAdmin.addEventListener('click', () => mudarAba('propostasAdmin'));
 
@@ -5481,6 +5512,42 @@ async function selecionarCliente(id, nome, username) {
     } finally {
       colabToggle.disabled = false;
     }
+  })();
+
+  // ---- Cerebro de IA (recurso pago a parte - desligado ate liberar aqui) ----
+  const cerebroLabel = document.createElement('label'); cerebroLabel.className = 'auto-label'; cerebroLabel.textContent = 'Cérebro de IA (recurso pago)';
+  clienteIntegracoesPainel.appendChild(cerebroLabel);
+  const cerebroWrap = document.createElement('label');
+  cerebroWrap.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);margin-bottom:10px;cursor:pointer;';
+  const cerebroCb = document.createElement('input');
+  cerebroCb.type = 'checkbox';
+  cerebroCb.disabled = true;
+  cerebroWrap.appendChild(cerebroCb);
+  cerebroWrap.appendChild(document.createTextNode('Liberar a aba Cérebro (memória compartilhada entre IAs) pra esse cliente'));
+  clienteIntegracoesPainel.appendChild(cerebroWrap);
+  cerebroCb.addEventListener('change', async () => {
+    const liberado = cerebroCb.checked;
+    try {
+      const r = await fetch(`/api/admin/tenants/${id}/cerebro`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ liberado }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+      addBubble(`Cérebro ${liberado ? 'liberado' : 'bloqueado'} pra "${nome}".`, 'system');
+    } catch (err) {
+      cerebroCb.checked = !liberado;
+      addBubble(`Erro alterando o Cérebro: ${err.message}`, 'system');
+    }
+  });
+  (async () => {
+    try {
+      const r = await fetch(`/api/admin/tenants/${id}/cerebro`, { headers: { 'x-app-password': appPassword } });
+      const d = await r.json();
+      cerebroCb.checked = !!d.liberado;
+      cerebroCb.disabled = false;
+    } catch (e) {}
   })();
 
   // ---- Apagar cliente (marca pra exclusao - so apaga de verdade depois de 30 dias, da pra

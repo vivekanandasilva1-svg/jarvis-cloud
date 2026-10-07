@@ -27,6 +27,8 @@ import * as metaAds from './metaads.js';
 import * as propostas from './propostas.js';
 import * as relatorioGerador from './relatorioGerador.js';
 import * as followUp from './followUp.js';
+import * as cerebro from './cerebro.js';
+import { router as cerebroMcpRouter } from './cerebroMcp.js';
 
 const execAsync = promisify(exec);
 
@@ -78,6 +80,11 @@ const TAB_ROTA_PREFIXO = {
   integracoes: '/api/integracoes',
 };
 
+// endpoint MCP do Cerebro (Claude/ChatGPT/Cursor conectam aqui) - registrado ANTES do auth geral
+// porque tem autenticacao propria (token crb_... do Cerebro, ver cerebroMcp.js), nao o token
+// de login do app
+app.use(cerebroMcpRouter);
+
 app.use(async (req, res, next) => {
   if (!process.env.SESSION_SECRET) return next(); // sem auth configurada, roda aberto (dev local sem Postgres)
   if (
@@ -107,6 +114,19 @@ app.use(async (req, res, next) => {
   if (tenantId) {
     req.tenantId = tenantId;
     const abaProtegida = Object.entries(TAB_ROTA_PREFIXO).find(([, prefixo]) => req.path.startsWith(prefixo));
+    // Cerebro e recurso pago a parte: desligado por padrao pra todo cliente, so o admin liga
+    // (tenant_config.cerebro_liberado) - por isso nao segue a regra de tabs_habilitadas, onde
+    // "nada marcado" quer dizer "tudo liberado"
+    if (req.path.startsWith('/api/cerebro')) {
+      try {
+        const tenant = await tenants.obterPorId(tenantId);
+        if (!tenant?.super_admin && !(await cerebro.estaLiberado(tenantId))) {
+          return res.status(403).json({ erro: 'o Cerebro de IA nao esta liberado pra sua conta' });
+        }
+      } catch (err) {
+        return res.status(500).json({ erro: err.message });
+      }
+    }
     if (abaProtegida) {
       const [aba] = abaProtegida;
       try {
@@ -150,7 +170,8 @@ app.get('/api/me', async (req, res) => {
     const tenant = await tenants.obterPorId(req.tenantId);
     if (!tenant || !tenant.ativo) return res.status(401).json({ erro: 'tenant nao encontrado' });
     const tabsHabilitadas = await tenantConfig.obterTabsHabilitadas(tenant.id);
-    res.json({ tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas, permiteColaboradores: !!tenant.permite_colaboradores });
+    const cerebroLiberado = !!tenant.super_admin || await cerebro.estaLiberado(tenant.id).catch(() => false);
+    res.json({ tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas, permiteColaboradores: !!tenant.permite_colaboradores, cerebroLiberado });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -334,6 +355,24 @@ app.get('/api/admin/tenants/:id/tabs', exigirSuperAdmin, async (req, res) => {
   try {
     const habilitadas = await tenantConfig.obterTabsHabilitadas(Number(req.params.id));
     res.json({ tabsHabilitadas: habilitadas, tabsValidas: tenantConfig.TABS_VALIDAS });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// Cerebro de IA e liberado a parte (recurso pago) - ver cerebro.js
+app.get('/api/admin/tenants/:id/cerebro', exigirSuperAdmin, async (req, res) => {
+  try {
+    res.json({ liberado: await cerebro.estaLiberado(Number(req.params.id)) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/admin/tenants/:id/cerebro', exigirSuperAdmin, async (req, res) => {
+  try {
+    await cerebro.definirLiberado(Number(req.params.id), !!req.body?.liberado);
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -1862,6 +1901,55 @@ app.post('/api/agenda/google/desconectar', async (req, res) => {
     res.status(500).json({ erro: err.message });
   }
 });
+
+// ---------- Cerebro de IA (aba "Cerebro") - memoria compartilhada entre as IAs, ver cerebro.js ----------
+const rotaCerebro = (fn) => async (req, res) => {
+  try {
+    await fn(req, res);
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+};
+
+app.get('/api/cerebro/grafo', rotaCerebro(async (req, res) => {
+  res.json(await cerebro.grafo(req.tenantId));
+}));
+
+app.get('/api/cerebro/buscar', rotaCerebro(async (req, res) => {
+  res.json({ memorias: await cerebro.buscarMemorias(req.tenantId, { consulta: req.query.q, projeto: req.query.projeto, limite: 20 }) });
+}));
+
+app.get('/api/cerebro/memorias/:id', rotaCerebro(async (req, res) => {
+  const m = await cerebro.obterMemoria(req.tenantId, Number(req.params.id));
+  if (!m) return res.status(404).json({ erro: 'memoria nao encontrada' });
+  res.json(m);
+}));
+
+app.post('/api/cerebro/memorias', rotaCerebro(async (req, res) => {
+  res.json(await cerebro.salvarMemoria(req.tenantId, { ...req.body, origem: 'manual' }));
+}));
+
+app.put('/api/cerebro/memorias/:id', rotaCerebro(async (req, res) => {
+  res.json(await cerebro.atualizarMemoria(req.tenantId, Number(req.params.id), req.body || {}));
+}));
+
+app.delete('/api/cerebro/memorias/:id', rotaCerebro(async (req, res) => {
+  await cerebro.arquivarMemoria(req.tenantId, Number(req.params.id));
+  res.json({ ok: true });
+}));
+
+app.get('/api/cerebro/tokens', rotaCerebro(async (req, res) => {
+  res.json({ tokens: await cerebro.listarTokens(req.tenantId), origens: cerebro.ORIGENS });
+}));
+
+app.post('/api/cerebro/tokens', rotaCerebro(async (req, res) => {
+  res.json(await cerebro.criarToken(req.tenantId, req.body || {}));
+}));
+
+app.delete('/api/cerebro/tokens/:id', rotaCerebro(async (req, res) => {
+  await cerebro.revogarToken(req.tenantId, Number(req.params.id));
+  res.json({ ok: true });
+}));
 
 iniciarSchedulerLembretes();
 // O alerta de saldo baixo fixo (env var LUMIA_WHATSAPP_ADMIN, sem configuracao de
