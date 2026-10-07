@@ -281,7 +281,7 @@
     // tela em pe (celular): o campo de visao da camera e vertical, entao afasta na proporcao
     // pra nao cortar as laterais
     const proporcao = Math.max(1, el.grafo.clientHeight / Math.max(el.grafo.clientWidth, 1));
-    grafo.cameraPosition({ x: centro.x, y: centro.y, z: centro.z + (raio * 2.2 + 40) * proporcao }, centro, 800);
+    grafo.cameraPosition({ x: centro.x, y: centro.y, z: centro.z + (raio * 2.7 + 50) * proporcao }, centro, 800);
   }
 
   function focar(id) {

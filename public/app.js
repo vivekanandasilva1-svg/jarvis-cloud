@@ -1892,7 +1892,7 @@ function abrirCerebro() {
   if (!cerebroCarregando) {
     cerebroCarregando = new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = '/cerebro.js?v=8';
+      s.src = '/cerebro.js?v=9';
       s.onload = resolve;
       s.onerror = () => { cerebroCarregando = null; reject(new Error('falha ao carregar o Cerebro')); };
       document.head.appendChild(s);
