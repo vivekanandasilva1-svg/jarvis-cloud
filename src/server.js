@@ -951,18 +951,64 @@ app.post('/webhook/whatsapp', (req, res) => {
 
 // extrai o numero (so digitos), o texto e o tipo de midia (se tiver) de uma mensagem no formato
 // do Baileys - texto simples/resposta, ou imagem/audio/video (com ou sem legenda)
-function extrairMensagemEvolution(data) {
-  const remoteJid = data?.key?.remoteJid || '';
-  const numero = remoteJid.split('@')[0];
-  const msg = data?.message || {};
-  const id = data?.key?.id || null;
+// o WhatsApp embrulha varios tipos de mensagem (temporaria, visualizacao unica, documento com
+// legenda, editada) dentro de outro objeto - sem desembrulhar, essas mensagens pareciam vazias
+// e sumiam do CRM
+function desembrulharMensagem(msg) {
+  let atual = msg || {};
+  for (let n = 0; n < 4; n += 1) {
+    const interna = atual.ephemeralMessage?.message
+      || atual.viewOnceMessage?.message
+      || atual.viewOnceMessageV2?.message
+      || atual.viewOnceMessageV2Extension?.message
+      || atual.documentWithCaptionMessage?.message
+      || atual.editedMessage?.message
+      || null;
+    if (!interna) break;
+    atual = interna;
+  }
+  return atual;
+}
 
-  if (msg.imageMessage) return { numero, texto: msg.imageMessage.caption || '', tipo: 'image', fromMe: !!data?.key?.fromMe, id };
-  if (msg.audioMessage) return { numero, texto: '', tipo: 'audio', fromMe: !!data?.key?.fromMe, id };
-  if (msg.videoMessage) return { numero, texto: msg.videoMessage.caption || '', tipo: 'video', fromMe: !!data?.key?.fromMe, id };
+// messageTimestamp pode vir como numero (segundos) ou como objeto Long ({low, high}) conforme a
+// versao do Evolution
+function horarioDaMensagem(data) {
+  const bruto = data?.messageTimestamp;
+  const seg = typeof bruto === 'object' && bruto !== null ? Number(bruto.low ?? bruto) : Number(bruto);
+  return Number.isFinite(seg) && seg > 0 ? new Date(seg * 1000) : null;
+}
+
+function extrairMensagemEvolution(data) {
+  const key = data?.key || {};
+  // conversa 1-pra-1 nova do WhatsApp pode chegar como "@lid" (id interno, nao e telefone) - o
+  // telefone real vem em remoteJidAlt quando o Evolution manda
+  let remoteJid = key.remoteJid || '';
+  if (remoteJid.endsWith('@lid') && key.remoteJidAlt) remoteJid = key.remoteJidAlt;
+  const numero = remoteJid.split('@')[0];
+  const msg = desembrulharMensagem(data?.message);
+  const base = { numero, fromMe: !!key.fromMe, id: key.id || null, quando: horarioDaMensagem(data) };
+
+  if (msg.imageMessage) return { ...base, texto: msg.imageMessage.caption || '', tipo: 'image' };
+  if (msg.audioMessage) return { ...base, texto: '', tipo: 'audio' };
+  if (msg.videoMessage) return { ...base, texto: msg.videoMessage.caption || '', tipo: 'video' };
+
+  // tipos que nao sao texto nem midia que o app exibe: aparecem na conversa como uma linha
+  // descritiva (espelho fiel do WhatsApp) mas NAO disparam resposta da IA (soEspelho)
+  if (msg.documentMessage) {
+    const d = msg.documentMessage;
+    return { ...base, texto: `📄 Documento: ${d.fileName || d.title || 'arquivo'}${d.caption ? ` - ${d.caption}` : ''}`, tipo: 'text', soEspelho: true };
+  }
+  if (msg.stickerMessage) return { ...base, texto: '🙂 Figurinha', tipo: 'text', soEspelho: true };
+  if (msg.locationMessage || msg.liveLocationMessage) {
+    const l = msg.locationMessage || msg.liveLocationMessage;
+    return { ...base, texto: `📍 Localização${l.name ? `: ${l.name}` : ''}${l.address ? ` - ${l.address}` : ''}`, tipo: 'text', soEspelho: true };
+  }
+  if (msg.contactMessage) return { ...base, texto: `👤 Contato: ${msg.contactMessage.displayName || ''}`.trim(), tipo: 'text', soEspelho: true };
+  if (msg.contactsArrayMessage) return { ...base, texto: `👤 ${msg.contactsArrayMessage.contacts?.length || 0} contato(s) compartilhado(s)`, tipo: 'text', soEspelho: true };
+  if (msg.pollCreationMessage || msg.pollCreationMessageV3) return { ...base, texto: `📊 Enquete: ${(msg.pollCreationMessage || msg.pollCreationMessageV3).name || ''}`.trim(), tipo: 'text', soEspelho: true };
 
   const texto = msg.conversation || msg.extendedTextMessage?.text || '';
-  return { numero, texto, tipo: 'text', fromMe: !!data?.key?.fromMe, id };
+  return { ...base, texto, tipo: 'text' };
 }
 
 // compara dois numeros de telefone ignorando formatacao (DDI "55" presente ou nao, o "9" extra
@@ -1013,7 +1059,7 @@ function lembrarEnviada(resposta) {
 // depender do WhatsApp/Evolution ainda ter o arquivo disponivel na hora que o dono for abrir.
 // "melhor esforco": se o download falhar, ainda registra a mensagem (so sem midia, cai no
 // icone de sempre) em vez de perder a mensagem inteira do historico do CRM.
-async function registrarMensagemComMidia(tenantId, { numero, instancia, direcao, tipo, texto, nome, mensagemBruta }) {
+async function registrarMensagemComMidia(tenantId, { numero, instancia, direcao, tipo, texto, nome, mensagemBruta, quando, waId, evitarEco }) {
   let midiaBase64 = null;
   let midiaMimetype = null;
   if (tipo === 'image' || tipo === 'audio') {
@@ -1025,7 +1071,7 @@ async function registrarMensagemComMidia(tenantId, { numero, instancia, direcao,
       console.error('Erro baixando midia pro CRM:', err.message);
     }
   }
-  await crm.registrarMensagem(tenantId, { numero, instancia, direcao, tipo, texto, nome, midiaBase64, midiaMimetype });
+  await crm.registrarMensagem(tenantId, { numero, instancia, direcao, tipo, texto, nome, midiaBase64, midiaMimetype, quando, waId, evitarEco });
 }
 
 // serializa o processamento de mensagens do MESMO contato (chave "tenantId:numero") - sem isso,
@@ -1122,7 +1168,10 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   // falsa (numero "status") misturada no CRM - bug real reportado pelo usuario. Ignora
   // qualquer coisa de "@broadcast" de proposito (inclui listas de transmissao tambem, mesmo
   // motivo: nao sao uma conversa 1-pra-1 de verdade).
-  if ((data?.key?.remoteJid || '').endsWith('@broadcast')) return;
+  // GRUPOS (@g.us) e canais (@newsletter) tambem ficam de fora: nao sao um lead 1-pra-1 - antes,
+  // um grupo virava um "card" com mensagens de varias pessoas misturadas (e a IA chegou a
+  // responder dentro do grupo)
+  if (/@(broadcast|g\.us|newsletter)$/.test(data?.key?.remoteJid || '')) return;
 
   // primeira coisa: descobre de qual tenant e essa instancia - sem mapeamento, ignora a
   // mensagem silenciosamente (mesmo padrao ja usado pra numero fora da allowlist). Isso
@@ -1130,9 +1179,12 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   const tenantId = await tenants.resolverTenantPorInstancia(instanciaDoWebhook);
   if (!tenantId) return;
 
-  const { numero, texto, tipo, fromMe, id } = extrairMensagemEvolution(data);
+  const { numero, texto, tipo, fromMe, id, quando, soEspelho } = extrairMensagemEvolution(data);
+  if (!numero) return;
   const { instanciaAtiva, numeroAdmin } = await whatsappInstances.obterConfig(tenantId);
   const ehNumeroAdmin = numeroAdmin && mesmoNumero(numero, numeroAdmin);
+
+  if (tipo === 'text' && !texto) return; // reacao, apagar mensagem, etc - nada pra espelhar
 
   if (fromMe) {
     // eco confirmado de algo que a propria Lumia mandou (painel CRM ou auto-atendimento) -
@@ -1144,22 +1196,25 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
     // passar pela Lumia nem pelo painel - registra no CRM como 'saida' pra a conversa la
     // ficar identica a conversa real (senao essas respostas manuais nunca apareciam no CRM).
     if (!ehNumeroAdmin) {
-      registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo, texto, nome: data?.pushName, mensagemBruta: data })
+      registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo, texto, mensagemBruta: data, quando, waId: id, evitarEco: true })
         .catch((err) => console.error('Erro registrando mensagem manual (fromMe) no CRM:', err.message));
       return;
     }
     // fromMe pro proprio numero do dono (chat "Mensagem para voce mesmo") - continua nao
     // sendo uma conversa de CRM, e a conversa pessoal do dono com a Lumia
   }
-  if (tipo === 'text' && !texto) return;
 
   // espelha no CRM (Kanban) qualquer mensagem recebida de um contato que nao seja o proprio
   // dono, em qualquer instancia conectada - "best-effort", nunca trava o fluxo principal (a
   // resposta da Lumia) se o CRM der erro
   if (!ehNumeroAdmin) {
-    registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'entrada', tipo, texto, nome: data?.pushName, mensagemBruta: data })
+    registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'entrada', tipo, texto, nome: data?.pushName, mensagemBruta: data, quando, waId: id })
       .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
   }
+
+  // documento, figurinha, localizacao etc: ja foi espelhado no CRM acima, mas nao e algo que a IA
+  // saiba responder - nao dispara nenhum atendimento automatico
+  if (soEspelho) return;
 
   // mensagem do dono, na instancia pessoal ativa - conversa normal (todas as ferramentas,
   // memoria persistente, personalidade completa). Midia do dono continua so texto por

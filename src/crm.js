@@ -103,6 +103,10 @@ async function garantirTabelas() {
   // que o CONTATO mandou; lido_em = quando alguem abriu a conversa no app pela ultima vez
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS ultima_entrada_em TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS lido_em TIMESTAMPTZ;`);
+  // id da mensagem no WhatsApp (key.id) - evita registrar duas vezes a mesma mensagem quando o
+  // Evolution reenvia o webhook (ou o eco de algo que a gente mesmo mandou chega depois de um reinicio)
+  await pool.query(`ALTER TABLE crm_mensagens ADD COLUMN IF NOT EXISTS wa_id TEXT;`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS crm_mensagens_waid_idx ON crm_mensagens (tenant_id, instancia, wa_id) WHERE wa_id IS NOT NULL;`);
 
   await pool.query(`ALTER TABLE crm_contatos DROP CONSTRAINT IF EXISTS crm_contatos_numero_instancia_key;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS crm_contatos_tenant_numero_instancia_idx ON crm_contatos (tenant_id, numero, instancia);`);
@@ -121,38 +125,68 @@ const tabelasProntas = garantirTabelas().catch((err) => {
 });
 
 // registra uma mensagem (entrada = contato mandou, saida = a gente/Lumia mandou) e garante que
-// o contato tem um card - se for a primeira vez que esse numero fala nessa instancia, cria como
-// "novo_lead"; se o card ja existia como novo_lead e agora estamos respondendo (saida), passa
-// pra "em_atendimento" sozinho (o dono ainda pode mover manualmente pra qualquer etapa depois)
-export async function registrarMensagem(tenantId, { numero, instancia, direcao, tipo = 'text', texto = '', nome, midiaBase64, midiaMimetype }) {
+// o contato tem um card. Etapa inicial: "novo_lead" SO quando o proprio contato foi quem escreveu
+// primeiro; se a clinica/IA e quem puxou a conversa (saida), o card ja nasce em "em_atendimento".
+// Card em "novo_lead" que recebe resposta nossa vai pra "em_atendimento"; card em "perdido" cujo
+// contato volta a escrever tambem volta pra "em_atendimento". O dono ainda pode mover manualmente.
+//
+// - nome: so vale quando a mensagem e de ENTRADA - em mensagem enviada por nos, o pushName do
+//   webhook e o do DONO do WhatsApp, e gravar isso virava todo paciente com o nome da clinica
+// - quando: horario real da mensagem no WhatsApp (messageTimestamp), pra ordem da conversa bater
+//   com o WhatsApp mesmo se o webhook atrasar; sem isso usa o horario de agora
+// - waId: id da mensagem no WhatsApp - mensagem repetida (webhook reenviado) e ignorada
+// - evitarEco: usado no registro de mensagem "fromMe" - se a gente acabou de registrar o MESMO
+//   texto como saida (ex: resposta da IA), o eco que o WhatsApp devolve nao duplica
+export async function registrarMensagem(tenantId, { numero, instancia, direcao, tipo = 'text', texto = '', nome, midiaBase64, midiaMimetype, quando, waId, evitarEco = false }) {
   if (!pool) return;
   await tabelasProntas;
 
+  if (waId) {
+    const { rows: jaTem } = await pool.query('SELECT 1 FROM crm_mensagens WHERE tenant_id = $1 AND instancia = $2 AND wa_id = $3', [tenantId, instancia, waId]);
+    if (jaTem.length) return;
+  }
+  if (evitarEco && texto) {
+    const { rows: eco } = await pool.query(
+      `SELECT 1 FROM crm_mensagens WHERE tenant_id = $1 AND numero = $2 AND instancia = $3 AND direcao = 'saida' AND texto = $4 AND criado_em > now() - interval '3 minutes' LIMIT 1`,
+      [tenantId, numero, instancia, texto],
+    );
+    if (eco.length) return;
+  }
+
   const preview = (texto || '').slice(0, 200) || (tipo !== 'text' ? `[${tipo}]` : '');
+  const nomeFinal = direcao === 'entrada' ? (nome || null) : null;
+  // horario da mensagem: o do WhatsApp se vier e for plausivel (nunca no futuro), senao agora
+  let ts = quando ? new Date(quando) : null;
+  if (!ts || Number.isNaN(ts.getTime()) || ts.getTime() > Date.now() + 5 * 60 * 1000) ts = new Date();
 
   const { rows } = await pool.query(
     `INSERT INTO crm_contatos (tenant_id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, ultima_entrada_em)
-     VALUES ($1, $2, $3, $4, 'novo_lead', $5, now(), CASE WHEN $6 = 'entrada' THEN now() ELSE NULL END)
+     VALUES ($1, $2, $3, $4, CASE WHEN $6::text = 'entrada' THEN 'novo_lead' ELSE 'em_atendimento' END, $5, $7::timestamptz, CASE WHEN $6::text = 'entrada' THEN $7::timestamptz ELSE NULL END)
      ON CONFLICT (tenant_id, numero, instancia) DO UPDATE SET
        nome = COALESCE(EXCLUDED.nome, crm_contatos.nome),
-       ultima_mensagem = $5,
-       ultima_mensagem_em = now(),
-       ultima_entrada_em = CASE WHEN $6 = 'entrada' THEN now() ELSE crm_contatos.ultima_entrada_em END,
-       retorno_em = CASE WHEN $6 = 'entrada' AND crm_contatos.retorno_disparado_em IS NOT NULL THEN NULL ELSE crm_contatos.retorno_em END,
-       retorno_nota = CASE WHEN $6 = 'entrada' AND crm_contatos.retorno_disparado_em IS NOT NULL THEN NULL ELSE crm_contatos.retorno_nota END,
-       retorno_origem = CASE WHEN $6 = 'entrada' AND crm_contatos.retorno_disparado_em IS NOT NULL THEN NULL ELSE crm_contatos.retorno_origem END,
-       retorno_disparado_em = CASE WHEN $6 = 'entrada' AND crm_contatos.retorno_disparado_em IS NOT NULL THEN NULL ELSE crm_contatos.retorno_disparado_em END,
-       etapa = CASE WHEN crm_contatos.etapa = 'novo_lead' AND $6 = 'saida' THEN 'em_atendimento' ELSE crm_contatos.etapa END
+       ultima_mensagem = CASE WHEN crm_contatos.ultima_mensagem_em IS NULL OR $7::timestamptz >= crm_contatos.ultima_mensagem_em THEN $5 ELSE crm_contatos.ultima_mensagem END,
+       ultima_mensagem_em = GREATEST(COALESCE(crm_contatos.ultima_mensagem_em, $7::timestamptz), $7::timestamptz),
+       ultima_entrada_em = CASE WHEN $6::text = 'entrada' THEN GREATEST(COALESCE(crm_contatos.ultima_entrada_em, $7::timestamptz), $7::timestamptz) ELSE crm_contatos.ultima_entrada_em END,
+       retorno_em = CASE WHEN $6::text = 'entrada' AND crm_contatos.retorno_disparado_em IS NOT NULL THEN NULL ELSE crm_contatos.retorno_em END,
+       retorno_nota = CASE WHEN $6::text = 'entrada' AND crm_contatos.retorno_disparado_em IS NOT NULL THEN NULL ELSE crm_contatos.retorno_nota END,
+       retorno_origem = CASE WHEN $6::text = 'entrada' AND crm_contatos.retorno_disparado_em IS NOT NULL THEN NULL ELSE crm_contatos.retorno_origem END,
+       retorno_disparado_em = CASE WHEN $6::text = 'entrada' AND crm_contatos.retorno_disparado_em IS NOT NULL THEN NULL ELSE crm_contatos.retorno_disparado_em END,
+       etapa = CASE
+         WHEN crm_contatos.etapa = 'novo_lead' AND $6::text = 'saida' THEN 'em_atendimento'
+         WHEN crm_contatos.etapa = 'perdido' AND $6::text = 'entrada' THEN 'em_atendimento'
+         ELSE crm_contatos.etapa END
      RETURNING id`,
-    [tenantId, numero, instancia, nome || null, preview, direcao],
+    [tenantId, numero, instancia, nomeFinal, preview, direcao, ts],
   );
 
   const { rows: msgRows } = await pool.query(
-    `INSERT INTO crm_mensagens (tenant_id, numero, instancia, direcao, tipo, texto, midia_base64, midia_mimetype)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO crm_mensagens (tenant_id, numero, instancia, direcao, tipo, texto, midia_base64, midia_mimetype, criado_em, wa_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     ON CONFLICT (tenant_id, instancia, wa_id) WHERE wa_id IS NOT NULL DO NOTHING
      RETURNING id, direcao, tipo, texto, criado_em, (midia_base64 IS NOT NULL) AS tem_midia`,
-    [tenantId, numero, instancia, direcao, tipo, texto || '', midiaBase64 || null, midiaMimetype || null],
+    [tenantId, numero, instancia, direcao, tipo, texto || '', midiaBase64 || null, midiaMimetype || null, ts, waId || null],
   );
+  if (!msgRows[0]) return rows[0]?.id; // outro webhook identico ganhou a corrida - nada a emitir
 
   eventosCrm.emit('mensagem', { tenantId, contatoId: rows[0]?.id, numero, instancia, mensagem: msgRows[0] });
 
