@@ -330,7 +330,9 @@ async function executar(job) {
     if (info.duracao > DURACAO_MAX + 1) throw new Error(`o video tem ${Math.round(info.duracao)}s - o limite e ${Math.round(DURACAO_MAX / 60)} minutos`);
     const { largura, altura } = FORMATOS[opcoes.formato];
     meta = { duracao: info.duracao, larguraOriginal: info.largura, alturaOriginal: info.altura };
-    await midia.normalizar(arquivoPrincipal, arq(id, 'base.mp4'), { largura, altura, temAudio: info.temAudio, hdr: info.hdr });
+    await midia.normalizar(arquivoPrincipal, arq(id, 'base.mp4'), { largura, altura, temAudio: info.temAudio, hdr: info.hdr, duracao: info.duracao }, (p) => {
+      atualizar(id, { progresso: 0.02 + 0.08 * p }).catch(() => {});
+    });
     meta.duracao = (await midia.analisar(arq(id, 'base.mp4'))).duracao;
     await atualizar(id, { meta, etapa: 'transcrevendo', progresso: 0.1 });
 

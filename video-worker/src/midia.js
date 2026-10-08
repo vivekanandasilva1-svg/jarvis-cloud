@@ -2,13 +2,21 @@
 // edicao: padroniza resolucao/fps, trata o audio e extrai o que a transcricao e a revisao precisam.
 import { spawn } from 'node:child_process';
 
-function rodar(cmd, args, { timeoutMs = 30 * 60 * 1000 } = {}) {
+// aoProgredir(segundosProcessados) le o "time=" que o ffmpeg imprime enquanto trabalha
+function rodar(cmd, args, { timeoutMs = 30 * 60 * 1000, aoProgredir } = {}) {
   return new Promise((resolve, reject) => {
     const p = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     let err = '';
     p.stdout.on('data', (d) => { out += d; });
-    p.stderr.on('data', (d) => { err += d; if (err.length > 20000) err = err.slice(-10000); });
+    p.stderr.on('data', (d) => {
+      err += d;
+      if (err.length > 20000) err = err.slice(-10000);
+      if (aoProgredir) {
+        const m = String(d).match(/time=(\d+):(\d+):(\d+(?:\.\d+)?)/);
+        if (m) aoProgredir(Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]));
+      }
+    });
     const timer = setTimeout(() => { p.kill('SIGKILL'); reject(new Error(`${cmd} demorou demais`)); }, timeoutMs);
     p.on('error', (e) => { clearTimeout(timer); reject(e); });
     p.on('close', (code) => {
@@ -42,7 +50,7 @@ export async function analisar(arquivo) {
 // keyframe a cada meio segundo (o renderizador pula muito pra frente e pra tras nos cortes) e o
 // audio tratado - reducao de ruido, corte de grave de microfone e volume no padrao das redes
 // sociais (-14 LUFS)
-export async function normalizar(entrada, saida, { largura, altura, temAudio, hdr }) {
+export async function normalizar(entrada, saida, { largura, altura, temAudio, hdr, duracao = 0 }, aoProgredir) {
   const filtrosVideo = [
     ...(hdr ? ['zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv'] : []),
     `scale=${largura}:${altura}:force_original_aspect_ratio=increase:flags=lanczos`,
@@ -61,11 +69,19 @@ export async function normalizar(entrada, saida, { largura, altura, temAudio, hd
     args.push('-map', '1:v:0', '-map', '0:a:0', '-shortest', '-c:a', 'aac', '-b:a', '128k');
   }
   args.push(saida);
+  // video longo em 1 CPU leva tempo: o limite cresce com a duracao (minimo 30 min)
+  const timeoutMs = Math.max(30, Math.ceil(duracao / 60) * 6) * 60 * 1000;
+  let ultimo = 0;
+  const progresso = aoProgredir && duracao ? (seg) => {
+    if (Date.now() - ultimo < 3000) return;
+    ultimo = Date.now();
+    aoProgredir(Math.min(1, seg / duracao));
+  } : undefined;
   try {
-    await rodar('ffmpeg', args);
+    await rodar('ffmpeg', args, { timeoutMs, aoProgredir: progresso });
   } catch (err) {
     // ffmpeg sem zscale (build mais enxuto) - tenta de novo sem o mapeamento de HDR
-    if (hdr && /zscale/i.test(err.message)) return normalizar(entrada, saida, { largura, altura, temAudio, hdr: false });
+    if (hdr && /zscale/i.test(err.message)) return normalizar(entrada, saida, { largura, altura, temAudio, hdr: false, duracao }, aoProgredir);
     throw err;
   }
 }

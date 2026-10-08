@@ -28,7 +28,7 @@ export async function renderizar(roteiro, saida, aoProgredir) {
   const composition = await selectComposition({ serveUrl, id: 'Edicao', inputProps: roteiro });
   await renderMedia({
     composition, serveUrl, codec: 'h264', outputLocation: saida, inputProps: roteiro,
-    concurrency: CONCORRENCIA, crf: 20, x264Preset: 'medium', audioBitrate: '192k', pixelFormat: 'yuv420p',
+    concurrency: CONCORRENCIA, crf: 20, x264Preset: 'veryfast', audioBitrate: '192k', pixelFormat: 'yuv420p',
     offthreadVideoThreads: 1, offthreadVideoCacheSizeInBytes: 96 * 1024 * 1024,
     timeoutInMilliseconds: 120000,
     onProgress: ({ progress }) => aoProgredir?.(progress),

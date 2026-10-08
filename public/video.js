@@ -640,7 +640,8 @@
         const pct = Math.round((atual.progresso || 0) * 100);
         sobre.innerHTML = `<div class="ve-anel" style="background:conic-gradient(#d4af37 ${pct * 3.6}deg, rgba(255,255,255,.08) 0)"><div style="width:62px;height:62px;border-radius:50%;background:#121110;display:flex;align-items:center;justify-content:center">${pct}%</div></div>
           <b>${esc(atual.status === 'na_fila' && atual.posicaoFila > 1 ? `Na fila (${atual.posicaoFila}º)` : ETAPAS[atual.etapa] || 'Processando')}</b>
-          <small>${atual.ajustePendente ? `Aplicando: "${esc(atual.ajustePendente)}"` : 'Pode fechar o editor. A edição continua no servidor.'}</small>`;
+          <small>${atual.ajustePendente ? `Aplicando: "${esc(atual.ajustePendente)}"` : 'Pode fechar o editor. A edição continua no servidor.'}</small>
+          ${atual.duracaoOriginal ? `<small>Vídeo de ${tempo(atual.duracaoOriginal)} · tempo total estimado: ~${Math.max(5, Math.round((atual.duracaoOriginal / 60) * 16))} min</small>` : ''}`;
       }
     }
   }
