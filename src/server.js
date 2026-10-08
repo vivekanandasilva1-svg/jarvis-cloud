@@ -31,6 +31,7 @@ import * as followUp from './followUp.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
 import * as cerebro from './cerebro.js';
 import { router as cerebroMcpRouter } from './cerebroMcp.js';
+import * as videoEditor from './videoEditor.js';
 
 const execAsync = promisify(exec);
 
@@ -100,6 +101,8 @@ app.use(async (req, res, next) => {
     // <img src>/<audio src> tambem nao mandam headers customizados - mesma solucao (senha via
     // query string, conferida dentro do proprio handler)
     req.path.startsWith('/api/crm/midia/') ||
+    // mesma coisa pro <video>/<img> do Editor de Video (token conferido no handler)
+    /^\/api\/video\/edicoes\/[^/]+\/(video|capa)$/.test(req.path) ||
     // pagina de proposta comercial (public/proposta.html) e publica, sem login - quem preenche
     // e o proprio Vivekananda direto no navegador, e quem le o link e o cliente em potencial
     req.path.startsWith('/api/propostas')
@@ -124,6 +127,17 @@ app.use(async (req, res, next) => {
         const tenant = await tenants.obterPorId(tenantId);
         if (!tenant?.super_admin && !(await cerebro.estaLiberado(tenantId))) {
           return res.status(403).json({ erro: 'o Cerebro de IA nao esta liberado pra sua conta' });
+        }
+      } catch (err) {
+        return res.status(500).json({ erro: err.message });
+      }
+    }
+    // Editor de Video: recurso pago a parte, mesma regra do Cerebro
+    if (req.path.startsWith('/api/video')) {
+      try {
+        const tenant = await tenants.obterPorId(tenantId);
+        if (!tenant?.super_admin && !(await videoEditor.estaLiberado(tenantId))) {
+          return res.status(403).json({ erro: 'o Editor de Vídeo nao esta liberado pra sua conta' });
         }
       } catch (err) {
         return res.status(500).json({ erro: err.message });
@@ -173,7 +187,8 @@ app.get('/api/me', async (req, res) => {
     if (!tenant || !tenant.ativo) return res.status(401).json({ erro: 'tenant nao encontrado' });
     const tabsHabilitadas = await tenantConfig.obterTabsHabilitadas(tenant.id);
     const cerebroLiberado = !!tenant.super_admin || await cerebro.estaLiberado(tenant.id).catch(() => false);
-    res.json({ tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas, permiteColaboradores: !!tenant.permite_colaboradores, cerebroLiberado });
+    const videoLiberado = !!tenant.super_admin || await videoEditor.estaLiberado(tenant.id).catch(() => false);
+    res.json({ tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas, permiteColaboradores: !!tenant.permite_colaboradores, cerebroLiberado, videoLiberado });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -374,6 +389,24 @@ app.get('/api/admin/tenants/:id/cerebro', exigirSuperAdmin, async (req, res) => 
 app.post('/api/admin/tenants/:id/cerebro', exigirSuperAdmin, async (req, res) => {
   try {
     await cerebro.definirLiberado(Number(req.params.id), !!req.body?.liberado);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// Editor de Video tambem e liberado a parte - ver videoEditor.js
+app.get('/api/admin/tenants/:id/video', exigirSuperAdmin, async (req, res) => {
+  try {
+    res.json({ liberado: await videoEditor.estaLiberado(Number(req.params.id)) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/admin/tenants/:id/video', exigirSuperAdmin, async (req, res) => {
+  try {
+    await videoEditor.definirLiberado(Number(req.params.id), !!req.body?.liberado);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -2070,6 +2103,47 @@ app.post('/api/cerebro/tokens', rotaCerebro(async (req, res) => {
 app.delete('/api/cerebro/tokens/:id', rotaCerebro(async (req, res) => {
   await cerebro.revogarToken(req.tenantId, Number(req.params.id));
   res.json({ ok: true });
+}));
+
+// ---------- Editor de Video (aba "Editor de Vídeo") - ver videoEditor.js e video-worker/ ----------
+const rotaVideo = (fn) => async (req, res) => {
+  try {
+    await fn(req, res);
+  } catch (err) {
+    if (!res.headersSent) res.status(err.status && err.status < 600 ? err.status : 400).json({ erro: err.message });
+    else res.destroy();
+  }
+};
+
+// upload: corpo cru (o proprio arquivo), repassado em streaming - opcoes vem na query string
+app.post('/api/video/edicoes', rotaVideo(async (req, res) => {
+  res.json(await videoEditor.enviar(req.tenantId, req));
+}));
+
+app.get('/api/video/edicoes', rotaVideo(async (req, res) => {
+  res.json({ edicoes: await videoEditor.listar(req.tenantId) });
+}));
+
+app.get('/api/video/edicoes/:id', rotaVideo(async (req, res) => {
+  res.json(await videoEditor.obter(req.tenantId, req.params.id));
+}));
+
+app.post('/api/video/edicoes/:id/ajustar', rotaVideo(async (req, res) => {
+  res.json(await videoEditor.ajustar(req.tenantId, req.params.id, req.body?.pedido));
+}));
+
+app.delete('/api/video/edicoes/:id', rotaVideo(async (req, res) => {
+  await videoEditor.apagar(req.tenantId, req.params.id);
+  res.json({ ok: true });
+}));
+
+// <video src>/<img src> nao mandam header - token vem na query (?senha=), conferido aqui
+app.get('/api/video/edicoes/:id/:tipo(video|capa)', rotaVideo(async (req, res) => {
+  const tenantId = process.env.SESSION_SECRET ? tenants.verificarToken(req.query.senha) : req.tenantId;
+  if (!tenantId) return res.status(401).end();
+  const tenant = await tenants.obterPorId(tenantId);
+  if (!tenant?.super_admin && !(await videoEditor.estaLiberado(tenantId))) return res.status(403).end();
+  await videoEditor.transmitirArquivo(tenantId, req.params.id, req.params.tipo, req, res);
 }));
 
 iniciarSchedulerLembretes();

@@ -1,0 +1,25 @@
+{
+  "name": "lumia-video-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Servico separado que processa as edicoes de video da Lumia (transcricao, direcao por IA, renderizacao Remotion) - roda isolado com limite de CPU/memoria pra nao pesar no app",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "bundle": "node src/bundle.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.132.1",
+    "@remotion/bundler": "4.0.534",
+    "@remotion/google-fonts": "4.0.534",
+    "@remotion/renderer": "4.0.534",
+    "express": "^4.19.2",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "remotion": "4.0.534"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true
+  }
+}
