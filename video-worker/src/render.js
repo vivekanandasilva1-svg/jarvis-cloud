@@ -35,6 +35,14 @@ export async function renderizar(roteiro, saida, aoProgredir) {
   });
 }
 
+// SVG (desenhado pelo Claude) -> PNG com transparencia
+export async function rasterizarSvg(svg, largura, altura, saida) {
+  const serveUrl = await servirDe();
+  const inputProps = { svg, largura, altura };
+  const composition = await selectComposition({ serveUrl, id: 'Arte', inputProps });
+  await renderStill({ composition, serveUrl, frame: 0, output: saida, inputProps, imageFormat: 'png', timeoutInMilliseconds: 60000 });
+}
+
 export async function quadroPrevia(roteiro, frame, saida) {
   const serveUrl = await servirDe();
   const composition = await selectComposition({ serveUrl, id: 'Edicao', inputProps: roteiro });

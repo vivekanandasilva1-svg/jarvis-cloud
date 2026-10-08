@@ -1,10 +1,11 @@
 // imagens criadas PELO PROPRIO CLAUDE pra compor a edicao: ele desenha cada uma como arte vetorial
 // (SVG) - ilustracoes, objetos com volume/luz de render 3D, icones e fundos inteiros - a partir do
-// que a pessoa fala. O SVG e convertido em PNG aqui no servidor (rsvg-convert), com fundo
+// que a pessoa fala. O SVG e convertido em PNG aqui no servidor (pelo mesmo Chrome do video), com fundo
 // transparente quando e um objeto que vai flutuar na cena.
 import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import Anthropic from '@anthropic-ai/sdk';
+import { rasterizarSvg } from './render.js';
 
 const MODELO = 'claude-opus-5-5';
 const client = new Anthropic();
@@ -46,7 +47,7 @@ function limparSvg(svg) {
     .replace(/<image\b[^>]*>/gi, '')
     .replace(/<(style)[^>]*>[\s\S]*?@import[\s\S]*?<\/style>/gi, '')
     .replace(/\s(?:xlink:)?href\s*=\s*(["'])(?!#)[^"']*\1/gi, '')
-    .replace(/url\(\s*(["']?)(?!#)[^)]*\)/gi, 'none');
+    .replace(/url\(\s*(?!["']?#)[^)]*\)/gi, 'none');
 }
 
 export async function gerarImagem({ prompt, tipo, formato }, saidaPng, miniatura) {
@@ -70,6 +71,6 @@ export async function gerarImagem({ prompt, tipo, formato }, saidaPng, miniatura
   const svg = limparSvg(resposta.content.filter((b) => b.type === 'text').map((b) => b.text).join(''));
   const arquivoSvg = saidaPng.replace(/\.png$/, '.svg');
   await fs.writeFile(arquivoSvg, svg);
-  await rodar('rsvg-convert', ['-w', String(w), '-h', String(h), ...(transparente ? [] : ['-b', '#000000']), '-o', saidaPng, arquivoSvg]);
+  await rasterizarSvg(svg, w, h, saidaPng);
   await rodar('ffmpeg', ['-y', '-i', saidaPng, '-vf', 'scale=360:-2', '-frames:v', '1', '-q:v', '4', miniatura]);
 }
