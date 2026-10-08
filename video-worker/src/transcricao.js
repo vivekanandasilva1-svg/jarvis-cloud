@@ -4,7 +4,9 @@
 // Whisper que roda na propria VPS (mais lento, sem servico externo).
 import fs from 'node:fs/promises';
 
-const MODELOS_GEMINI = ['gemini-pro-latest', 'gemini-3.1-pro-preview', 'gemini-2.5-pro'];
+// Pro primeiro (exige faturamento ativo na API do Google - no plano gratuito o limite do Pro e zero);
+// sem isso, cai pro Flash, que funciona no gratuito
+const MODELOS_GEMINI = ['gemini-pro-latest', 'gemini-3.1-pro-preview', 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3-flash-preview'];
 const API_GEMINI = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 function limparPalavras(lista) {
@@ -66,7 +68,7 @@ async function viaGemini(arquivo, duracao) {
       },
     },
   };
-  let ultimoErro;
+  const erros = [];
   for (const modelo of MODELOS_GEMINI) {
     try {
       const res = await fetch(`${API_GEMINI}/${modelo}:generateContent`, {
@@ -83,10 +85,10 @@ async function viaGemini(arquivo, duracao) {
       if (duracao > 5 && palavras.length < duracao * 0.2) throw new Error(`Gemini ${modelo} devolveu poucas palavras (${palavras.length})`);
       return { texto: palavras.map((p) => p.t).join(' '), palavras, fonte: modelo };
     } catch (err) {
-      ultimoErro = err;
+      erros.push(err.message.slice(0, 160));
     }
   }
-  throw ultimoErro;
+  throw new Error(erros.join(' | '));
 }
 
 async function viaWhisperLocal(arquivo) {
