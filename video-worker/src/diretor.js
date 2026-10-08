@@ -79,25 +79,25 @@ function validarIndices(plano, total, idsMidia = new Set(), idsGeradas = new Set
   const ok = (n) => Number.isInteger(n) && n >= 0 && n < total;
   const okIntervalo = (x) => ok(x.de) && ok(x.ate) && x.ate >= x.de;
   const gerar = (plano.gerar_imagens || [])
-    .filter((g) => /^[a-zA-Z0-9_-]{1,20}$/.test(g.id) && g.prompt?.trim() && !idsMidia.has(g.id) && !idsGeradas.has(g.id))
+    .filter((g) => /^[a-zA-Z0-9_-]{1,20}$/.test(g.id) && String(g.prompt || '').trim() && ['objeto_3d', 'icone', 'ilustracao', 'fundo'].includes(g.tipo) && !idsMidia.has(g.id) && !idsGeradas.has(g.id))
     .slice(0, MAX_IMAGENS);
   const visuais = new Set([...idsMidia, ...idsGeradas, ...gerar.map((g) => g.id)]);
   return {
     ...plano,
     remover: (plano.remover || []).filter(okIntervalo),
     destaques: (plano.destaques || []).filter(ok),
-    zooms: (plano.zooms || []).filter((z) => ok(z.palavra)),
-    transicoes: (plano.transicoes || []).filter((t) => ok(t.palavra)),
-    textos: (plano.textos || []).filter((t) => okIntervalo(t) && t.texto.trim()),
-    textos_atras: (plano.textos_atras || []).filter((t) => okIntervalo(t) && t.texto.trim()),
-    numeros: (plano.numeros || []).filter((x) => okIntervalo(x) && Number.isFinite(x.valor)),
-    listas: (plano.listas || []).filter((l) => okIntervalo(l) && l.itens.length),
+    zooms: (plano.zooms || []).filter((z) => ok(z.palavra) && ['soco', 'lento', 'dramatico'].includes(z.tipo)),
+    transicoes: (plano.transicoes || []).filter((t) => ok(t.palavra) && TIPOS_TRANSICAO.includes(t.tipo)),
+    textos: (plano.textos || []).filter((t) => okIntervalo(t) && String(t.texto || '').trim() && ['impacto', '3d', 'topo', 'etiqueta'].includes(t.estilo)),
+    textos_atras: (plano.textos_atras || []).filter((t) => okIntervalo(t) && String(t.texto || '').trim()).map((t) => ({ ...t, movimento: ['deslizar', 'subir', 'zoom', 'giro3d'].includes(t.movimento) ? t.movimento : 'deslizar' })),
+    numeros: (plano.numeros || []).filter((x) => okIntervalo(x) && Number.isFinite(Number(x.valor))).map((x) => ({ ...x, valor: Number(x.valor), prefixo: x.prefixo || '', sufixo: x.sufixo || '', rotulo: x.rotulo || '' })),
+    listas: (plano.listas || []).filter((l) => okIntervalo(l) && Array.isArray(l.itens) && l.itens.length),
     gerar_imagens: gerar,
-    insercoes: (plano.insercoes || []).filter((x) => okIntervalo(x) && visuais.has(x.midia)),
-    elementos: (plano.elementos || []).filter((x) => okIntervalo(x) && visuais.has(x.imagem)),
-    fundos: (plano.fundos || []).filter((x) => okIntervalo(x) && (x.tipo !== 'imagem' || visuais.has(x.imagem))),
-    divisoes: (plano.divisoes || []).filter((x) => okIntervalo(x) && visuais.has(x.midia)),
-    efeitos: (plano.efeitos || []).filter(okIntervalo),
+    insercoes: (plano.insercoes || []).filter((x) => okIntervalo(x) && visuais.has(x.midia)).map((x) => ({ ...x, modo: x.modo === 'janela' ? 'janela' : 'tela_cheia' })),
+    elementos: (plano.elementos || []).filter((x) => okIntervalo(x) && visuais.has(x.imagem)).map((x) => ({ ...x, camada: x.camada === 'atras' ? 'atras' : 'frente', posicao: ['esquerda', 'direita', 'centro', 'topo'].includes(x.posicao) ? x.posicao : 'direita', movimento: ['flutuar', 'girar', 'entrar'].includes(x.movimento) ? x.movimento : 'flutuar' })),
+    fundos: (plano.fundos || []).filter((x) => okIntervalo(x) && ['imagem', 'gradiente', 'desfocado', 'escuro'].includes(x.tipo) && (x.tipo !== 'imagem' || visuais.has(x.imagem))),
+    divisoes: (plano.divisoes || []).filter((x) => okIntervalo(x) && visuais.has(x.midia) && ['cima_baixo', 'lado_a_lado', 'janela_pessoa'].includes(x.layout)),
+    efeitos: (plano.efeitos || []).filter((x) => okIntervalo(x) && TIPOS_EFEITO.includes(x.tipo)),
     trilha: idsMidia.has(plano.trilha) ? plano.trilha : '',
     legendas: plano.legendas !== false,
     altura_textos: plano.altura_textos === 'media' ? 'media' : 'alta',
@@ -160,21 +160,47 @@ function contexto({ palavras, meta, opcoes, apoio = [], referencia }) {
   return linhas.join('\n');
 }
 
-async function chamar(conteudo, schema, esforco) {
-  const stream = client.beta.messages.stream({
-    model: MODELO,
-    max_tokens: 32000,
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
-    thinking: { type: 'adaptive' },
-    output_config: { effort: esforco, format: { type: 'json_schema', schema } },
-    system: [{ type: 'text', text: SISTEMA, cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: conteudo }],
-  });
-  const resposta = await stream.finalMessage();
-  if (resposta.stop_reason === 'refusal') throw new Error('a IA recusou editar esse video');
-  if (resposta.stop_reason === 'max_tokens') throw new Error('o plano de edicao ficou grande demais - tente um video mais curto');
-  return JSON.parse(resposta.content.filter((b) => b.type === 'text').map((b) => b.text).join(''));
+// o plano completo passou do limite de tamanho do "structured output" da API (gramatica grande
+// demais), entao o formato vai como instrucao e o JSON e validado aqui - validarIndices/enums
+// descartam qualquer coisa fora do formato, e um JSON quebrado ganha uma segunda tentativa
+function extrairJson(texto) {
+  const limpo = texto.replace(/```(?:json)?/gi, '');
+  const ini = limpo.indexOf('{');
+  const fim = limpo.lastIndexOf('}');
+  if (ini < 0 || fim <= ini) throw new SyntaxError('resposta sem JSON');
+  return JSON.parse(limpo.slice(ini, fim + 1));
+}
+
+async function chamar(conteudo, schema, esforco, sistema = SISTEMA) {
+  const instrucaoFormato = {
+    type: 'text',
+    text: `Responda SOMENTE com um objeto JSON valido (sem markdown, sem comentario) seguindo exatamente este JSON Schema:\n${JSON.stringify(schema)}`,
+  };
+  const mensagens = [{ role: 'user', content: [...conteudo, instrucaoFormato] }];
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    const stream = client.beta.messages.stream({
+      model: MODELO,
+      max_tokens: 48000,
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      thinking: { type: 'adaptive' },
+      output_config: { effort: esforco },
+      system: [{ type: 'text', text: sistema, cache_control: { type: 'ephemeral' } }],
+      messages: mensagens,
+    });
+    const resposta = await stream.finalMessage();
+    if (resposta.stop_reason === 'refusal') throw new Error('a IA recusou editar esse video');
+    if (resposta.stop_reason === 'max_tokens') throw new Error('o plano de edicao ficou grande demais - tente um video mais curto');
+    const texto = resposta.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+    try {
+      return extrairJson(texto);
+    } catch (err) {
+      if (tentativa === 1) throw new Error(`a IA devolveu um plano invalido (${err.message})`);
+      mensagens.push({ role: 'assistant', content: resposta.content });
+      mensagens.push({ role: 'user', content: 'O JSON veio invalido ou incompleto. Responda de novo SOMENTE com o objeto JSON completo e valido.' });
+    }
+  }
+  return null;
 }
 
 const PLANO_VAZIO = { titulo: 'Vídeo sem fala', resumo: 'Não encontrei fala no vídeo, então apliquei só o tratamento de imagem e áudio.', remover: [], destaques: [], zooms: [], transicoes: [], textos: [], textos_atras: [], numeros: [], listas: [], gerar_imagens: [], insercoes: [], elementos: [], fundos: [], divisoes: [], efeitos: [], trilha: '', posicao_legenda: 'baixo', legendas: false, altura_textos: 'alta' };

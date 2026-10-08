@@ -12,7 +12,7 @@ referência e mídias de apoio (imagens, vídeos, áudios), e só depois pede "E
 
 1. **Preparo** (`src/midia.js`): recorta no formato escolhido, 30fps, trata o áudio (redução de
    ruído, compressor, -14 LUFS).
-2. **Transcrição** (`src/transcricao.js`): tempo de cada palavra. Usa a Groq e, se falhar, o
+2. **Transcrição** (`src/transcricao.js`): tempo de cada palavra. Usa o Gemini Pro (o Claude nao recebe audio) e, se falhar, o
    Whisper da VPS. Áudio em silêncio não é transcrito, porque o Whisper inventa frases.
    - **Referência** (se houver): conta os cortes por minuto (detecção de cena) e o Claude estuda
      8 quadros, gerando um perfil de estilo (fonte, cores, legenda, composição, transição,
@@ -42,7 +42,7 @@ Atualizar depois de um push:
 cd /root/lumia-video-src/repo && git pull && cd video-worker && nice -n 15 docker build -t lumia-video:latest . && docker service update --force --image lumia-video:latest lumia-video
 ```
 
-As variáveis (`ANTHROPIC_API_KEY`, `GROQ_API_KEY`, `WHISPER_URL`, `VIDEO_WORKER_SECRET`) foram
+As variáveis (`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `WHISPER_URL`, `VIDEO_WORKER_SECRET`) foram
 copiadas do serviço da Lumia na criação. `VIDEO_WORKER_SECRET` é o HMAC-SHA256 de
 `"lumia-video-worker"` com o `SESSION_SECRET` da Lumia (ver `src/videoEditor.js` na raiz). Se o
 `SESSION_SECRET` mudar, recalcule e atualize com `docker service update --env-add`.

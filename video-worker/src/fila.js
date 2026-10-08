@@ -336,7 +336,7 @@ async function executar(job) {
 
     await midia.extrairAudioTranscricao(arq(id, 'base.mp4'), arq(id, 'audio.mp3'));
     const temFala = info.temAudio && (await midia.volumeMaximo(arq(id, 'audio.mp3'))) > -40;
-    const transcricao = temFala ? await transcrever(arq(id, 'audio.mp3')) : { texto: '', palavras: [] };
+    const transcricao = temFala ? await transcrever(arq(id, 'audio.mp3'), meta.duracao) : { texto: '', palavras: [] };
     palavras = transcricao.palavras;
     await gravarJson(arq(id, 'transcricao.json'), transcricao);
     await fs.rm(arq(id, 'audio.mp3'), { force: true });
