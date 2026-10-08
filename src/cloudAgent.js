@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as metaAds from './metaads.js';
 import * as clinicorp from './clinicorp.js';
+import * as secretaria from './secretaria.js';
 import { generateImageGemini } from './gemini.js';
 import { transcrever } from './whisper.js';
 import { gerarPdf, gerarWord, gerarExcel, gerarGraficoSvg } from './geradorDocumentos.js';
@@ -320,6 +321,8 @@ WhatsApp - sempre calcule a data/hora absoluta certa a partir do "hoje" que voce
 whatsapp_listar_lembretes e whatsapp_cancelar_lembrete quando o usuario perguntar ou quiser
 desmarcar algo.
 
+SECRETARIA FINANCEIRA: voce tambem e a secretaria pessoal do usuario - controla contas a pagar/receber, gastos e cartoes pelas ferramentas financas_*, e o sistema te avisa sozinho no WhatsApp (resumo de manha e lembrete a tarde) das contas atrasadas, de hoje e dos proximos dias. Quando ele disser que PAGOU algo, use financas_listar_contas pra achar a conta certa e financas_marcar_paga (conta recorrente gera a do mes seguinte sozinha). Quando disser que GASTOU algo ("gastei 80 no mercado"), registre com financas_registrar_gasto (pergunte so se faltar o valor). Pra "tenho que pagar X dia Y", use financas_registrar_conta calculando o vencimento (AAAA-MM-DD) a partir do "hoje" que voce ja sabe - se ele disse so o dia ("dia 10"), assuma o proximo dia 10 que ainda nao passou. Valores sempre em reais. Depois de registrar, confirme de forma curta com o valor e a data. Nunca invente valor, vencimento nem id: consulte as ferramentas. Pra "quanto gastei esse mes", use financas_resumo.
+
 Voce tem uma agenda propria (agenda_criar_evento, agenda_listar_eventos, agenda_cancelar_evento)
 que funciona sozinha, e pode ficar OPCIONALMENTE sincronizada com o Google Agenda (o usuario liga
 e desliga isso quando quiser na aba "Agenda" do app). Marque, consulte e cancele compromissos
@@ -368,6 +371,9 @@ async function systemPromptBlocos(tenantId) {
   // Maceio e sempre UTC-03:00 - fixo, sem precisar calcular o offset dinamicamente.
   const agoraHora = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' });
   let dinamico = `Agora sao ${agoraHora} de ${hoje} (fuso horario de Maceio/Brasil, UTC-03:00). Use isso pra calcular "hoje", "ontem", "essa semana", "daqui a X minutos/horas" etc sem precisar perguntar ao usuario - qualquer data/hora que voce gerar pra uma ferramenta (ex: lembretes) tem que ser calculada a partir desse horario real, nunca chutada.`;
+
+  const ctxFinanceiro = await secretaria.contextoCurto(tenantId);
+  if (ctxFinanceiro) dinamico += `\n\n${ctxFinanceiro}`;
 
   const instrucoes = await listarInstrucoesAprendidas(tenantId);
   if (instrucoes.length) {
@@ -958,6 +964,94 @@ const tools = [
     },
   },
   {
+    name: 'financas_registrar_conta',
+    description: 'Registra uma conta A PAGAR (padrao) ou A RECEBER com vencimento - ex: "tenho que pagar a luz de R$ 180 dia 10". O sistema avisa no WhatsApp quando estiver perto de vencer/atrasada. Use recorrenteMensal=true pra contas fixas que se repetem todo mes (aluguel, internet, assinatura) - ao dar baixa, a do mes seguinte e criada sozinha.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        descricao: { type: 'string', description: 'O que e a conta (ex: "Luz", "Aluguel", "Fatura Nubank")' },
+        valor: { type: 'number', description: 'Valor em reais (ex: 180.5)' },
+        vencimento: { type: 'string', description: 'Data de vencimento AAAA-MM-DD' },
+        tipo: { type: 'string', enum: ['pagar', 'receber'], description: 'pagar (padrao) ou receber' },
+        categoria: { type: 'string', description: 'Categoria opcional (moradia, saude, lazer, cartao...)' },
+        recorrenteMensal: { type: 'boolean', description: 'true se se repete todo mes' },
+      },
+      required: ['descricao', 'valor', 'vencimento'],
+    },
+  },
+  {
+    name: 'financas_listar_contas',
+    description: 'Lista contas a pagar/receber. Por padrao so as PENDENTES (inclui o campo atrasada). status: "pendente" | "pago" | "todas". Use pra achar o id antes de dar baixa/apagar e pra responder "o que tenho pra pagar?".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['pendente', 'pago', 'todas'] },
+        tipo: { type: 'string', enum: ['pagar', 'receber'] },
+        de: { type: 'string', description: 'Vencimento a partir de (AAAA-MM-DD), opcional' },
+        ate: { type: 'string', description: 'Vencimento ate (AAAA-MM-DD), opcional' },
+      },
+    },
+  },
+  {
+    name: 'financas_marcar_paga',
+    description: 'Da baixa numa conta (marca como paga, ou recebida se for a receber) pelo id - use financas_listar_contas antes pra achar o id certo. Se for recorrente mensal, ja cria a do mes seguinte.',
+    input_schema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] },
+  },
+  {
+    name: 'financas_apagar_conta',
+    description: 'Apaga uma conta pelo id (cadastrada por engano, por exemplo). So faca isso se o usuario pedir.',
+    input_schema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] },
+  },
+  {
+    name: 'financas_registrar_gasto',
+    description: 'Registra um gasto que o usuario ja fez ("gastei 80 no mercado", "paguei 35 de uber"). Data padrao: hoje. Se foi no cartao, passe o nome do cartao (cadastrado antes com financas_salvar_cartao) pra contar no limite dele.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        descricao: { type: 'string' },
+        valor: { type: 'number', description: 'Valor em reais' },
+        categoria: { type: 'string', description: 'mercado, transporte, alimentacao, saude, lazer...' },
+        data: { type: 'string', description: 'AAAA-MM-DD (opcional, padrao hoje)' },
+        cartao: { type: 'string', description: 'Nome do cartao, se foi no cartao (opcional)' },
+      },
+      required: ['descricao', 'valor'],
+    },
+  },
+  {
+    name: 'financas_listar_gastos',
+    description: 'Lista os gastos registrados de um mes (padrao: mes atual), com id - util pra conferir ou corrigir.',
+    input_schema: { type: 'object', properties: { mes: { type: 'string', description: 'AAAA-MM (opcional)' } } },
+  },
+  {
+    name: 'financas_apagar_gasto',
+    description: 'Apaga um gasto pelo id (registrado errado). So se o usuario pedir.',
+    input_schema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] },
+  },
+  {
+    name: 'financas_resumo',
+    description: 'Resumo financeiro do mes (padrao: atual): total gasto e por categoria, contas pagas no mes, contas a pagar/receber pendentes e situacao dos cartoes (usado na fatura aberta e limite disponivel aproximado). Use pra "quanto gastei esse mes?", "como estao minhas financas?".',
+    input_schema: { type: 'object', properties: { mes: { type: 'string', description: 'AAAA-MM (opcional)' } } },
+  },
+  {
+    name: 'financas_salvar_cartao',
+    description: 'Cadastra (ou atualiza, pelo nome) um cartao de credito com limite e dias de fechamento/vencimento da fatura. O limite disponivel e calculado pelos gastos lancados no cartao desde o ultimo fechamento.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        nome: { type: 'string', description: 'Ex: "Nubank", "Itau Visa"' },
+        limite: { type: 'number', description: 'Limite total em reais' },
+        diaFechamento: { type: 'number', description: 'Dia do mes que a fatura fecha (1-31)' },
+        diaVencimento: { type: 'number', description: 'Dia do mes que a fatura vence (1-31)' },
+      },
+      required: ['nome', 'limite'],
+    },
+  },
+  {
+    name: 'financas_listar_cartoes',
+    description: 'Lista os cartoes cadastrados com limite, usado na fatura aberta e limite disponivel aproximado.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
     name: 'agenda_criar_evento',
     description: 'Cria um evento/compromisso na agenda interna do usuario. Se a Google Agenda estiver conectada, o evento tambem e sincronizado la automaticamente (sem precisar fazer nada a mais). Calcule inicio/fim como data/hora absoluta ISO 8601 usando o "agora" que voce ja sabe.',
     input_schema: {
@@ -1516,6 +1610,26 @@ async function runTool(name, input, session, sessionId) {
     try {
       await salvarInstrucaoAprendida(session.tenantId, input.instrucao);
       return { ok: true, mensagem: 'Instrucao guardada - vai valer em toda conversa futura, ate ser apagada.' };
+    } catch (err) {
+      return { erro: err.message };
+    }
+  }
+  if (name.startsWith('financas_')) {
+    try {
+      const t = session.tenantId;
+      if (name === 'financas_registrar_conta') {
+        const conta = await secretaria.registrarConta(t, input);
+        return { ok: true, conta };
+      }
+      if (name === 'financas_listar_contas') return { contas: await secretaria.listarContas(t, input || {}) };
+      if (name === 'financas_marcar_paga') return { ok: true, ...(await secretaria.marcarPaga(t, input.id)) };
+      if (name === 'financas_apagar_conta') { await secretaria.apagarConta(t, input.id); return { ok: true }; }
+      if (name === 'financas_registrar_gasto') return { ok: true, gasto: await secretaria.registrarGasto(t, input) };
+      if (name === 'financas_listar_gastos') return { gastos: await secretaria.listarGastos(t, input || {}) };
+      if (name === 'financas_apagar_gasto') { await secretaria.apagarGasto(t, input.id); return { ok: true }; }
+      if (name === 'financas_resumo') return await secretaria.resumoDoMes(t, input || {});
+      if (name === 'financas_salvar_cartao') return { ok: true, ...(await secretaria.salvarCartao(t, input)) };
+      if (name === 'financas_listar_cartoes') return { cartoes: await secretaria.listarCartoes(t) };
     } catch (err) {
       return { erro: err.message };
     }
