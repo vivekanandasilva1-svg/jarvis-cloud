@@ -29,6 +29,7 @@ import * as propostas from './propostas.js';
 import * as relatorioGerador from './relatorioGerador.js';
 import * as followUp from './followUp.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
+import { iniciarCerebroMae } from './cerebroMae.js';
 import * as cerebro from './cerebro.js';
 import { router as cerebroMcpRouter } from './cerebroMcp.js';
 import * as videoEditor from './videoEditor.js';
@@ -2181,6 +2182,7 @@ app.get('/api/video/edicoes/:id/midias/:mid/:qual(miniatura|arquivo)', rotaVideo
 
 iniciarSchedulerLembretes();
 iniciarSchedulerSecretaria();
+iniciarCerebroMae();
 // O alerta de saldo baixo fixo (env var LUMIA_WHATSAPP_ADMIN, sem configuracao de
 // instancia/destinatarios) foi substituido pelo tipo "ads_saldo_baixo" na aba Relatorios -
 // mesma logica, agora configuravel (instancia de envio, destinatarios, frequencia de checagem,

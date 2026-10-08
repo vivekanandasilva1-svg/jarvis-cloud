@@ -1,0 +1,335 @@
+[
+  {
+    "chave": "raiz", "hub": true, "modulo": "raiz", "tipo": "contexto",
+    "titulo": "LUMIA - Cérebro-mãe do app (raiz)",
+    "conteudo": "Lumia (antes Jarvis Cloud / Klaus) é uma plataforma SaaS multi-tenant: assistente pessoal com IA + atendimento de clínicas via WhatsApp + CRM + relatórios de anúncios + produtos de venda. Dono e super_admin: Vivekananda (tenant 1). Este é o nó raiz do cérebro-mãe: cada módulo do app tem um nó-hub ligado aqui, e cada melhoria/ajuste/correção vira um nó ligado ao hub do seu módulo e à evolução anterior do mesmo módulo - dá pra navegar o grafo de avanços desde 2026-07-09 até hoje. Regra viva: toda entrega nova entra em cerebro-mae/historico.json e é sincronizada sozinha a cada deploy."
+  },
+  {
+    "chave": "retrato", "modulo": "raiz", "tipo": "fato", "dinamico": true,
+    "titulo": "Retrato do app hoje (atualizado automaticamente)",
+    "conteudo": "(gerado a cada sincronização)"
+  },
+  {
+    "chave": "dados", "modulo": "raiz", "tipo": "fato",
+    "titulo": "Onde ficam os dados (mapa das tabelas por módulo)",
+    "conteudo": "Postgres único, TODA tabela com tenant_id (isolamento por cliente). Plataforma: tenants, tenant_config (integrações cifradas, abas liberadas, planos), tenant_colaboradores, whatsapp_instance_tenant, whatsapp_config. Assistente: sessions (histórico do chat), learned_instructions, lembretes, anexos_lidos, arquivos gerados ficam só 30min em RAM. Agenda: agenda_eventos, google_calendar_tokens. CRM: crm_contatos (etapa, retorno_em, pre_agendamento, lido_em), crm_mensagens (wa_id único, mídia em base64), crm_seguranca. Auto Atendimento: auto_atendimento_config, auto_atendimento_sessions (history JSONB, pendente_desde, fatos_agendamento), auto_atendimento_arquivos. Follow Up: follow_up_config/etapas/contatos/arquivos. Relatórios: relatorio_configs/destinatarios, relatorio_temas, relatorios_gerados. Propostas: propostas_comerciais. Cérebro: cerebro_memorias, cerebro_ligacoes, tokens MCP. Secretaria: sec_contas, sec_gastos, sec_cartoes, sec_config."
+  },
+
+  {
+    "chave": "mod:plataforma", "hub": true, "modulo": "plataforma", "tipo": "contexto",
+    "titulo": "Módulo: Plataforma (infra, multi-tenant, segurança)",
+    "conteudo": "Base técnica: Node 22 + Express + Postgres, Docker Swarm via Easypanel numa VPS Hostinger (lumia-marketing.com). Multi-tenant por token HMAC assinado, credenciais de cada cliente cifradas AES-256-GCM, backups diários do Postgres. Tudo novo nasce isolado por tenant."
+  },
+  {
+    "chave": "plat:inicio", "modulo": "plataforma", "data": "2026-07-09", "tipo": "fato",
+    "titulo": "Nasce o Jarvis Cloud (chat + Meta Ads)",
+    "conteudo": "Primeira versão: chat com IA (Claude) e integração Meta Ads, deploy na Render. Depois virou Klaus (07-10) e Lumia (07-12), com Clinicorp (07-10) e a identidade dourado/prata/preto/branco."
+  },
+  {
+    "chave": "plat:vps", "modulo": "plataforma", "data": "2026-07-13", "tipo": "decisao",
+    "titulo": "Deploy na VPS Hostinger via Easypanel (Dockerfile)",
+    "conteudo": "Dockerfile node:22-alpine permitiu rodar na VPS. Alvo único de deploy: lumia-marketing.com (Render ficou parado, sem manutenção). Sequência de deploy que funciona: git pull na VPS, docker build --no-cache -t jarviscloud_jarvis-cloud:latest, docker tag para easypanel/jarviscloud/jarvis-cloud:latest e docker service update --force --image <essa tag> jarviscloud_jarvis-cloud. Sem a tag/--image certa o serviço continua com a imagem velha em silêncio (aconteceu após restauração de snapshot)."
+  },
+  {
+    "chave": "plat:multitenant", "modulo": "plataforma", "data": "2026-07-23", "tipo": "decisao",
+    "titulo": "Conversão para multi-tenant (fase 1)",
+    "conteudo": "Cada cliente pagante é um tenant: login próprio, token de sessão HMAC (30 dias), credenciais (Clinicorp, Meta Ads, Trello) cifradas AES-256-GCM com TENANT_SECRETS_KEY, tenant_id em todas as tabelas e roteamento de webhook do WhatsApp por instância. Nunca mais env var global de credencial de cliente. Migrações antigas deixaram colunas legadas (id DEFAULT 1) que só quebravam para o 2º tenant - ver auditoria de 2026-09-30."
+  },
+  {
+    "chave": "plat:clientes", "modulo": "plataforma", "data": "2026-07-23", "tipo": "fato",
+    "titulo": "Painel admin Clientes (provisionamento manual)",
+    "conteudo": "Aba Clientes (só super_admin): cria tenant, configura Clinicorp/Meta Ads/Trello na própria UI. Decisão do dono: sem auto-cadastro, só ele cria clientes."
+  },
+  {
+    "chave": "plat:acesso", "modulo": "plataforma", "data": "2026-09-10", "tipo": "fato",
+    "titulo": "Período de acesso, controle de abas e separação Lumia x Propostas",
+    "conteudo": "Cada cliente tem período contratado (1-12 meses ou vitalício) com sweep que bloqueia ao vencer, abas liberadas por cliente (tabs_habilitadas; vazio = tudo liberado) e separação clara entre cliente da Lumia e assinante do Gerador de Propostas (mesma tabela, listas diferentes)."
+  },
+  {
+    "chave": "plat:exclusao", "modulo": "plataforma", "data": "2026-09-19", "tipo": "aprendizado",
+    "titulo": "Exclusão suave de cliente (30 dias) após perda de dados",
+    "conteudo": "Incidente real: 14 tenants foram apagados de vez sem recuperação possível (backup semanal não cobria a janela) e um segundo restauro destruiu dados porque o backup de segurança estava na própria VPS. Correções: exclusão marca por 30 dias e é restaurável, backup diário do Postgres com retenção de 30 dias, e regra de sempre copiar o dump para FORA da VPS antes de qualquer restauração. 'Apagar definitivamente' existe mas exige digitar o nome do cliente."
+  },
+  {
+    "chave": "plat:senhas", "modulo": "plataforma", "data": "2026-09-29", "tipo": "fato",
+    "titulo": "Ver senha, redefinir senha e olhinho de mostrar/ocultar",
+    "conteudo": "Além do hash scrypt (irreversível, único usado no login), há uma cópia cifrada reversível só para o super_admin consultar a senha de clientes/assinantes. Todos os campos de senha ganharam o olhinho. Botões: copiar usuário, redefinir senha (Clientes e Propostas)."
+  },
+  {
+    "chave": "plat:sidebar", "modulo": "plataforma", "data": "2026-09-29", "tipo": "fato",
+    "titulo": "Redesign: barra lateral no lugar das abas horizontais",
+    "conteudo": "Etapa 1 da reestruturação visual inspirada no Ploomes: sidebar preta com nomes dourados e brilho LED na aba ativa, drawer no celular. Mantém todos os ids/abas. Etapas 2 e 3 (kanban estilo Ploomes, polimento tablet) ficaram combinadas para depois."
+  },
+  {
+    "chave": "plat:pk-legada", "modulo": "plataforma", "data": "2026-09-30", "tipo": "aprendizado",
+    "titulo": "Bug de PK legada (id DEFAULT 1) em 6 tabelas - só aparecia no 2º cliente",
+    "conteudo": "Salvar config do Auto Atendimento de um cliente novo dava 'duplicate key ... pkey'. Causa: tabelas anteriores ao multi-tenant mantiveram id PRIMARY KEY DEFAULT 1 (ou PK só em 'tipo'/'numero'). Corrigidas: auto_atendimento_config, auto_atendimento_sessions, whatsapp_config, google_calendar_tokens, crm_seguranca, relatorio_configs. Lição: toda migração para multi-tenant precisa DROPAR a PK/constraint antiga, não só adicionar tenant_id + índice."
+  },
+  {
+    "chave": "plat:colaboradores", "modulo": "plataforma", "data": "2026-09-30", "tipo": "fato",
+    "titulo": "Colaboradores: logins extras dentro da conta do cliente",
+    "conteudo": "Benefício liberado pelo super_admin por cliente (tenants.permite_colaboradores, padrão desligado). O cliente cria logins extras na aba Integrações; cada um resolve para o mesmo tenant_id (acesso idêntico, sem permissão reduzida). Atenção: colaborador de tenant super_admin herda poder de super_admin."
+  },
+  {
+    "chave": "plat:auditoria", "modulo": "plataforma", "data": "2026-09-30", "tipo": "aprendizado",
+    "titulo": "Auditoria completa: race condition, XSS, rede de segurança, dependências",
+    "conteudo": "Achados e corrigidos: (1) duas mensagens seguidas do mesmo lead processavam em paralelo e uma sobrescrevia o histórico da outra - agora há fila por contato (processarEmFila, chave tenantId:numero); (2) sem handler de unhandledRejection um erro solto derrubava o processo de todos os clientes - agora loga e segue (uncaughtException reinicia limpo); (3) XSS na lista de colaboradores; (4) npm audit fix. Verificado limpo: SQL injection, vazamento de credenciais em log, isolamento entre tenants, SSE do CRM, mídia por tenant. Pendente: uuid via exceljs exige upgrade breaking."
+  },
+  {
+    "chave": "plat:backup-restore", "modulo": "plataforma", "data": "2026-09-19", "tipo": "aprendizado",
+    "titulo": "Snapshot da Hostinger reverte a VPS inteira, não é restauro seletivo",
+    "conteudo": "Restaurar snapshot (leva ~50 min) volta TODOS os volumes e o código ao estado daquela data. Depois dele o checkout git e a imagem do serviço voltam antigos e é preciso redeployar. Por isso: dump do Postgres copiado para fora da VPS antes, e conferir 'git log' e a tag da imagem depois."
+  },
+
+  {
+    "chave": "mod:assistente", "hub": true, "modulo": "assistente", "tipo": "contexto",
+    "titulo": "Módulo: Assistente Lumia (chat, voz, avatar)",
+    "conteudo": "A Lumia pessoal: chat no app (Painel) e pelo WhatsApp do dono, com voz, avatar em vídeo, memória persistente, geração de arquivos e acesso a todas as integrações. Motor: cloudAgent.js (Claude, prompt caching, thinking adaptativo)."
+  },
+  {
+    "chave": "ass:voz-avatar", "modulo": "assistente", "data": "2026-07-14", "tipo": "fato",
+    "titulo": "Voz Kokoro auto-hospedada + avatar em vídeo com chroma key",
+    "conteudo": "Voz passou de ElevenLabs para Gemini e por fim Kokoro TTS auto-hospedado (fixa, grátis, sem cota; sem fallback para voz robótica do navegador). Avatar é vídeo real com chroma key em canvas, sequências de pose parada e falando; transcrição por Groq com fallback Whisper local/Gemini. Valores em dinheiro e horários são falados por extenso (R$ -> reais)."
+  },
+  {
+    "chave": "ass:persona-memoria", "modulo": "assistente", "data": "2026-07-14", "tipo": "fato",
+    "titulo": "Persona superagente, memória persistente e prompt caching",
+    "conteudo": "Persona multidisciplinar (marketing, dev, comportamento, gestão) e palestrante. Histórico de conversa persistido no Postgres (nunca apaga sozinha, só no botão Limpar ou comando explícito). Prompt caching da Anthropic ligado para economizar custo. Respostas objetivas por padrão e sem markdown cru."
+  },
+  {
+    "chave": "ass:arquivos", "modulo": "assistente", "data": "2026-07-17", "tipo": "fato",
+    "titulo": "Anexos (imagem, PDF, Word, Excel) e geração de arquivos",
+    "conteudo": "A Lumia lê imagem, áudio, vídeo, PDF, Word e Excel anexados (com memória dos arquivos lidos) e gera PDF, Word, Excel, gráfico e imagem por IA para download (ficam 30 min em RAM). Status ao vivo mostra o que ela está fazendo durante respostas longas."
+  },
+  {
+    "chave": "ass:robustez", "modulo": "assistente", "data": "2026-07-18", "tipo": "aprendizado",
+    "titulo": "Correções de robustez do chat (tool_result órfão, resposta vazia)",
+    "conteudo": "Bugs recorrentes: histórico cortado no meio de um par tool_use/tool_result deixava a sessão em 400 para sempre (corrigido reparando o histórico); thinking consumia o orçamento e não sobrava texto (corrigido com thinking adaptativo + effort médio, max_tokens 16000 pois o SDK exige streaming acima); payload gigante do Clinicorp estourava tokens (resultados são resumidos/cortados)."
+  },
+  {
+    "chave": "ass:whatsapp-dono", "modulo": "assistente", "data": "2026-07-18", "tipo": "fato",
+    "titulo": "Conversar com a Lumia pelo WhatsApp (número admin)",
+    "conteudo": "O 'número admin' da aba WhatsApp é o número autorizado a falar com a Lumia (inclusive 'Mensagem para você mesmo'); mesmas ferramentas do app, exceto controle do computador. Reconhecimento ignora o 9 extra de celular. Lembretes automáticos chegam nesse número (verificador a cada 30s)."
+  },
+  {
+    "chave": "ass:secretaria", "modulo": "assistente", "data": "2026-10-08", "tipo": "fato",
+    "titulo": "Secretaria financeira da Lumia (contas, gastos, cartões, avisos)",
+    "conteudo": "Ferramentas financas_*: registrar/listar/dar baixa/apagar contas a pagar e receber (recorrentes geram a do mês seguinte), gastos, cartões com limite e resumo do mês. Agendador manda no WhatsApp do número admin um resumo às 8h (atrasadas, hoje e próximos 3 dias) e lembrete às 17h do que segue pendente. Lumia também recebe no contexto o aviso de contas atrasadas/vencendo hoje. Tabelas sec_*. Pendente: aba visual, horários editáveis."
+  },
+
+  {
+    "chave": "mod:whatsapp", "hub": true, "modulo": "whatsapp", "tipo": "contexto",
+    "titulo": "Módulo: WhatsApp (Evolution API, instâncias)",
+    "conteudo": "WhatsApp dos clientes via Evolution API (instâncias por número, conexão por QR code na aba WhatsApp). Cada instância pertence a um único tenant (whatsapp_instance_tenant) e o webhook roteia por ela. Instância ativa + número admin ficam em whatsapp_config."
+  },
+  {
+    "chave": "wa:evolution", "modulo": "whatsapp", "data": "2026-07-15", "tipo": "fato",
+    "titulo": "Número dedicado via Evolution API + aba WhatsApp com QR code",
+    "conteudo": "Substituiu a Cloud API da Meta (07-10) por Evolution para ter número dedicado, conversa e lembretes. Aba WhatsApp troca/reconecta número direto pelo app. Não chamar settings/set da Evolution (causou desconexão conflict/device_removed): estabilidade da sessão vale mais que o indicador 'online'."
+  },
+  {
+    "chave": "wa:roteamento", "modulo": "whatsapp", "data": "2026-07-28", "tipo": "aprendizado",
+    "titulo": "Bugs de roteamento do webhook",
+    "conteudo": "Webhook usava nome de instância errado em produção; reconhecimento do dono falhava com/sem o 9 de celular. Regra: instância não mapeada é ignorada em silêncio (nunca vaza para outro tenant)."
+  },
+
+  {
+    "chave": "mod:crm", "hub": true, "modulo": "crm", "tipo": "contexto",
+    "titulo": "Módulo: CRM Kanban (espelho do WhatsApp)",
+    "conteudo": "CRM estilo Kanban que espelha as conversas do WhatsApp de cada cliente, com conversa dentro do app e tempo real (SSE). Colunas: Novo Lead, Em Atendimento, Em negociação, Pré-agendamento, Agendado, Compareceu, Follow Up, Perdido. Card pode ser pausado para a IA, ocultado (lista protegida por senha própria) ou apagado."
+  },
+  {
+    "chave": "crm:base", "modulo": "crm", "data": "2026-07-16", "tipo": "fato",
+    "titulo": "CRM Kanban criado",
+    "conteudo": "Espelha toda conversa de WhatsApp (exceto o dono) em cards por etapa, com conversa dentro do app e movimentação automática para 'Agendado' quando a IA marca consulta."
+  },
+  {
+    "chave": "crm:tempo-real", "modulo": "crm", "data": "2026-07-21", "tipo": "fato",
+    "titulo": "Conversa igual ao WhatsApp, tempo real, mídia e conversas ocultas",
+    "conteudo": "Conversa com visual de WhatsApp, atualização por SSE (filtrado por tenant), imagens e áudios recebidos aparecem e tocam (guardados em base64 no banco), ocultar manualmente com senha separada, pausar auto-atendimento por conversa e apagar conversa."
+  },
+  {
+    "chave": "crm:status", "modulo": "crm", "data": "2026-09-29", "tipo": "aprendizado",
+    "titulo": "Status/stories do WhatsApp viravam uma conversa falsa",
+    "conteudo": "Todos os status chegam com remoteJid status@broadcast; o app tratava 'status' como número e juntava tudo num card. Filtro de @broadcast no webhook e limpeza do card falso."
+  },
+  {
+    "chave": "crm:pre-agendado", "modulo": "crm", "data": "2026-10-06", "tipo": "fato",
+    "titulo": "Coluna Pré-agendamento com dia/hora/médico no card",
+    "conteudo": "No modo 'só pré-agendar', a IA move o lead para a coluna Pré-agendamento e o card mostra dia, hora e médico (hover: paciente, telefone, resumo) para a atendente confirmar. Muda de coluna ao vivo. Ao confirmar vira Agendado e limpa os detalhes."
+  },
+  {
+    "chave": "crm:retorno", "modulo": "crm", "data": "2026-10-07", "tipo": "fato",
+    "titulo": "Alerta de retorno, coluna Em negociação e sino de notificações",
+    "conteudo": "Botão 'Alerta de retorno' na conversa (data/hora + anotação) leva o card para 'Em negociação'; na hora volta para 'Em atendimento' e a IA retoma sozinha (se não puder, só avisa; fora do horário da IA espera abrir). Faixa/card laranja no dia do retorno, some quando o lead responde. A IA também cria o alerta (ferramenta criar_alerta_retorno). Sino no topo com '!' lista retornos de hoje, mensagens não lidas, pré-agendamentos pendentes e faltas recentes do Clinicorp."
+  },
+  {
+    "chave": "crm:espelho", "modulo": "crm", "data": "2026-10-07", "tipo": "aprendizado",
+    "titulo": "CRM espelho fiel: grupos, nomes, etapa inicial, tipos, duplicatas",
+    "conteudo": "Analisando o CRM do cliente Vitaly: grupos (@g.us) viravam 'conversa' e a IA chegou a responder neles (agora ignorados); mensagem enviada pela clínica gravava o pushName do DONO como nome do paciente (23 cards 'Laboratório Labartis'); novo lead nascia mesmo quando a clínica puxou a conversa. Regras novas: Novo Lead só quando o contato escreveu primeiro, senão Em Atendimento; Perdido que volta a escrever vai para Em Atendimento; documento/figurinha/localização/contato/enquete aparecem sem acionar a IA; horário real do WhatsApp; wa_id único contra duplicata/eco; suporte a @lid. Pendente: importar histórico anterior à conexão."
+  },
+
+  {
+    "chave": "mod:auto", "hub": true, "modulo": "auto", "tipo": "contexto",
+    "titulo": "Módulo: Auto Atendimento (IA que atende leads)",
+    "conteudo": "IA recepcionista de cada clínica: prompt/persona próprios por número de WhatsApp, motor isolado do chat pessoal (autoAtendimento.js), histórico por lead, agenda interna e/ou Clinicorp, arquivos de referência, respostas em texto ou áudio. Configurações por tenant na aba Auto Atendimento."
+  },
+  {
+    "chave": "auto:base", "modulo": "auto", "data": "2026-07-15", "tipo": "fato",
+    "titulo": "Auto Atendimento criado",
+    "conteudo": "Persona/prompt isolado por número, biblioteca de arquivos de referência que a IA envia, entende mídia recebida (imagem vista, áudio transcrito, vídeo só registrado) e cadência de resposta em áudio (a cada 3-5 mensagens ou quando o lead manda áudio). Mostra 'digitando/gravando áudio' com heartbeat até enviar."
+  },
+  {
+    "chave": "auto:agendamento", "modulo": "auto", "data": "2026-07-16", "tipo": "fato",
+    "titulo": "Agendamento real no Clinicorp e/ou agenda interna",
+    "conteudo": "Consulta disponibilidade por médico, cadastra paciente novo (nome + nascimento, perguntando se já é paciente antes para não duplicar), valida contra passado, duplicidade e limite de 2 pacientes por horário, confirma só depois de ok:true, cancela de verdade (07-18) e checa comparecimento em datas passadas."
+  },
+  {
+    "chave": "auto:audio-formato", "modulo": "auto", "data": "2026-07-16", "tipo": "aprendizado",
+    "titulo": "Formatação de áudio: sem emoji/markdown, hora por extenso",
+    "conteudo": "Quando a resposta vai ser falada a IA é avisada ANTES de gerar e há filtro de segurança no código (prepararTextoParaAudio). Botão Salvar fica vermelho com alterações pendentes."
+  },
+  {
+    "chave": "auto:reset", "modulo": "auto", "data": "2026-09-29", "tipo": "fato",
+    "titulo": "Reset de histórico (manual e por inatividade)",
+    "conteudo": "Botão para zerar a memória de conversa de todos os leads e opção 'reiniciar sozinho após N horas/dias sem responder' (sweep a cada 15 min sobre auto_atendimento_sessions.updated_at)."
+  },
+  {
+    "chave": "auto:tempo", "modulo": "auto", "data": "2026-09-29", "tipo": "fato",
+    "titulo": "Consciência de tempo e comparecimento",
+    "conteudo": "Antes de cada resposta o sistema busca o último agendamento passado do lead (Clinicorp status Faltou/Atendido, agenda interna via marcador [contato:numero]; cache 4h) e injeta como fato: faltou -> descobrir motivo e remarcar; compareceu -> perguntar da experiência e quebrar objeções se não fechou; incerto -> perguntar. Também informa há quantos dias a conversa começou."
+  },
+  {
+    "chave": "auto:pre-agendar", "modulo": "auto", "data": "2026-09-29", "tipo": "decisao",
+    "titulo": "Toggle: agendar direto no Clinicorp ou só pré-agendar",
+    "conteudo": "Ligado (padrão) a IA agenda de verdade. Desligado ela só consulta disponibilidade, registra pré-agendamento e avisa que a atendente confirma por ligação/WhatsApp; o card vai para Pré-agendamento. No modo pré-agendar a agenda interna não cria evento confirmado."
+  },
+  {
+    "chave": "auto:espera", "modulo": "auto", "data": "2026-09-29", "tipo": "fato",
+    "titulo": "Espera configurável antes de responder",
+    "conteudo": "Campo 'esperar X segundos' (0-180, +variação aleatória até 3s) mantém 'digitando...' ativo para parecer humano; a espera é descontada do tempo de geração e acontece depois do timeout de 55s da IA."
+  },
+  {
+    "chave": "auto:horario", "modulo": "auto", "data": "2026-10-06", "tipo": "fato",
+    "titulo": "Horário de funcionamento da IA + resposta quando abre",
+    "conteudo": "Início/fim (fuso Maceió; vazio = 24h). Fora do horário a IA não responde, mas guarda a mensagem como pendente (auto_atendimento_sessions.pendente_desde, persistido); verificador a cada 2 min responde quando abre, com todas as mensagens da noite, espaçando 20-40s entre leads. Descarta pendente com +48h, conversa pausada ou lead já respondido por humano."
+  },
+  {
+    "chave": "auto:retorno-ia", "modulo": "auto", "data": "2026-10-07", "tipo": "fato",
+    "titulo": "IA cria alerta de retorno e retoma o contato",
+    "conteudo": "Ferramenta criar_alerta_retorno: quando o lead pede um tempo, a IA pergunta dia/hora, cria o alerta (card vai para Em negociação) e na hora marcada retoma com mensagem proativa (turno de sistema marcado no histórico, sem pedido de desculpas em caso de erro)."
+  },
+
+  {
+    "chave": "mod:followup", "hub": true, "modulo": "followup", "tipo": "contexto",
+    "titulo": "Módulo: Follow Up (reengajamento de leads parados)",
+    "conteudo": "Reengajamento automático de leads que pararam de responder, em tentativas configuráveis (dias, script, arquivos por tentativa), com coluna própria no CRM (entre Compareceu e Perdido). Se o lead responde com interesse, volta para Em Atendimento e o Auto Atendimento reassume."
+  },
+  {
+    "chave": "fu:base", "modulo": "followup", "data": "2026-09-23", "tipo": "fato",
+    "titulo": "Follow Up criado + horário de funcionamento",
+    "conteudo": "Motor próprio (followUp.js), substitui o Auto Atendimento enquanto o card está na coluna. Horário de funcionamento (padrão 08-20h Maceió): fora dele não manda tentativa nem responde, mas guarda a mensagem."
+  },
+
+  {
+    "chave": "mod:clinicorp", "hub": true, "modulo": "clinicorp", "tipo": "contexto",
+    "titulo": "Módulo: Clinicorp (gestão da clínica)",
+    "conteudo": "Integração com o Clinicorp de cada clínica (credenciais por tenant, cifradas): agenda, pacientes, financeiro, relatórios comerciais, orçamentos e execução. Usada pela Lumia pessoal, pelo Auto Atendimento e pelos relatórios."
+  },
+  {
+    "chave": "cli:base", "modulo": "clinicorp", "data": "2026-07-10", "tipo": "fato",
+    "titulo": "Integração Clinicorp (agenda, pacientes, financeiro) e acesso amplo",
+    "conteudo": "Começou com agenda/pacientes/financeiro e ganhou financeiro detalhado, relatórios comerciais, procedimentos, organização e extras de paciente. API não dá acesso a prontuário clínico."
+  },
+  {
+    "chave": "cli:status", "modulo": "clinicorp", "data": "2026-07-18", "tipo": "aprendizado",
+    "titulo": "Status reais dos agendamentos e contagem server-side",
+    "conteudo": "Resolve o status (Faltou, Confirmado, Prótese pendente...) pelo catálogo de status, evita confundir 'Prótese pendente' com Controle Protético, conta por status no servidor (clinicorp_contar_agendamentos_por_status) e dá acesso à execução clínica dos orçamentos (finalizado x em andamento x não iniciado). Clinic_BusinessId precisa ir como número."
+  },
+  {
+    "chave": "cli:vitaly", "modulo": "clinicorp", "data": "2026-09-30", "tipo": "contexto",
+    "titulo": "Vitaly Odontologia (tenant 10): conta de teste = clínica própria",
+    "conteudo": "Primeiro cliente-teste do SaaS é a própria clínica do dono, por isso usa as mesmas credenciais do Clinicorp do tenant 1. Auto Atendimento do Vitaly fica desligado até o dono ativar. Reutilizar credencial entre clientes REAIS seria vazamento - só vale por ser a mesma clínica."
+  },
+
+  {
+    "chave": "mod:ads", "hub": true, "modulo": "ads", "tipo": "contexto",
+    "titulo": "Módulo: Meta Ads e relatórios automáticos",
+    "conteudo": "Contas de anúncio Meta Ads conectadas por tenant (tokens cifrados, ativar/desativar por conta), monitoramento de saldo e relatórios automáticos configuráveis por WhatsApp (aba Relatórios): financeiro de Ads, métricas, financeiro/agendamentos da clínica e alerta de saldo."
+  },
+  {
+    "chave": "ads:relatorios", "modulo": "ads", "data": "2026-07-18", "tipo": "fato",
+    "titulo": "Aba Relatórios: destinatários e 4 relatórios configuráveis",
+    "conteudo": "Destinatários de WhatsApp, frequência por relatório (6h/12h/diário/semanal...), horário de envio, instância por tipo. Relatórios montados em código (sem IA no envio). Scheduler a cada 5 min por tenant. Só marca como enviado se algum envio deu certo."
+  },
+  {
+    "chave": "ads:saldo", "modulo": "ads", "data": "2026-09-19", "tipo": "decisao",
+    "titulo": "Saldo das contas Meta Ads: relatório diário em 3 cores",
+    "conteudo": "Verde acima de R$250, amarelo até R$250, vermelho até R$100 (configuráveis por env). Reporta sempre o saldo, não só quando baixo. Relatórios do Meta têm retry com espera quando a API bloqueia por limite de taxa (08-21)."
+  },
+  {
+    "chave": "ads:regra-confirmacao", "modulo": "ads", "tipo": "decisao",
+    "titulo": "Ativar campanha ou aumentar orçamento exige confirmação",
+    "conteudo": "Único tipo de ação que continua pedindo confirmação mesmo com autonomia total no repositório: ads_criar_campanha, ads_alterar_status_campanha, ads_alterar_orcamento_adset (dinheiro real)."
+  },
+
+  {
+    "chave": "mod:relatorios", "hub": true, "modulo": "relatorios", "tipo": "contexto",
+    "titulo": "Módulo: Gerador de Relatórios (HTML com IA)",
+    "conteudo": "Aba que gera relatório visual (HTML) com IA a partir do Meta Ads ou de arquivos anexados, com temas de cor, marca própria do cliente e download em PDF ou JPG."
+  },
+  {
+    "chave": "rel:base", "modulo": "relatorios", "data": "2026-09-23", "tipo": "fato",
+    "titulo": "Gerador de Relatórios criado (temas, marca, PDF/JPG)",
+    "conteudo": "Fiel ao design original, marca customizável (nome + logo), download PDF/JPG no lugar de HTML. Em 09-30 o novo tema ganhou preview ao vivo (o seletor de cor nativo não tem botão de confirmar, então o mockup reflete cada cor escolhida em tempo real)."
+  },
+
+  {
+    "chave": "mod:propostas", "hub": true, "modulo": "propostas", "tipo": "contexto",
+    "titulo": "Módulo: Gerador de Propostas (produto separado)",
+    "conteudo": "Produto de venda independente: gera proposta comercial interativa com link curto (/p/:id), vendido a assinantes em dois planos (branded e white_label com editor de conteúdo), com período de acesso. Assinantes ficam na aba admin Propostas, separados dos clientes da Lumia."
+  },
+  {
+    "chave": "prop:base", "modulo": "propostas", "data": "2026-09-09", "tipo": "fato",
+    "titulo": "Proposta comercial interativa multi-tenant",
+    "conteudo": "proposta.html pública (sem login), paleta dourado/prata/preto/branco, add-on de vídeo em 2 níveis, plano branded x white_label (fase 2 permite reescrever conteúdo), domínio/marca próprios, página de vendas do Relatório Automático de Anúncios com captura de leads, serviço separado Automação LumIA."
+  },
+
+  {
+    "chave": "mod:agenda", "hub": true, "modulo": "agenda", "tipo": "contexto",
+    "titulo": "Módulo: Agenda e integrações Google/Trello",
+    "conteudo": "Agenda interna (Postgres) com visão de grade diária estilo Clinicorp e sincronização opcional com Google Agenda; Google Sheets (a Lumia lê/edita planilhas); Trello (consulta/cria/move/arquiva cartões); aba Integrações para ativar/desativar sistemas e contas Meta Ads."
+  },
+  {
+    "chave": "agd:base", "modulo": "agenda", "data": "2026-07-15", "tipo": "fato",
+    "titulo": "Agenda interna + Google Agenda; Trello e Sheets (07-22)",
+    "conteudo": "Compromissos internos funcionam sozinhos; Google é espelho best-effort (falha externa nunca perde o evento local). Trello e Google Sheets integrados em 07-22; aba Integrações em 07-28."
+  },
+
+  {
+    "chave": "mod:cerebro", "hub": true, "modulo": "cerebro", "tipo": "contexto",
+    "titulo": "Módulo: Cérebro de IA (memória compartilhada via MCP)",
+    "conteudo": "Memória única compartilhada entre todas as IAs do cliente (Claude, ChatGPT, Cursor, Gemini, Lumia) por endpoint MCP com token próprio; busca por significado (embeddings Gemini calculados no Node, sem pgvector), ligações automáticas por similaridade formando o grafo 3D da aba. Recurso pago liberado por cliente; super_admin sempre tem."
+  },
+  {
+    "chave": "cer:base", "modulo": "cerebro", "data": "2026-10-07", "tipo": "fato",
+    "titulo": "Cérebro de IA criado",
+    "conteudo": "Aba Cérebro com grafo 3D, busca, tokens MCP e ferramentas salvar/buscar/atualizar/esquecer memória. Esquecer arquiva (reversível). Se o Gemini falhar, salva sem embedding e busca cai para texto."
+  },
+  {
+    "chave": "cer:mae", "modulo": "cerebro", "data": "2026-10-08", "tipo": "decisao",
+    "titulo": "Cérebro-mãe: histórico completo sincronizado a cada deploy",
+    "conteudo": "O cérebro do dono passou a ter TODO o histórico do app (módulos, melhorias, correções e decisões, ligados por evolução) vindo de cerebro-mae/historico.json, sincronizado no boot e a cada 24h pelo cerebroMae.js (idempotente pela tag mae:<chave>), mais um 'retrato do app' com números atuais. Toda entrega nova deve adicionar uma entrada nesse arquivo (regra no CLAUDE.md)."
+  },
+
+  {
+    "chave": "mod:video", "hub": true, "modulo": "video", "tipo": "contexto",
+    "titulo": "Módulo: Editor de Vídeo com IA",
+    "conteudo": "Serviço separado (video-worker) + aba na Lumia, liberado por cliente. A IA analisa o vídeo e monta a edição (legendas, textos, cortes), com render em fila."
+  },
+  {
+    "chave": "vid:base", "modulo": "video", "data": "2026-10-08", "tipo": "fato",
+    "titulo": "Editor de Vídeo: criação e evolução do dia",
+    "conteudo": "Serviço separado com senha interna derivada do SESSION_SECRET (sem env nova). Render com cache 96MB e arquivo final mais leve; deploy no meio de um render devolve a edição para a fila sem corromper estado. Editor em tela cheia com linha do tempo em camadas, vídeo de referência e mídias de apoio; a IA vê quadros do vídeo antes de planejar (desliga a própria legenda se o vídeo já tem, ajusta altura do texto pelo rosto, avisa limitações). Não transcreve áudio em silêncio (Whisper inventava frases)."
+  }
+]
