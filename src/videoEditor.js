@@ -16,6 +16,13 @@ import { pool } from './db.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
 import { tabelasProntas as tenantConfigPronto } from './tenantConfig.js';
 
+// endereco interno do servico na rede do Docker; a senha entre os dois e derivada do
+// SESSION_SECRET que o app ja tem (o servico recebe o mesmo valor no deploy) - sem precisar de
+// mais uma variavel de ambiente pra manter sincronizada
+const WORKER_URL = process.env.VIDEO_WORKER_URL || 'http://lumia-video:4100';
+const WORKER_SECRET = process.env.VIDEO_WORKER_SECRET
+  || (process.env.SESSION_SECRET ? crypto.createHmac('sha256', process.env.SESSION_SECRET).update('lumia-video-worker').digest('hex') : '');
+
 export const ESTILOS = ['criador', 'neon', 'clinica', 'impacto', 'documentario'];
 export const FORMATOS = ['9:16', '4:5', '1:1', '16:9'];
 const TAMANHO_MAX = 1024 * 1024 * 1024;
@@ -47,7 +54,7 @@ export const tabelasProntas = garantirTabelas().catch((err) => {
 
 function exigirConfig() {
   if (!pool) throw new Error('O Editor de Vídeo precisa do Postgres configurado.');
-  if (!process.env.VIDEO_WORKER_URL || !process.env.VIDEO_WORKER_SECRET) {
+  if (!WORKER_URL || !WORKER_SECRET) {
     throw new Error('O serviço de vídeo ainda não está configurado neste servidor.');
   }
 }
@@ -70,7 +77,7 @@ export async function definirLiberado(tenantId, liberado) {
 }
 
 function urlWorker(caminho, tenantId, extra = {}) {
-  const u = new URL(caminho, process.env.VIDEO_WORKER_URL);
+  const u = new URL(caminho, WORKER_URL);
   u.searchParams.set('tenant', String(tenantId));
   for (const [k, v] of Object.entries(extra)) u.searchParams.set(k, v);
   return u;
@@ -79,7 +86,7 @@ function urlWorker(caminho, tenantId, extra = {}) {
 async function chamarWorker(caminho, tenantId, opcoes = {}) {
   const res = await fetch(urlWorker(caminho, tenantId), {
     ...opcoes,
-    headers: { 'x-worker-secret': process.env.VIDEO_WORKER_SECRET, ...(opcoes.headers || {}) },
+    headers: { 'x-worker-secret': WORKER_SECRET, ...(opcoes.headers || {}) },
     signal: AbortSignal.timeout(20000),
   });
   const dados = await res.json().catch(() => ({}));
@@ -162,7 +169,7 @@ export async function enviar(tenantId, req) {
     const res = await fetch(urlWorker(`/jobs/${id}`, tenantId, { nome }), {
       method: 'POST',
       headers: {
-        'x-worker-secret': process.env.VIDEO_WORKER_SECRET,
+        'x-worker-secret': WORKER_SECRET,
         'content-type': 'application/octet-stream',
         'content-length': String(tamanho),
         'x-opcoes': Buffer.from(JSON.stringify(opcoes)).toString('base64'),
@@ -241,7 +248,7 @@ export async function apagar(tenantId, id) {
 export async function transmitirArquivo(tenantId, id, tipo, req, res) {
   exigirConfig();
   const linha = await garantirDono(tenantId, id);
-  const headers = { 'x-worker-secret': process.env.VIDEO_WORKER_SECRET };
+  const headers = { 'x-worker-secret': WORKER_SECRET };
   if (req.headers.range) headers.range = req.headers.range;
   const resposta = await fetch(urlWorker(`/jobs/${id}/${tipo}`, tenantId), { headers });
   if (!resposta.ok && resposta.status !== 206) {
