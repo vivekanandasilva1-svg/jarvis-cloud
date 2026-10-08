@@ -60,10 +60,14 @@ export async function encerrar() {
 
 // gravacoes do mesmo projeto em serie (upload de midia e progresso podem chegar juntos)
 const travas = new Map();
+// projetos apagados enquanto processavam: a edicao em andamento e abandonada sem gravar nada
+const apagados = new Set();
+
 async function atualizar(id, mudancas) {
-  if (encerrando) return null;
+  if (encerrando || apagados.has(id)) return null;
   const anterior = travas.get(id) || Promise.resolve();
   const atual = anterior.catch(() => {}).then(async () => {
+    if (!(await existe(pasta(id)))) return null; // pasta sumiu (projeto apagado) - nao recria nada
     const job = (await obter(id)) || { id };
     const novo = typeof mudancas === 'function' ? mudancas(job) : mudancas;
     Object.assign(job, novo, { atualizadoEm: new Date().toISOString() });
@@ -95,8 +99,12 @@ async function processarFila() {
       try {
         await executar(job);
       } catch (err) {
-        console.error(`[${id}] erro:`, err);
-        await atualizar(id, { status: 'erro', etapa: 'erro', erro: String(err.message || err).slice(0, 500), pendente: null });
+        if (apagados.has(id)) {
+          console.log(`[${id}] projeto apagado durante o processamento - edicao cancelada`);
+        } else {
+          console.error(`[${id}] erro:`, err);
+          await atualizar(id, { status: 'erro', etapa: 'erro', erro: String(err.message || err).slice(0, 500), pendente: null }).catch(() => {});
+        }
       } finally {
         emExecucao = null;
       }
@@ -207,6 +215,7 @@ export async function pedirAjuste(id, pedido) {
 export async function apagar(id) {
   const i = fila.indexOf(id);
   if (i >= 0) fila.splice(i, 1);
+  if (emExecucao === id) apagados.add(id); // a edicao em andamento vai falhar ao tentar ler/gravar - e esperado
   await fs.rm(pasta(id), { recursive: true, force: true });
 }
 

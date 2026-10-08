@@ -181,6 +181,11 @@ app.delete('/jobs/:id', rota(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// rede de seguranca: uma promise sem .catch num canto qualquer nao pode derrubar o servico inteiro
+process.on('unhandledRejection', (err) => {
+  console.error('promise rejeitada sem tratamento (servico continua):', err);
+});
+
 // deploy novo: devolve a edicao em andamento pra fila (o container novo retoma) e sai
 for (const sinal of ['SIGTERM', 'SIGINT']) {
   process.on(sinal, async () => {
