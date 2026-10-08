@@ -58,7 +58,38 @@ export const ESTILOS = {
   },
 };
 
-export function obterEstilo(nome, corDestaque) {
-  const base = ESTILOS[nome] || ESTILOS.criador;
-  return corDestaque ? { ...base, corDestaque } : base;
+const FONTES = {
+  montserrat: { familia: montserrat, peso: 900 },
+  poppins: { familia: poppins, peso: 800 },
+  inter: { familia: inter, peso: 800 },
+  anton: { familia: anton, peso: 400 },
+  playfair: { familia: playfair, peso: 700 },
+};
+
+const TRATAMENTO_COR = {
+  natural: 'contrast(1.04) saturate(1.06)',
+  quente: 'sepia(0.15) contrast(1.06) saturate(1.12)',
+  frio: 'contrast(1.06) saturate(0.95) hue-rotate(8deg)',
+  contraste: 'contrast(1.14) saturate(1.15)',
+  pb_suave: 'grayscale(0.85) contrast(1.1)',
+};
+const ZOOM = { sutil: 1.06, medio: 1.12, forte: 1.18 };
+
+// custom = perfil de estilo extraido do video referencia (ver diretor.estudarReferencia)
+export function obterEstilo(nome, corDestaque, custom) {
+  let e = { ...(ESTILOS[nome] || ESTILOS.criador) };
+  if (custom) {
+    const f = FONTES[custom.fonte];
+    if (f) e = { ...e, fonteLegenda: f.familia, pesoLegenda: f.peso, fonteTitulo: f.familia, pesoTitulo: f.peso };
+    if (typeof custom.maiusculas === 'boolean') e.maiusculas = custom.maiusculas;
+    if (custom.palavrasPorTela) e.palavrasPorTela = custom.palavrasPorTela;
+    if (typeof custom.fundoLegenda === 'boolean') e.fundoLegenda = custom.fundoLegenda ? 'rgba(8, 8, 12, 0.72)' : null;
+    if (typeof custom.contorno === 'boolean') e.contorno = custom.contorno;
+    if (typeof custom.brilho === 'boolean') e.brilho = custom.brilho;
+    if (custom.corTexto) e.corTexto = custom.corTexto;
+    if (TRATAMENTO_COR[custom.tratamentoCor]) e.filtroVideo = TRATAMENTO_COR[custom.tratamentoCor];
+    if (ZOOM[custom.intensidadeZoom]) e.zoomSoco = ZOOM[custom.intensidadeZoom];
+  }
+  if (corDestaque) e.corDestaque = corDestaque;
+  return e;
 }

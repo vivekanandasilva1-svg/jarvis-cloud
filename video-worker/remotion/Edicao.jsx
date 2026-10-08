@@ -4,7 +4,7 @@
 // nada sai de sincronia quando um trecho e cortado.
 import React from 'react';
 import {
-  AbsoluteFill, Audio, Easing, OffthreadVideo, Sequence, interpolate, spring, staticFile,
+  AbsoluteFill, Audio, Easing, Img, OffthreadVideo, Sequence, interpolate, spring, staticFile,
   useCurrentFrame, useVideoConfig,
 } from 'remotion';
 import { obterEstilo } from './estilos.js';
@@ -44,16 +44,29 @@ function fatorZoom(frame, zooms, fps, e) {
   return fator;
 }
 
-function CamadaVideo({ videoSrc, segmentos, zooms, estilo }) {
+function CamadaVideo({ videoSrc, segmentos, zooms, estilo, transicoes = [] }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const seg = segmentos.find((s) => frame >= s.outInicio && frame < s.outInicio + s.duracao) || segmentos[segmentos.length - 1];
   const progressoSeg = seg ? (frame - seg.outInicio) / Math.max(1, seg.duracao) : 0;
   // jump-cut alterna enquadramento entre segmentos (esconde o "pulo" do corte) + deriva lenta
   // dentro do segmento pra imagem nunca ficar parada
-  const escala = (seg?.escala || 1) * (1 + 0.025 * progressoSeg) * fatorZoom(frame, zooms, fps, estilo);
+  let escala = (seg?.escala || 1) * (1 + 0.025 * progressoSeg) * fatorZoom(frame, zooms, fps, estilo);
+  // transicoes no corte: "zoom" entra aproximado e assenta; "deslize" entra de lado com borrao
+  let deslocX = 0;
+  let borrao = 0;
+  for (const tr of transicoes) {
+    const t = frame - tr.frame;
+    if (t < 0 || t > 10) continue;
+    if (tr.tipo === 'zoom') escala *= interpolate(t, [0, 9], [1.16, 1], { extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
+    if (tr.tipo === 'deslize') {
+      deslocX = interpolate(t, [0, 7], [9, 0], { extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
+      borrao = interpolate(t, [0, 7], [10, 0], { extrapolateRight: 'clamp' });
+      escala *= 1 + deslocX * 0.02; // amplia junto pra borda preta nao aparecer
+    }
+  }
   return (
-    <AbsoluteFill style={{ transform: `scale(${escala})`, transformOrigin: '50% 38%', filter: estilo.filtroVideo }}>
+    <AbsoluteFill style={{ transform: `translateX(${deslocX}%) scale(${escala})`, transformOrigin: '50% 38%', filter: `${estilo.filtroVideo}${borrao ? ` blur(${borrao}px)` : ''}` }}>
       {segmentos.map((s, i) => (
         <Sequence key={i} from={s.outInicio} durationInFrames={s.duracao} layout="none">
           <OffthreadVideo
@@ -280,12 +293,75 @@ function Lista({ titulo, itens, duracao, estilo, media }) {
   );
 }
 
+// ---------- midias de apoio, flash de transicao e trilha ----------
+
+function Insercao({ src, kind, modo, duracao, estilo }) {
+  const frame = useCurrentFrame();
+  const { fps, height } = useVideoConfig();
+  const u = useUnidade();
+  const entrada = spring({ frame, fps, config: { damping: 16, stiffness: 150 } });
+  const saida = interpolate(frame, [duracao - 6, duracao], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const kenBurns = interpolate(frame, [0, duracao], [1, 1.08]);
+  const midia = kind === 'video'
+    ? <OffthreadVideo src={src} muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+    : <Img src={src} style={{ width: '100%', height: '100%', objectFit: 'cover', transform: `scale(${kenBurns})` }} />;
+  if (modo === 'janela') {
+    return (
+      <AbsoluteFill style={{ alignItems: 'center' }}>
+        <div style={{
+          position: 'absolute', top: height * 0.08, width: '84%', aspectRatio: '16 / 11', borderRadius: 30 * u, overflow: 'hidden',
+          border: `${4 * u}px solid rgba(255,255,255,0.9)`,
+          boxShadow: estilo.brilho ? `0 0 ${40 * u}px ${estilo.corDestaque}88` : `0 ${18 * u}px ${50 * u}px rgba(0,0,0,0.55)`,
+          transform: `translateY(${(1 - entrada) * -80 * u}px) scale(${0.9 + 0.1 * entrada}) rotate(${(1 - entrada) * -3}deg)`,
+          opacity: entrada * saida,
+        }}>{midia}</div>
+      </AbsoluteFill>
+    );
+  }
+  return (
+    <AbsoluteFill style={{ opacity: Math.min(1, entrada * 1.4) * saida, transform: `scale(${1.12 - 0.12 * entrada})` }}>
+      {midia}
+      <AbsoluteFill style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.55) 100%)' }} />
+    </AbsoluteFill>
+  );
+}
+
+function Flash({ transicoes }) {
+  const frame = useCurrentFrame();
+  let opacidade = 0;
+  for (const tr of transicoes) {
+    if (tr.tipo !== 'flash') continue;
+    const t = frame - tr.frame;
+    if (t >= -1 && t <= 6) opacidade = Math.max(opacidade, interpolate(t, [-1, 0, 6], [0, 0.75, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }));
+  }
+  return opacidade > 0 ? <AbsoluteFill style={{ background: '#fff', opacity: opacidade }} /> : null;
+}
+
+// trilha de fundo com "ducking": abaixa enquanto a pessoa fala, sobe nas pausas
+function Trilha({ src, falas }) {
+  const { fps, durationInFrames } = useVideoConfig();
+  const volume = (f) => {
+    const t = f / fps;
+    let dist = Infinity;
+    for (const [a, b] of falas) {
+      if (t >= a && t <= b) { dist = 0; break; }
+      dist = Math.min(dist, t < a ? a - t : t - b);
+      if (a > t + 1) break;
+    }
+    const falando = interpolate(dist, [0, 0.35], [1, 0], { extrapolateRight: 'clamp' });
+    const base = 0.3 - 0.2 * falando;
+    const bordas = interpolate(f, [0, fps, durationInFrames - fps * 1.5, durationInFrames], [0, 1, 1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+    return base * bordas;
+  };
+  return <Audio src={src} loop volume={volume} />;
+}
+
 // ---------- composicao ----------
 
 export function Edicao(props) {
-  const { videoSrc, segmentos, palavras, zooms = [], textos = [], numeros = [], listas = [], sfx = [], estilo: nomeEstilo, corDestaque, legendas = true, posicaoLegenda = 'baixo', alturaTextos = 'alta' } = props;
+  const { videoSrc, segmentos, palavras, zooms = [], textos = [], numeros = [], listas = [], sfx = [], insercoes = [], transicoes = [], trilha = null, estiloCustom = null, estilo: nomeEstilo, corDestaque, legendas = true, posicaoLegenda = 'baixo', alturaTextos = 'alta' } = props;
   const media = alturaTextos === 'media';
-  const estilo = obterEstilo(nomeEstilo, corDestaque);
+  const estilo = obterEstilo(nomeEstilo, corDestaque, estiloCustom);
   // a legenda some enquanto um texto grande ou lista ocupa a tela - evita poluicao visual
   const ocultarLegenda = [
     ...textos.filter((t) => t.estilo === 'impacto').map((t) => [t.inicio, t.fim]),
@@ -293,8 +369,14 @@ export function Edicao(props) {
   ];
   return (
     <AbsoluteFill style={{ backgroundColor: '#000' }}>
-      <CamadaVideo videoSrc={videoSrc} segmentos={segmentos} zooms={zooms} estilo={estilo} />
+      <CamadaVideo videoSrc={videoSrc} segmentos={segmentos} zooms={zooms} estilo={estilo} transicoes={transicoes} />
+      {insercoes.map((x, i) => (
+        <Sequence key={`m${i}`} from={x.inicio} durationInFrames={Math.max(1, x.fim - x.inicio)}>
+          <Insercao {...x} duracao={x.fim - x.inicio} estilo={estilo} />
+        </Sequence>
+      ))}
       <Acabamento estilo={estilo} />
+      <Flash transicoes={transicoes} />
       {textos.map((t, i) => (
         <Sequence key={`t${i}`} from={t.inicio} durationInFrames={Math.max(1, t.fim - t.inicio)}>
           {t.estilo === 'impacto' && <TextoImpacto texto={t.texto} duracao={t.fim - t.inicio} estilo={estilo} media={media} />}
@@ -313,6 +395,7 @@ export function Edicao(props) {
         </Sequence>
       ))}
       {legendas && <Legendas palavras={palavras} estilo={estilo} ocultarEm={ocultarLegenda} posicao={posicaoLegenda} />}
+      {trilha && <Trilha src={trilha.src} falas={trilha.falas} />}
       {sfx.map((s, i) => (
         <Sequence key={`s${i}`} from={s.frame} durationInFrames={30} layout="none">
           <Audio src={staticFile(`sfx/${s.tipo}.wav`)} volume={s.tipo === 'whoosh' ? 0.32 : 0.4} />

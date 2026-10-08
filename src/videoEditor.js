@@ -1,9 +1,10 @@
-// Editor de Video (aba "Editor de Vídeo"): a Lumia so guarda QUEM e dono de cada edicao e faz a
+// Editor de Video (aba "Editor de Vídeo"): a Lumia so guarda QUEM e dono de cada projeto e faz a
 // ponte com o servico de video (video-worker/, container separado na VPS com CPU/memoria
-// limitados). Todo o trabalho pesado - preparar o video, transcrever, a IA dirigir a edicao e
-// renderizar - acontece la, entao o app continua leve pra todo mundo enquanto um video e editado.
+// limitados). Todo o trabalho pesado - preparar o video, transcrever, estudar a referencia, a IA
+// dirigir a edicao e renderizar - acontece la, entao o app continua leve pra todo mundo enquanto
+// um video e editado.
 //
-// Upload e download passam por aqui em STREAMING (nunca o arquivo inteiro em memoria) - o
+// Uploads e downloads passam por aqui em STREAMING (nunca o arquivo inteiro em memoria) - o
 // servico de video nao tem dominio publico, so a Lumia fala com ele, sempre mandando o tenantId
 // pra ele conferir o dono de novo.
 //
@@ -23,9 +24,8 @@ const WORKER_URL = process.env.VIDEO_WORKER_URL || 'http://lumia-video:4100';
 const WORKER_SECRET = process.env.VIDEO_WORKER_SECRET
   || (process.env.SESSION_SECRET ? crypto.createHmac('sha256', process.env.SESSION_SECRET).update('lumia-video-worker').digest('hex') : '');
 
-export const ESTILOS = ['criador', 'neon', 'clinica', 'impacto', 'documentario'];
-export const FORMATOS = ['9:16', '4:5', '1:1', '16:9'];
 const TAMANHO_MAX = 1024 * 1024 * 1024;
+const STATUS_FINAIS = ['pronto', 'erro', 'expirado', 'rascunho'];
 
 async function garantirTabelas() {
   if (!pool) return;
@@ -52,11 +52,11 @@ export const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas do Editor de Video:', err.message);
 });
 
+const erro = (mensagem, status = 400) => Object.assign(new Error(mensagem), { status });
+
 function exigirConfig() {
-  if (!pool) throw new Error('O Editor de Vídeo precisa do Postgres configurado.');
-  if (!WORKER_URL || !WORKER_SECRET) {
-    throw new Error('O serviço de vídeo ainda não está configurado neste servidor.');
-  }
+  if (!pool) throw erro('O Editor de Vídeo precisa do Postgres configurado.', 500);
+  if (!WORKER_URL || !WORKER_SECRET) throw erro('O serviço de vídeo ainda não está configurado neste servidor.', 500);
 }
 
 export async function estaLiberado(tenantId) {
@@ -79,50 +79,45 @@ export async function definirLiberado(tenantId, liberado) {
 function urlWorker(caminho, tenantId, extra = {}) {
   const u = new URL(caminho, WORKER_URL);
   u.searchParams.set('tenant', String(tenantId));
-  for (const [k, v] of Object.entries(extra)) u.searchParams.set(k, v);
+  for (const [k, v] of Object.entries(extra)) if (v != null) u.searchParams.set(k, v);
   return u;
 }
 
-async function chamarWorker(caminho, tenantId, opcoes = {}) {
+async function chamarWorker(caminho, tenantId, { metodo = 'GET', corpo, timeout = 20000 } = {}) {
   const res = await fetch(urlWorker(caminho, tenantId), {
-    ...opcoes,
-    headers: { 'x-worker-secret': WORKER_SECRET, ...(opcoes.headers || {}) },
-    signal: AbortSignal.timeout(20000),
+    method: metodo,
+    headers: { 'x-worker-secret': WORKER_SECRET, ...(corpo ? { 'content-type': 'application/json' } : {}) },
+    body: corpo ? JSON.stringify(corpo) : undefined,
+    signal: AbortSignal.timeout(timeout),
   });
   const dados = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = new Error(dados.erro || `serviço de vídeo respondeu ${res.status}`);
-    err.status = res.status;
-    throw err;
-  }
+  if (!res.ok) throw erro(dados.erro || `serviço de vídeo respondeu ${res.status}`, res.status);
   return dados;
 }
 
 async function garantirDono(tenantId, id) {
   await tabelasProntas;
   const { rows } = await pool.query('SELECT * FROM video_edicoes WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
-  if (!rows[0]) {
-    const err = new Error('edição não encontrada');
-    err.status = 404;
-    throw err;
-  }
+  if (!rows[0]) throw erro('projeto não encontrado', 404);
   return rows[0];
 }
 
 // guarda status/titulo na tabela pra lista abrir rapido sem consultar o servico pra cada item
 async function sincronizar(tenantId, id, job) {
   await pool.query(
-    'UPDATE video_edicoes SET status = $3, titulo = coalesce($4, titulo), atualizado_em = now() WHERE id = $1 AND tenant_id = $2',
-    [id, tenantId, job.status, job.titulo || null],
+    `UPDATE video_edicoes SET status = $3, titulo = coalesce($4, titulo), nome_arquivo = coalesce($5, nome_arquivo),
+       estilo = coalesce($6, estilo), formato = coalesce($7, formato), atualizado_em = now()
+     WHERE id = $1 AND tenant_id = $2`,
+    [id, tenantId, job.status, job.titulo || null, job.nomeOriginal || null, job.opcoes?.estilo || null, job.opcoes?.formato || null],
   );
 }
 
 function resumoJob(linha, job) {
   return {
     id: linha.id,
-    nomeArquivo: linha.nome_arquivo,
-    estilo: linha.estilo,
-    formato: linha.formato,
+    nomeArquivo: job?.nomeOriginal || linha.nome_arquivo,
+    estilo: job?.opcoes?.estilo || linha.estilo,
+    formato: job?.opcoes?.formato || linha.formato,
     criadoEm: linha.criado_em,
     titulo: job?.titulo || linha.titulo,
     status: job?.status || linha.status,
@@ -138,49 +133,24 @@ function resumoJob(linha, job) {
     ajustes: job?.ajustes || [],
     ajustePendente: job?.ajustePendente || null,
     opcoes: job?.opcoes || null,
+    midias: job?.midias || [],
+    referencia: job?.referencia || null,
+    completo: !!job,
   };
 }
 
-// upload: o corpo da requisicao (o video cru) vai direto pro servico de video, em streaming
-export async function enviar(tenantId, req) {
+export async function criar(tenantId, { nome, opcoes } = {}) {
   exigirConfig();
   await tabelasProntas;
-  const tamanho = Number(req.header('content-length') || 0);
-  if (!tamanho) throw Object.assign(new Error('envie o arquivo de vídeo'), { status: 400 });
-  if (tamanho > TAMANHO_MAX) throw Object.assign(new Error('o vídeo passa de 1 GB - envie um arquivo menor'), { status: 413 });
-
-  const estilo = ESTILOS.includes(req.query.estilo) ? req.query.estilo : 'criador';
-  const formato = FORMATOS.includes(req.query.formato) ? req.query.formato : '9:16';
-  const opcoes = {
-    estilo, formato,
-    instrucoes: String(req.query.instrucoes || '').slice(0, 2000),
-    corDestaque: /^#[0-9a-fA-F]{6}$/.test(req.query.cor || '') ? req.query.cor : null,
-    legendas: req.query.legendas !== '0',
-    revisaoAutomatica: req.query.revisao !== '0',
-  };
-  const nome = String(req.query.nome || 'video').slice(0, 200);
   const id = crypto.randomBytes(12).toString('hex');
-
+  const nomeProjeto = String(nome || 'Novo projeto').slice(0, 200);
   await pool.query(
     'INSERT INTO video_edicoes (id, tenant_id, nome_arquivo, estilo, formato, status) VALUES ($1, $2, $3, $4, $5, $6)',
-    [id, tenantId, nome, estilo, formato, 'enviando'],
+    [id, tenantId, nomeProjeto, opcoes?.estilo || 'criador', opcoes?.formato || '9:16', 'rascunho'],
   );
   try {
-    const res = await fetch(urlWorker(`/jobs/${id}`, tenantId, { nome }), {
-      method: 'POST',
-      headers: {
-        'x-worker-secret': WORKER_SECRET,
-        'content-type': 'application/octet-stream',
-        'content-length': String(tamanho),
-        'x-opcoes': Buffer.from(JSON.stringify(opcoes)).toString('base64'),
-      },
-      body: Readable.toWeb(req),
-      duplex: 'half',
-    });
-    const job = await res.json().catch(() => ({}));
-    if (!res.ok) throw Object.assign(new Error(job.erro || `falha no envio (${res.status})`), { status: res.status });
-    await sincronizar(tenantId, id, job);
-    return resumoJob({ id, nome_arquivo: nome, estilo, formato, criado_em: new Date() }, job);
+    const job = await chamarWorker(`/jobs/${id}`, tenantId, { metodo: 'POST', corpo: { nome: nomeProjeto, opcoes: opcoes || {} } });
+    return resumoJob({ id, criado_em: new Date() }, job);
   } catch (err) {
     await pool.query('DELETE FROM video_edicoes WHERE id = $1', [id]).catch(() => {});
     throw err;
@@ -190,10 +160,10 @@ export async function enviar(tenantId, req) {
 export async function listar(tenantId) {
   exigirConfig();
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT * FROM video_edicoes WHERE tenant_id = $1 ORDER BY criado_em DESC LIMIT 50', [tenantId]);
-  // so consulta o servico pras que ainda estao em andamento (as prontas ja tem status final salvo)
+  const { rows } = await pool.query('SELECT * FROM video_edicoes WHERE tenant_id = $1 ORDER BY criado_em DESC LIMIT 60', [tenantId]);
+  // so consulta o servico pras que ainda estao em andamento (as outras ja tem status salvo)
   return Promise.all(rows.map(async (linha) => {
-    if (['pronto', 'erro', 'expirado'].includes(linha.status)) return resumoJob(linha, null);
+    if (STATUS_FINAIS.includes(linha.status)) return resumoJob(linha, null);
     try {
       const job = await chamarWorker(`/jobs/${linha.id}`, tenantId);
       await sincronizar(tenantId, linha.id, job);
@@ -224,33 +194,58 @@ export async function obter(tenantId, id) {
   }
 }
 
-export async function ajustar(tenantId, id, pedido) {
+// acoes simples (JSON) repassadas pro servico depois de conferir o dono
+export async function acao(tenantId, id, caminho, metodo, corpo) {
   exigirConfig();
   const linha = await garantirDono(tenantId, id);
-  const texto = String(pedido || '').trim().slice(0, 2000);
-  if (!texto) throw Object.assign(new Error('descreva o ajuste que você quer'), { status: 400 });
-  const job = await chamarWorker(`/jobs/${id}/ajustar`, tenantId, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pedido: texto }),
+  const job = await chamarWorker(`/jobs/${id}${caminho}`, tenantId, { metodo, corpo });
+  if (job?.status) await sincronizar(tenantId, id, job);
+  return job?.status ? resumoJob(linha, job) : job;
+}
+
+export async function linhaDoTempo(tenantId, id) {
+  exigirConfig();
+  await garantirDono(tenantId, id);
+  return chamarWorker(`/jobs/${id}/linha-do-tempo`, tenantId);
+}
+
+// upload de midia (principal, referencia ou apoio): o corpo da requisicao vai direto pro servico
+export async function enviarMidia(tenantId, id, req) {
+  exigirConfig();
+  await garantirDono(tenantId, id);
+  const tamanho = Number(req.header('content-length') || 0);
+  if (!tamanho) throw erro('envie o arquivo');
+  if (tamanho > TAMANHO_MAX) throw erro('o arquivo passa de 1 GB - envie um arquivo menor', 413);
+  const res = await fetch(urlWorker(`/jobs/${id}/midias`, tenantId, {
+    tipo: String(req.query.tipo || ''), nome: String(req.query.nome || 'arquivo').slice(0, 200), mime: String(req.query.mime || '').slice(0, 100),
+  }), {
+    method: 'PUT',
+    headers: { 'x-worker-secret': WORKER_SECRET, 'content-type': 'application/octet-stream', 'content-length': String(tamanho) },
+    body: Readable.toWeb(req),
+    duplex: 'half',
   });
+  const dados = await res.json().catch(() => ({}));
+  if (!res.ok) throw erro(dados.erro || `falha no envio (${res.status})`, res.status);
+  const job = await chamarWorker(`/jobs/${id}`, tenantId);
   await sincronizar(tenantId, id, job);
-  return resumoJob(linha, job);
+  return dados;
 }
 
 export async function apagar(tenantId, id) {
   exigirConfig();
   await garantirDono(tenantId, id);
-  await chamarWorker(`/jobs/${id}`, tenantId, { method: 'DELETE' }).catch((err) => { if (err.status !== 404) throw err; });
+  await chamarWorker(`/jobs/${id}`, tenantId, { metodo: 'DELETE' }).catch((err) => { if (err.status !== 404) throw err; });
   await pool.query('DELETE FROM video_edicoes WHERE id = $1 AND tenant_id = $2', [id, tenantId]);
 }
 
-// video final / capa: repassa em streaming, incluindo Range (o <video> do navegador pede pedacos
-// pra conseguir avancar e voltar sem baixar tudo)
-export async function transmitirArquivo(tenantId, id, tipo, req, res) {
+// arquivos (video final, capa, tira da linha do tempo, midias): repassa em streaming, incluindo
+// Range (o <video> do navegador pede pedacos pra conseguir avancar e voltar sem baixar tudo)
+export async function transmitirArquivo(tenantId, id, caminho, req, res) {
   exigirConfig();
   const linha = await garantirDono(tenantId, id);
   const headers = { 'x-worker-secret': WORKER_SECRET };
   if (req.headers.range) headers.range = req.headers.range;
-  const resposta = await fetch(urlWorker(`/jobs/${id}/${tipo}`, tenantId), { headers });
+  const resposta = await fetch(urlWorker(`/jobs/${id}/${caminho}`, tenantId), { headers });
   if (!resposta.ok && resposta.status !== 206) {
     res.status(resposta.status).json(await resposta.json().catch(() => ({ erro: 'arquivo indisponível' })));
     return;
@@ -260,8 +255,8 @@ export async function transmitirArquivo(tenantId, id, tipo, req, res) {
     const v = resposta.headers.get(h);
     if (v) res.setHeader(h, v);
   }
-  res.setHeader('Cache-Control', 'private, max-age=60');
-  if (tipo === 'video' && req.query.baixar === '1') {
+  res.setHeader('Cache-Control', 'private, max-age=30');
+  if (caminho === 'video' && req.query.baixar === '1') {
     const nome = (linha.titulo || linha.nome_arquivo || 'video').replace(/[^\w\-. À-ú]+/g, '').trim().slice(0, 80) || 'video';
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(`${nome} - editado.mp4`)}`);
   }

@@ -1831,7 +1831,14 @@ async function capturarFrameCamera() {
 }
 
 // ---------- Abas: Painel / Agenda / WhatsApp ----------
+// o Editor de Video abre por cima do app inteiro - ao fechar, volta pra aba onde a pessoa estava
+let abaAtualApp = 'painel';
+let abaAntesDoVideo = 'painel';
+window.lumiaFecharVideo = () => mudarAba(abaAntesDoVideo === 'video' ? 'painel' : abaAntesDoVideo);
+
 function mudarAba(aba) {
+  if (aba === 'video' && abaAtualApp !== 'video') abaAntesDoVideo = abaAtualApp;
+  abaAtualApp = aba;
   tabPainel.hidden = aba !== 'painel';
   tabAgenda.hidden = aba !== 'agenda';
   tabWhatsapp.hidden = aba !== 'whatsapp';
@@ -1902,7 +1909,7 @@ function abrirVideo() {
   if (!videoCarregando) {
     videoCarregando = new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = '/video.js?v=1';
+      s.src = '/video.js?v=2';
       s.onload = resolve;
       s.onerror = () => { videoCarregando = null; reject(new Error('falha ao carregar o Editor de Vídeo')); };
       document.head.appendChild(s);

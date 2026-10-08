@@ -102,7 +102,7 @@ app.use(async (req, res, next) => {
     // query string, conferida dentro do proprio handler)
     req.path.startsWith('/api/crm/midia/') ||
     // mesma coisa pro <video>/<img> do Editor de Video (token conferido no handler)
-    /^\/api\/video\/edicoes\/[^/]+\/(video|capa)$/.test(req.path) ||
+    (req.method === 'GET' && /^\/api\/video\/edicoes\/[^/]+\/(video|capa|tira|midias\/[a-f0-9]{16}\/(miniatura|arquivo))$/.test(req.path)) ||
     // pagina de proposta comercial (public/proposta.html) e publica, sem login - quem preenche
     // e o proprio Vivekananda direto no navegador, e quem le o link e o cliente em potencial
     req.path.startsWith('/api/propostas')
@@ -2115,9 +2115,10 @@ const rotaVideo = (fn) => async (req, res) => {
   }
 };
 
-// upload: corpo cru (o proprio arquivo), repassado em streaming - opcoes vem na query string
+// projeto: nasce como rascunho; o cliente envia video principal, referencia e midias de apoio, e so
+// depois pede "Editar com IA"
 app.post('/api/video/edicoes', rotaVideo(async (req, res) => {
-  res.json(await videoEditor.enviar(req.tenantId, req));
+  res.json(await videoEditor.criar(req.tenantId, req.body || {}));
 }));
 
 app.get('/api/video/edicoes', rotaVideo(async (req, res) => {
@@ -2128,8 +2129,29 @@ app.get('/api/video/edicoes/:id', rotaVideo(async (req, res) => {
   res.json(await videoEditor.obter(req.tenantId, req.params.id));
 }));
 
+app.get('/api/video/edicoes/:id/linha-do-tempo', rotaVideo(async (req, res) => {
+  res.json(await videoEditor.linhaDoTempo(req.tenantId, req.params.id));
+}));
+
+// upload de midia: corpo cru (o proprio arquivo), repassado em streaming - tipo/nome na query
+app.put('/api/video/edicoes/:id/midias', rotaVideo(async (req, res) => {
+  res.json(await videoEditor.enviarMidia(req.tenantId, req.params.id, req));
+}));
+
+app.delete('/api/video/edicoes/:id/midias/:mid', rotaVideo(async (req, res) => {
+  res.json(await videoEditor.acao(req.tenantId, req.params.id, `/midias/${encodeURIComponent(req.params.mid)}`, 'DELETE'));
+}));
+
+app.patch('/api/video/edicoes/:id/opcoes', rotaVideo(async (req, res) => {
+  res.json(await videoEditor.acao(req.tenantId, req.params.id, '/opcoes', 'PATCH', req.body || {}));
+}));
+
+app.post('/api/video/edicoes/:id/iniciar', rotaVideo(async (req, res) => {
+  res.json(await videoEditor.acao(req.tenantId, req.params.id, '/iniciar', 'POST', req.body || {}));
+}));
+
 app.post('/api/video/edicoes/:id/ajustar', rotaVideo(async (req, res) => {
-  res.json(await videoEditor.ajustar(req.tenantId, req.params.id, req.body?.pedido));
+  res.json(await videoEditor.acao(req.tenantId, req.params.id, '/ajustar', 'POST', { pedido: req.body?.pedido }));
 }));
 
 app.delete('/api/video/edicoes/:id', rotaVideo(async (req, res) => {
@@ -2138,12 +2160,23 @@ app.delete('/api/video/edicoes/:id', rotaVideo(async (req, res) => {
 }));
 
 // <video src>/<img src> nao mandam header - token vem na query (?senha=), conferido aqui
-app.get('/api/video/edicoes/:id/:tipo(video|capa)', rotaVideo(async (req, res) => {
+async function tenantDaMidia(req, res) {
   const tenantId = process.env.SESSION_SECRET ? tenants.verificarToken(req.query.senha) : req.tenantId;
-  if (!tenantId) return res.status(401).end();
+  if (!tenantId) { res.status(401).end(); return null; }
   const tenant = await tenants.obterPorId(tenantId);
-  if (!tenant?.super_admin && !(await videoEditor.estaLiberado(tenantId))) return res.status(403).end();
-  await videoEditor.transmitirArquivo(tenantId, req.params.id, req.params.tipo, req, res);
+  if (!tenant?.super_admin && !(await videoEditor.estaLiberado(tenantId))) { res.status(403).end(); return null; }
+  return tenantId;
+}
+
+app.get('/api/video/edicoes/:id/:tipo(video|capa|tira)', rotaVideo(async (req, res) => {
+  const tenantId = await tenantDaMidia(req, res);
+  if (tenantId) await videoEditor.transmitirArquivo(tenantId, req.params.id, req.params.tipo, req, res);
+}));
+
+app.get('/api/video/edicoes/:id/midias/:mid/:qual(miniatura|arquivo)', rotaVideo(async (req, res) => {
+  if (!/^[a-f0-9]{16}$/.test(req.params.mid)) return res.status(400).end();
+  const tenantId = await tenantDaMidia(req, res);
+  if (tenantId) await videoEditor.transmitirArquivo(tenantId, req.params.id, `midias/${req.params.mid}/${req.params.qual}`, req, res);
 }));
 
 iniciarSchedulerLembretes();
