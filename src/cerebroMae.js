@@ -79,6 +79,18 @@ async function sincronizarTenant(tenantId, entradas) {
     }
     if (!e.hub && ids.get(e.chave)) ultimoDoModulo.set(e.modulo, ids.get(e.chave));
   }
+  // o retrato conta as memorias do cerebro - regera no FIM, depois de tudo ja criado, senao
+  // o numero sai defasado na primeira sincronizacao
+  for (const e of entradas.filter((x) => x.dinamico)) {
+    const id = ids.get(e.chave);
+    if (!id) continue;
+    const conteudo = await gerarRetrato();
+    const { rows: [atual] } = await pool.query('SELECT conteudo FROM cerebro_memorias WHERE id = $1', [id]);
+    if (atual && atual.conteudo !== conteudo) {
+      await cerebro.atualizarMemoria(tenantId, id, { titulo: tituloDe(e), conteudo });
+      atualizadas += 1;
+    }
+  }
   return { criadas, atualizadas, total: entradas.length };
 }
 
