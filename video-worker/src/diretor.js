@@ -1,11 +1,13 @@
 // "diretor de edicao": o Claude le a transcricao (palavra por palavra, numerada), ve quadros do
-// video, as midias de apoio enviadas e o perfil de estilo da referencia (se houver), e decide o que
-// cortar, o que destacar e onde entra cada animacao/insercao. Ele NAO escreve codigo nem desenha
-// nada - so devolve um plano em JSON validado por schema, ancorado nos NUMEROS das palavras. O
-// visual vem da biblioteca de componentes (remotion/), entao o resultado mantem padrao
-// profissional e a IA nao consegue gerar algo que quebre a renderizacao.
+// video, as midias enviadas e o perfil de estilo da referencia (se houver), e devolve o plano de
+// edicao completo - cortes, textos (inclusive 3D e por tras da pessoa), imagens a gerar com IA,
+// elementos, fundos, tela dividida, efeitos e transicoes. Ele NAO escreve codigo: o plano e um JSON
+// validado por schema, ancorado nos NUMEROS das palavras, e o visual vem da biblioteca de
+// componentes (remotion/) - o resultado mantem padrao profissional e nao quebra o render.
+// O repertorio e as regras de oficio ficam em manualEdicao.js.
 import fs from 'node:fs/promises';
 import Anthropic from '@anthropic-ai/sdk';
+import { MANUAL } from './manualEdicao.js';
 
 const MODELO = 'claude-opus-5-5';
 const client = new Anthropic();
@@ -15,92 +17,109 @@ const intervalo = (extra = {}) => ({
   properties: { de: { type: 'integer' }, ate: { type: 'integer' }, ...extra },
   required: ['de', 'ate', ...Object.keys(extra)],
 });
+const enumStr = (valores) => ({ type: 'string', enum: valores });
+
+export const TIPOS_EFEITO = ['preto_branco', 'desfoque_fundo', 'glitch', 'tremor', 'cor_quente', 'cor_fria', 'alto_contraste', 'granulado', 'brilho_sonho', 'vinheta_forte'];
+export const TIPOS_TRANSICAO = ['flash', 'whip', 'zoom', 'glitch', 'luz', 'giro', 'desfoque', 'queimado'];
 
 const SCHEMA_PLANO = {
   type: 'object', additionalProperties: false,
   properties: {
     titulo: { type: 'string', description: 'nome curto do video (ate 6 palavras)' },
-    resumo: { type: 'string', description: 'o que voce fez na edicao, em 1-3 frases para o cliente ler' },
+    resumo: { type: 'string', description: 'as escolhas criativas principais, em 2-4 frases para o cliente ler' },
     remover: { type: 'array', items: intervalo({ motivo: { type: 'string' } }) },
     destaques: { type: 'array', items: { type: 'integer' } },
     zooms: {
       type: 'array',
+      items: { type: 'object', additionalProperties: false, properties: { palavra: { type: 'integer' }, tipo: enumStr(['soco', 'lento', 'dramatico']) }, required: ['palavra', 'tipo'] },
+    },
+    transicoes: {
+      type: 'array',
+      items: { type: 'object', additionalProperties: false, properties: { palavra: { type: 'integer' }, tipo: enumStr(TIPOS_TRANSICAO) }, required: ['palavra', 'tipo'] },
+    },
+    textos: { type: 'array', items: intervalo({ texto: { type: 'string' }, estilo: enumStr(['impacto', '3d', 'topo', 'etiqueta']) }) },
+    textos_atras: { type: 'array', items: intervalo({ texto: { type: 'string' }, movimento: enumStr(['deslizar', 'subir', 'zoom', 'giro3d']) }) },
+    numeros: { type: 'array', items: intervalo({ valor: { type: 'number' }, prefixo: { type: 'string' }, sufixo: { type: 'string' }, rotulo: { type: 'string' } }) },
+    listas: { type: 'array', items: intervalo({ titulo: { type: 'string' }, itens: { type: 'array', items: { type: 'string' } } }) },
+    gerar_imagens: {
+      type: 'array',
       items: {
         type: 'object', additionalProperties: false,
-        properties: { palavra: { type: 'integer' }, tipo: { type: 'string', enum: ['soco', 'lento'] } },
-        required: ['palavra', 'tipo'],
+        properties: { id: { type: 'string' }, prompt: { type: 'string' }, tipo: enumStr(['foto', 'render_3d', 'ilustracao', 'fundo']), recortar: { type: 'boolean' } },
+        required: ['id', 'prompt', 'tipo', 'recortar'],
       },
     },
-    textos: { type: 'array', items: intervalo({ texto: { type: 'string' }, estilo: { type: 'string', enum: ['impacto', 'topo', 'etiqueta'] } }) },
-    numeros: {
+    insercoes: { type: 'array', items: intervalo({ midia: { type: 'string' }, modo: enumStr(['tela_cheia', 'janela']) }) },
+    elementos: {
       type: 'array',
-      items: intervalo({ valor: { type: 'number' }, prefixo: { type: 'string' }, sufixo: { type: 'string' }, rotulo: { type: 'string' } }),
+      items: intervalo({ imagem: { type: 'string' }, camada: enumStr(['atras', 'frente']), posicao: enumStr(['esquerda', 'direita', 'centro', 'topo']), movimento: enumStr(['flutuar', 'girar', 'entrar']) }),
     },
-    listas: { type: 'array', items: intervalo({ titulo: { type: 'string' }, itens: { type: 'array', items: { type: 'string' } } }) },
-    insercoes: {
-      type: 'array',
-      description: 'imagens/videos de apoio enviados pelo cliente, mostrados enquanto a pessoa fala do assunto',
-      items: intervalo({ midia: { type: 'string' }, modo: { type: 'string', enum: ['tela_cheia', 'janela'] } }),
-    },
-    trilha: { type: 'string', description: 'id da midia de audio usada como trilha de fundo, ou string vazia para nenhuma' },
-    posicao_legenda: { type: 'string', enum: ['baixo', 'meio'] },
+    fundos: { type: 'array', items: intervalo({ tipo: enumStr(['imagem', 'gradiente', 'desfocado', 'escuro']), imagem: { type: 'string' } }) },
+    divisoes: { type: 'array', items: intervalo({ midia: { type: 'string' }, layout: enumStr(['cima_baixo', 'lado_a_lado', 'janela_pessoa']) }) },
+    efeitos: { type: 'array', items: intervalo({ tipo: enumStr(TIPOS_EFEITO) }) },
+    trilha: { type: 'string', description: 'id da midia de audio usada como trilha de fundo, ou string vazia' },
+    posicao_legenda: enumStr(['baixo', 'meio']),
     legendas: { type: 'boolean', description: 'false quando o video ja tem legenda propria gravada na imagem' },
-    altura_textos: { type: 'string', enum: ['alta', 'media'], description: 'onde ficam textos, numeros e listas: alta = topo da tela; media = logo abaixo do rosto' },
+    altura_textos: { type: 'string', enum: ['alta', 'media'], description: 'alta = topo da tela; media = logo abaixo do rosto' },
   },
-  required: ['titulo', 'resumo', 'remover', 'destaques', 'zooms', 'textos', 'numeros', 'listas', 'insercoes', 'trilha', 'posicao_legenda', 'legendas', 'altura_textos'],
+  required: ['titulo', 'resumo', 'remover', 'destaques', 'zooms', 'transicoes', 'textos', 'textos_atras', 'numeros', 'listas', 'gerar_imagens', 'insercoes', 'elementos', 'fundos', 'divisoes', 'efeitos', 'trilha', 'posicao_legenda', 'legendas', 'altura_textos'],
 };
 
-const SISTEMA = `Voce e um editor de video senior especializado em videos curtos verticais (Reels, TikTok, Shorts) em portugues do Brasil. Voce recebe a transcricao de um video bruto, palavra por palavra, cada uma com seu numero [n] e o segundo em que e falada, e devolve o plano de edicao.
-
-Como o plano funciona:
-- Tudo e ancorado nos numeros das palavras. "de" e "ate" sao numeros de palavras (inclusive).
-- remover: trechos a cortar. Corte vicios de fala ("é...", "hã", "tipo" sobrando), comecos falsos, frases repetidas e tomadas erradas (quando a pessoa repete a frase, mantenha a ULTIMA versao boa e remova as anteriores). Nunca corte conteudo que muda o sentido. Silencios entre palavras ja sao cortados automaticamente - nao precisa listar.
-- destaques: palavras-chave que aparecem coloridas na legenda. Uma ou duas por frase, as que carregam o sentido (numeros, beneficios, a palavra mais forte). Nunca artigos ou conectivos.
-- zooms: "soco" e um zoom rapido de enfase numa palavra forte; "lento" e uma aproximacao suave em momento emocional ou de revelacao. Um a cada 4-8 segundos, nunca dois em menos de 2 segundos.
-- textos: sobreposicoes de texto. "impacto" e texto GRANDE (ate 5 palavras) para o gancho e as ideias principais; "topo" e um titulo em caixa para marcar um assunto ou etapa; "etiqueta" e uma faixa lateral pequena (nome da pessoa, cargo, local, nome de produto).
-- numeros: contador animado grande quando a pessoa fala um numero importante (porcentagem, preco, quantidade, prazo). valor numerico puro, prefixo tipo "R$ " e sufixo tipo "%" ou " mil" ou " dias" (strings vazias se nao tiver). rotulo curto do que o numero significa.
-- listas: cartao com itens que aparecem um a um, quando a pessoa enumera coisas (passos, beneficios, dicas). Itens curtos (ate 5 palavras cada). O intervalo deve cobrir a fala da enumeracao inteira.
-- insercoes: se o cliente enviou midias de apoio (imagens/videos, listadas com id), mostre cada uma no trecho em que a fala combina com ela. "tela_cheia" cobre o video inteiro (bom pra mostrar resultado, produto, ambiente); "janela" mostra a midia num cartao na parte de cima com a pessoa ainda visivel. Entre 1,5 e 6 segundos cada (umas 4-15 palavras). Use cada midia no maximo uma vez e nunca duas insercoes ao mesmo tempo. Use o id exatamente como informado. Se nenhuma combinar com a fala, pode deixar de fora.
-- trilha: se houver midia de audio, use o id dela como trilha de fundo (o volume abaixa sozinho quando a pessoa fala). String vazia se nao houver ou nao combinar.
-
-Regras de qualidade:
-- O inicio decide tudo: coloque um texto "impacto" no gancho, comecando na palavra 0 (ou na primeira palavra que sobrar depois dos cortes), resumindo a promessa do video em poucas palavras fortes.
-- Ritmo: algo visual novo a cada 3-6 segundos (zoom, texto, numero, lista ou insercao), mas sem poluir. Textos, numeros e listas NUNCA se sobrepoem no tempo entre si - um de cada vez.
-- Cada texto/numero/lista precisa ficar na tela tempo suficiente pra ser lido (no minimo umas 4-5 palavras faladas).
-- Escreva os textos sobrepostos com ortografia e acentuacao corretas, sem emojis.
-- posicao_legenda: "baixo" no padrao; "meio" so se o pedido do cliente indicar.
-
-Use os quadros do video bruto que vem junto:
-- legendas: false se o video JA TEM legenda gravada na imagem (senao ficam duas legendas sobrepostas). Nesse caso compense com textos de impacto nas ideias principais.
-- altura_textos: os textos grandes, numeros e listas ficam no topo da tela ("alta"). Se o rosto da pessoa estiver alto no quadro (cabeca encostando no topo), use "media", que coloca esses elementos na altura do peito, abaixo do rosto. Nunca deixe texto sobre os olhos.
-- Veja tambem se ja existem textos, logos ou imagens gravados no video e evite colocar elementos por cima deles.
-
-Se vier um PERFIL DE ESTILO de um video referencia, imite o jeito de editar dele: ritmo, quantidade de elementos, tipo de texto, uso de zoom. As cores, fontes e transicoes da referencia ja sao aplicadas automaticamente - voce cuida do conteudo e do ritmo.
-
-O que este editor ainda NAO faz: texto ou objetos 3D atras da pessoa, recorte/troca de fundo, efeitos de profundidade com camadas. Se o cliente pedir algo disso, faca o melhor possivel com o que existe e diga com gentileza no "resumo" o que nao foi possivel nesta versao.
-
-- Siga as instrucoes do cliente quando houver - elas tem prioridade sobre o padrao.`;
+const SISTEMA = MANUAL;
 
 function formatarTranscricao(palavras) {
   return palavras.map((p, n) => `[${n}] ${p.t} (${p.i.toFixed(2)}s)`).join('\n');
 }
 
-function validarIndices(plano, total, idsMidia = new Set()) {
+const MAX_IMAGENS = 6;
+
+// descarta o que aponta pra palavra/midia inexistente - o plano que chega no render e sempre valido.
+// idsMidia = midias enviadas pelo cliente; idsGeradas = imagens ja geradas em rodadas anteriores
+function validarIndices(plano, total, idsMidia = new Set(), idsGeradas = new Set()) {
   const ok = (n) => Number.isInteger(n) && n >= 0 && n < total;
   const okIntervalo = (x) => ok(x.de) && ok(x.ate) && x.ate >= x.de;
+  const gerar = (plano.gerar_imagens || [])
+    .filter((g) => /^[a-zA-Z0-9_-]{1,20}$/.test(g.id) && g.prompt?.trim() && !idsMidia.has(g.id) && !idsGeradas.has(g.id))
+    .slice(0, MAX_IMAGENS);
+  const visuais = new Set([...idsMidia, ...idsGeradas, ...gerar.map((g) => g.id)]);
   return {
     ...plano,
     remover: (plano.remover || []).filter(okIntervalo),
     destaques: (plano.destaques || []).filter(ok),
     zooms: (plano.zooms || []).filter((z) => ok(z.palavra)),
+    transicoes: (plano.transicoes || []).filter((t) => ok(t.palavra)),
     textos: (plano.textos || []).filter((t) => okIntervalo(t) && t.texto.trim()),
+    textos_atras: (plano.textos_atras || []).filter((t) => okIntervalo(t) && t.texto.trim()),
     numeros: (plano.numeros || []).filter((x) => okIntervalo(x) && Number.isFinite(x.valor)),
     listas: (plano.listas || []).filter((l) => okIntervalo(l) && l.itens.length),
-    insercoes: (plano.insercoes || []).filter((x) => okIntervalo(x) && idsMidia.has(x.midia)),
+    gerar_imagens: gerar,
+    insercoes: (plano.insercoes || []).filter((x) => okIntervalo(x) && visuais.has(x.midia)),
+    elementos: (plano.elementos || []).filter((x) => okIntervalo(x) && visuais.has(x.imagem)),
+    fundos: (plano.fundos || []).filter((x) => okIntervalo(x) && (x.tipo !== 'imagem' || visuais.has(x.imagem))),
+    divisoes: (plano.divisoes || []).filter((x) => okIntervalo(x) && visuais.has(x.midia)),
+    efeitos: (plano.efeitos || []).filter(okIntervalo),
     trilha: idsMidia.has(plano.trilha) ? plano.trilha : '',
     legendas: plano.legendas !== false,
     altura_textos: plano.altura_textos === 'media' ? 'media' : 'alta',
   };
+}
+
+// tira do plano o que depende de uma imagem que nao foi gerada (falha no Gemini)
+export function semImagens(plano, faltando) {
+  if (!faltando.size) return plano;
+  return {
+    ...plano,
+    insercoes: plano.insercoes.filter((x) => !faltando.has(x.midia)),
+    elementos: plano.elementos.filter((x) => !faltando.has(x.imagem)),
+    fundos: plano.fundos.filter((x) => !faltando.has(x.imagem)),
+    divisoes: plano.divisoes.filter((x) => !faltando.has(x.midia)),
+  };
+}
+
+// o plano usa algo que exige a pessoa recortada?
+export function precisaRecorte(plano) {
+  return (plano.textos_atras || []).length > 0 || (plano.fundos || []).length > 0
+    || (plano.elementos || []).some((e) => e.camada === 'atras') || (plano.efeitos || []).some((e) => e.tipo === 'desfoque_fundo');
 }
 
 async function imagem(arquivo, legenda) {
@@ -118,7 +137,7 @@ async function blocosVisuais({ quadros = [], apoio = [] }) {
   for (const q of quadros) blocos.push(...(await imagem(q.arquivo, `Quadro do video bruto em ${q.segundo.toFixed(1)}s:`)));
   for (const m of apoio) {
     if (m.kind === 'audio') continue;
-    blocos.push(...(await imagem(m.miniatura, `Midia de apoio id "${m.id}" (${m.kind === 'video' ? `video de ${m.duracao?.toFixed(1)}s` : 'imagem'}, arquivo "${m.nome}"):`)));
+    blocos.push(...(await imagem(m.miniatura, m.tipo === 'gerada' ? `Imagem gerada por IA antes, id "${m.id}" (pode reutilizar):` : `Midia de apoio id "${m.id}" (${m.kind === 'video' ? `video de ${m.duracao?.toFixed(1)}s` : 'imagem'}, arquivo "${m.nome}"):`)));
   }
   return blocos;
 }
@@ -129,10 +148,10 @@ function contexto({ palavras, meta, opcoes, apoio = [], referencia }) {
     opcoes.instrucoes ? `Instrucoes do cliente: ${opcoes.instrucoes}` : 'O cliente nao deu instrucoes especificas.',
   ];
   if (apoio.length) {
-    linhas.push('', 'Midias de apoio enviadas pelo cliente:');
-    for (const m of apoio) linhas.push(`- id "${m.id}": ${m.kind}${m.duracao ? ` de ${m.duracao.toFixed(1)}s` : ''}, arquivo "${m.nome}"`);
+    linhas.push('', 'Midias disponiveis (enviadas pelo cliente ou ja geradas por IA):');
+    for (const m of apoio) linhas.push(`- id "${m.id}": ${m.tipo === 'gerada' ? `imagem gerada por IA (${m.nome})` : `${m.kind}${m.duracao ? ` de ${m.duracao.toFixed(1)}s` : ''}, arquivo "${m.nome}"`}`);
   } else {
-    linhas.push('', 'Nenhuma midia de apoio enviada (insercoes vazio, trilha "").');
+    linhas.push('', 'Nenhuma midia enviada pelo cliente - se precisar de imagem, gere com gerar_imagens. trilha "".');
   }
   if (referencia) {
     linhas.push('', 'PERFIL DE ESTILO do video referencia (imite o jeito de editar):', JSON.stringify(referencia));
@@ -149,7 +168,7 @@ async function chamar(conteudo, schema, esforco) {
     fallbacks: 'default',
     thinking: { type: 'adaptive' },
     output_config: { effort: esforco, format: { type: 'json_schema', schema } },
-    system: SISTEMA,
+    system: [{ type: 'text', text: SISTEMA, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: conteudo }],
   });
   const resposta = await stream.finalMessage();
@@ -158,12 +177,12 @@ async function chamar(conteudo, schema, esforco) {
   return JSON.parse(resposta.content.filter((b) => b.type === 'text').map((b) => b.text).join(''));
 }
 
-const PLANO_VAZIO = { titulo: 'Vídeo sem fala', resumo: 'Não encontrei fala no vídeo, então apliquei só o tratamento de imagem e áudio.', remover: [], destaques: [], zooms: [], textos: [], numeros: [], listas: [], insercoes: [], trilha: '', posicao_legenda: 'baixo', legendas: false, altura_textos: 'alta' };
+const PLANO_VAZIO = { titulo: 'Vídeo sem fala', resumo: 'Não encontrei fala no vídeo, então apliquei só o tratamento de imagem e áudio.', remover: [], destaques: [], zooms: [], transicoes: [], textos: [], textos_atras: [], numeros: [], listas: [], gerar_imagens: [], insercoes: [], elementos: [], fundos: [], divisoes: [], efeitos: [], trilha: '', posicao_legenda: 'baixo', legendas: false, altura_textos: 'alta' };
 
 export async function planejar({ palavras, meta, opcoes, quadros, apoio = [], referencia = null }) {
   const ids = new Set(apoio.map((m) => m.id));
   if (!palavras.length) {
-    const trilha = apoio.find((m) => m.kind === 'audio')?.id || '';
+    const trilha = apoio.find((m) => m.kind === 'audio' && m.tipo !== 'gerada')?.id || '';
     return { ...PLANO_VAZIO, trilha };
   }
   const conteudo = [...(await blocosVisuais({ quadros, apoio })), { type: 'text', text: contexto({ palavras, meta, opcoes, apoio, referencia }) }];
@@ -211,7 +230,7 @@ export async function revisarQuadros({ palavras, planoAtual, quadros, apoio = []
       `Transcricao (${palavras.length} palavras) para referencia dos numeros:`,
       formatarTranscricao(palavras),
       '',
-      'Revise como um editor exigente olhando so o que da pra ver na imagem: texto sobreposto cobrindo o rosto, texto saindo da tela ou cortado, erro de ortografia, excesso de elementos ao mesmo tempo, legenda ilegivel, duas legendas sobrepostas (o video ja tinha legenda gravada). Se estiver bom, aprovado=true e plano=null. Se tiver problema que se resolve mudando o plano (encurtar texto, trocar estilo "impacto" por "topo", mover ou remover um elemento, mudar posicao_legenda, legendas=false, altura_textos, trocar o modo de uma insercao), aprovado=false, liste os problemas e devolva o plano completo corrigido. Nao mude o que esta bom.',
+      'Revise como um editor exigente olhando so o que da pra ver na imagem: texto sobreposto cobrindo o rosto, texto saindo da tela ou cortado, erro de ortografia, excesso de elementos ao mesmo tempo, legenda ilegivel, duas legendas sobrepostas (o video ja tinha legenda gravada). Se estiver bom, aprovado=true e plano=null. Se tiver problema que se resolve mudando o plano (encurtar texto, trocar estilo "impacto" por "topo", mover ou remover um elemento, mudar posicao_legenda, legendas=false, altura_textos, trocar o modo de uma insercao, mover um elemento ou texto atras pra outra posicao, tirar um efeito que ficou feio), aprovado=false, liste os problemas e devolva o plano completo corrigido. Nao mude o que esta bom.',
     ].join('\n'),
   });
   const r = await chamar(conteudo, SCHEMA_REVISAO, 'medium').catch(() => ({ aprovado: true, problemas: [], plano: null }));

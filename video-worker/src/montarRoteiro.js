@@ -16,7 +16,7 @@ const RESPIRO_ANTES = 0.08;
 const RESPIRO_DEPOIS = 0.18;
 const DURACAO_MIN_SOBREPOSICAO = 1.3;
 
-export function montarRoteiro({ palavras, plano, meta, opcoes, videoSrc, midias = {}, referencia = null }) {
+export function montarRoteiro({ palavras, plano, meta, opcoes, videoSrc, midias = {}, referencia = null, pessoaSrc = null }) {
   const PAUSA_MAX = PAUSA_POR_RITMO[referencia?.ritmo] || PAUSA_POR_RITMO.medio;
   const { largura, altura } = FORMATOS[opcoes.formato] || FORMATOS['9:16'];
   const removidas = new Set();
@@ -130,14 +130,45 @@ export function montarRoteiro({ palavras, plano, meta, opcoes, videoSrc, midias 
     insercoes.push({ inicio, fim, src: m.src, kind: m.kind, modo: x.modo, midia: x.midia });
   }
 
-  // 7) transicoes nos cortes (estilo da referencia) - espacadas, pra nao cansar
+  // 7) transicoes: as escolhidas pelo diretor (numa palavra) + as do estilo da referencia nos
+  // cortes - espacadas, pra nao cansar
+  const candidatas = (plano.transicoes || []).map((t) => ({ frame: ancora(t.palavra, 'i'), tipo: t.tipo, escolhida: true }));
+  const MAPA_REF = { deslize: 'whip', zoom: 'zoom', flash: 'flash' };
+  const tipoRef = MAPA_REF[referencia?.transicao];
+  if (tipoRef) for (const s of segmentos.slice(1)) candidatas.push({ frame: s.outInicio, tipo: tipoRef });
   const transicoes = [];
-  const tipoTransicao = referencia?.transicao && referencia.transicao !== 'corte_seco' ? referencia.transicao : null;
-  if (tipoTransicao) {
-    for (const s of segmentos.slice(1)) {
-      if (transicoes.length && s.outInicio - transicoes[transicoes.length - 1].frame < FPS * 2.5) continue;
-      transicoes.push({ frame: s.outInicio, tipo: tipoTransicao });
-    }
+  for (const t of candidatas.sort((a, b) => a.frame - b.frame || (b.escolhida ? 1 : 0) - (a.escolhida ? 1 : 0))) {
+    if (t.frame <= 0 || t.frame >= duracaoFrames - 6) continue;
+    if (transicoes.length && t.frame - transicoes[transicoes.length - 1].frame < FPS * (t.escolhida ? 1 : 2.5)) continue;
+    transicoes.push({ frame: t.frame, tipo: t.tipo });
+  }
+
+  // 7b) camadas de profundidade e composicao (textos atras, elementos, fundos, tela dividida, efeitos)
+  const intervaloDe = (x, min = 1.2) => {
+    const inicio = Math.max(0, ancora(x.de, 'i') - 3);
+    const fim = Math.min(duracaoFrames, Math.max(ancora(x.ate, 'f') + 8, inicio + Math.round(min * FPS)));
+    return { inicio, fim };
+  };
+  const textosAtras = (plano.textos_atras || []).map((t) => ({ ...intervaloDe(t, 1.5), texto: t.texto, movimento: t.movimento }));
+  const elementos = (plano.elementos || [])
+    .filter((e) => midias[e.imagem] && midias[e.imagem].kind === 'imagem')
+    .map((e) => ({ ...intervaloDe(e, 1.5), src: midias[e.imagem].src, midia: e.imagem, camada: e.camada, posicao: e.posicao, movimento: e.movimento }));
+  const fundos = (plano.fundos || [])
+    .filter((f) => f.tipo !== 'imagem' || (midias[f.imagem] && midias[f.imagem].kind !== 'audio'))
+    .map((f) => ({ ...intervaloDe(f, 2), tipo: f.tipo, src: f.tipo === 'imagem' ? midias[f.imagem].src : null, kind: f.tipo === 'imagem' ? midias[f.imagem].kind : null, midia: f.imagem || '' }));
+  const divisoes = (plano.divisoes || [])
+    .filter((d) => midias[d.midia] && midias[d.midia].kind !== 'audio')
+    .map((d) => ({ ...intervaloDe(d, 2), src: midias[d.midia].src, kind: midias[d.midia].kind, layout: d.layout, midia: d.midia }));
+  const efeitos = (plano.efeitos || []).map((e) => ({ ...intervaloDe(e, 1), tipo: e.tipo }));
+
+  // trechos que precisam da pessoa recortada por cima (o render so decodifica o recorte neles)
+  const trechosPessoa = [
+    ...textosAtras, ...fundos, ...elementos.filter((e) => e.camada === 'atras'), ...efeitos.filter((e) => e.tipo === 'desfoque_fundo'),
+  ].map((x) => [x.inicio, x.fim]).sort((a, b) => a[0] - b[0]);
+  const pessoa = [];
+  for (const [a, b] of trechosPessoa) {
+    const u = pessoa[pessoa.length - 1];
+    if (u && a <= u[1] + 15) u[1] = Math.max(u[1], b); else pessoa.push([a, b]);
   }
 
   // 8) trilha: volume abaixa enquanto a pessoa fala (intervalos de fala ja no tempo final)
@@ -171,21 +202,38 @@ export function montarRoteiro({ palavras, plano, meta, opcoes, videoSrc, midias 
     textos: aceitas.filter((o) => o.tipo === 'texto').map((o) => ({ inicio: o.inicio, fim: o.fim, texto: o.texto, estilo: o.estilo })),
     numeros: aceitas.filter((o) => o.tipo === 'numero').map((o) => ({ inicio: o.inicio, fim: o.fim, valor: o.valor, prefixo: o.prefixo, sufixo: o.sufixo, rotulo: o.rotulo })),
     listas: aceitas.filter((o) => o.tipo === 'lista').map((o) => ({ inicio: o.inicio, fim: o.fim, titulo: o.titulo, itens: o.itens })),
-    sfx: [...sfx, ...insercoes.map((x) => ({ frame: Math.max(0, x.inicio - 2), tipo: 'whoosh' }))],
+    sfx: [
+      ...sfx,
+      ...insercoes.map((x) => ({ frame: Math.max(0, x.inicio - 2), tipo: 'whoosh' })),
+      ...divisoes.map((x) => ({ frame: Math.max(0, x.inicio - 2), tipo: 'whoosh' })),
+      ...textosAtras.map((x) => ({ frame: Math.max(0, x.inicio - 2), tipo: 'whoosh' })),
+      ...transicoes.filter((t) => ['whip', 'giro', 'glitch'].includes(t.tipo)).map((t) => ({ frame: Math.max(0, t.frame - 3), tipo: 'whoosh' })),
+    ].sort((a, b) => a.frame - b.frame).filter((s, i, arr) => i === 0 || s.frame - arr[i - 1].frame > 8),
     insercoes,
     transicoes,
     trilha,
+    textosAtras,
+    elementos,
+    fundos,
+    divisoes,
+    efeitos,
+    pessoaSrc: pessoa.length ? pessoaSrc : null,
+    trechosPessoa: pessoaSrc ? pessoa : [],
   };
 }
 
 // momentos que valem um quadro de previa pra revisao de qualidade: meio de cada sobreposicao +
 // alguns trechos so com legenda
-export function momentosRevisao(roteiro, max = 10) {
+export function momentosRevisao(roteiro, max = 12) {
   const momentos = [
     ...roteiro.textos.map((t) => ({ frame: Math.round(t.inicio + (t.fim - t.inicio) * 0.6), descricao: `texto ${t.estilo}: "${t.texto}"` })),
     ...roteiro.numeros.map((x) => ({ frame: Math.round(x.inicio + (x.fim - x.inicio) * 0.7), descricao: `numero ${x.prefixo}${x.valor}${x.sufixo}` })),
     ...roteiro.listas.map((l) => ({ frame: l.fim - 15, descricao: `lista "${l.titulo}"` })),
     ...(roteiro.insercoes || []).map((x) => ({ frame: Math.round((x.inicio + x.fim) / 2), descricao: `insercao ${x.modo} da midia ${x.midia}` })),
+    ...(roteiro.textosAtras || []).map((x) => ({ frame: Math.round(x.inicio + (x.fim - x.inicio) * 0.5), descricao: `texto atras da pessoa: "${x.texto}"` })),
+    ...(roteiro.elementos || []).map((x) => ({ frame: Math.round((x.inicio + x.fim) / 2), descricao: `elemento ${x.midia} ${x.camada} ${x.posicao}` })),
+    ...(roteiro.fundos || []).map((x) => ({ frame: Math.round((x.inicio + x.fim) / 2), descricao: `fundo ${x.tipo}` })),
+    ...(roteiro.divisoes || []).map((x) => ({ frame: Math.round((x.inicio + x.fim) / 2), descricao: `tela dividida ${x.layout}` })),
   ];
   for (const frac of [0.25, 0.5, 0.8]) momentos.push({ frame: Math.round(roteiro.duracaoFrames * frac), descricao: 'legenda' });
   return momentos

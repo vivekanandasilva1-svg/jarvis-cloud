@@ -2151,6 +2151,11 @@ app.post('/api/video/edicoes/:id/iniciar', rotaVideo(async (req, res) => {
   res.json(await videoEditor.acao(req.tenantId, req.params.id, '/iniciar', 'POST', req.body || {}));
 }));
 
+// edicao manual feita na linha do tempo (mover, esticar, apagar, reescrever) - re-render sem IA
+app.post('/api/video/edicoes/:id/edicao', rotaVideo(async (req, res) => {
+  res.json(await videoEditor.acao(req.tenantId, req.params.id, '/edicao', 'POST', req.body || {}));
+}));
+
 app.post('/api/video/edicoes/:id/ajustar', rotaVideo(async (req, res) => {
   res.json(await videoEditor.acao(req.tenantId, req.params.id, '/ajustar', 'POST', { pedido: req.body?.pedido }));
 }));

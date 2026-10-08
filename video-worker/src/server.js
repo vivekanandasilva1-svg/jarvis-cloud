@@ -19,7 +19,7 @@ const ehLoopback = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(re
 
 // o renderizador (Chrome headless rodando AQUI dentro) le o video padronizado e as midias de
 // apoio por essa rota - so aceita conexao da propria maquina e so esses arquivos
-app.get(/^\/interno\/midia\/([a-zA-Z0-9_-]{8,64})\/(base\.mp4|midias\/[a-f0-9]{16}\/pronto\.(?:mp4|jpg|m4a))$/, (req, res) => {
+app.get(/^\/interno\/midia\/([a-zA-Z0-9_-]{8,64})\/(base\.mp4|pessoa\.webm|midias\/[a-f0-9]{16}\/pronto\.(?:mp4|jpg|png|m4a))$/, (req, res) => {
   if (!ehLoopback(req)) return res.status(403).end();
   res.sendFile(path.join(fila.pasta(req.params[0]), req.params[1]));
 });
@@ -140,6 +140,18 @@ app.post('/jobs/:id/ajustar', express.json(), rota(async (req, res) => {
   if (!pedido) return res.status(400).json({ erro: 'descreva o ajuste' });
   try {
     await fila.pedirAjuste(job.id, pedido);
+  } catch (err) {
+    return res.status(409).json({ erro: err.message });
+  }
+  res.json(publico(await fila.obter(job.id)));
+}));
+
+// edicao manual feita na linha do tempo (re-render sem IA)
+app.post('/jobs/:id/edicao', express.json({ limit: '2mb' }), rota(async (req, res) => {
+  const job = await carregar(req, res);
+  if (!job) return;
+  try {
+    await fila.aplicarEdicaoManual(job.id, req.body || {});
   } catch (err) {
     return res.status(409).json({ erro: err.message });
   }

@@ -13,6 +13,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --omit=dev --no-audit --no-fund
 RUN node -e "import('@remotion/renderer').then(r => r.ensureBrowser())"
+# modelo de recorte da pessoa (Robust Video Matting, MobileNetV3) - conferido por hash
+RUN mkdir -p modelos && node -e "fetch('https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_mobilenetv3_fp32.onnx').then(r => r.arrayBuffer()).then(b => { const buf = Buffer.from(b); const h = require('crypto').createHash('sha256').update(buf).digest('hex'); if (h !== '88d4531297118f595bf2fd60f6f566aec2e559393802d1f436c380f0cbbd2828') throw new Error('hash do modelo nao confere: ' + h); require('fs').writeFileSync('modelos/rvm_mobilenetv3_fp32.onnx', buf); })"
 COPY . .
 RUN node src/bundle.js
 

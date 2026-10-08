@@ -8,79 +8,10 @@ import {
   useCurrentFrame, useVideoConfig,
 } from 'remotion';
 import { obterEstilo } from './estilos.js';
-
-// escala de layout: tudo foi desenhado pra 1080px no menor lado
-const useUnidade = () => {
-  const { width, height } = useVideoConfig();
-  return Math.min(width, height) / 1080;
-};
-
-const sombraTexto = (e, u, forte = false) => {
-  if (e.contorno) {
-    const s = Math.round((forte ? 7 : 5) * u);
-    return `0 0 ${s}px rgba(0,0,0,0.9), 0 ${s / 2}px ${s * 1.5}px rgba(0,0,0,0.75)`;
-  }
-  if (e.brilho) return `0 0 ${18 * u}px ${e.corDestaque}88, 0 ${4 * u}px ${18 * u}px rgba(0,0,0,0.6)`;
-  return `0 ${3 * u}px ${14 * u}px rgba(0,0,0,0.55)`;
-};
-
-// ---------- camada de video: cortes + "camera" (zoom de enfase, deriva lenta, jump-cut) ----------
-
-function fatorZoom(frame, zooms, fps, e) {
-  let fator = 1;
-  for (const z of zooms) {
-    const t = frame - z.frame;
-    if (t < 0 || t > fps * 3.2) continue;
-    if (z.tipo === 'soco') {
-      const entrada = spring({ frame: t, fps, config: { damping: 14, stiffness: 180 } });
-      const saida = interpolate(t, [fps * 1.4, fps * 1.9], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.cubic) });
-      fator = Math.max(fator, 1 + (e.zoomSoco - 1) * entrada * (1 - saida));
-    } else {
-      const ida = interpolate(t, [0, fps * 2.6], [0, 1], { extrapolateRight: 'clamp', easing: Easing.inOut(Easing.sin) });
-      const volta = interpolate(t, [fps * 2.6, fps * 3.2], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.cubic) });
-      fator = Math.max(fator, 1 + 0.1 * ida * (1 - volta));
-    }
-  }
-  return fator;
-}
-
-function CamadaVideo({ videoSrc, segmentos, zooms, estilo, transicoes = [] }) {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const seg = segmentos.find((s) => frame >= s.outInicio && frame < s.outInicio + s.duracao) || segmentos[segmentos.length - 1];
-  const progressoSeg = seg ? (frame - seg.outInicio) / Math.max(1, seg.duracao) : 0;
-  // jump-cut alterna enquadramento entre segmentos (esconde o "pulo" do corte) + deriva lenta
-  // dentro do segmento pra imagem nunca ficar parada
-  let escala = (seg?.escala || 1) * (1 + 0.025 * progressoSeg) * fatorZoom(frame, zooms, fps, estilo);
-  // transicoes no corte: "zoom" entra aproximado e assenta; "deslize" entra de lado com borrao
-  let deslocX = 0;
-  let borrao = 0;
-  for (const tr of transicoes) {
-    const t = frame - tr.frame;
-    if (t < 0 || t > 10) continue;
-    if (tr.tipo === 'zoom') escala *= interpolate(t, [0, 9], [1.16, 1], { extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
-    if (tr.tipo === 'deslize') {
-      deslocX = interpolate(t, [0, 7], [9, 0], { extrapolateRight: 'clamp', easing: Easing.out(Easing.cubic) });
-      borrao = interpolate(t, [0, 7], [10, 0], { extrapolateRight: 'clamp' });
-      escala *= 1 + deslocX * 0.02; // amplia junto pra borda preta nao aparecer
-    }
-  }
-  return (
-    <AbsoluteFill style={{ transform: `translateX(${deslocX}%) scale(${escala})`, transformOrigin: '50% 38%', filter: `${estilo.filtroVideo}${borrao ? ` blur(${borrao}px)` : ''}` }}>
-      {segmentos.map((s, i) => (
-        <Sequence key={i} from={s.outInicio} durationInFrames={s.duracao} layout="none">
-          <OffthreadVideo
-            src={videoSrc}
-            trimBefore={s.srcInicioFrame}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            // micro fade de audio nas bordas do corte - evita o "clique" de cortar no meio da onda
-            volume={(f) => interpolate(f, [0, 2, s.duracao - 2, s.duracao], [0, 1, 1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })}
-          />
-        </Sequence>
-      ))}
-    </AbsoluteFill>
-  );
-}
+import {
+  useUnidade, sombraTexto, CamadaVideo, Fundos, Elementos, Texto3D, TextosAtras, Divisoes, desfoqueBase, filtroEfeitos,
+  SobreposicaoEfeitos, cameraTransicao, SobreposicaoTransicoes,
+} from './camadas.jsx';
 
 function Acabamento({ estilo }) {
   const frame = useCurrentFrame();
@@ -326,18 +257,6 @@ function Insercao({ src, kind, modo, duracao, estilo }) {
   );
 }
 
-function Flash({ transicoes }) {
-  const frame = useCurrentFrame();
-  let opacidade = 0;
-  for (const tr of transicoes) {
-    if (tr.tipo !== 'flash') continue;
-    const t = frame - tr.frame;
-    if (t >= -1 && t <= 6) opacidade = Math.max(opacidade, interpolate(t, [-1, 0, 6], [0, 0.75, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }));
-  }
-  return opacidade > 0 ? <AbsoluteFill style={{ background: '#fff', opacity: opacidade }} /> : null;
-}
-
-// trilha de fundo com "ducking": abaixa enquanto a pessoa fala, sobe nas pausas
 function Trilha({ src, falas }) {
   const { fps, durationInFrames } = useVideoConfig();
   const volume = (f) => {
@@ -357,29 +276,67 @@ function Trilha({ src, falas }) {
 }
 
 // ---------- composicao ----------
+// ordem de profundidade (de tras pra frente):
+//   video base (desfocavel) > fundo novo > elementos/texto ATRAS > pessoa recortada > elementos da
+//   frente > tela dividida > insercoes > efeitos/transicoes > textos, numeros, listas > legenda
 
 export function Edicao(props) {
-  const { videoSrc, segmentos, palavras, zooms = [], textos = [], numeros = [], listas = [], sfx = [], insercoes = [], transicoes = [], trilha = null, estiloCustom = null, estilo: nomeEstilo, corDestaque, legendas = true, posicaoLegenda = 'baixo', alturaTextos = 'alta' } = props;
+  const {
+    videoSrc, segmentos, palavras, zooms = [], textos = [], numeros = [], listas = [], sfx = [], insercoes = [], transicoes = [],
+    trilha = null, estiloCustom = null, estilo: nomeEstilo, corDestaque, legendas = true, posicaoLegenda = 'baixo', alturaTextos = 'alta',
+    textosAtras = [], elementos = [], fundos = [], divisoes = [], efeitos = [], pessoaSrc = null, trechosPessoa = [],
+  } = props;
+  const frame = useCurrentFrame();
+  const { width } = useVideoConfig();
   const media = alturaTextos === 'media';
   const estilo = obterEstilo(nomeEstilo, corDestaque, estiloCustom);
+  const temPessoa = !!pessoaSrc && trechosPessoa.length > 0;
+
+  // sem recorte (falhou ou nao foi preciso): o que seria "atras" vai pra frente e fundo novo nao entra
+  const elementosAtras = temPessoa ? elementos.filter((e) => e.camada === 'atras') : [];
+  const elementosFrente = temPessoa ? elementos.filter((e) => e.camada !== 'atras') : elementos;
+  const fundosUsados = temPessoa ? fundos : [];
+  const efeitosUsados = temPessoa ? efeitos : efeitos.filter((e) => e.tipo !== 'desfoque_fundo');
+
+  const desfoque = desfoqueBase(frame, fundosUsados, efeitosUsados);
+  const fx = filtroEfeitos(frame, efeitosUsados);
+  const tr = cameraTransicao(frame, transicoes, width);
+  const filtroMundo = `${fx.filtro} ${tr.filtro}${tr.borrao ? ` blur(${tr.borrao}px)` : ''}`.trim();
+
   // a legenda some enquanto um texto grande ou lista ocupa a tela - evita poluicao visual
   const ocultarLegenda = [
-    ...textos.filter((t) => t.estilo === 'impacto').map((t) => [t.inicio, t.fim]),
+    ...textos.filter((t) => t.estilo === 'impacto' || t.estilo === '3d').map((t) => [t.inicio, t.fim]),
     ...listas.map((l) => [l.inicio, l.fim]),
   ];
+  const videoPessoaJanela = <CamadaVideo src={videoSrc} segmentos={segmentos} zooms={[]} estilo={estilo} mudo />;
+
   return (
     <AbsoluteFill style={{ backgroundColor: '#000' }}>
-      <CamadaVideo videoSrc={videoSrc} segmentos={segmentos} zooms={zooms} estilo={estilo} transicoes={transicoes} />
-      {insercoes.map((x, i) => (
-        <Sequence key={`m${i}`} from={x.inicio} durationInFrames={Math.max(1, x.fim - x.inicio)}>
-          <Insercao {...x} duracao={x.fim - x.inicio} estilo={estilo} />
-        </Sequence>
-      ))}
+      <AbsoluteFill style={{
+        transform: `translate(${tr.tx + fx.deslocX}px, ${fx.deslocY}px) scale(${tr.escala}) rotate(${tr.giro}deg)`,
+        filter: filtroMundo || undefined,
+      }}>
+        <CamadaVideo src={videoSrc} segmentos={segmentos} zooms={zooms} estilo={estilo} filtro={desfoque ? `blur(${desfoque}px) brightness(0.85)` : ''} />
+        <Fundos fundos={fundosUsados} estilo={estilo} />
+        <Elementos elementos={elementosAtras} />
+        {temPessoa && <TextosAtras textos={textosAtras} estilo={estilo} />}
+        {temPessoa && <CamadaVideo src={pessoaSrc} segmentos={segmentos} zooms={zooms} estilo={estilo} transparente mudo trechos={trechosPessoa} />}
+        <Elementos elementos={elementosFrente} />
+        <Divisoes divisoes={divisoes} estilo={estilo} videoPessoa={videoPessoaJanela} />
+        {insercoes.map((x, i) => (
+          <Sequence key={`m${i}`} from={x.inicio} durationInFrames={Math.max(1, x.fim - x.inicio)}>
+            <Insercao {...x} duracao={x.fim - x.inicio} estilo={estilo} />
+          </Sequence>
+        ))}
+      </AbsoluteFill>
       <Acabamento estilo={estilo} />
-      <Flash transicoes={transicoes} />
+      <SobreposicaoEfeitos efeitos={efeitosUsados} />
+      <SobreposicaoTransicoes transicoes={transicoes} />
+      {!temPessoa && <TextosAtras textos={textosAtras} estilo={estilo} />}
       {textos.map((t, i) => (
         <Sequence key={`t${i}`} from={t.inicio} durationInFrames={Math.max(1, t.fim - t.inicio)}>
           {t.estilo === 'impacto' && <TextoImpacto texto={t.texto} duracao={t.fim - t.inicio} estilo={estilo} media={media} />}
+          {t.estilo === '3d' && <Texto3D texto={t.texto} duracao={t.fim - t.inicio} estilo={estilo} media={media} />}
           {t.estilo === 'topo' && <TextoTopo texto={t.texto} duracao={t.fim - t.inicio} estilo={estilo} media={media} />}
           {t.estilo === 'etiqueta' && <Etiqueta texto={t.texto} duracao={t.fim - t.inicio} estilo={estilo} />}
         </Sequence>

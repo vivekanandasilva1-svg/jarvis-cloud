@@ -13,6 +13,9 @@ import { transcrever } from './transcricao.js';
 import * as diretor from './diretor.js';
 import { montarRoteiro, momentosRevisao, FORMATOS } from './montarRoteiro.js';
 import { renderizar, quadroPrevia } from './render.js';
+import { recortarPessoa } from './recorte.js';
+import { gerarImagem } from './imagens.js';
+import { aplicarEdicao, precisaPessoa, recalcularDerivados } from './edicaoManual.js';
 
 export const PASTA_DADOS = process.env.DATA_DIR || '/data';
 const PASTA_JOBS = path.join(PASTA_DADOS, 'jobs');
@@ -218,6 +221,10 @@ export async function linhaDoTempo(id) {
   return {
     ...resto,
     insercoes: (roteiro.insercoes || []).map(({ src: _s, ...x }) => x),
+    elementos: (roteiro.elementos || []).map(({ src: _s, ...x }) => x),
+    fundos: (roteiro.fundos || []).map(({ src: _s, ...x }) => x),
+    divisoes: (roteiro.divisoes || []).map(({ src: _s, ...x }) => x),
+    pessoaSrc: undefined,
     trilha: roteiro.trilha ? { midia: roteiro.trilha.midia } : null,
     ondas, temTira: await existe(arq(id, 'tira.jpg')),
   };
@@ -239,6 +246,52 @@ async function quadrosDe(arquivo, duracao, prefixo, fracoes) {
   return quadros;
 }
 
+// gera as imagens que o diretor pediu (gerar_imagens) e troca os apelidos do plano ("g1") pelo id
+// da midia gravada. Imagem que falhar some do plano (o resto da edicao continua).
+async function gerarImagensDoPlano(job, plano, opcoes, midiasRender) {
+  const pedidos = plano.gerar_imagens || [];
+  if (!pedidos.length) return plano;
+  const { id } = job;
+  await atualizar(id, { etapa: 'gerando_imagens', progresso: 0.22 });
+  const mapa = new Map();
+  const faltando = new Set();
+  // 2 por vez: rapido sem estourar a cota do Gemini
+  for (let i = 0; i < pedidos.length; i += 2) {
+    await Promise.all(pedidos.slice(i, i + 2).map(async (g) => {
+      const mid = crypto.randomBytes(8).toString('hex');
+      const dir = pastaMidia(id, mid);
+      try {
+        await fs.mkdir(dir, { recursive: true });
+        await gerarImagem({ ...g, formato: opcoes.formato }, path.join(dir, 'pronto.png'), path.join(dir, 'miniatura.jpg'));
+        await fs.copyFile(path.join(dir, 'pronto.png'), path.join(dir, 'original'));
+        const registro = {
+          id: mid, tipo: 'gerada', kind: 'imagem', nome: `${g.tipo.replace('_', ' ')}: ${g.prompt.slice(0, 80)}`, prompt: g.prompt,
+          recortada: !!g.recortar, tamanho: (await fs.stat(path.join(dir, 'pronto.png'))).size, criadoEm: new Date().toISOString(),
+        };
+        await atualizar(id, (j) => ({ midias: [...(j.midias || []), registro] }));
+        job.midias = [...(job.midias || []), registro];
+        midiasRender[mid] = { kind: 'imagem', src: urlInterna(id, `midias/${mid}/pronto.png`) };
+        mapa.set(g.id, mid);
+      } catch (err) {
+        console.error(`[${id}] imagem ${g.id} falhou:`, err.message);
+        await fs.rm(dir, { recursive: true, force: true });
+        faltando.add(g.id);
+      }
+    }));
+  }
+  const troca = (v) => mapa.get(v) || v;
+  const novo = diretor.semImagens({
+    ...plano,
+    gerar_imagens: [],
+    insercoes: plano.insercoes.map((x) => ({ ...x, midia: troca(x.midia) })),
+    elementos: plano.elementos.map((x) => ({ ...x, imagem: troca(x.imagem) })),
+    fundos: plano.fundos.map((x) => ({ ...x, imagem: troca(x.imagem) })),
+    divisoes: plano.divisoes.map((x) => ({ ...x, midia: troca(x.midia) })),
+  }, faltando);
+  if (faltando.size) novo.resumo = `${novo.resumo} (${faltando.size} imagem(ns) não puderam ser geradas e ficaram de fora.)`;
+  return novo;
+}
+
 async function limparTemporarios(id) {
   for (const f of await fs.readdir(pasta(id))) {
     if (/^(contexto|previa|referencia)-\d+\.jpg$/.test(f)) await fs.rm(arq(id, f), { force: true });
@@ -248,6 +301,7 @@ async function limparTemporarios(id) {
 async function executar(job) {
   const { id, opcoes } = job;
   const pend = job.pendente || { tipo: 'completo' };
+  if (pend.tipo === 'manual') return executarManual(job);
   const midiasJob = job.midias || [];
   const principal = midiasJob.find((m) => m.tipo === 'principal');
   const arquivoPrincipal = principal ? arquivoMidia(id, principal.id) : arq(id, 'original'); // projetos antigos
@@ -262,6 +316,7 @@ async function executar(job) {
   if (pend.tipo === 'completo') {
     await atualizar(id, { status: 'processando', etapa: 'preparando', progresso: 0.02, referencia: null, problemasCorrigidos: [] });
     referencia = null;
+    await fs.rm(arq(id, 'pessoa.webm'), { force: true }); // base nova = recorte novo
     const info = await midia.analisar(arquivoPrincipal);
     if (info.duracao > DURACAO_MAX + 1) throw new Error(`o video tem ${Math.round(info.duracao)}s - o limite e ${Math.round(DURACAO_MAX / 60)} minutos`);
     const { largura, altura } = FORMATOS[opcoes.formato];
@@ -302,19 +357,47 @@ async function executar(job) {
       midiasRender[m.id] = { kind: m.kind, duracao: m.duracao, src: urlInterna(id, `midias/${m.id}/pronto.${ext}`) };
     }
   }
-  const apoioDiretor = apoio.map((m) => ({ ...m, miniatura: arquivoMidia(id, m.id, 'miniatura') }));
+  // imagens geradas por IA em rodadas anteriores continuam disponiveis (o diretor pode reutilizar)
+  for (const m of midiasJob.filter((x) => x.tipo === 'gerada')) {
+    midiasRender[m.id] = { kind: 'imagem', src: urlInterna(id, `midias/${m.id}/pronto.png`) };
+  }
+  const apoioDiretor = () => (job.midias || []).filter((m) => m.tipo === 'apoio' || m.tipo === 'gerada')
+    .map((m) => ({ ...m, miniatura: arquivoMidia(id, m.id, 'miniatura') }));
   const videoSrc = urlInterna(id, 'base.mp4');
 
   await atualizar(id, { etapa: 'dirigindo', progresso: 0.2 });
   const quadros = await quadrosDe(arq(id, 'base.mp4'), meta.duracao, arq(id, 'contexto'), [0.1, 0.35, 0.6, 0.85]);
   if (pend.tipo === 'completo') {
-    plano = await diretor.planejar({ palavras, meta, opcoes, quadros, apoio: apoioDiretor, referencia });
+    plano = await diretor.planejar({ palavras, meta, opcoes, quadros, apoio: apoioDiretor(), referencia });
   } else {
     const planoAtual = await lerJson(arq(id, 'plano.json'));
-    plano = await diretor.ajustar({ palavras, meta, opcoes, planoAtual, pedido: pend.pedido, quadros, apoio: apoioDiretor, referencia });
+    plano = await diretor.ajustar({ palavras, meta, opcoes, planoAtual, pedido: pend.pedido, quadros, apoio: apoioDiretor(), referencia });
   }
 
-  const montar = () => montarRoteiro({ palavras, plano, meta, opcoes, videoSrc, midias: midiasRender, referencia });
+  // transforma o plano em coisa concreta: gera as imagens pedidas e recorta a pessoa se precisar
+  let pessoaSrc = null;
+  const materializar = async () => {
+    plano = await gerarImagensDoPlano(job, plano, opcoes, midiasRender);
+    if (diretor.precisaRecorte(plano)) {
+      try {
+        if (!(await existe(arq(id, 'pessoa.webm')))) {
+          await atualizar(id, { etapa: 'recortando', progresso: 0.24 });
+          const { largura, altura } = FORMATOS[opcoes.formato];
+          await recortarPessoa(arq(id, 'base.mp4'), pasta(id), { largura, altura, duracao: meta.duracao }, (p) => {
+            atualizar(id, { progresso: 0.24 + 0.05 * p }).catch(() => {});
+          });
+          await fs.rm(arq(id, 'mascara.mp4'), { force: true });
+        }
+        pessoaSrc = urlInterna(id, 'pessoa.webm');
+      } catch (err) {
+        // sem recorte o render ainda funciona: o que era "atras" vai pra frente e o fundo nao troca
+        console.error(`[${id}] recorte falhou, seguindo sem ele:`, err.message);
+      }
+    }
+  };
+  await materializar();
+
+  const montar = () => montarRoteiro({ palavras, plano, meta, opcoes, videoSrc, midias: midiasRender, referencia, pessoaSrc });
   let roteiro = montar();
   let problemas = [];
 
@@ -328,10 +411,11 @@ async function executar(job) {
         await quadroPrevia(roteiro, m.frame, saida);
         previas.push({ arquivo: saida, segundo: m.frame / roteiro.fps, descricao: m.descricao });
       }
-      const revisao = await diretor.revisarQuadros({ palavras, planoAtual: plano, quadros: previas, apoio: apoioDiretor });
+      const revisao = await diretor.revisarQuadros({ palavras, planoAtual: plano, quadros: previas, apoio: apoioDiretor() });
       if (!revisao.aprovado && revisao.plano) {
         problemas = revisao.problemas;
         plano = revisao.plano;
+        await materializar();
         roteiro = montar();
       }
     } catch (err) {
@@ -344,6 +428,67 @@ async function executar(job) {
   await gravarJson(arq(id, 'plano.json'), plano);
   await gravarJson(arq(id, 'roteiro.json'), roteiro);
 
+  const ajustes = pend.tipo === 'ajuste' ? [...(job.ajustes || []), { pedido: pend.pedido, em: new Date().toISOString(), resumo: plano.resumo }] : job.ajustes || [];
+  await renderizarEFinalizar(job, roteiro, { titulo: plano.titulo, resumo: plano.resumo, problemasCorrigidos: problemas, ajustes, edicoesManuais: 0 });
+}
+
+// midias prontas pro render (apoio enviadas + imagens geradas), preparando o que faltar
+async function mapaMidias(job) {
+  const mapa = {};
+  for (const m of job.midias || []) {
+    if (m.tipo === 'gerada') {
+      mapa[m.id] = { kind: 'imagem', src: urlInterna(job.id, `midias/${m.id}/pronto.png`) };
+    } else if (m.tipo === 'apoio') {
+      const ext = m.kind === 'imagem' ? 'jpg' : m.kind === 'audio' ? 'm4a' : 'mp4';
+      const pronto = path.join(pastaMidia(job.id, m.id), `pronto.${ext}`);
+      if (!(await existe(pronto))) await midia.prepararMidia(arquivoMidia(job.id, m.id), m.kind, pronto);
+      mapa[m.id] = { kind: m.kind, duracao: m.duracao, src: urlInterna(job.id, `midias/${m.id}/pronto.${ext}`) };
+    }
+  }
+  return mapa;
+}
+
+export async function aplicarEdicaoManual(id, edicao) {
+  const job = await obter(id);
+  if (!job) throw new Error('edicao nao encontrada');
+  if (!['pronto', 'erro'].includes(job.status)) throw new Error('espere a edicao atual terminar');
+  if (!(await existe(arq(id, 'roteiro.json')))) throw new Error('essa edicao ainda nao tem linha do tempo');
+  await gravarJson(arq(id, 'edicao-manual.json'), edicao || {});
+  await atualizar(id, { status: 'na_fila', etapa: 'na_fila', progresso: 0, erro: null, pendente: { tipo: 'manual' } });
+  enfileirar(id);
+}
+
+// re-render com as mudancas feitas a mao na linha do tempo - sem IA, so o motor de render
+async function executarManual(job) {
+  const { id } = job;
+  await atualizar(id, { status: 'processando', etapa: 'aplicando_edicao', progresso: 0.05 });
+  const midias = await mapaMidias(job);
+  let roteiro = aplicarEdicao(await lerJson(arq(id, 'roteiro.json')), await lerJson(arq(id, 'edicao-manual.json')), midias);
+  let pessoaSrc = null;
+  if (precisaPessoa(roteiro)) {
+    try {
+      if (!(await existe(arq(id, 'pessoa.webm')))) {
+        await atualizar(id, { etapa: 'recortando', progresso: 0.1 });
+        const { largura, altura } = FORMATOS[job.opcoes.formato] || FORMATOS['9:16'];
+        await recortarPessoa(arq(id, 'base.mp4'), pasta(id), { largura, altura, duracao: job.meta.duracao }, (p) => {
+          atualizar(id, { progresso: 0.1 + 0.2 * p }).catch(() => {});
+        });
+        await fs.rm(arq(id, 'mascara.mp4'), { force: true });
+      }
+      pessoaSrc = urlInterna(id, 'pessoa.webm');
+    } catch (err) {
+      console.error(`[${id}] recorte falhou na edicao manual:`, err.message);
+    }
+  }
+  roteiro = recalcularDerivados(roteiro, pessoaSrc);
+  await gravarJson(arq(id, 'roteiro.json'), roteiro);
+  await fs.rm(arq(id, 'edicao-manual.json'), { force: true });
+  await renderizarEFinalizar(job, roteiro, { edicoesManuais: (job.edicoesManuais || 0) + 1 });
+}
+
+// render + capa + dados da linha do tempo + estado final (comum a edicao pela IA e a manual)
+async function renderizarEFinalizar(job, roteiro, extras) {
+  const { id } = job;
   await atualizar(id, { etapa: 'renderizando', progresso: 0.35 });
   let ultimo = 0;
   await renderizar(roteiro, arq(id, 'final.tmp.mp4'), (p) => {
@@ -360,18 +505,21 @@ async function executar(job) {
   await midia.tiraMiniaturas(arq(id, 'final.mp4'), duracaoFinal, arq(id, 'tira.jpg')).catch(() => {});
   await gravarJson(arq(id, 'ondas.json'), await midia.picosAudio(arq(id, 'final.mp4')).catch(() => []));
 
-  const ajustes = pend.tipo === 'ajuste' ? [...(job.ajustes || []), { pedido: pend.pedido, em: new Date().toISOString(), resumo: plano.resumo }] : job.ajustes || [];
-  await atualizar(id, {
+  await atualizar(id, (j) => ({
     status: 'pronto', etapa: 'pronto', progresso: 1, pendente: null, erro: null,
-    titulo: plano.titulo, resumo: plano.resumo, problemasCorrigidos: problemas, ajustes,
+    ...extras,
     duracaoFinal,
     contagem: {
       cortes: roteiro.segmentos.length - 1, textos: roteiro.textos.length, numeros: roteiro.numeros.length,
       listas: roteiro.listas.length, zooms: roteiro.zooms.length, insercoes: (roteiro.insercoes || []).length,
       transicoes: (roteiro.transicoes || []).length, trilha: !!roteiro.trilha, legendas: !!roteiro.legendas,
       alturaTextos: roteiro.alturaTextos,
+      textosAtras: (roteiro.textosAtras || []).length, elementos: (roteiro.elementos || []).length,
+      fundos: (roteiro.fundos || []).length, divisoes: (roteiro.divisoes || []).length, efeitos: (roteiro.efeitos || []).length,
+      recorte: !!roteiro.pessoaSrc,
+      imagensGeradas: (j.midias || []).filter((m) => m.tipo === 'gerada').length,
     },
-  });
+  }));
 }
 
 // ---------- inicializacao e limpeza ----------

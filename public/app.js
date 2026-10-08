@@ -1909,7 +1909,7 @@ function abrirVideo() {
   if (!videoCarregando) {
     videoCarregando = new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = '/video.js?v=2';
+      s.src = '/video.js?v=3';
       s.onload = resolve;
       s.onerror = () => { videoCarregando = null; reject(new Error('falha ao carregar o Editor de Vídeo')); };
       document.head.appendChild(s);
