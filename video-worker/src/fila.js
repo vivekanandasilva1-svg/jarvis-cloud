@@ -35,7 +35,19 @@ export async function obter(id) {
   try { return await lerJson(arq(id, 'job.json')); } catch { return null; }
 }
 
+// quando o container recebe ordem de desligar (deploy novo), para de gravar progresso: o container
+// novo ja assumiu a edicao e uma gravacao atrasada daqui sobrescreveria o estado dele
+let encerrando = false;
+let emExecucao = null;
+
+export async function encerrar() {
+  if (encerrando) return;
+  if (emExecucao) await atualizar(emExecucao, { status: 'na_fila', etapa: 'na_fila', progresso: 0 }).catch(() => {});
+  encerrando = true;
+}
+
 async function atualizar(id, mudancas) {
+  if (encerrando) return null;
   const job = (await obter(id)) || { id };
   Object.assign(job, mudancas, { atualizadoEm: new Date().toISOString() });
   await gravarJson(arq(id, 'job.json'), job);
@@ -59,11 +71,14 @@ async function processarFila() {
       const id = fila.shift();
       const job = await obter(id);
       if (!job || FINAIS.has(job.status)) continue;
+      emExecucao = id;
       try {
         await executar(job);
       } catch (err) {
         console.error(`[${id}] erro:`, err);
         await atualizar(id, { status: 'erro', etapa: 'erro', erro: String(err.message || err).slice(0, 500), pendente: null });
+      } finally {
+        emExecucao = null;
       }
     }
   } finally {

@@ -112,5 +112,13 @@ app.delete('/jobs/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// deploy novo: devolve a edicao em andamento pra fila (o container novo retoma) e sai
+for (const sinal of ['SIGTERM', 'SIGINT']) {
+  process.on(sinal, async () => {
+    await fila.encerrar();
+    process.exit(0);
+  });
+}
+
 await fila.iniciar();
 app.listen(PORT, () => console.log(`servico de video ouvindo na porta ${PORT}`));
