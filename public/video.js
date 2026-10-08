@@ -470,7 +470,7 @@
     if (geradas.length) {
       const cg = document.createElement('div');
       cg.className = 've-card';
-      cg.innerHTML = `<div class="ve-rot">Criadas pela IA <span style="text-transform:none;letter-spacing:0;font-weight:600">${geradas.length}</span></div><div class="ve-grade" data-a="geradas"></div>`;
+      cg.innerHTML = `<div class="ve-rot">Desenhadas pelo Claude <span style="text-transform:none;letter-spacing:0;font-weight:600">${geradas.length}</span></div><div class="ve-grade" data-a="geradas"></div>`;
       const g = cg.querySelector('[data-a=geradas]');
       for (const m of geradas) {
         const d = document.createElement('div');
@@ -729,8 +729,8 @@
         pronto ? `${c.insercoes || 0} inserções${c.trilha ? ' · trilha com volume automático' : ''}` : `${apoio.length} mídia(s) pra encaixar na fala`]);
     }
     const geradas = atual.midias.filter((m) => m.tipo === 'gerada').length;
-    itens.push(['Imagens e 3D criados pela IA', estado('gerando_imagens', 'gerando_imagens'),
-      pronto ? (c.imagensGeradas || geradas ? `${c.imagensGeradas || geradas} imagem(ns) criadas · ${c.elementos || 0} elementos` : 'não precisou criar imagens') : 'cria fotos, objetos 3D e fundos ligados à fala']);
+    itens.push(['Imagens e 3D desenhados pelo Claude', estado('gerando_imagens', 'gerando_imagens'),
+      pronto ? (c.imagensGeradas || geradas ? `${c.imagensGeradas || geradas} imagem(ns) criadas · ${c.elementos || 0} elementos` : 'não precisou criar imagens') : 'desenha objetos 3D, ícones, ilustrações e fundos ligados à fala']);
     itens.push(['Profundidade e camadas', estado('recortando', 'recortando'),
       pronto ? `${c.recorte ? 'pessoa recortada · ' : ''}${c.textosAtras || 0} textos atrás · ${c.fundos || 0} fundos · ${c.divisoes || 0} telas divididas · ${c.efeitos || 0} efeitos` : 'texto atrás da pessoa, fundo novo, tela dividida, efeitos']);
     itens.push(['Revisão de qualidade', estado('revisando', 'revisando'), pronto ? ((atual.problemasCorrigidos || []).length ? `${atual.problemasCorrigidos.length} correção(ões) antes de renderizar` : 'aprovada sem correções') : 'IA olha quadros de prévia e corrige antes do render']);

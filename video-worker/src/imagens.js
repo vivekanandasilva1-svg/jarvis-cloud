@@ -1,72 +1,75 @@
-// imagens geradas por IA (Gemini) pra compor a edicao: fotos e ilustracoes de apoio, renders 3D de
-// objetos (com fundo removido, pra flutuar na cena atras/na frente da pessoa) e fundos inteiros
-// criados do zero. O diretor (Claude) escreve o pedido de cada imagem a partir do que a pessoa fala.
+// imagens criadas PELO PROPRIO CLAUDE pra compor a edicao: ele desenha cada uma como arte vetorial
+// (SVG) - ilustracoes, objetos com volume/luz de render 3D, icones e fundos inteiros - a partir do
+// que a pessoa fala. O SVG e convertido em PNG aqui no servidor (rsvg-convert), com fundo
+// transparente quando e um objeto que vai flutuar na cena.
 import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import Anthropic from '@anthropic-ai/sdk';
 
-const MODELOS = ['gemini-3-pro-image', 'gemini-3.1-flash-image', 'gemini-2.5-flash-image'];
-const API = 'https://generativelanguage.googleapis.com/v1beta/models';
+const MODELO = 'claude-opus-5-5';
+const client = new Anthropic();
 
-const PROPORCAO = { '9:16': '9:16', '4:5': '4:5', '1:1': '1:1', '16:9': '16:9' };
+const TAMANHOS = { '9:16': [1080, 1920], '4:5': [1080, 1350], '1:1': [1080, 1080], '16:9': [1920, 1080] };
 
-// objetos "recortaveis" sao gerados num fundo verde chapado e o verde e removido depois
-const SUFIXO = {
-  foto: 'Photorealistic, professional photography, sharp focus, natural light, high detail. No text, no watermark.',
-  render_3d: 'High-end 3D render, single isolated object, soft studio lighting, subtle reflections, octane/cinema4d look, centered with margin around it. No text, no watermark.',
-  ilustracao: 'Clean modern illustration, vibrant but tasteful colors, high detail. No text, no watermark.',
-  fundo: 'Background plate for a video, no people, depth of field, cinematic lighting, uncluttered center area. No text, no watermark.',
+const ESTILO = {
+  objeto_3d: 'um OBJETO unico com aparencia de render 3D: volume com gradientes radiais e lineares, luz de estudio vindo de cima/esquerda, brilho especular, sombras internas e reflexo sutil, perspectiva leve (3/4). Fundo TOTALMENTE transparente (nada desenhado atras do objeto, sem retangulo de fundo). Objeto centralizado ocupando ~80% da area.',
+  icone: 'um ICONE moderno e limpo, com profundidade (gradiente + sombra suave), estilo app premium. Fundo TOTALMENTE transparente. Centralizado ocupando ~75% da area.',
+  ilustracao: 'uma ILUSTRACAO editorial moderna e detalhada (cena completa, varios elementos, profundidade com planos de frente/meio/fundo, luz e sombra), cores harmonicas e sofisticadas, preenchendo toda a area.',
+  fundo: 'um FUNDO de video (cenario) preenchendo toda a area: profundidade com camadas, luz ambiente, elementos desfocados ou suaves nas bordas e o CENTRO mais limpo (uma pessoa recortada vai ficar na frente). Nada de texto.',
 };
-const FUNDO_VERDE = ' The object is on a perfectly flat, uniform pure chroma-key green background (#00FF00), no shadows on the background, no green on the object.';
 
-function rodarFfmpeg(args) {
+const SISTEMA = `Voce e um ilustrador e motion designer senior que desenha em SVG. Responda SOMENTE com o codigo SVG completo (comecando em <svg e terminando em </svg>), sem explicacao, sem markdown.
+Regras do SVG:
+- xmlns="http://www.w3.org/2000/svg", com width, height e viewBox exatamente como pedido.
+- Use gradientes (<linearGradient>, <radialGradient>), filtros (<feGaussianBlur>, <feDropShadow>), opacidades e formas bem construidas pra dar acabamento profissional: nada de desenho infantil ou chapado demais.
+- PROIBIDO: <script>, <foreignObject>, <image>, links externos, fontes externas, animacoes. Nenhum texto/letra na imagem.
+- Codigo enxuto mas rico em detalhe (ate ~400 elementos).`;
+
+function rodar(cmd, args) {
   return new Promise((resolve, reject) => {
-    const p = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    const p = spawn(cmd, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let err = '';
     p.stderr.on('data', (d) => { err += d; });
     p.on('error', reject);
-    p.on('close', (c) => (c === 0 ? resolve() : reject(new Error(err.slice(-300)))));
+    p.on('close', (c) => (c === 0 ? resolve() : reject(new Error(err.slice(-300) || `${cmd} saiu com ${c}`))));
   });
 }
 
-async function chamarGemini(modelo, texto, proporcao) {
-  const res = await fetch(`${API}/${modelo}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: texto }] }],
-      generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: proporcao } },
-    }),
-    signal: AbortSignal.timeout(120000),
-  });
-  if (!res.ok) throw new Error(`Gemini ${modelo} ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
-  const data = await res.json();
-  const parte = (data.candidates?.[0]?.content?.parts || []).find((p) => p.inlineData?.data);
-  if (!parte) throw new Error(`Gemini ${modelo} nao devolveu imagem`);
-  return Buffer.from(parte.inlineData.data, 'base64');
+// tira qualquer coisa que pudesse buscar arquivo/rede ao rasterizar - so desenho puro passa
+function limparSvg(svg) {
+  const inicio = svg.indexOf('<svg');
+  const fim = svg.lastIndexOf('</svg>');
+  if (inicio < 0 || fim < 0) throw new Error('o Claude nao devolveu um SVG valido');
+  return svg.slice(inicio, fim + 6)
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, '')
+    .replace(/<image\b[^>]*>/gi, '')
+    .replace(/<(style)[^>]*>[\s\S]*?@import[\s\S]*?<\/style>/gi, '')
+    .replace(/\s(?:xlink:)?href\s*=\s*(["'])(?!#)[^"']*\1/gi, '')
+    .replace(/url\(\s*(["']?)(?!#)[^)]*\)/gi, 'none');
 }
 
-// gera e grava: "arquivo.png" (com transparencia se recortar) + miniatura
-export async function gerarImagem({ prompt, tipo, recortar, formato }, saidaPng, miniatura) {
-  if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY nao configurada no servico de video');
-  const recorta = recortar && tipo !== 'fundo';
-  const proporcao = tipo === 'fundo' ? (PROPORCAO[formato] || '9:16') : recorta ? '1:1' : (PROPORCAO[formato] || '9:16');
-  const texto = `${prompt.trim()}\n\n${SUFIXO[tipo] || SUFIXO.foto}${recorta ? FUNDO_VERDE : ''}`;
-  let buf = null;
-  let ultimoErro;
-  for (const modelo of MODELOS) {
-    try { buf = await chamarGemini(modelo, texto, proporcao); break; } catch (err) { ultimoErro = err; }
-  }
-  if (!buf) throw ultimoErro;
-  const bruto = `${saidaPng}.bruto`;
-  await fs.writeFile(bruto, buf);
-  if (recorta) {
-    // remove o verde + tira o "vazamento" verde das bordas
-    await rodarFfmpeg(['-y', '-i', bruto, '-vf', 'colorkey=0x00FF00:0.32:0.08,despill=type=green,format=rgba', '-frames:v', '1', saidaPng]);
-  } else {
-    await rodarFfmpeg(['-y', '-i', bruto, '-vf', "scale='min(1920,iw)':-2", '-frames:v', '1', saidaPng]);
-  }
-  await rodarFfmpeg(['-y', '-i', saidaPng, '-vf', 'scale=360:-2', '-frames:v', '1', '-q:v', '4', miniatura]).catch(async () => {
-    await rodarFfmpeg(['-y', '-f', 'lavfi', '-i', 'color=c=0x222222:s=360x360', '-i', saidaPng, '-filter_complex', '[1]scale=360:-2[i];[0][i]overlay=(W-w)/2:(H-h)/2', '-frames:v', '1', miniatura]);
+export async function gerarImagem({ prompt, tipo, formato }, saidaPng, miniatura) {
+  const transparente = tipo === 'objeto_3d' || tipo === 'icone';
+  const [w, h] = transparente ? [1024, 1024] : (TAMANHOS[formato] || TAMANHOS['9:16']);
+  const stream = client.beta.messages.stream({
+    model: MODELO,
+    max_tokens: 32000,
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    thinking: { type: 'adaptive' },
+    output_config: { effort: 'medium' },
+    system: [{ type: 'text', text: SISTEMA, cache_control: { type: 'ephemeral' } }],
+    messages: [{
+      role: 'user',
+      content: `Desenhe ${ESTILO[tipo] || ESTILO.ilustracao}\n\nO que desenhar: ${prompt}\n\nTamanho: width="${w}" height="${h}" viewBox="0 0 ${w} ${h}".`,
+    }],
   });
-  await fs.rm(bruto, { force: true });
+  const resposta = await stream.finalMessage();
+  if (resposta.stop_reason === 'refusal') throw new Error('o Claude recusou essa imagem');
+  const svg = limparSvg(resposta.content.filter((b) => b.type === 'text').map((b) => b.text).join(''));
+  const arquivoSvg = saidaPng.replace(/\.png$/, '.svg');
+  await fs.writeFile(arquivoSvg, svg);
+  await rodar('rsvg-convert', ['-w', String(w), '-h', String(h), ...(transparente ? [] : ['-b', '#000000']), '-o', saidaPng, arquivoSvg]);
+  await rodar('ffmpeg', ['-y', '-i', saidaPng, '-vf', 'scale=360:-2', '-frames:v', '1', '-q:v', '4', miniatura]);
 }

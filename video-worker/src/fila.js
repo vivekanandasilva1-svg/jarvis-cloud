@@ -255,7 +255,7 @@ async function gerarImagensDoPlano(job, plano, opcoes, midiasRender) {
   await atualizar(id, { etapa: 'gerando_imagens', progresso: 0.22 });
   const mapa = new Map();
   const faltando = new Set();
-  // 2 por vez: rapido sem estourar a cota do Gemini
+  // 2 por vez: rapido sem estourar o limite de chamadas
   for (let i = 0; i < pedidos.length; i += 2) {
     await Promise.all(pedidos.slice(i, i + 2).map(async (g) => {
       const mid = crypto.randomBytes(8).toString('hex');
@@ -266,7 +266,7 @@ async function gerarImagensDoPlano(job, plano, opcoes, midiasRender) {
         await fs.copyFile(path.join(dir, 'pronto.png'), path.join(dir, 'original'));
         const registro = {
           id: mid, tipo: 'gerada', kind: 'imagem', nome: `${g.tipo.replace('_', ' ')}: ${g.prompt.slice(0, 80)}`, prompt: g.prompt,
-          recortada: !!g.recortar, tamanho: (await fs.stat(path.join(dir, 'pronto.png'))).size, criadoEm: new Date().toISOString(),
+          recortada: g.tipo === 'objeto_3d' || g.tipo === 'icone', tamanho: (await fs.stat(path.join(dir, 'pronto.png'))).size, criadoEm: new Date().toISOString(),
         };
         await atualizar(id, (j) => ({ midias: [...(j.midias || []), registro] }));
         job.midias = [...(job.midias || []), registro];

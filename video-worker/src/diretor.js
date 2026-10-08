@@ -45,8 +45,8 @@ const SCHEMA_PLANO = {
       type: 'array',
       items: {
         type: 'object', additionalProperties: false,
-        properties: { id: { type: 'string' }, prompt: { type: 'string' }, tipo: enumStr(['foto', 'render_3d', 'ilustracao', 'fundo']), recortar: { type: 'boolean' } },
-        required: ['id', 'prompt', 'tipo', 'recortar'],
+        properties: { id: { type: 'string' }, prompt: { type: 'string' }, tipo: enumStr(['objeto_3d', 'icone', 'ilustracao', 'fundo']) },
+        required: ['id', 'prompt', 'tipo'],
       },
     },
     insercoes: { type: 'array', items: intervalo({ midia: { type: 'string' }, modo: enumStr(['tela_cheia', 'janela']) }) },
@@ -104,7 +104,7 @@ function validarIndices(plano, total, idsMidia = new Set(), idsGeradas = new Set
   };
 }
 
-// tira do plano o que depende de uma imagem que nao foi gerada (falha no Gemini)
+// tira do plano o que depende de uma imagem que nao saiu (falha ao desenhar)
 export function semImagens(plano, faltando) {
   if (!faltando.size) return plano;
   return {

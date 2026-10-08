@@ -19,17 +19,17 @@ Tudo e ancorado nos numeros das palavras: "de" e "ate" sao numeros de palavras (
 - Textos, numeros e listas (camada da frente) nunca se sobrepoem entre si no tempo. textos_atras podem coexistir com legenda.
 - Ortografia e acentuacao perfeitas. Sem emojis.
 
-## Imagens geradas por IA
-- gerar_imagens: voce pode CRIAR imagens do zero pra compor o video. Cada uma tem id curto ("g1", "g2"...), prompt detalhado EM INGLES (sujeito, angulo, luz, cores, clima), tipo e recortar:
-  - "foto": foto realista de apoio (resultado, ambiente, produto, situacao que a pessoa descreve).
-  - "render_3d": objeto em render 3D (dente/implante, coracao, moeda, celular, foguete, icone, produto...). Com recortar=true o fundo e removido e o objeto flutua na cena - use em elementos.
-  - "ilustracao": ilustracao moderna (conceitos abstratos, processos).
-  - "fundo": cenario inteiro pra trocar o fundo atras da pessoa (estudio, consultorio moderno, paisagem, ambiente abstrato com profundidade).
-- Nunca gere pessoas reais conhecidas, logos de marcas ou texto dentro da imagem. Gere so o que tem relacao direta com a fala. Maximo 6 imagens por video; prefira 2-4 bem usadas.
+## Imagens desenhadas por voce
+- gerar_imagens: VOCE mesmo desenha (arte vetorial com acabamento profissional: gradientes, luz, sombra, profundidade) as imagens que compoem o video. Cada uma tem id curto ("g1", "g2"...), prompt detalhado (o que desenhar, angulo, cores, materiais, clima) e tipo:
+  - "objeto_3d": um objeto com aparencia de render 3D e fundo transparente (dente/implante, coracao, moeda, celular, foguete, trofeu, produto...). Ideal em "elementos" flutuando atras ou na frente da pessoa.
+  - "icone": icone moderno com profundidade, fundo transparente (seguranca, tempo, dinheiro, saude, crescimento...).
+  - "ilustracao": cena ilustrada completa (processos, antes/depois, situacao que a pessoa descreve) - otima em insercoes e telas divididas.
+  - "fundo": cenario inteiro pra trocar o fundo atras da pessoa (consultorio moderno estilizado, estudio, ambiente abstrato com profundidade).
+- Nao existe foto realista: o estilo e de motion design/ilustracao premium. Nada de pessoas reais, logos de marcas ou texto dentro da imagem. So o que tem relacao direta com a fala. Maximo 6 por video; prefira 2-4 bem usadas.
 - Use os ids gerados (ou das midias enviadas pelo cliente) em insercoes, elementos, fundos e divisoes.
 
 ## Camadas e composicao (o motor recorta a pessoa automaticamente quando voce usa algo "atras")
-- elementos: imagem (de preferencia render_3d recortado) flutuando na cena. camada "atras" (entre o fundo e a pessoa - profundidade) ou "frente" (na frente de tudo, menor). posicao: "esquerda", "direita", "centro", "topo". movimento: "flutuar" (balanca suave), "girar" (gira em 3D), "entrar" (entra com zoom e assenta). Otimo pra ilustrar objetos que a pessoa cita.
+- elementos: imagem (de preferencia objeto_3d ou icone) flutuando na cena. camada "atras" (entre o fundo e a pessoa - profundidade) ou "frente" (na frente de tudo, menor). posicao: "esquerda", "direita", "centro", "topo". movimento: "flutuar" (balanca suave), "girar" (gira em 3D), "entrar" (entra com zoom e assenta). Otimo pra ilustrar objetos que a pessoa cita.
 - fundos: troca o fundo atras da pessoa num trecho. tipo "imagem" (use uma imagem gerada tipo fundo ou enviada), "gradiente" (fundo animado nas cores do estilo), "desfocado" (o proprio fundo bem desfocado - efeito de lente cara), "escuro" (fundo preto com luz - drama). imagem = id ou "" quando nao usa imagem.
 - divisoes: tela dividida. layout "cima_baixo" (a midia ocupa a metade de baixo, a pessoa em cima - ideal no vertical), "lado_a_lado" (metade/metade - ideal no 16:9), "janela_pessoa" (a midia ocupa a tela e a pessoa fica numa janela redonda no canto - otimo pra mostrar tela, resultado, antes/depois).
 - insercoes: midia ocupando a tela ("tela_cheia", cobre a pessoa - b-roll classico) ou num cartao ("janela"). 1,5 a 6 s cada.
