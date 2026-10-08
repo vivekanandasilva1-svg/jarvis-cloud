@@ -271,7 +271,8 @@ async function executar(job) {
     await atualizar(id, { meta, etapa: 'transcrevendo', progresso: 0.1 });
 
     await midia.extrairAudioTranscricao(arq(id, 'base.mp4'), arq(id, 'audio.mp3'));
-    const transcricao = info.temAudio ? await transcrever(arq(id, 'audio.mp3')) : { texto: '', palavras: [] };
+    const temFala = info.temAudio && (await midia.volumeMaximo(arq(id, 'audio.mp3'))) > -40;
+    const transcricao = temFala ? await transcrever(arq(id, 'audio.mp3')) : { texto: '', palavras: [] };
     palavras = transcricao.palavras;
     await gravarJson(arq(id, 'transcricao.json'), transcricao);
     await fs.rm(arq(id, 'audio.mp3'), { force: true });

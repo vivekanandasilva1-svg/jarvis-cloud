@@ -149,3 +149,14 @@ export async function picosAudio(arquivo, porSegundo = 10) {
 export async function tiraMiniaturas(arquivo, duracao, saida, quadros = 24) {
   await rodar('ffmpeg', ['-y', '-i', arquivo, '-vf', `fps=${quadros}/${Math.max(1, duracao)},scale=-2:120,tile=${quadros}x1`, '-frames:v', '1', '-q:v', '5', saida]);
 }
+
+// volume maximo do audio em dB - silencio total faz o Whisper "inventar" frases ("Obrigado.",
+// creditos de legenda...), entao abaixo de um limite nem transcreve
+export async function volumeMaximo(arquivo) {
+  const p = spawn('ffmpeg', ['-i', arquivo, '-vn', '-af', 'volumedetect', '-f', 'null', '-']);
+  let log = '';
+  p.stderr.on('data', (d) => { log += d; if (log.length > 200000) log = log.slice(-100000); });
+  await new Promise((resolve) => p.on('close', resolve));
+  const m = log.match(/max_volume:\s*(-?[\d.]+|-inf) dB/);
+  return !m || m[1] === '-inf' ? -Infinity : Number(m[1]);
+}
