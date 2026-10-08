@@ -7,16 +7,27 @@ domínio público.
 
 ## Como uma edição acontece
 
+Um projeto nasce como **rascunho**. O cliente envia o vídeo principal, opcionalmente um vídeo
+referência e mídias de apoio (imagens, vídeos, áudios), e só depois pede "Editar com IA".
+
 1. **Preparo** (`src/midia.js`): recorta no formato escolhido, 30fps, trata o áudio (redução de
    ruído, compressor, -14 LUFS).
 2. **Transcrição** (`src/transcricao.js`): tempo de cada palavra. Usa a Groq e, se falhar, o
-   Whisper da VPS.
-3. **Direção** (`src/diretor.js`): o Claude devolve um plano em JSON (cortes, destaques, zooms,
-   textos, números, listas), ancorado nos números das palavras.
+   Whisper da VPS. Áudio em silêncio não é transcrito, porque o Whisper inventa frases.
+   - **Referência** (se houver): conta os cortes por minuto (detecção de cena) e o Claude estuda
+     8 quadros, gerando um perfil de estilo (fonte, cores, legenda, composição, transição,
+     ritmo) que o render aplica.
+   - **Mídias de apoio**: viram arquivos prontos pro render (vídeo H.264 sem áudio, JPG, AAC).
+3. **Direção** (`src/diretor.js`): o Claude vê quadros do vídeo e as miniaturas das mídias e
+   devolve um plano em JSON (cortes, destaques, zooms, textos, números, listas, inserções de
+   mídia, trilha), ancorado nos números das palavras.
 4. **Revisão** (`diretor.revisarQuadros`): renderiza quadros de prévia e o Claude corrige o plano
    se achar problema visual.
 5. **Render** (`src/render.js` + `remotion/`): Remotion monta o vídeo final. O visual (fontes,
-   cores, animações) fica em `remotion/estilos.js` e `remotion/Edicao.jsx`.
+   cores, animações, inserções, transições, trilha que abaixa na fala) fica em
+   `remotion/estilos.js` e `remotion/Edicao.jsx`.
+6. **Linha do tempo**: depois do render gera `tira.jpg` (miniaturas) e `ondas.json` (forma de
+   onda), que a tela do editor usa junto com o `roteiro.json`.
 
 Os arquivos ficam no volume `lumia_video_data` (`/data/jobs/<id>`) e são apagados depois de 30 dias.
 
