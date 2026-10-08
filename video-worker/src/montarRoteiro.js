@@ -121,8 +121,9 @@ export function montarRoteiro({ palavras, plano, meta, opcoes, videoSrc }) {
   return {
     largura, altura, fps: FPS, duracaoFrames, videoSrc,
     estilo: opcoes.estilo, corDestaque: opcoes.corDestaque || null,
-    legendas: opcoes.legendas !== false,
+    legendas: opcoes.legendas !== false && plano.legendas !== false,
     posicaoLegenda: plano.posicao_legenda,
+    alturaTextos: plano.altura_textos === 'media' ? 'media' : 'alta',
     segmentos: segmentos.map(({ palavras: _p, ...s }) => s),
     palavras: palavrasSaida,
     zooms,

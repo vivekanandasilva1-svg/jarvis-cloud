@@ -136,6 +136,19 @@ export async function apagar(id) {
 
 // ---------- pipeline ----------
 
+// alguns quadros do video bruto pro diretor ver o enquadramento antes de planejar
+async function quadrosContexto(id, duracao) {
+  const quadros = [];
+  for (const [k, frac] of [0.1, 0.35, 0.6, 0.85].entries()) {
+    const arquivo = arq(id, `contexto-${k}.jpg`);
+    try {
+      await midia.extrairQuadro(arq(id, 'base.mp4'), duracao * frac, arquivo, 360);
+      quadros.push({ arquivo, segundo: duracao * frac });
+    } catch { /* quadro e opcional */ }
+  }
+  return quadros;
+}
+
 async function executar(job) {
   const { id, opcoes } = job;
   const pend = job.pendente || { tipo: 'completo' };
@@ -162,13 +175,14 @@ async function executar(job) {
     await fs.rm(arq(id, 'audio.mp3'), { force: true });
 
     await atualizar(id, { etapa: 'dirigindo', progresso: 0.2 });
-    plano = await diretor.planejar({ palavras, meta, opcoes });
+    plano = await diretor.planejar({ palavras, meta, opcoes, quadros: await quadrosContexto(id, meta.duracao) });
   } else {
     palavras = (await lerJson(arq(id, 'transcricao.json'))).palavras;
     const planoAtual = await lerJson(arq(id, 'plano.json'));
     await atualizar(id, { status: 'processando', etapa: 'dirigindo', progresso: 0.1 });
-    plano = await diretor.ajustar({ palavras, meta, opcoes, planoAtual, pedido: pend.pedido });
+    plano = await diretor.ajustar({ palavras, meta, opcoes, planoAtual, pedido: pend.pedido, quadros: await quadrosContexto(id, meta.duracao) });
   }
+  for (const f of await fs.readdir(pasta(id))) if (f.startsWith('contexto-')) await fs.rm(arq(id, f), { force: true });
 
   let roteiro = montarRoteiro({ palavras, plano, meta, opcoes, videoSrc });
   let problemas = [];

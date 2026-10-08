@@ -37,8 +37,10 @@ const SCHEMA_PLANO = {
     },
     listas: { type: 'array', items: intervalo({ titulo: { type: 'string' }, itens: { type: 'array', items: { type: 'string' } } }) },
     posicao_legenda: { type: 'string', enum: ['baixo', 'meio'] },
+    legendas: { type: 'boolean', description: 'false quando o video ja tem legenda propria gravada na imagem' },
+    altura_textos: { type: 'string', enum: ['alta', 'media'], description: 'onde ficam textos, numeros e listas: alta = topo da tela; media = logo abaixo do rosto' },
   },
-  required: ['titulo', 'resumo', 'remover', 'destaques', 'zooms', 'textos', 'numeros', 'listas', 'posicao_legenda'],
+  required: ['titulo', 'resumo', 'remover', 'destaques', 'zooms', 'textos', 'numeros', 'listas', 'posicao_legenda', 'legendas', 'altura_textos'],
 };
 
 const SISTEMA = `Voce e um editor de video senior especializado em videos curtos verticais (Reels, TikTok, Shorts) em portugues do Brasil. Voce recebe a transcricao de um video bruto, palavra por palavra, cada uma com seu numero [n] e o segundo em que e falada, e devolve o plano de edicao.
@@ -58,6 +60,14 @@ Regras de qualidade:
 - Cada texto/numero/lista precisa ficar na tela tempo suficiente pra ser lido (no minimo umas 4-5 palavras faladas).
 - Escreva os textos sobrepostos com ortografia e acentuacao corretas, sem emojis.
 - posicao_legenda: "baixo" no padrao; "meio" so se o pedido do cliente indicar.
+
+Use os quadros do video bruto que vem junto:
+- legendas: false se o video JA TEM legenda gravada na imagem (senao ficam duas legendas sobrepostas). Nesse caso compense com textos de impacto nas ideias principais.
+- altura_textos: os textos grandes, numeros e listas ficam no topo da tela ("alta"). Se o rosto da pessoa estiver alto no quadro (cabeca encostando no topo), use "media", que coloca esses elementos na altura do peito, abaixo do rosto. Nunca deixe texto sobre os olhos.
+- Veja tambem se ja existem textos, logos ou imagens gravados no video e evite colocar elementos por cima deles.
+
+O que este editor ainda NAO faz: texto ou objetos 3D atras da pessoa, recorte/troca de fundo, efeitos de profundidade com camadas, inserir imagens ou videos de apoio (b-roll), musica de fundo. Se o cliente pedir algo disso, faca o melhor possivel com o que existe (textos de impacto, zooms, numeros, listas) e diga com gentileza no "resumo" o que nao foi possivel nesta versao.
+
 - Siga as instrucoes do cliente quando houver - elas tem prioridade sobre o padrao.`;
 
 function formatarTranscricao(palavras) {
@@ -75,7 +85,22 @@ function validarIndices(plano, total) {
     textos: plano.textos.filter((t) => okIntervalo(t) && t.texto.trim()),
     numeros: plano.numeros.filter((x) => okIntervalo(x) && Number.isFinite(x.valor)),
     listas: plano.listas.filter((l) => okIntervalo(l) && l.itens.length),
+    legendas: plano.legendas !== false,
+    altura_textos: plano.altura_textos === 'media' ? 'media' : 'alta',
   };
+}
+
+// quadros do video bruto pro diretor enxergar o enquadramento (onde esta o rosto, se ja tem
+// legenda/texto gravado na imagem)
+async function blocosQuadros(quadros = []) {
+  const blocos = [];
+  for (const q of quadros) {
+    const dados = await fs.readFile(q.arquivo).catch(() => null);
+    if (!dados) continue;
+    blocos.push({ type: 'text', text: `Quadro do video bruto em ${q.segundo.toFixed(1)}s:` });
+    blocos.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: dados.toString('base64') } });
+  }
+  return blocos;
 }
 
 async function pedirPlano(conteudo, { esforco = 'high' } = {}) {
@@ -106,18 +131,18 @@ function contexto({ palavras, meta, opcoes }) {
   ].join('\n');
 }
 
-export async function planejar({ palavras, meta, opcoes }) {
+export async function planejar({ palavras, meta, opcoes, quadros }) {
   if (!palavras.length) {
-    return { titulo: 'Video sem fala', resumo: 'Nao encontrei fala no video, entao apliquei so o tratamento de imagem e audio.', remover: [], destaques: [], zooms: [], textos: [], numeros: [], listas: [], posicao_legenda: 'baixo' };
+    return { titulo: 'Vídeo sem fala', resumo: 'Não encontrei fala no vídeo, então apliquei só o tratamento de imagem e áudio.', remover: [], destaques: [], zooms: [], textos: [], numeros: [], listas: [], posicao_legenda: 'baixo', legendas: false, altura_textos: 'alta' };
   }
-  const plano = await pedirPlano(contexto({ palavras, meta, opcoes }));
+  const plano = await pedirPlano([...(await blocosQuadros(quadros)), { type: 'text', text: contexto({ palavras, meta, opcoes }) }]);
   return validarIndices(plano, palavras.length);
 }
 
 // ajuste pedido pelo cliente depois de ver o resultado ("tira o zoom do comeco", "poe uma lista
 // com os 3 beneficios") - devolve o plano INTEIRO revisado, nao so a diferenca
-export async function ajustar({ palavras, meta, opcoes, planoAtual, pedido }) {
-  const conteudo = [
+export async function ajustar({ palavras, meta, opcoes, planoAtual, pedido, quadros }) {
+  const texto = [
     contexto({ palavras, meta, opcoes }),
     '',
     'Plano de edicao atual:',
@@ -126,7 +151,7 @@ export async function ajustar({ palavras, meta, opcoes, planoAtual, pedido }) {
     `O cliente viu o video editado e pediu este ajuste: "${pedido}"`,
     'Devolva o plano completo revisado aplicando o pedido. Mantenha tudo que o cliente nao pediu pra mudar. No "resumo", conte em 1-2 frases o que mudou.',
   ].join('\n');
-  const plano = await pedirPlano(conteudo);
+  const plano = await pedirPlano([...(await blocosQuadros(quadros)), { type: 'text', text: texto }]);
   return validarIndices(plano, palavras.length);
 }
 
@@ -159,7 +184,7 @@ export async function revisarQuadros({ palavras, planoAtual, quadros }) {
       `Transcricao (${palavras.length} palavras) para referencia dos numeros:`,
       formatarTranscricao(palavras),
       '',
-      'Revise como um editor exigente olhando so o que da pra ver na imagem: texto sobreposto cobrindo o rosto, texto saindo da tela ou cortado, erro de ortografia, excesso de elementos ao mesmo tempo, legenda ilegivel. Se estiver bom, aprovado=true e plano=null. Se tiver problema que se resolve mudando o plano (encurtar texto, trocar estilo "impacto" por "topo", mover ou remover um elemento, mudar posicao_legenda), aprovado=false, liste os problemas e devolva o plano completo corrigido. Nao mude o que esta bom.',
+      'Revise como um editor exigente olhando so o que da pra ver na imagem: texto sobreposto cobrindo o rosto, texto saindo da tela ou cortado, erro de ortografia, excesso de elementos ao mesmo tempo, legenda ilegivel, duas legendas sobrepostas (o video ja tinha legenda gravada). Se estiver bom, aprovado=true e plano=null. Se tiver problema que se resolve mudando o plano (encurtar texto, trocar estilo "impacto" por "topo", mover ou remover um elemento, mudar posicao_legenda, legendas=false, altura_textos), aprovado=false, liste os problemas e devolva o plano completo corrigido. Nao mude o que esta bom.',
     ].join('\n'),
   });
   const stream = client.beta.messages.stream({

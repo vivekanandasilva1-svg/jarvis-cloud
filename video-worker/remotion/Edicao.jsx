@@ -153,7 +153,7 @@ function Legendas({ palavras, estilo, ocultarEm, posicao }) {
 
 // ---------- sobreposicoes ----------
 
-function TextoImpacto({ texto, duracao, estilo }) {
+function TextoImpacto({ texto, duracao, estilo, media }) {
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
   const u = useUnidade();
@@ -162,7 +162,7 @@ function TextoImpacto({ texto, duracao, estilo }) {
   const tamanho = Math.min(150, 1700 / Math.max(6, texto.length)) * u * (estilo.fonteTitulo === estilo.fonteLegenda && estilo.maiusculas ? 1.1 : 1);
   return (
     <AbsoluteFill style={{ alignItems: 'center' }}>
-      <div style={{ position: 'absolute', top: height * 0.13, width: '88%', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: `0 ${22 * u}px`, opacity: saida }}>
+      <div style={{ position: 'absolute', top: height * (media ? 0.42 : 0.13), width: '88%', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: `0 ${22 * u}px`, opacity: saida }}>
         {palavras.map((p, k) => {
           const s = spring({ frame: frame - k * 3, fps, config: { damping: 12, stiffness: 170 } });
           const ultima = k === palavras.length - 1 && palavras.length > 1;
@@ -180,7 +180,7 @@ function TextoImpacto({ texto, duracao, estilo }) {
   );
 }
 
-function TextoTopo({ texto, duracao, estilo }) {
+function TextoTopo({ texto, duracao, estilo, media }) {
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
   const u = useUnidade();
@@ -189,7 +189,7 @@ function TextoTopo({ texto, duracao, estilo }) {
   return (
     <AbsoluteFill style={{ alignItems: 'center' }}>
       <div style={{
-        position: 'absolute', top: height * 0.12, maxWidth: '84%', padding: `${18 * u}px ${34 * u}px`,
+        position: 'absolute', top: height * (media ? 0.44 : 0.12), maxWidth: '84%', padding: `${18 * u}px ${34 * u}px`,
         background: 'rgba(10,10,14,0.78)', borderRadius: 22 * u, border: `${3 * u}px solid ${estilo.corDestaque}`,
         boxShadow: estilo.brilho ? `0 0 ${30 * u}px ${estilo.corDestaque}66` : `0 ${10 * u}px ${30 * u}px rgba(0,0,0,0.45)`,
         transform: `translateY(${(1 - s) * -60 * u}px)`, opacity: s * saida,
@@ -222,7 +222,7 @@ function Etiqueta({ texto, duracao, estilo }) {
   );
 }
 
-function Numero({ valor, prefixo, sufixo, rotulo, duracao, estilo }) {
+function Numero({ valor, prefixo, sufixo, rotulo, duracao, estilo, media }) {
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
   const u = useUnidade();
@@ -233,7 +233,7 @@ function Numero({ valor, prefixo, sufixo, rotulo, duracao, estilo }) {
   const saida = interpolate(frame, [duracao - 8, duracao], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   return (
     <AbsoluteFill style={{ alignItems: 'center' }}>
-      <div style={{ position: 'absolute', top: height * 0.11, textAlign: 'center', opacity: s * saida, transform: `scale(${0.7 + 0.3 * s})` }}>
+      <div style={{ position: 'absolute', top: height * (media ? 0.38 : 0.11), textAlign: 'center', opacity: s * saida, transform: `scale(${0.7 + 0.3 * s})` }}>
         <div style={{
           fontFamily: estilo.fonteTitulo, fontWeight: estilo.pesoTitulo, fontSize: 210 * u, lineHeight: 1,
           color: estilo.corTexto, textShadow: sombraTexto(estilo, u, true),
@@ -249,7 +249,7 @@ function Numero({ valor, prefixo, sufixo, rotulo, duracao, estilo }) {
   );
 }
 
-function Lista({ titulo, itens, duracao, estilo }) {
+function Lista({ titulo, itens, duracao, estilo, media }) {
   const frame = useCurrentFrame();
   const { fps, height } = useVideoConfig();
   const u = useUnidade();
@@ -260,7 +260,7 @@ function Lista({ titulo, itens, duracao, estilo }) {
   return (
     <AbsoluteFill style={{ alignItems: 'center' }}>
       <div style={{
-        position: 'absolute', top: height * 0.1, width: '80%', padding: `${30 * u}px ${36 * u}px`,
+        position: 'absolute', top: height * (media ? 0.36 : 0.1), width: '80%', padding: `${30 * u}px ${36 * u}px`,
         background: 'rgba(12,12,18,0.82)', borderRadius: 30 * u, border: `${2 * u}px solid rgba(255,255,255,0.12)`,
         boxShadow: estilo.brilho ? `0 0 ${40 * u}px ${estilo.corDestaque}55` : `0 ${16 * u}px ${40 * u}px rgba(0,0,0,0.5)`,
         opacity: s * saida, transform: `translateY(${(1 - s) * -40 * u}px) scale(${0.94 + 0.06 * s})`,
@@ -283,7 +283,8 @@ function Lista({ titulo, itens, duracao, estilo }) {
 // ---------- composicao ----------
 
 export function Edicao(props) {
-  const { videoSrc, segmentos, palavras, zooms = [], textos = [], numeros = [], listas = [], sfx = [], estilo: nomeEstilo, corDestaque, legendas = true, posicaoLegenda = 'baixo' } = props;
+  const { videoSrc, segmentos, palavras, zooms = [], textos = [], numeros = [], listas = [], sfx = [], estilo: nomeEstilo, corDestaque, legendas = true, posicaoLegenda = 'baixo', alturaTextos = 'alta' } = props;
+  const media = alturaTextos === 'media';
   const estilo = obterEstilo(nomeEstilo, corDestaque);
   // a legenda some enquanto um texto grande ou lista ocupa a tela - evita poluicao visual
   const ocultarLegenda = [
@@ -296,19 +297,19 @@ export function Edicao(props) {
       <Acabamento estilo={estilo} />
       {textos.map((t, i) => (
         <Sequence key={`t${i}`} from={t.inicio} durationInFrames={Math.max(1, t.fim - t.inicio)}>
-          {t.estilo === 'impacto' && <TextoImpacto texto={t.texto} duracao={t.fim - t.inicio} estilo={estilo} />}
-          {t.estilo === 'topo' && <TextoTopo texto={t.texto} duracao={t.fim - t.inicio} estilo={estilo} />}
+          {t.estilo === 'impacto' && <TextoImpacto texto={t.texto} duracao={t.fim - t.inicio} estilo={estilo} media={media} />}
+          {t.estilo === 'topo' && <TextoTopo texto={t.texto} duracao={t.fim - t.inicio} estilo={estilo} media={media} />}
           {t.estilo === 'etiqueta' && <Etiqueta texto={t.texto} duracao={t.fim - t.inicio} estilo={estilo} />}
         </Sequence>
       ))}
       {numeros.map((n, i) => (
         <Sequence key={`n${i}`} from={n.inicio} durationInFrames={Math.max(1, n.fim - n.inicio)}>
-          <Numero {...n} duracao={n.fim - n.inicio} estilo={estilo} />
+          <Numero {...n} duracao={n.fim - n.inicio} estilo={estilo} media={media} />
         </Sequence>
       ))}
       {listas.map((l, i) => (
         <Sequence key={`l${i}`} from={l.inicio} durationInFrames={Math.max(1, l.fim - l.inicio)}>
-          <Lista {...l} duracao={l.fim - l.inicio} estilo={estilo} />
+          <Lista {...l} duracao={l.fim - l.inicio} estilo={estilo} media={media} />
         </Sequence>
       ))}
       {legendas && <Legendas palavras={palavras} estilo={estilo} ocultarEm={ocultarLegenda} posicao={posicaoLegenda} />}
