@@ -474,7 +474,7 @@ async function executarManual(job) {
   const { id } = job;
   await atualizar(id, { status: 'processando', etapa: 'aplicando_edicao', progresso: 0.05 });
   const midias = await mapaMidias(job);
-  let roteiro = aplicarEdicao(await lerJson(arq(id, 'roteiro.json')), await lerJson(arq(id, 'edicao-manual.json')), midias);
+  let roteiro = aplicarEdicao(await lerJson(arq(id, 'roteiro.json')), await lerJson(arq(id, 'edicao-manual.json')).catch(() => ({})), midias);
   let pessoaSrc = null;
   if (precisaPessoa(roteiro)) {
     try {

@@ -4,6 +4,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
+import { montarAudio } from './audioFinal.js';
 import { fileURLToPath } from 'node:url';
 import { renderMedia, renderStill, selectComposition } from '@remotion/renderer';
 
@@ -82,9 +83,9 @@ export async function renderizar(roteiro, saida, aoProgredir) {
     }
   }
 
-  const audio = path.join(pasta, 'audio.aac');
+  const audio = path.join(pasta, 'audio.m4a');
   if (!(await existe(`${audio}.ok`))) {
-    await renderMedia({ ...comum, codec: 'aac', outputLocation: audio, audioBitrate: '192k' });
+    await montarAudio(roteiro, audio);
     await fs.writeFile(`${audio}.ok`, '');
   }
   const lista = path.join(pasta, 'lista.txt');
