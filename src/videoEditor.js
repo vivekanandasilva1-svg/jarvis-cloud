@@ -163,7 +163,8 @@ export async function listar(tenantId) {
   const { rows } = await pool.query('SELECT * FROM video_edicoes WHERE tenant_id = $1 ORDER BY criado_em DESC LIMIT 60', [tenantId]);
   // so consulta o servico pras que ainda estao em andamento (as outras ja tem status salvo)
   return Promise.all(rows.map(async (linha) => {
-    if (STATUS_FINAIS.includes(linha.status)) return resumoJob(linha, null);
+    // 'erro' tambem e reconsultado: uma edicao com erro pode ter sido retomada e terminado depois
+    if (STATUS_FINAIS.includes(linha.status) && linha.status !== 'erro') return resumoJob(linha, null);
     try {
       const job = await chamarWorker(`/jobs/${linha.id}`, tenantId);
       await sincronizar(tenantId, linha.id, job);
