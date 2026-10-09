@@ -494,7 +494,12 @@ async function executarManual(job) {
   roteiro = recalcularDerivados(roteiro, pessoaSrc);
   await gravarJson(arq(id, 'roteiro.json'), roteiro);
   await fs.rm(arq(id, 'edicao-manual.json'), { force: true });
-  await renderizarEFinalizar(job, roteiro, { edicoesManuais: (job.edicoesManuais || 0) + 1 });
+  // edicao retomada depois de uma falha no render ainda nao tem titulo/resumo - vem do plano
+  const plano = job.titulo ? null : await lerJson(arq(id, 'plano.json')).catch(() => null);
+  await renderizarEFinalizar(job, roteiro, {
+    edicoesManuais: (job.edicoesManuais || 0) + 1,
+    ...(plano ? { titulo: plano.titulo, resumo: plano.resumo } : {}),
+  });
 }
 
 // render + capa + dados da linha do tempo + estado final (comum a edicao pela IA e a manual)
