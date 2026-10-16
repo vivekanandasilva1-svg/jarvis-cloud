@@ -135,6 +135,14 @@
     "conteudo": "A VPS ficou desligada 15:53-16:26 (kernel novo, manutenção/atualização automática) e a Lumia ficou fora ~40 min. Ao religar, o Docker ainda acordando derrubou tarefas com 'No such container', o Postgres do Evolution caiu 2x (exit 255) e o Evolution entrou em loop (P1001) até o banco ficar pronto. Os serviços já têm restart on-failure/any sem limite e 5s de intervalo, então se recuperaram sozinhos em ~7 min; não há healthchecks nem depends_on no Swarm. Mensagens de WhatsApp recebidas durante a queda se perderam (webhook não é reenfileirado). Endurecido no app: src/db.js espera o Postgres responder (até 180s) antes de qualquer módulo criar/migrar tabelas e o pool trata 'error' de conexão ociosa em vez de derrubar o processo. Pendente: reconciliar mensagens perdidas via Evolution (findMessages) usando o wa_id único do CRM."
   },
   {
+    "chave": "plat:creditos-ia",
+    "modulo": "plataforma",
+    "data": "2026-10-16",
+    "tipo": "aprendizado",
+    "titulo": "Créditos da Anthropic acabaram: IA parada e leads recebendo 'probleminha técnico'",
+    "conteudo": "Em 16/10 a API devolveu 400 'Your credit balance is too low' - a conta Anthropic (chave única do app, serve a TODOS os clientes) zerou, e cada mensagem de lead gerava o pedido de desculpas. Só o dono resolve (recarregar em console.anthropic.com > Plans & Billing). Blindagem: src/alertaCreditos.js reconhece o erro, avisa o dono no WhatsApp (1x/3h, sem usar IA) e no sino do app; o Auto Atendimento deixa de pedir desculpas, guarda a mensagem do lead como pendente e responde sozinho quando a IA volta (fila pendente_desde); retornos agendados não são disparados nem perdidos enquanto estiver sem crédito; o chat mostra mensagem clara. Pendente: ligar recarga automática na Anthropic (auto-reload) e alerta de saldo baixo ANTES de zerar."
+  },
+  {
     "chave": "mod:assistente",
     "hub": true,
     "modulo": "assistente",

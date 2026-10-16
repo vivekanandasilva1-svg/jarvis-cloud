@@ -2978,6 +2978,10 @@ async function atualizarSino() {
       sinoLista.appendChild(vazio);
       return;
     }
+    if (d.alertas?.length) {
+      sinoSecao('Atenção');
+      for (const a of d.alertas) sinoItem(`⚠️ ${a.titulo}`, a.detalhe, 'vermelho');
+    }
     if (d.retornos.length) {
       sinoSecao('Alertas de retorno de hoje');
       for (const r of d.retornos) {

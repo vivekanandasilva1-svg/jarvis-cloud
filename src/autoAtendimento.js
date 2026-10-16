@@ -13,6 +13,7 @@ import * as crm from './crm.js';
 import { transcrever } from './whisper.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
 import { moedaPorExtenso } from './numeroPorExtenso.js';
+import { creditoRestabelecido } from './alertaCreditos.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -708,7 +709,7 @@ export async function guardarMensagemForaDoHorario(tenantId, numero, { texto, ti
   if (!conteudo) return;
   const { history, contagem } = await obterSessao(tenantId, numero);
   history.push({ role: 'user', content: `${conteudo}
-[mensagem recebida fora do horario de atendimento - ainda nao respondida]` });
+[mensagem recebida enquanto o atendimento estava indisponivel - ainda nao respondida]` });
   await salvarSessao(tenantId, numero, history, contagem);
   await pool.query('UPDATE auto_atendimento_sessions SET pendente_desde = COALESCE(pendente_desde, now()) WHERE tenant_id = $1 AND numero = $2', [tenantId, numero]);
 }
@@ -1015,7 +1016,7 @@ const AVISO_ALERTA_RETORNO = '\n\nSe o contato disser que precisa de um tempo, v
 
 const AVISO_RETORNO = '\n\nCONTEXTO: chegou o dia/horario de retorno combinado com esse contato (veja a mensagem de aviso do sistema no fim do historico - ela NAO foi escrita pelo contato). Escreva AGORA a primeira mensagem retomando o assunto de onde pararam, de forma natural e curta, sem soar cobranca (ex: "oi, tudo bem? voce tinha pedido pra falarmos hoje sobre..."). Nao cite o aviso do sistema.';
 
-const AVISO_RETOMADA = '\n\nCONTEXTO: o contato escreveu FORA do horario de atendimento (as mensagens estao no fim do historico, marcadas como "ainda nao respondida") e so agora o horario abriu. Responda a elas de uma vez, de forma natural - pode mencionar de leve que viu a mensagem so agora (ex: "bom dia, vi sua mensagem de ontem a noite"), sem se desculpar demais nem repetir o marcador.';
+const AVISO_RETOMADA = '\n\nCONTEXTO: o contato escreveu enquanto o atendimento estava indisponivel (fora do horario ou fora do ar - as mensagens estao no fim do historico, marcadas como "ainda nao respondida") e so agora o horario abriu. Responda a elas de uma vez, de forma natural - pode mencionar de leve que viu a mensagem so agora (ex: "bom dia, vi sua mensagem de ontem a noite"), sem se desculpar demais nem repetir o marcador.';
 
 // tipo: 'text' | 'image' | 'audio' | 'video' (o que o CONTATO mandou, se nao for so texto)
 export async function processarMensagem(tenantId, numero, instancia, { texto, tipo, mensagemBruta, retomarPendente = false, retomadaRetorno = null }) {
@@ -1082,6 +1083,7 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   // aqui seria ainda pior: o contato do WhatsApp ficaria sem resposta nenhuma ("travado").
   const configClaude = { model: 'claude-sonnet-5', max_tokens: 4096, thinking: { type: 'adaptive' }, output_config: { effort: 'medium' }, system, tools: TOOLS };
   let response = await anthropic.messages.create({ ...configClaude, messages: history });
+  creditoRestabelecido(); // chamada a IA deu certo - se os creditos tinham acabado, voltaram
   let rounds = 0;
   while (response.stop_reason === 'tool_use' && rounds < MAX_RODADAS_FERRAMENTA) {
     history.push({ role: 'assistant', content: response.content });

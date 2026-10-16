@@ -30,6 +30,7 @@ import * as relatorioGerador from './relatorioGerador.js';
 import * as followUp from './followUp.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
 import { iniciarCerebroMae } from './cerebroMae.js';
+import { ehErroDeCredito, creditoEsgotado, registrarFalhaCredito } from './alertaCreditos.js';
 import * as cerebro from './cerebro.js';
 import { router as cerebroMcpRouter } from './cerebroMcp.js';
 import * as videoEditor from './videoEditor.js';
@@ -780,6 +781,10 @@ app.post('/api/chat', async (req, res) => {
     res.json(resultado);
   } catch (err) {
     console.error('Erro no chat:', err);
+    if (ehErroDeCredito(err)) {
+      registrarFalhaCredito().catch(() => {});
+      return res.status(503).json({ erro: 'A IA está sem créditos na Anthropic no momento. Recarregue em console.anthropic.com → Plans & Billing que a Lumia volta a responder.' });
+    }
     res.status(500).json({ erro: err.message });
   }
 });
@@ -1189,7 +1194,16 @@ async function atenderContato(tenantId, numero, instanciaDoWebhook, configAuto, 
     // nunca deixa o contato literalmente sem resposta nenhuma por causa de um erro tecnico -
     // antes disso, um erro (Anthropic sobrecarregada, Clinicorp fora do ar etc) resultava em
     // silencio total, o que parecia a Lumia ter "travado" pra quem estava mandando mensagem
+    // creditos da Anthropic acabaram: nao adianta pedir pro lead mandar de novo (ele so recebe um
+    // pedido de desculpas a cada mensagem) - guarda a mensagem dele como pendente pra IA responder
+    // sozinha quando o dono recarregar, e avisa o dono
+    if (ehErroDeCredito(err)) {
+      registrarFalhaCredito().catch(() => {});
+      if (!retomarPendente && !retomadaRetorno) await autoAtendimento.guardarMensagemForaDoHorario(tenantId, numero, { texto, tipo }).catch(() => {});
+      return 'sem-credito';
+    }
     if (!retomadaRetorno) await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, 'Desculpa, tive um probleminha técnico aqui agora. Pode mandar sua mensagem de novo?').catch(() => {});
+    return 'erro';
   } finally {
     clearInterval(manterPresenca);
   }
@@ -1265,7 +1279,10 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
       lembrarEnviada(await enviarMensagemTexto(tenantId, numero, resultado.reply));
     } catch (err) {
       console.error('Erro no chat via Evolution/WhatsApp:', err);
-      lembrarEnviada(await enviarMensagemTexto(tenantId, numero, `Deu erro por aqui: ${err.message}`).catch(() => {}));
+      if (ehErroDeCredito(err)) registrarFalhaCredito().catch(() => {});
+      lembrarEnviada(await enviarMensagemTexto(tenantId, numero, ehErroDeCredito(err)
+        ? '⚠️ Estou sem créditos na Anthropic agora, então não consigo responder. Recarregue em console.anthropic.com → Plans & Billing que eu volto na hora.'
+        : `Deu erro por aqui: ${err.message}`).catch(() => {}));
     }
     return;
   }
@@ -1843,8 +1860,12 @@ async function faltasRecentes(tenantId) {
 app.get('/api/notificacoes', async (req, res) => {
   try {
     const [resumo, faltas] = await Promise.all([crm.resumoNotificacoes(req.tenantId), faltasRecentes(req.tenantId)]);
-    const total = resumo.naoLidas.length + resumo.retornos.length + resumo.preAgendamentos.length + faltas.length;
-    res.json({ total, ...resumo, faltas });
+    const tenant = await tenants.obterPorId(req.tenantId);
+    const alertas = tenant?.super_admin && creditoEsgotado()
+      ? [{ tipo: 'creditos', titulo: 'IA sem créditos na Anthropic', detalhe: 'O Auto Atendimento e a Lumia pararam de responder. Recarregue em console.anthropic.com → Plans & Billing - as mensagens dos leads ficam guardadas e são respondidas sozinhas depois.' }]
+      : [];
+    const total = alertas.length + resumo.naoLidas.length + resumo.retornos.length + resumo.preAgendamentos.length + faltas.length;
+    res.json({ total, ...resumo, faltas, alertas });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -2250,6 +2271,7 @@ async function checarPendentesForaDoHorario() {
     for (const tenantId of await autoAtendimento.listarTenantsComPendentes()) {
       const config = await autoAtendimento.obterConfig(tenantId);
       if (!config.ativo || !config.instancia || !autoAtendimento.dentroDoHorario(config)) continue;
+      let semCredito = false;
       for (const { numero, pendente_desde: desde } of await autoAtendimento.listarPendentes(tenantId)) {
         try {
           const pausado = await crm.estaPausado(tenantId, numero, config.instancia).catch(() => false);
@@ -2257,7 +2279,10 @@ async function checarPendentesForaDoHorario() {
             await autoAtendimento.limparPendente(tenantId, numero);
             continue;
           }
-          await processarEmFila(`${tenantId}:${numero}`, () => atenderContato(tenantId, numero, config.instancia, config, { texto: '', tipo: 'text', data: null, retomarPendente: true }));
+          const resultadoAtendimento = await processarEmFila(`${tenantId}:${numero}`, () => atenderContato(tenantId, numero, config.instancia, config, { texto: '', tipo: 'text', data: null, retomarPendente: true }));
+          // sem creditos da Anthropic: mantem TODOS na fila (nao limpa nem pede desculpa) e para por agora -
+          // o proximo ciclo (2min) tenta de novo, e quando os creditos voltam todo mundo e respondido
+          if (resultadoAtendimento === 'sem-credito') { semCredito = true; break; }
           // limpa de qualquer jeito (atenderContato ja trata erro mandando aviso ao lead) - senao um erro
           // repetia a mesma tentativa a cada 2min
           await autoAtendimento.limparPendente(tenantId, numero);
@@ -2268,6 +2293,7 @@ async function checarPendentesForaDoHorario() {
           await autoAtendimento.limparPendente(tenantId, numero).catch(() => {});
         }
       }
+      if (semCredito) break;
     }
   } catch (err) {
     console.error('Erro checando pendentes fora do horario:', err.message);
@@ -2293,12 +2319,16 @@ async function checarRetornosVencidos() {
         const pausado = await crm.estaPausado(c.tenant_id, c.numero, c.instancia).catch(() => false);
         const iaPodeRetomar = config.ativo && config.instancia === c.instancia && !pausado;
         if (iaPodeRetomar && !autoAtendimento.dentroDoHorario(config)) continue;
+        if (!iaPodeRetomar) { await crm.marcarRetornoDisparado(c.tenant_id, c.id); continue; }
+        const resultadoRetorno = await processarEmFila(`${c.tenant_id}:${c.numero}`, () => atenderContato(c.tenant_id, c.numero, c.instancia, config, { texto: '', tipo: 'text', data: null, retomadaRetorno: { nota: c.retorno_nota } }));
+        // sem creditos: nao dispara (continua pendente e tenta no proximo minuto) - senao o retorno
+        // combinado com o lead se perdia em silencio
+        if (resultadoRetorno === 'sem-credito') break;
         await crm.marcarRetornoDisparado(c.tenant_id, c.id);
-        if (!iaPodeRetomar) continue;
-        await processarEmFila(`${c.tenant_id}:${c.numero}`, () => atenderContato(c.tenant_id, c.numero, c.instancia, config, { texto: '', tipo: 'text', data: null, retomadaRetorno: { nota: c.retorno_nota } }));
         await new Promise((r) => setTimeout(r, 20000 + Math.floor(Math.random() * 20000)));
       } catch (err) {
         console.error(`Erro disparando retorno (tenant ${c.tenant_id}, contato ${c.id}):`, err.message);
+        await crm.marcarRetornoDisparado(c.tenant_id, c.id).catch(() => {}); // evita repetir o mesmo erro todo minuto
       }
     }
   } catch (err) {
