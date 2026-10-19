@@ -946,15 +946,35 @@ REGRA CRITICA sobre cancelar agendamento: quando o contato pedir pra cancelar/re
 
 REGRA CRITICA sobre evitar cadastro de paciente duplicado: a busca do Clinicorp por nome (clinicorp_buscar_paciente) exige o nome EXATO como esta cadastrado - um nome parecido mas nao identico (ex: contato diz "Vivekananda Silva" mas o cadastro real e "Vivekananda Francisco da Silva Filho") NAO aparece na busca, entao "nao encontrado" nao significa necessariamente que o contato e paciente novo. Por isso, antes de cadastrar um paciente novo (clinicorp_cadastrar_paciente), SEMPRE pergunte diretamente pro contato "voce ja e paciente da clinica ou seria seu primeiro cadastro?" - se ele disser que ja e paciente, peça o nome completo EXATO (ou telefone que costuma usar) e tente a busca de novo antes de criar um cadastro novo. So cadastre quando o contato confirmar que e cliente/paciente novo.`;
 
-function systemPromptComHoje(promptCustom, vaiSerAudio, temAgenda) {
-  const agora = new Date();
+// O system prompt sai em DOIS blocos pra dar pra usar prompt caching (ver docs da Anthropic: o
+// cache e um casamento de prefixo - qualquer byte diferente no inicio invalida tudo que vem
+// depois). O bloco 1 so tem o que NAO muda de uma mensagem pra outra (prompt do painel + regras
+// fixas) e leva cache_control: as ferramentas + esse bloco (~maior parte do que se reenvia a cada
+// chamada) passam a ser lidos a ~10% do preco normal, e o prefixo e compartilhado entre TODOS os
+// contatos do mesmo tenant. TTL de 1h porque o intervalo medio entre mensagens de contatos
+// diferentes (~6 min) passa dos 5 min do cache padrao. O bloco 2 guarda tudo que varia por
+// chamada (hora de agora, fatos da conversa, avisos de audio/retomada) - NUNCA colocar conteudo
+// dinamico no bloco 1, senao o cache quebra em silencio e a conta volta ao normal.
+export function systemBlocos(config, { vaiSerAudio, temAgenda, contextoTemporalTexto = '', retomarPendente = false, retomadaRetorno = null, agora = new Date() }) {
   const hoje = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', year: 'numeric', month: '2-digit', day: '2-digit' });
   const agoraHora = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' });
-  let prompt = `${promptCustom}\n\nAgora sao ${agoraHora} de ${hoje} (fuso horario de Maceio/Brasil, UTC-03:00). Use isso pra calcular qualquer data/hora de agendamento - nunca chute.\n\nVoce pode receber do contato texto, audio (chega ja transcrito), imagem (voce ve de verdade) ou video (voce so sabe que recebeu, ainda nao consegue assistir).`;
-  prompt += AVISO_OBJETIVIDADE;
-  if (temAgenda) prompt += AVISO_DATAS_PASSADAS;
-  if (vaiSerAudio) prompt += AVISO_RESPOSTA_EM_AUDIO;
-  return prompt;
+  let fixo = `${config.prompt}\n\nVoce pode receber do contato texto, audio (chega ja transcrito), imagem (voce ve de verdade) ou video (voce so sabe que recebeu, ainda nao consegue assistir).`;
+  fixo += AVISO_OBJETIVIDADE;
+  if (temAgenda) fixo += AVISO_DATAS_PASSADAS;
+  fixo += avisoAgendamentoClinicorp(config);
+  fixo += AVISO_ALERTA_RETORNO;
+
+  let dinamico = `Agora sao ${agoraHora} de ${hoje} (fuso horario de Maceio/Brasil, UTC-03:00). Use isso pra calcular qualquer data/hora de agendamento - nunca chute.`;
+  dinamico += contextoTemporalTexto;
+  if (retomarPendente) dinamico += AVISO_RETOMADA;
+  if (retomadaRetorno) dinamico += AVISO_RETORNO;
+  // o aviso de audio fica por ultimo de proposito (maior prioridade/recencia, ver comentario dele)
+  if (vaiSerAudio) dinamico += AVISO_RESPOSTA_EM_AUDIO;
+
+  return [
+    { type: 'text', text: fixo, cache_control: { type: 'ephemeral', ttl: '1h' } },
+    { type: 'text', text: dinamico },
+  ];
 }
 
 // rede de seguranca no CODIGO (nao so no prompt) - mesmo que a IA "esqueça" a instrucao, isso
@@ -1074,13 +1094,19 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   TOOLS.push(toolEnviarArquivo(listaArquivos));
   const contexto = { tenantId, instancia, numero, config };
   const contextoTemporal = await montarContextoTemporal(tenantId, numero, config, sessao);
-  const system = systemPromptComHoje(config.prompt, vaiSerAudio, config.agendarClinicorp || config.agendarAgendaInterna) + contextoTemporal.texto + avisoAgendamentoClinicorp(config) + (retomarPendente ? AVISO_RETOMADA : '') + (retomadaRetorno ? AVISO_RETORNO : '') + AVISO_ALERTA_RETORNO;
+  const system = systemBlocos(config, {
+    vaiSerAudio,
+    temAgenda: !!(config.agendarClinicorp || config.agendarAgendaInterna),
+    contextoTemporalTexto: contextoTemporal.texto,
+    retomarPendente,
+    retomadaRetorno,
+  });
 
   // thinking adaptive + effort medio: sem isso, o modelo as vezes gasta o max_tokens inteiro
   // "pensando" internamente (bloco thinking) e nao sobra nada pro texto de verdade da resposta
   // (stop_reason=max_tokens, zero texto) - mesmo bug encontrado no chat pessoal (cloudAgent.js),
   // aqui seria ainda pior: o contato do WhatsApp ficaria sem resposta nenhuma ("travado").
-  const configClaude = { model: 'claude-sonnet-5', max_tokens: 4096, thinking: { type: 'adaptive' }, output_config: { effort: 'medium' }, system, tools: TOOLS };
+  const configClaude = { model: 'claude-sonnet-5', max_tokens: 4096, thinking: { type: 'adaptive' }, output_config: { effort: 'medium' }, system, tools: TOOLS, _uso: { tenantId, modulo: 'auto-atendimento' } };
   let response = await anthropic.messages.create({ ...configClaude, messages: history });
   creditoRestabelecido(); // chamada a IA deu certo - se os creditos tinham acabado, voltaram
   let rounds = 0;

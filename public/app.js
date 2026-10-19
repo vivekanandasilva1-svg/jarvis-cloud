@@ -3041,6 +3041,7 @@ const saldoInput = document.getElementById('saldoInput');
 const saldoLimite = document.getElementById('saldoLimite');
 const saldoSalvar = document.getElementById('saldoSalvar');
 const saldoMsg = document.getElementById('saldoMsg');
+const saldoUso = document.getElementById('saldoUso');
 let saldoIniciado = false;
 
 const usd = (v) => `US$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -3061,6 +3062,21 @@ function renderSaldo(d) {
     if (d.diasRestantes !== null) partes.push(`dá para ~${d.diasRestantes < 1 ? 'menos de 1 dia' : `${Math.floor(d.diasRestantes)} dia(s)`} neste ritmo`);
     saldoDetalhe.textContent = partes.join(' · ');
   }
+  // cache + quem mais consome (7 dias) - mostra se a economia por prompt caching esta funcionando
+  saldoUso.textContent = '';
+  const linha = (rotulo, valor) => {
+    const l = document.createElement('div');
+    l.className = 'linha';
+    const a = document.createElement('span');
+    a.textContent = rotulo;
+    const b = document.createElement('strong');
+    b.textContent = valor;
+    l.append(a, b);
+    saldoUso.appendChild(l);
+  };
+  if (d.cachePct !== null && d.cachePct !== undefined) linha('Entrada vinda do cache (7 dias)', `${d.cachePct}%`);
+  const NOMES_MODULO = { 'auto-atendimento': 'Auto Atendimento', lumia: 'Lumia', 'follow-up': 'Follow Up', 'gerador-relatorios': 'Gerador de Relatórios' };
+  for (const r of d.porCliente || []) linha(`${r.nome} · ${NOMES_MODULO[r.modulo] || r.modulo || 'outros'}`, usd(r.custoUsd));
   if (document.activeElement !== saldoLimite) saldoLimite.value = String(d.limiteAlertaUsd).replace('.', ',');
 }
 

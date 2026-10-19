@@ -41,9 +41,13 @@ const tabelasProntas = pool ? (async () => {
       tokens_saida BIGINT NOT NULL DEFAULT 0,
       tokens_cache_escrita BIGINT NOT NULL DEFAULT 0,
       tokens_cache_leitura BIGINT NOT NULL DEFAULT 0,
-      custo_usd NUMERIC(12,6) NOT NULL DEFAULT 0,
-      PRIMARY KEY (hora, modelo)
+      custo_usd NUMERIC(12,6) NOT NULL DEFAULT 0
     )`);
+  // atribuicao por cliente/modulo (tenant_id 0 = chamada sem dono identificado)
+  await pool.query('ALTER TABLE ia_uso ADD COLUMN IF NOT EXISTS tenant_id INTEGER NOT NULL DEFAULT 0');
+  await pool.query(`ALTER TABLE ia_uso ADD COLUMN IF NOT EXISTS modulo TEXT NOT NULL DEFAULT ''`);
+  await pool.query('ALTER TABLE ia_uso DROP CONSTRAINT IF EXISTS ia_uso_pkey');
+  await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS ia_uso_chave ON ia_uso (hora, modelo, tenant_id, modulo)');
   await pool.query('INSERT INTO ia_saldo (id) VALUES (1) ON CONFLICT DO NOTHING');
 })().catch((err) => console.error('Erro criando tabelas do saldo da IA:', err.message)) : Promise.resolve();
 
@@ -59,23 +63,23 @@ export function custoDaChamada(modelo, usage) {
 }
 
 // chamado pelo cliente compartilhado a cada resposta da IA - nunca pode derrubar a chamada de quem usa
-export async function registrarUso(modelo, usage) {
+export async function registrarUso(modelo, usage, dono) {
   if (!pool || !usage) return;
   try {
     await tabelasProntas;
     const custo = custoDaChamada(modelo, usage);
     const n = (v) => Number(v) || 0;
     await pool.query(
-      `INSERT INTO ia_uso (hora, modelo, chamadas, tokens_entrada, tokens_saida, tokens_cache_escrita, tokens_cache_leitura, custo_usd)
-       VALUES (date_trunc('hour', now()), $1, 1, $2, $3, $4, $5, $6)
-       ON CONFLICT (hora, modelo) DO UPDATE SET
+      `INSERT INTO ia_uso (hora, modelo, tenant_id, modulo, chamadas, tokens_entrada, tokens_saida, tokens_cache_escrita, tokens_cache_leitura, custo_usd)
+       VALUES (date_trunc('hour', now()), $1, $7, $8, 1, $2, $3, $4, $5, $6)
+       ON CONFLICT (hora, modelo, tenant_id, modulo) DO UPDATE SET
          chamadas = ia_uso.chamadas + 1,
          tokens_entrada = ia_uso.tokens_entrada + EXCLUDED.tokens_entrada,
          tokens_saida = ia_uso.tokens_saida + EXCLUDED.tokens_saida,
          tokens_cache_escrita = ia_uso.tokens_cache_escrita + EXCLUDED.tokens_cache_escrita,
          tokens_cache_leitura = ia_uso.tokens_cache_leitura + EXCLUDED.tokens_cache_leitura,
          custo_usd = ia_uso.custo_usd + EXCLUDED.custo_usd`,
-      [modelo || 'desconhecido', n(usage.input_tokens), n(usage.output_tokens), n(usage.cache_creation_input_tokens), n(usage.cache_read_input_tokens), custo],
+      [modelo || 'desconhecido', n(usage.input_tokens), n(usage.output_tokens), n(usage.cache_creation_input_tokens), n(usage.cache_read_input_tokens), custo, Number(dono?.tenantId) || 0, String(dono?.modulo || '')],
     );
     const { rows: [s] } = await pool.query(
       'UPDATE ia_saldo SET saldo_usd = saldo_usd - $1 WHERE id = 1 AND saldo_usd IS NOT NULL RETURNING saldo_usd, limite_alerta_usd, aviso_baixo_em',
@@ -116,6 +120,18 @@ export async function obterSituacao() {
       COALESCE(SUM(chamadas) FILTER (WHERE hora >= now() - interval '7 days'), 0) AS chamadas_7d,
       MIN(hora) AS primeiro
     FROM ia_uso`);
+  // quanto da entrada dos ultimos 7 dias veio do cache (leitura) - mede se o prompt caching esta funcionando
+  const { rows: [c] } = await pool.query(`
+    SELECT COALESCE(SUM(tokens_cache_leitura),0) AS lido,
+           COALESCE(SUM(tokens_entrada + tokens_cache_escrita + tokens_cache_leitura),0) AS total
+    FROM ia_uso WHERE hora >= now() - interval '7 days'`);
+  const cachePct = Number(c.total) > 0 ? Math.round((Number(c.lido) / Number(c.total)) * 100) : null;
+  const { rows: porCliente } = await pool.query(`
+    SELECT u.tenant_id, COALESCE(t.nome, CASE WHEN u.tenant_id = 0 THEN 'Sem dono identificado' ELSE 'Cliente ' || u.tenant_id END) AS nome,
+           u.modulo, SUM(u.custo_usd) AS custo, SUM(u.chamadas) AS chamadas
+    FROM ia_uso u LEFT JOIN tenants t ON t.id = u.tenant_id
+    WHERE u.hora >= now() - interval '7 days'
+    GROUP BY u.tenant_id, t.nome, u.modulo ORDER BY custo DESC LIMIT 8`);
   const diasHistorico = u.primeiro ? Math.min(7, Math.max(1, (Date.now() - new Date(u.primeiro).getTime()) / 86400000)) : 0;
   const mediaDia = diasHistorico ? Number(u.sete_dias) / diasHistorico : 0;
   const configurado = s.saldo_usd !== null;
@@ -139,6 +155,8 @@ export async function obterSituacao() {
     mediaDiariaUsd: mediaDia,
     diasRestantes,
     chamadas7dias: Number(u.chamadas_7d),
+    cachePct,
+    porCliente: porCliente.map((r) => ({ tenantId: r.tenant_id, nome: r.nome, modulo: r.modulo, custoUsd: Number(r.custo), chamadas: Number(r.chamadas) })),
   };
 }
 

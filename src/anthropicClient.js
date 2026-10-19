@@ -9,11 +9,14 @@ import { registrarUso } from './saldoIA.js';
 export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const criarOriginal = anthropic.messages.create.bind(anthropic.messages);
+// quem chama pode mandar `_uso: { tenantId, modulo }` junto dos parametros - serve so pra atribuir o
+// custo ao cliente/modulo certo (saldoIA.js) e e removido aqui, nunca vai pra API
 anthropic.messages.create = async (params, ...resto) => {
+  const { _uso, ...corpo } = params || {};
   try {
-    const resposta = await criarOriginal(params, ...resto);
+    const resposta = await criarOriginal(corpo, ...resto);
     creditoRestabelecido();
-    registrarUso(params?.model, resposta?.usage); // sem await: contabilidade nunca atrasa nem derruba a resposta
+    registrarUso(corpo.model, resposta?.usage, _uso); // sem await: contabilidade nunca atrasa nem derruba a resposta
     return resposta;
   } catch (err) {
     if (ehErroDeCredito(err)) registrarFalhaCredito().catch(() => {});

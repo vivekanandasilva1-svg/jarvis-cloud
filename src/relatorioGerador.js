@@ -252,7 +252,7 @@ async function montarBlocosArquivos(arquivos) {
   return blocos;
 }
 
-async function extrairDadosEAnaliseDeArquivos({ arquivos, instrucoes }) {
+async function extrairDadosEAnaliseDeArquivos({ tenantId, arquivos, instrucoes }) {
   const blocosArquivos = await montarBlocosArquivos(arquivos);
   if (!blocosArquivos.length) throw new Error('nenhum arquivo valido anexado');
 
@@ -268,6 +268,7 @@ async function extrairDadosEAnaliseDeArquivos({ arquivos, instrucoes }) {
     tools: [TOOL_DADOS_E_ANALISE],
     tool_choice: { type: 'tool', name: 'entregar_dados_e_analise' },
     messages: [{ role: 'user', content: [{ type: 'text', text: texto }, ...blocosArquivos] }],
+    _uso: { tenantId, modulo: 'gerador-relatorios' },
   });
 
   const toolUse = resp.content.find((b) => b.type === 'tool_use');
@@ -280,7 +281,7 @@ async function extrairDadosEAnaliseDeArquivos({ arquivos, instrucoes }) {
   return dados;
 }
 
-async function gerarAnaliseComIA({ dados, instrucoes }) {
+async function gerarAnaliseComIA({ tenantId, dados, instrucoes }) {
   const resumo = [
     `Investimento: R$ ${dados.investimento?.toFixed(2)}`,
     dados.resultados != null ? `${dados.tipoResultado || 'Resultados'}: ${dados.resultados}` : null,
@@ -301,6 +302,7 @@ async function gerarAnaliseComIA({ dados, instrucoes }) {
     tools: [TOOL_ANALISE],
     tool_choice: { type: 'tool', name: 'entregar_analise' },
     messages: [{ role: 'user', content: texto }],
+    _uso: { tenantId, modulo: 'gerador-relatorios' },
   });
 
   const toolUse = resp.content.find((b) => b.type === 'tool_use');
@@ -542,12 +544,12 @@ export async function gerarRelatorio(tenantId, { fonte, temaId, accountId, from,
   let dados;
   let analise;
   if (fonte === 'manual') {
-    const extraido = await extrairDadosEAnaliseDeArquivos({ arquivos, instrucoes });
+    const extraido = await extrairDadosEAnaliseDeArquivos({ tenantId, arquivos, instrucoes });
     dados = extraido;
     analise = { analiseMetricas: extraido.analiseMetricas, conclusaoEstrategica: extraido.conclusaoEstrategica, sugestoes: extraido.sugestoes };
   } else {
     dados = await buscarDadosAutomatico(tenantId, { accountId, from, to });
-    analise = await gerarAnaliseComIA({ dados, instrucoes });
+    analise = await gerarAnaliseComIA({ tenantId, dados, instrucoes });
   }
 
   const html = montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride: clienteNome, marca });

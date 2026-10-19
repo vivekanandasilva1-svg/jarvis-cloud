@@ -151,6 +151,14 @@
     "conteudo": "Depois dos créditos da Anthropic zerarem (16/10) e o Gerador de Relatórios mostrar o erro cru da API, o dono pediu um indicador de saldo. A API da Anthropic NÃO tem endpoint de saldo pré-pago (só uso/custo via Admin API com chave sk-ant-admin, e só para organização) - então o saldo é ESTIMADO: o dono informa o valor atual (chip no topo, só super_admin) e src/anthropicClient.js (cliente único usado por Lumia, Auto Atendimento, Follow Up e Gerador) desconta o custo real de cada chamada a partir de usage x tabela de preços em src/saldoIA.js (tabelas ia_saldo e ia_uso). Chip verde/amarelo/vermelho, média diária e dias restantes; abaixo do limite escolhido avisa no WhatsApp do dono (1x/12h, sem IA) antes de zerar. Botão 'Recarregar créditos' abre platform.claude.com/settings/billing (no painel do saldo e no alerta do sino). Gerador de Relatórios agora explica falta de crédito em vez de mostrar JSON. Pendente: saldo é da plataforma (chave única), não por cliente; custo por tenant e leitura exata via Admin key ficam para depois; o preço do modelo precisa ser atualizado em saldoIA.js se mudar."
   },
   {
+    "chave": "plat:economia-cache-auto",
+    "modulo": "plataforma",
+    "data": "2026-10-19",
+    "tipo": "melhoria",
+    "titulo": "Prompt caching no Auto Atendimento + custo da IA por cliente e módulo",
+    "conteudo": "Auditoria de custo (guia cost-optimize da Anthropic) mostrou que ~97% das mensagens vêm do Auto Atendimento do tenant 10 (~116/dia) e que ele reenviava prompt (~8 mil caracteres) + ferramentas a preço cheio a cada chamada, sem cache, com a hora 'Agora são HH:MM' dentro do próprio prompt (o que quebraria qualquer cache). Agora src/autoAtendimento.js systemBlocos() separa o bloco FIXO (prompt do painel + regras fixas, com cache_control TTL 1h - o intervalo médio entre mensagens de contatos diferentes é ~6 min, maior que os 5 min padrão) do bloco que muda por chamada (hora, fatos da conversa, avisos de áudio/retomada/retorno). Mesmo texto, só reordenado; ferramentas+bloco fixo são lidos a ~10% do preço e o prefixo é compartilhado entre os contatos do tenant. REGRA: nunca pôr conteúdo dinâmico no bloco fixo, senão o cache quebra em silêncio. Também: ia_uso agora guarda tenant_id e modulo (chamadas passam _uso:{tenantId,modulo}) e o painel do saldo mostra % da entrada vinda do cache e quem mais consome - é como conferir se o cache funciona (esperado >80%). Pendente (precisa de recarga e de eval com conversas reais): trocar claude-sonnet-5 por claude-sonnet-5-5 (exige tirar tool_choice forçado do Follow Up e do Gerador), baixar effort do atendimento de medium para low, e testar Haiku 5.5 em tarefas leves/atendimento."
+  },
+  {
     "chave": "mod:assistente",
     "hub": true,
     "modulo": "assistente",

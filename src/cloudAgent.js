@@ -1839,6 +1839,7 @@ async function callClaude(tenantId, history, sessionId) {
     system: await systemPromptBlocos(tenantId),
     tools: ehWhatsapp ? TOOLS_SEM_CONTROLE_PC : tools,
     messages: history,
+    _uso: { tenantId, modulo: 'lumia' },
   });
   // log leve pra confirmar que o prompt caching esta funcionando de verdade -
   // cache_read_input_tokens alto (vs input_tokens baixo) significa que a maior parte do

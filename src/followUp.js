@@ -276,7 +276,7 @@ function formatarHistorico(historico) {
   return historico.slice(-8).map((h) => `[${h.autor === 'lumia' ? 'Voce (Lumia)' : 'Contato'}] ${h.texto}`).join('\n');
 }
 
-async function gerarMensagemEtapa({ config, etapa, contato, historico }) {
+async function gerarMensagemEtapa({ tenantId, config, etapa, contato, historico }) {
   const texto = `${config.promptGeral}\n\n` +
     `Voce esta tentando reengajar um contato que parou de responder ha ${etapa.dias} dia(s) - essa e a tentativa numero ${etapa.ordem} de reengajamento.` +
     (etapa.prompt ? `\n\nInstrucoes especificas pra essa tentativa: ${etapa.prompt}` : '') +
@@ -288,6 +288,7 @@ async function gerarMensagemEtapa({ config, etapa, contato, historico }) {
     model: MODEL, max_tokens: 500,
     tools: [TOOL_GERAR_MENSAGEM], tool_choice: { type: 'tool', name: 'entregar_mensagem_followup' },
     messages: [{ role: 'user', content: texto }],
+    _uso: { tenantId, modulo: 'follow-up' },
   });
   const toolUse = resp.content.find((b) => b.type === 'tool_use');
   if (!toolUse) throw new Error('a IA nao conseguiu gerar a mensagem de follow up');
@@ -344,6 +345,7 @@ export async function processarMensagem(tenantId, contatoId, numero, instancia, 
     model: MODEL, max_tokens: 600,
     tools: [TOOL_RESPONDER_E_ANALISAR], tool_choice: { type: 'tool', name: 'responder_e_analisar' },
     messages: [{ role: 'user', content: prompt }],
+    _uso: { tenantId, modulo: 'follow-up' },
   });
   const toolUse = resp.content.find((b) => b.type === 'tool_use');
   if (!toolUse) return null;
@@ -377,7 +379,7 @@ async function processarContato(tenantId, contato, etapas, config) {
   const proxima = etapas.find((e) => e.ordem > ultimaOrdem && e.ativo && diasDesdeEntrada >= e.dias);
   if (proxima) {
     const historico = contato.historico || [];
-    const mensagem = await gerarMensagemEtapa({ config, etapa: proxima, contato, historico });
+    const mensagem = await gerarMensagemEtapa({ tenantId, config, etapa: proxima, contato, historico });
     await evolutionApi.enviarMensagemTextoPor(contato.instancia, contato.numero, mensagem);
     await crm.registrarMensagem(tenantId, { numero: contato.numero, instancia: contato.instancia, direcao: 'saida', tipo: 'text', texto: mensagem });
 
