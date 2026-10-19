@@ -315,6 +315,27 @@ function toolEnviarArquivo(listaDisponiveis) {
   };
 }
 
+// lista de ferramentas que o Auto Atendimento oferece a IA, conforme o que esta ligado no painel.
+// Exportada pra o teste de qualidade (scripts/eval-atendimento.mjs) usar exatamente as mesmas
+// ferramentas da producao - a ordem e o conteudo precisam ser estaveis (fazem parte do prefixo em cache)
+export function montarTools(config, listaArquivos) {
+  const TOOLS = [];
+  if (config.agendarAgendaInterna) TOOLS.push(TOOL_AGENDA_LISTAR_INTERNA);
+  if (config.agendarClinicorp) {
+    TOOLS.push(TOOL_CLINICORP_CONSULTAR_AGENDA);
+    TOOLS.push(TOOL_CLINICORP_BUSCAR_PACIENTE);
+    TOOLS.push(TOOL_CLINICORP_CADASTRAR_PACIENTE);
+  }
+  if (config.agendarClinicorp || config.agendarAgendaInterna) {
+    TOOLS.push(toolCriarAgendamento(config));
+    TOOLS.push(TOOL_VERIFICAR_COMPARECIMENTO);
+    TOOLS.push(TOOL_CANCELAR_AGENDAMENTO);
+  }
+  TOOLS.push(TOOL_CRIAR_ALERTA_RETORNO);
+  TOOLS.push(toolEnviarArquivo(listaArquivos));
+  return TOOLS;
+}
+
 // acha o profissional certo pelo nome que o contato falou (aceita nome parcial, sem
 // acento/maiusculas - "Thales", "dr thales" ou o nome completo todos acham o mesmo)
 function normalizarNome(s) {
@@ -1078,20 +1099,7 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   const vaiSerAudio = decidirSeAudio(config, novaContagem, tipo);
 
   const listaArquivos = await arquivos.listarArquivos(tenantId);
-  const TOOLS = [];
-  if (config.agendarAgendaInterna) TOOLS.push(TOOL_AGENDA_LISTAR_INTERNA);
-  if (config.agendarClinicorp) {
-    TOOLS.push(TOOL_CLINICORP_CONSULTAR_AGENDA);
-    TOOLS.push(TOOL_CLINICORP_BUSCAR_PACIENTE);
-    TOOLS.push(TOOL_CLINICORP_CADASTRAR_PACIENTE);
-  }
-  if (config.agendarClinicorp || config.agendarAgendaInterna) {
-    TOOLS.push(toolCriarAgendamento(config));
-    TOOLS.push(TOOL_VERIFICAR_COMPARECIMENTO);
-    TOOLS.push(TOOL_CANCELAR_AGENDAMENTO);
-  }
-  TOOLS.push(TOOL_CRIAR_ALERTA_RETORNO);
-  TOOLS.push(toolEnviarArquivo(listaArquivos));
+  const TOOLS = montarTools(config, listaArquivos);
   const contexto = { tenantId, instancia, numero, config };
   const contextoTemporal = await montarContextoTemporal(tenantId, numero, config, sessao);
   const system = systemBlocos(config, {
