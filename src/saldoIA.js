@@ -9,14 +9,16 @@ import { pool } from './db.js';
 import * as whatsappInstances from './whatsappInstances.js';
 import { enviarMensagemTexto } from './evolutionApi.js';
 
-// US$ por milhao de tokens: entrada, saida, escrita de cache (5 min), leitura de cache.
-// Fonte: platform.claude.com/docs/en/about-claude/pricing (conferido em 2026-10-16).
+// US$ por milhao de tokens: entrada, saida, escrita de cache de 5 min, escrita de cache de 1h, leitura de cache.
+// Fonte: platform.claude.com/docs/en/about-claude/pricing (conferido em 2026-10-19).
+// Haiku 5.5: valores do prompt ate 100 mil tokens (acima disso o preco e 5x - o app nunca chega la).
 const PRECOS = {
-  'claude-sonnet-5': { entrada: 2, saida: 10, cacheEscrita: 2.5, cacheLeitura: 0.2 },
-  'claude-sonnet-5-5': { entrada: 2, saida: 10, cacheEscrita: 2.5, cacheLeitura: 0.1 },
-  'claude-haiku-4-5': { entrada: 1, saida: 5, cacheEscrita: 1.25, cacheLeitura: 0.1 },
-  'claude-opus-5-5': { entrada: 4, saida: 20, cacheEscrita: 5, cacheLeitura: 0.2 },
-  'claude-fable-5-1': { entrada: 10, saida: 50, cacheEscrita: 12.5, cacheLeitura: 0.25 },
+  'claude-sonnet-5': { entrada: 2, saida: 10, cacheEscrita: 2.5, cacheEscrita1h: 4, cacheLeitura: 0.2 },
+  'claude-sonnet-5-5': { entrada: 2, saida: 10, cacheEscrita: 2.5, cacheEscrita1h: 4, cacheLeitura: 0.1 },
+  'claude-haiku-4-5': { entrada: 1, saida: 5, cacheEscrita: 1.25, cacheEscrita1h: 2, cacheLeitura: 0.1 },
+  'claude-haiku-5-5': { entrada: 0.1, saida: 0.5, cacheEscrita: 0.125, cacheEscrita1h: 0.2, cacheLeitura: 0.01 },
+  'claude-opus-5-5': { entrada: 4, saida: 20, cacheEscrita: 5, cacheEscrita1h: 8, cacheLeitura: 0.2 },
+  'claude-fable-5-1': { entrada: 10, saida: 50, cacheEscrita: 12.5, cacheEscrita1h: 20, cacheLeitura: 0.25 },
 };
 const PRECO_PADRAO = PRECOS['claude-sonnet-5']; // modelo desconhecido: estima como o modelo que o app mais usa
 
@@ -54,10 +56,15 @@ const tabelasProntas = pool ? (async () => {
 export function custoDaChamada(modelo, usage) {
   const p = PRECOS[modelo] || PRECO_PADRAO;
   const n = (v) => Number(v) || 0;
+  // escrita de cache: a resposta separa por duracao (5 min x 1 h, a de 1h custa mais); sem essa quebra, tudo vai como 5 min
+  const c1h = n(usage?.cache_creation?.ephemeral_1h_input_tokens);
+  const escritaTotal = n(usage?.cache_creation_input_tokens);
+  const c5m = usage?.cache_creation ? n(usage.cache_creation.ephemeral_5m_input_tokens) : escritaTotal;
   return (
     n(usage?.input_tokens) * p.entrada +
     n(usage?.output_tokens) * p.saida + // tokens de raciocinio (thinking) ja vem somados no output_tokens
-    n(usage?.cache_creation_input_tokens) * p.cacheEscrita +
+    c5m * p.cacheEscrita +
+    c1h * p.cacheEscrita1h +
     n(usage?.cache_read_input_tokens) * p.cacheLeitura
   ) / 1e6;
 }
