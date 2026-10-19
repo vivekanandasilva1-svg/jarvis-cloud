@@ -161,6 +161,24 @@
           <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M6 19a5 5 0 0 1-.6-9.97A6 6 0 0 1 17 8a4.5 4.5 0 0 1 .5 9H6z"/></svg>
           <span id="weatherBadgeTemp">--°</span>
         </span>
+        <div class="saldo-wrap" id="saldoWrap" hidden>
+          <button type="button" class="saldo-chip" id="saldoChip" title="Saldo estimado da IA (créditos da Anthropic)">
+            <span class="saldo-dot" id="saldoDot"></span><span id="saldoChipTexto">IA</span>
+          </button>
+          <div class="saldo-painel" id="saldoPainel" hidden>
+            <div class="sino-painel-topo"><strong>Saldo da IA (Anthropic)</strong><span id="saldoNivel"></span></div>
+            <div class="saldo-valor" id="saldoValor">--</div>
+            <p class="saldo-detalhe" id="saldoDetalhe"></p>
+            <a class="saldo-recarregar" id="saldoRecarregar" href="https://platform.claude.com/settings/billing" target="_blank" rel="noopener noreferrer">Recarregar créditos na Anthropic ↗</a>
+            <label class="saldo-label" for="saldoInput">Quanto você tem agora (US$) — veja no Console, em Plans &amp; Billing</label>
+            <input type="text" id="saldoInput" inputmode="decimal" placeholder="ex.: 25,00" autocomplete="off">
+            <label class="saldo-label" for="saldoLimite">Avisar no WhatsApp quando ficar abaixo de (US$)</label>
+            <input type="text" id="saldoLimite" inputmode="decimal" placeholder="ex.: 5" autocomplete="off">
+            <button type="button" class="saldo-salvar" id="saldoSalvar">Salvar saldo</button>
+            <p class="saldo-aviso">É uma estimativa: o app desconta o custo de cada resposta da IA do valor que você informa. A Anthropic não permite consultar o saldo exato — depois de recarregar, informe o novo valor aqui.</p>
+            <p class="saldo-msg" id="saldoMsg"></p>
+          </div>
+        </div>
         <div class="sino-wrap" id="sinoWrap">
           <button type="button" class="sino-btn" id="sinoBtn" title="Notificacoes" aria-label="Notificacoes">
             <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm6.5-6V11a6.5 6.5 0 0 0-5-6.32V4a1.5 1.5 0 0 0-3 0v.68A6.5 6.5 0 0 0 5.5 11v5L3.5 18v1h17v-1l-2-2z"/></svg>

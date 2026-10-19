@@ -2930,6 +2930,7 @@ const sinoPainel = document.getElementById('sinoPainel');
 const sinoLista = document.getElementById('sinoLista');
 const sinoTotal = document.getElementById('sinoTotal');
 let sinoIniciado = false;
+const URL_RECARGA_ANTHROPIC = 'https://platform.claude.com/settings/billing'; // Console da Anthropic: Plans & Billing
 
 function sinoSecao(titulo) {
   const h = document.createElement('div');
@@ -2938,7 +2939,7 @@ function sinoSecao(titulo) {
   sinoLista.appendChild(h);
 }
 
-function sinoItem(titulo, detalhe, classe, aoClicar) {
+function sinoItem(titulo, detalhe, classe, aoClicar, recarregar) {
   const el = document.createElement('div');
   el.className = `sino-item ${classe || ''}`;
   el.textContent = titulo;
@@ -2946,6 +2947,15 @@ function sinoItem(titulo, detalhe, classe, aoClicar) {
     const small = document.createElement('small');
     small.textContent = detalhe;
     el.appendChild(small);
+  }
+  if (recarregar) {
+    const a = document.createElement('a');
+    a.className = 'sino-recarregar';
+    a.href = URL_RECARGA_ANTHROPIC;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = 'Recarregar créditos ↗';
+    el.appendChild(a);
   }
   if (aoClicar) el.addEventListener('click', aoClicar);
   sinoLista.appendChild(el);
@@ -2980,7 +2990,7 @@ async function atualizarSino() {
     }
     if (d.alertas?.length) {
       sinoSecao('Atenção');
-      for (const a of d.alertas) sinoItem(`⚠️ ${a.titulo}`, a.detalhe, 'vermelho');
+      for (const a of d.alertas) sinoItem(`⚠️ ${a.titulo}`, a.detalhe, 'vermelho', null, a.recarregar);
     }
     if (d.retornos.length) {
       sinoSecao('Alertas de retorno de hoje');
@@ -3019,8 +3029,81 @@ document.addEventListener('click', (ev) => {
   if (!sinoPainel.hidden && !document.getElementById('sinoWrap').contains(ev.target)) sinoPainel.hidden = true;
 });
 
+// ---------- Indicador de saldo da IA (so o dono; estimativa - ver src/saldoIA.js) ----------
+const saldoWrap = document.getElementById('saldoWrap');
+const saldoChip = document.getElementById('saldoChip');
+const saldoChipTexto = document.getElementById('saldoChipTexto');
+const saldoPainel = document.getElementById('saldoPainel');
+const saldoValor = document.getElementById('saldoValor');
+const saldoDetalhe = document.getElementById('saldoDetalhe');
+const saldoNivel = document.getElementById('saldoNivel');
+const saldoInput = document.getElementById('saldoInput');
+const saldoLimite = document.getElementById('saldoLimite');
+const saldoSalvar = document.getElementById('saldoSalvar');
+const saldoMsg = document.getElementById('saldoMsg');
+let saldoIniciado = false;
+
+const usd = (v) => `US$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const NIVEL_TEXTO = { ok: 'Saldo ok', atencao: 'Atenção', baixo: 'Saldo baixo', zerado: 'ZERADO', 'sem-config': 'Não informado' };
+
+function renderSaldo(d) {
+  saldoChip.className = `saldo-chip ${d.nivel}`;
+  saldoPainel.classList.toggle('critico', d.nivel === 'baixo' || d.nivel === 'zerado');
+  saldoNivel.textContent = NIVEL_TEXTO[d.nivel] || '';
+  if (!d.configurado) {
+    saldoChipTexto.textContent = 'Saldo IA';
+    saldoValor.textContent = '--';
+    saldoDetalhe.textContent = 'Informe abaixo quanto você tem na Anthropic para o app acompanhar o consumo e avisar antes de acabar.';
+  } else {
+    saldoChipTexto.textContent = d.nivel === 'zerado' ? 'IA sem saldo - recarregar' : `IA ${usd(d.saldoUsd)}`;
+    saldoValor.textContent = `~${usd(d.saldoUsd)}`;
+    const partes = [`Gasto hoje: ${usd(d.gastoHojeUsd)}`, `média ${usd(d.mediaDiariaUsd)}/dia (7 dias)`];
+    if (d.diasRestantes !== null) partes.push(`dá para ~${d.diasRestantes < 1 ? 'menos de 1 dia' : `${Math.floor(d.diasRestantes)} dia(s)`} neste ritmo`);
+    saldoDetalhe.textContent = partes.join(' · ');
+  }
+  if (document.activeElement !== saldoLimite) saldoLimite.value = String(d.limiteAlertaUsd).replace('.', ',');
+}
+
+async function atualizarSaldo() {
+  if (appWindow.hidden || !souSuperAdmin) { saldoWrap.hidden = true; return; }
+  try {
+    const res = await fetch('/api/saldo-ia', { headers: { 'x-app-password': appPassword } });
+    if (!res.ok) return;
+    saldoWrap.hidden = false;
+    renderSaldo(await res.json());
+  } catch { /* tenta de novo no proximo ciclo */ }
+}
+
+saldoChip.addEventListener('click', (ev) => {
+  ev.stopPropagation();
+  saldoPainel.hidden = !saldoPainel.hidden;
+  if (!saldoPainel.hidden) { saldoMsg.textContent = ''; atualizarSaldo(); }
+});
+saldoPainel.addEventListener('click', (ev) => ev.stopPropagation());
+document.addEventListener('click', () => { saldoPainel.hidden = true; });
+saldoSalvar.addEventListener('click', async () => {
+  saldoMsg.textContent = 'Salvando...';
+  try {
+    const res = await fetch('/api/saldo-ia', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ saldoUsd: saldoInput.value.trim(), limiteAlertaUsd: saldoLimite.value.trim() }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro ao salvar');
+    saldoInput.value = '';
+    renderSaldo(d);
+    saldoMsg.textContent = 'Salvo.';
+    atualizarSino();
+  } catch (err) {
+    saldoMsg.textContent = err.message;
+  }
+});
+
 function iniciarSino() {
   atualizarSino();
+  atualizarSaldo();
+  if (!saldoIniciado) { saldoIniciado = true; setInterval(atualizarSaldo, 60000); }
   if (sinoIniciado) return;
   sinoIniciado = true;
   setInterval(atualizarSino, 30000);

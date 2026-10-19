@@ -31,6 +31,7 @@ import * as followUp from './followUp.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
 import { iniciarCerebroMae } from './cerebroMae.js';
 import { ehErroDeCredito, creditoEsgotado, registrarFalhaCredito } from './alertaCreditos.js';
+import * as saldoIA from './saldoIA.js';
 import * as cerebro from './cerebro.js';
 import { router as cerebroMcpRouter } from './cerebroMcp.js';
 import * as videoEditor from './videoEditor.js';
@@ -1653,6 +1654,29 @@ app.post('/api/relatorios/enviar-agora/:tipo', async (req, res) => {
 
 // ---------- Gerador de Relatorios (aba dedicada, relatorio HTML com IA + temas de cor) ----------
 
+// ---------- Saldo da IA (creditos da Anthropic - estimativa, ver saldoIA.js; so o super_admin) ----------
+app.get('/api/saldo-ia', exigirSuperAdmin, async (req, res) => {
+  try {
+    res.json(await saldoIA.obterSituacao());
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/saldo-ia', exigirSuperAdmin, async (req, res) => {
+  const num = (v) => (v === undefined || v === null || v === '' ? undefined : Number(String(v).replace(',', '.')));
+  const saldoUsd = num(req.body?.saldoUsd);
+  const limiteAlertaUsd = num(req.body?.limiteAlertaUsd);
+  if ([saldoUsd, limiteAlertaUsd].some((v) => v !== undefined && (!Number.isFinite(v) || v < 0 || v > 1e6))) {
+    return res.status(400).json({ erro: 'valores invalidos (use numeros em dolar, ex.: 25 ou 12,50)' });
+  }
+  try {
+    res.json(await saldoIA.definirSaldo({ saldoUsd, limiteAlertaUsd }));
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.get('/api/gerador-relatorios/contas', async (req, res) => {
   try {
     res.json({ contas: await metaAds.listAdAccounts(req.tenantId, { apenasAtivas: true }) });
@@ -1749,6 +1773,7 @@ app.post('/api/gerador-relatorios/gerar', async (req, res) => {
     });
     res.json({ ok: true, ...resultado });
   } catch (err) {
+    if (ehErroDeCredito(err)) return res.status(503).json({ erro: 'A IA está sem créditos na Anthropic no momento, por isso o relatório não pôde ser gerado. Recarregue os créditos e tente de novo.', semCredito: true });
     res.status(500).json({ erro: err.message });
   }
 });
@@ -1861,9 +1886,15 @@ app.get('/api/notificacoes', async (req, res) => {
   try {
     const [resumo, faltas] = await Promise.all([crm.resumoNotificacoes(req.tenantId), faltasRecentes(req.tenantId)]);
     const tenant = await tenants.obterPorId(req.tenantId);
-    const alertas = tenant?.super_admin && creditoEsgotado()
-      ? [{ tipo: 'creditos', titulo: 'IA sem créditos na Anthropic', detalhe: 'O Auto Atendimento e a Lumia pararam de responder. Recarregue em console.anthropic.com → Plans & Billing - as mensagens dos leads ficam guardadas e são respondidas sozinhas depois.' }]
-      : [];
+    const alertas = [];
+    if (tenant?.super_admin) {
+      const saldo = await saldoIA.obterSituacao().catch(() => null);
+      if (creditoEsgotado() || saldo?.nivel === 'zerado') {
+        alertas.push({ tipo: 'creditos', recarregar: true, titulo: 'IA sem créditos na Anthropic', detalhe: 'O Auto Atendimento e a Lumia pararam de responder. Recarregue os créditos - as mensagens dos leads ficam guardadas e são respondidas sozinhas depois.' });
+      } else if (saldo?.nivel === 'baixo') {
+        alertas.push({ tipo: 'saldo-baixo', recarregar: true, titulo: `Saldo da IA baixo (~US$ ${saldo.saldoUsd.toFixed(2)})`, detalhe: 'Recarregue antes que acabe e a IA pare de responder.' });
+      }
+    }
     const total = alertas.length + resumo.naoLidas.length + resumo.retornos.length + resumo.preAgendamentos.length + faltas.length;
     res.json({ total, ...resumo, faltas, alertas });
   } catch (err) {

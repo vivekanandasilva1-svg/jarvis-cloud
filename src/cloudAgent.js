@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { anthropic } from './anthropicClient.js';
 import * as metaAds from './metaads.js';
 import * as clinicorp from './clinicorp.js';
 import * as secretaria from './secretaria.js';
@@ -16,7 +16,6 @@ import * as googleSheets from './googleSheets.js';
 import * as whatsappInstances from './whatsappInstances.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function garantirTabelas() {
   if (!pool) return;

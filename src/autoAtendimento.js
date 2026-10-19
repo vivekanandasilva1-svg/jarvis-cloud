@@ -3,7 +3,7 @@
 // bem menor (agenda + envio de arquivo de referencia). Existe pra atender contatos que mandam
 // mensagem pro numero de WhatsApp escolhido - nunca mistura com a conversa pessoal do dono nem
 // com a sessao do app web.
-import Anthropic from '@anthropic-ai/sdk';
+import { anthropic } from './anthropicClient.js';
 import { pool } from './db.js';
 import * as agenda from './agenda.js';
 import * as evolutionApi from './evolutionApi.js';
@@ -16,7 +16,6 @@ import { moedaPorExtenso } from './numeroPorExtenso.js';
 import { creditoRestabelecido } from './alertaCreditos.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function garantirTabelas() {
   if (!pool) return;

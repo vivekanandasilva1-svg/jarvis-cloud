@@ -13,13 +13,12 @@
 // forcada (tool_choice) que devolve so o texto (ou texto + decisao de interesse) - ele nao marca
 // agendamento sozinho, so tenta reabrir a conversa; quando consegue, quem retoma o atendimento
 // de verdade (inclusive marcar horario) e o humano ou o auto-atendimento normal, dali em diante.
-import Anthropic from '@anthropic-ai/sdk';
+import { anthropic } from './anthropicClient.js';
 import { pool } from './db.js';
 import * as evolutionApi from './evolutionApi.js';
 import * as crm from './crm.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = 'claude-sonnet-5';
 
 // quantos dias depois da ULTIMA tentativa configurada (ex: apos os 30 dias) o lead continua sem

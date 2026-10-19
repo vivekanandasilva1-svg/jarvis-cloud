@@ -143,6 +143,14 @@
     "conteudo": "Em 16/10 a API devolveu 400 'Your credit balance is too low' - a conta Anthropic (chave única do app, serve a TODOS os clientes) zerou, e cada mensagem de lead gerava o pedido de desculpas. Só o dono resolve (recarregar em console.anthropic.com > Plans & Billing). Blindagem: src/alertaCreditos.js reconhece o erro, avisa o dono no WhatsApp (1x/3h, sem usar IA) e no sino do app; o Auto Atendimento deixa de pedir desculpas, guarda a mensagem do lead como pendente e responde sozinho quando a IA volta (fila pendente_desde); retornos agendados não são disparados nem perdidos enquanto estiver sem crédito; o chat mostra mensagem clara. Pendente: ligar recarga automática na Anthropic (auto-reload) e alerta de saldo baixo ANTES de zerar."
   },
   {
+    "chave": "plat:saldo-ia",
+    "modulo": "plataforma",
+    "data": "2026-10-19",
+    "tipo": "melhoria",
+    "titulo": "Indicador de saldo da IA no topo do app + botão de recarregar créditos",
+    "conteudo": "Depois dos créditos da Anthropic zerarem (16/10) e o Gerador de Relatórios mostrar o erro cru da API, o dono pediu um indicador de saldo. A API da Anthropic NÃO tem endpoint de saldo pré-pago (só uso/custo via Admin API com chave sk-ant-admin, e só para organização) - então o saldo é ESTIMADO: o dono informa o valor atual (chip no topo, só super_admin) e src/anthropicClient.js (cliente único usado por Lumia, Auto Atendimento, Follow Up e Gerador) desconta o custo real de cada chamada a partir de usage x tabela de preços em src/saldoIA.js (tabelas ia_saldo e ia_uso). Chip verde/amarelo/vermelho, média diária e dias restantes; abaixo do limite escolhido avisa no WhatsApp do dono (1x/12h, sem IA) antes de zerar. Botão 'Recarregar créditos' abre platform.claude.com/settings/billing (no painel do saldo e no alerta do sino). Gerador de Relatórios agora explica falta de crédito em vez de mostrar JSON. Pendente: saldo é da plataforma (chave única), não por cliente; custo por tenant e leitura exata via Admin key ficam para depois; o preço do modelo precisa ser atualizado em saldoIA.js se mudar."
+  },
+  {
     "chave": "mod:assistente",
     "hub": true,
     "modulo": "assistente",

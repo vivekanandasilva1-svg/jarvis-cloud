@@ -9,14 +9,13 @@
 //    plataforma) e a IA extrai os numeros de la, alem de escrever a analise - aqui SIM a IA
 //    decide os numeros, porque nao tem outra fonte de verdade disponivel.
 import crypto from 'node:crypto';
-import Anthropic from '@anthropic-ai/sdk';
+import { anthropic } from './anthropicClient.js';
 import { pool } from './db.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
 import * as metaAds from './metaads.js';
 import { extrairTextoWord, extrairTextoExcel } from './leitorDocumentos.js';
 import { obterMarcaRelatorio } from './tenantConfig.js';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = 'claude-sonnet-5';
 
 async function garantirTabelas() {
