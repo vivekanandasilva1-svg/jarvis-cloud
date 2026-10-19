@@ -1114,7 +1114,7 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   // "pensando" internamente (bloco thinking) e nao sobra nada pro texto de verdade da resposta
   // (stop_reason=max_tokens, zero texto) - mesmo bug encontrado no chat pessoal (cloudAgent.js),
   // aqui seria ainda pior: o contato do WhatsApp ficaria sem resposta nenhuma ("travado").
-  const configClaude = { model: 'claude-sonnet-5', max_tokens: 4096, thinking: { type: 'adaptive' }, output_config: { effort: 'medium' }, system, tools: TOOLS, _uso: { tenantId, modulo: 'auto-atendimento' } };
+  const configClaude = { model: 'claude-sonnet-5-5', max_tokens: 4096, thinking: { type: 'adaptive' }, output_config: { effort: 'medium' }, system, tools: TOOLS, _uso: { tenantId, modulo: 'auto-atendimento' } };
   let response = await anthropic.messages.create({ ...configClaude, messages: history });
   creditoRestabelecido(); // chamada a IA deu certo - se os creditos tinham acabado, voltaram
   let rounds = 0;

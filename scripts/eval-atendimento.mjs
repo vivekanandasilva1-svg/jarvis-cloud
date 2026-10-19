@@ -1,7 +1,10 @@
 // Teste de qualidade/custo do Auto Atendimento: compara a configuracao ATUAL da IA com alternativas
 // mais baratas (modelo e/ou esforco de raciocinio), usando mensagens REAIS do tenant (ultimos 14 dias).
 //
-//   node scripts/eval-atendimento.mjs <tenantId> [nCasos=30] [arquivoSaida=/tmp/eval-atendimento.json]
+//   node scripts/eval-atendimento.mjs <tenantId> [nCasos=30] [arquivoSaida=/tmp/eval-atendimento.json] [foco]
+//   foco = "agenda" -> so conversas que falam de agendamento/horario (onde as ferramentas pesam)
+//   variaveis: JUIZ=<modelo avaliador> (padrao claude-sonnet-5-5; use outro modelo pra tirar vies de familia)
+//              CONFIGS=A,A2,B,D (subconjunto das configuracoes; A e sempre incluida)
 //
 // Como funciona (sem efeito colateral nenhum):
 //  - cada caso = uma mensagem de lead que teve resposta real + as mensagens anteriores da conversa
@@ -22,6 +25,7 @@ import { custoDaChamada } from '../src/saldoIA.js';
 const tenantId = Number(process.argv[2]);
 const N = Number(process.argv[3]) || 30;
 const SAIDA = process.argv[4] || '/tmp/eval-atendimento.json';
+const FOCO = process.argv[5] || '';
 if (!tenantId) { console.error('uso: node scripts/eval-atendimento.mjs <tenantId> [nCasos] [arquivoSaida]'); process.exit(1); }
 
 const CONFIGS = [
@@ -32,7 +36,9 @@ const CONFIGS = [
   { id: 'D', rotulo: 'Haiku 5.5 / medium', model: 'claude-haiku-5-5', effort: 'medium' },
   { id: 'E', rotulo: 'Haiku 5.5 / low', model: 'claude-haiku-5-5', effort: 'low' },
 ];
-const JUIZ = 'claude-sonnet-5-5';
+const JUIZ = process.env.JUIZ || 'claude-sonnet-5-5';
+if (process.env.CONFIGS) { const quer = new Set(['A', ...process.env.CONFIGS.split(',')]); for (let i = CONFIGS.length - 1; i >= 0; i--) if (!quer.has(CONFIGS[i].id)) CONFIGS.splice(i, 1); }
+const REGEX_AGENDA = /agend|marc(ar|a|ado|ou)|hor[aá]rio|consulta|avalia[cç]|dispon|amanh[aã]|segunda|ter[cç]a|quarta|quinta|sexta|s[aá]bado|\d{1,2}\s?(h|hs|:\d\d)/i;
 
 // ---------- sorteio reprodutivel ----------
 function prng(seed) { let a = seed; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -56,10 +62,11 @@ for (const [numero, msgs] of porNumero) {
     if (m.direcao !== 'entrada' || !prox || prox.direcao === 'entrada') continue;
     if (new Date(prox.criado_em) - new Date(m.criado_em) > 15 * 60 * 1000) continue; // so quando houve resposta de verdade
     const anteriores = msgs.slice(Math.max(0, i - 8), i);
+    if (FOCO === 'agenda' && !REGEX_AGENDA.test(`${m.texto} ${prox.texto} ${anteriores.slice(-2).map((a) => a.texto).join(' ')}`)) continue;
     candidatos.push({ numero, quando: m.criado_em, primeira: i === 0, anteriores, atual: m });
   }
 }
-const primeiras = embaralhar(candidatos.filter((c) => c.primeira)).slice(0, Math.round(N / 3));
+const primeiras = FOCO === 'agenda' ? [] : embaralhar(candidatos.filter((c) => c.primeira)).slice(0, Math.round(N / 3));
 const meio = embaralhar(candidatos.filter((c) => !c.primeira)).slice(0, N - primeiras.length);
 const casos = [...primeiras, ...meio].map((c, idx) => {
   const turnos = [];
@@ -69,6 +76,7 @@ const casos = [...primeiras, ...meio].map((c, idx) => {
   while (turnos.length && turnos[0].role !== 'user') turnos.shift();
   return { id: idx + 1, primeira: c.primeira, quando: c.quando, messages: turnos };
 });
+console.log(`avaliador: ${JUIZ} | foco: ${FOCO || 'geral'} | configs: ${CONFIGS.map((c) => c.id).join(',')}`);
 console.log(`casos montados: ${casos.length} (de ${candidatos.length} possiveis; ${primeiras.length} primeiros contatos) | conversas: ${porNumero.size}`);
 
 const listaArquivos = await arquivos.listarArquivos(tenantId);
