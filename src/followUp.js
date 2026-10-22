@@ -420,7 +420,7 @@ export function iniciarSchedulerFollowUp() {
       if (!pool) return;
       await tabelasProntas;
 
-      const { rows: tenantsAtivos } = await pool.query(`SELECT tenant_id FROM follow_up_config WHERE ativo = true`);
+      const { rows: tenantsAtivos } = await pool.query(`SELECT f.tenant_id FROM follow_up_config f JOIN tenants t ON t.id = f.tenant_id WHERE f.ativo = true AND (t.ativo OR t.super_admin)`);
       if (!tenantsAtivos.length) return;
 
       for (const { tenant_id: tenantId } of tenantsAtivos) {

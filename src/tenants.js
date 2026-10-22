@@ -2,6 +2,7 @@
 // usuario/senha, isolado dos dados dos outros tenants em todas as tabelas do sistema. Fase 1
 // da conversao multi-tenant (ver plano salvo em .claude/plans na epoca dessa mudanca).
 import crypto from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { pool } from './db.js';
 import { encrypt, decrypt } from './crypto.js';
 
@@ -222,6 +223,51 @@ export async function definirAtivo(tenantId, ativo) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
   await pool.query('UPDATE tenants SET ativo = $1 WHERE id = $2', [!!ativo, tenantId]);
+  avisarMudancaDeAtivo(tenantId, !!ativo);
+}
+
+// ---------- conta desativada = corte imediato em TUDO ----------
+// O token de login (30 dias) continua "valido" mesmo depois de a conta ser desativada, entao quem ja
+// estava logado seguia usando o app e a IA seguia atendendo. Agora TODO ponto de entrada/saida
+// consulta estaAtivo(): a API (middleware), a conexao ao vivo do CRM, o webhook do WhatsApp, o envio
+// de mensagens, as chamadas de IA e os agendadores. super_admin nunca e bloqueado (evita o dono se
+// trancar fora sem querer). O cache e curto (5s) e e invalidado na hora quando a mudanca acontece
+// neste processo; se alguem mexer direto no banco, vale em ate 5s. Em caso de erro no banco devolve
+// true (falha aberta) - uma falha momentanea do Postgres nao pode derrubar todos os clientes.
+export const eventosTenant = new EventEmitter(); // 'desativado' (tenantId)
+eventosTenant.setMaxListeners(0);
+const cacheAtivo = new Map();
+const TTL_CACHE_ATIVO_MS = 5000;
+
+function avisarMudancaDeAtivo(tenantId, ativo) {
+  cacheAtivo.delete(Number(tenantId));
+  if (!ativo) eventosTenant.emit('desativado', Number(tenantId));
+}
+
+export async function estaAtivo(tenantId) {
+  const id = Number(tenantId);
+  if (!id || !pool) return true;
+  const c = cacheAtivo.get(id);
+  if (c && c.ate > Date.now()) return c.ativo;
+  try {
+    await tabelasProntas;
+    const { rows } = await pool.query('SELECT ativo, super_admin FROM tenants WHERE id = $1', [id]);
+    const ativo = rows[0] ? !!(rows[0].ativo || rows[0].super_admin) : false; // tenant que nao existe mais tambem nao pode nada
+    cacheAtivo.set(id, { ativo, ate: Date.now() + TTL_CACHE_ATIVO_MS });
+    return ativo;
+  } catch {
+    return true;
+  }
+}
+
+// usado so na tela de login: as credenciais estao certas mas a conta esta desativada - sem isso o
+// usuario via "usuario ou senha incorretos" e perdia tempo mexendo na senha
+export async function contaDesativadaComCredenciaisValidas(username, senha) {
+  if (!pool || !username) return false;
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT password_hash, ativo, super_admin FROM tenants WHERE username = $1', [username]);
+  const t = rows[0];
+  return !!(t && !t.ativo && !t.super_admin && senhaConfere(senha, t.password_hash));
 }
 
 // periodo de contratacao (acesso geral a Lumia) - mesmo modelo do Gerador de Propostas
@@ -277,6 +323,7 @@ export async function marcarParaExclusao(tenantId) {
 
   const apagarEm = new Date(Date.now() + DIAS_ANTES_DE_APAGAR_DE_VERDADE * 24 * 60 * 60 * 1000);
   await pool.query('UPDATE tenants SET apagar_em = $1, ativo = false WHERE id = $2', [apagarEm, tenantId]);
+  avisarMudancaDeAtivo(tenantId, false);
   return apagarEm;
 }
 
@@ -286,6 +333,7 @@ export async function restaurarTenant(tenantId) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
   await pool.query('UPDATE tenants SET apagar_em = NULL, ativo = true WHERE id = $1', [tenantId]);
+  avisarMudancaDeAtivo(tenantId, true);
 }
 
 // apaga um tenant e TODOS os dados dele em qualquer tabela que referencie tenants(id) - usa o

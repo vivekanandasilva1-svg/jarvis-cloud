@@ -342,8 +342,10 @@ export async function listarRetornosVencidos() {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT id, tenant_id, numero, instancia, nome, retorno_nota, retorno_origem FROM crm_contatos
-     WHERE retorno_em IS NOT NULL AND retorno_em <= now() AND retorno_disparado_em IS NULL ORDER BY retorno_em ASC`,
+    `SELECT c.id, c.tenant_id, c.numero, c.instancia, c.nome, c.retorno_nota, c.retorno_origem FROM crm_contatos c
+     JOIN tenants t ON t.id = c.tenant_id
+     WHERE c.retorno_em IS NOT NULL AND c.retorno_em <= now() AND c.retorno_disparado_em IS NULL AND (t.ativo OR t.super_admin)
+     ORDER BY c.retorno_em ASC`,
   );
   return rows;
 }

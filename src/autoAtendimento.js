@@ -743,7 +743,7 @@ const PENDENTE_VALIDADE_HORAS = 48;
 export async function listarTenantsComPendentes() {
   if (!pool) return [];
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT DISTINCT tenant_id FROM auto_atendimento_sessions WHERE pendente_desde IS NOT NULL');
+  const { rows } = await pool.query('SELECT DISTINCT s.tenant_id FROM auto_atendimento_sessions s JOIN tenants t ON t.id = s.tenant_id WHERE s.pendente_desde IS NOT NULL AND (t.ativo OR t.super_admin)');
   return rows.map((r) => r.tenant_id);
 }
 

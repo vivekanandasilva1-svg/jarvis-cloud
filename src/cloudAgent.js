@@ -1995,7 +1995,8 @@ export function iniciarSchedulerLembretes() {
     try {
       await tabelasProntas;
       const { rows } = await pool.query(
-        'SELECT id, tenant_id, telefone, mensagem FROM lembretes WHERE enviado = false AND quando <= now()',
+        `SELECT l.id, l.tenant_id, l.telefone, l.mensagem FROM lembretes l JOIN tenants t ON t.id = l.tenant_id
+         WHERE l.enviado = false AND l.quando <= now() AND (t.ativo OR t.super_admin)`,
       );
       for (const lembrete of rows) {
         try {

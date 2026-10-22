@@ -5,6 +5,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { ehErroDeCredito, registrarFalhaCredito, creditoRestabelecido } from './alertaCreditos.js';
 import { registrarUso } from './saldoIA.js';
+import { estaAtivo } from './tenants.js';
 
 export const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -13,6 +14,12 @@ const criarOriginal = anthropic.messages.create.bind(anthropic.messages);
 // custo ao cliente/modulo certo (saldoIA.js) e e removido aqui, nunca vai pra API
 anthropic.messages.create = async (params, ...resto) => {
   const { _uso, ...corpo } = params || {};
+  // cliente desativado: nenhuma chamada de IA (e nenhum gasto de credito) em nome dele
+  if (_uso?.tenantId > 0 && !(await estaAtivo(_uso.tenantId))) {
+    const err = new Error('conta desativada - IA bloqueada');
+    err.codigo = 'CONTA_INATIVA';
+    throw err;
+  }
   try {
     const resposta = await criarOriginal(corpo, ...resto);
     creditoRestabelecido();

@@ -686,7 +686,7 @@ export function iniciarSchedulerRelatoriosProgramados() {
       // 1 linha por tenant que tem PELO MENOS 1 destinatario cadastrado - nao vale a pena
       // checar config de tenant nenhum que nunca vai receber nada mesmo
       const { rows: tenantsComDestinatario } = await pool.query(
-        'SELECT DISTINCT tenant_id FROM relatorio_destinatarios',
+        'SELECT DISTINCT d.tenant_id FROM relatorio_destinatarios d JOIN tenants t ON t.id = d.tenant_id WHERE (t.ativo OR t.super_admin)',
       );
       if (!tenantsComDestinatario.length) return;
 

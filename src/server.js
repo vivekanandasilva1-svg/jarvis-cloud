@@ -121,6 +121,11 @@ app.use(async (req, res, next) => {
   const tenantId = tenants.verificarToken(provided);
   if (tenantId) {
     req.tenantId = tenantId;
+    // conta desativada pelo admin: derruba a sessao NA HORA (o token continua "valido" por 30 dias, entao
+    // so a assinatura nao basta) - o navegador do cliente entende `contaInativa` e desloga sozinho
+    if (!(await tenants.estaAtivo(tenantId))) {
+      return res.status(401).json({ erro: 'Sua conta foi desativada. Fale com o suporte para reativar o acesso.', contaInativa: true });
+    }
     const abaProtegida = Object.entries(TAB_ROTA_PREFIXO).find(([, prefixo]) => req.path.startsWith(prefixo));
     // Cerebro e recurso pago a parte: desligado por padrao pra todo cliente, so o admin liga
     // (tenant_config.cerebro_liberado) - por isso nao segue a regra de tabs_habilitadas, onde
@@ -174,7 +179,7 @@ app.post('/api/login', async (req, res) => {
   if (!process.env.SESSION_SECRET) return res.json({ ok: true });
   try {
     const tenantId = await tenants.autenticar(username, password);
-    if (!tenantId) return res.json({ ok: false });
+    if (!tenantId) return res.json({ ok: false, contaInativa: await tenants.contaDesativadaComCredenciaisValidas(username, password).catch(() => false) });
     res.json({ ok: true, token: tenants.firmarToken(tenantId) });
   } catch (err) {
     res.status(500).json({ ok: false, erro: err.message });
@@ -1137,6 +1142,7 @@ function processarEmFila(chave, tarefa) {
 // verificador de pendentes (lead que escreveu fora do horario - retomarPendente=true). Quem chama
 // e responsavel por serializar via processarEmFila.
 async function atenderContato(tenantId, numero, instanciaDoWebhook, configAuto, { texto, tipo, data, retomarPendente = false, retomadaRetorno = null }) {
+  if (!(await tenants.estaAtivo(tenantId))) return 'inativo'; // conta desativada: nao responde nada
   // "digitando..."/"gravando audio..." no WhatsApp expira sozinho depois de poucos segundos
   // (o app do contato esconde o indicador se nao renovar) - como pensar a resposta (chamar a
   // IA, rodar ferramenta de agenda/Clinicorp etc) pode levar bem mais que isso, reenvia o
@@ -1228,6 +1234,8 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   // impede uma instancia nao cadastrada de "vazar" pra dentro de um tenant qualquer.
   const tenantId = await tenants.resolverTenantPorInstancia(instanciaDoWebhook);
   if (!tenantId) return;
+  // cliente desativado: nada funciona pra ele - nem IA, nem CRM, nem espelho de mensagem
+  if (!(await tenants.estaAtivo(tenantId))) return;
 
   const { numero, texto, tipo, fromMe, id, quando, soEspelho } = extrairMensagemEvolution(data);
   if (!numero) return;
@@ -1993,7 +2001,7 @@ app.post('/api/crm/ocultas/senha', async (req, res) => {
 // so repassa eventos do PROPRIO tenant - eventosCrm e um emissor global compartilhado por
 // todos os tenants no mesmo processo, entao o filtro por tenantId aqui e essencial, senao um
 // cliente veria em tempo real as conversas de outro.
-app.get('/api/crm/eventos', (req, res) => {
+app.get('/api/crm/eventos', async (req, res) => {
   const tenantId = tenants.verificarToken(req.query.senha);
   if (!tenantId) return res.status(401).end();
 
@@ -2006,10 +2014,18 @@ app.get('/api/crm/eventos', (req, res) => {
   res.write('\n');
 
   const mandar = (tipo, payload) => res.write(`data: ${JSON.stringify({ tipo, ...payload })}\n\n`);
+  // conta desativada: avisa o navegador (que desloga na hora) e fecha a conexao
+  if (!(await tenants.estaAtivo(tenantId))) { mandar('conta-inativa', {}); return res.end(); }
   const onMensagem = (payload) => { if (payload.tenantId === tenantId) mandar('mensagem', payload); };
   const onContatoAtualizado = (payload) => { if (payload.tenantId === tenantId) mandar('contato-atualizado', payload); };
   crm.eventosCrm.on('mensagem', onMensagem);
   crm.eventosCrm.on('contato-atualizado', onContatoAtualizado);
+  // desativada ENQUANTO conectado: o evento chega na hora quando foi desativada por este processo (aba
+  // Clientes); o vigia de 5s cobre qualquer outro caminho (ex.: mudanca direto no banco)
+  const encerrarPorInatividade = () => { try { mandar('conta-inativa', {}); } catch { /* conexao ja caiu */ } res.end(); };
+  const onDesativado = (id) => { if (id === tenantId) encerrarPorInatividade(); };
+  tenants.eventosTenant.on('desativado', onDesativado);
+  const vigia = setInterval(async () => { if (!(await tenants.estaAtivo(tenantId))) encerrarPorInatividade(); }, 5000);
 
   // sem isso a conexao fica "ociosa" e proxies na frente (Traefik) derrubam depois de um
   // tempo sem trafego nenhum - um comentario SSE (linha comecando com ":") a cada 20s mantem
@@ -2018,6 +2034,8 @@ app.get('/api/crm/eventos', (req, res) => {
 
   req.on('close', () => {
     clearInterval(heartbeat);
+    clearInterval(vigia);
+    tenants.eventosTenant.off('desativado', onDesativado);
     crm.eventosCrm.off('mensagem', onMensagem);
     crm.eventosCrm.off('contato-atualizado', onContatoAtualizado);
   });

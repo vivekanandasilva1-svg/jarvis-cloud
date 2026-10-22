@@ -335,7 +335,7 @@ async function checarAvisos() {
     const agora = new Date();
     const hora = agora.toLocaleTimeString('pt-BR', { timeZone: FUSO, hour: '2-digit', minute: '2-digit', hour12: false });
     const hoje = hojeMaceio();
-    const { rows: tenantsComConta } = await pool.query(`SELECT DISTINCT tenant_id FROM sec_contas WHERE status = 'pendente'`);
+    const { rows: tenantsComConta } = await pool.query(`SELECT DISTINCT c.tenant_id FROM sec_contas c JOIN tenants t ON t.id = c.tenant_id WHERE c.status = 'pendente' AND (t.ativo OR t.super_admin)`);
     for (const { tenant_id: tenantId } of tenantsComConta) {
       try {
         await pool.query('INSERT INTO sec_config (tenant_id) VALUES ($1) ON CONFLICT (tenant_id) DO NOTHING', [tenantId]);

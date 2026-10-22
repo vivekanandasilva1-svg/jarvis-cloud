@@ -247,6 +247,21 @@ if (!senhaValida(appPassword)) {
   appPassword = '';
   sessionStorage.removeItem('jarvis_password');
 }
+// conta desativada pelo administrador: qualquer resposta 401 com `contaInativa` (ou o aviso da conexao ao
+// vivo do CRM) derruba a sessao na hora - limpa o login, recarrega e mostra o aviso na tela de entrada
+function sairPorContaDesativada() {
+  try {
+    sessionStorage.removeItem('jarvis_password');
+    sessionStorage.setItem('jarvis_aviso_login', 'Sua conta foi desativada. Fale com o suporte para reativar o acesso.');
+  } catch { /* sem sessionStorage: o reload abaixo ja cai na tela de login por falta de token */ }
+  location.reload();
+}
+const fetchOriginal = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const res = await fetchOriginal(...args);
+  if (res.status === 401) res.clone().json().then((d) => { if (d && d.contaInativa) sairPorContaDesativada(); }).catch(() => {});
+  return res;
+};
 let vozAtivada = true;
 let gravando = false;
 let modoConversa = false;
@@ -300,7 +315,7 @@ async function tentarEntrar(usuario, senha) {
   const raw = await res.text();
   try {
     const data = JSON.parse(raw);
-    if (!data.ok) return null;
+    if (!data.ok) return data.contaInativa ? 'conta-desativada' : null;
     // ambiente sem SESSION_SECRET configurado (dev local sem Postgres) roda aberto - o
     // servidor devolve {ok:true} sem token, e o middleware la tambem nao exige nada nesse caso
     return data.token || 'sem-auth-configurada';
@@ -396,6 +411,10 @@ function sair() {
 }
 
 logoutBtn.addEventListener('click', sair);
+try {
+  const avisoLogin = sessionStorage.getItem('jarvis_aviso_login');
+  if (avisoLogin) { sessionStorage.removeItem('jarvis_aviso_login'); loginError.textContent = avisoLogin; }
+} catch { /* sem sessionStorage */ }
 
 if (appPassword) {
   tokenValido().then((ok) => {
@@ -414,6 +433,10 @@ loginForm.addEventListener('submit', async (e) => {
     return;
   }
   const token = await tentarEntrar(usuario, senha);
+  if (token === 'conta-desativada') {
+    loginError.textContent = 'Sua conta esta desativada. Fale com o suporte para reativar o acesso.';
+    return;
+  }
   if (!token) {
     loginError.textContent = 'Usuario ou senha incorretos.';
     return;
@@ -2636,6 +2659,7 @@ function conectarEventosCrm() {
   crmEventSource.onmessage = (ev) => {
     let data;
     try { data = JSON.parse(ev.data); } catch { return; }
+    if (data.tipo === 'conta-inativa') { sairPorContaDesativada(); return; }
     if (data.tipo === 'mensagem') {
       carregarCrm(); // preview/ordem dos cards muda a cada mensagem nova
       if (crmContatoAberto && data.numero === crmContatoAberto.numero && data.instancia === crmContatoAberto.instancia) {

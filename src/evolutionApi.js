@@ -2,6 +2,7 @@
 // (clinica/n8n). Suporta multiplas instancias (numeros) - qual delas esta "ativa" pra Lumia usar
 // no dia a dia fica guardado em whatsappInstances.js, trocavel pela aba WhatsApp do app.
 import { obterConfig } from './whatsappInstances.js';
+import { resolverTenantPorInstancia, estaAtivo } from './tenants.js';
 
 const WEBHOOK_URL = 'https://lumia-marketing.com/api/whatsapp-evolution/webhook';
 
@@ -54,6 +55,22 @@ async function chamar(method, path, body) {
   return data;
 }
 
+// Trava central: NADA sai pelo WhatsApp de uma instancia cujo cliente foi desativado (lembretes, retornos,
+// follow up, relatorios, auto atendimento... todos passam por aqui). Cache curto instancia -> cliente.
+const donoDaInstancia = new Map();
+async function exigirContaAtiva(instancia) {
+  let c = donoDaInstancia.get(instancia);
+  if (!c || c.ate < Date.now()) {
+    c = { tenantId: await resolverTenantPorInstancia(instancia).catch(() => null), ate: Date.now() + 30000 };
+    donoDaInstancia.set(instancia, c);
+  }
+  if (c.tenantId && !(await estaAtivo(c.tenantId))) {
+    const err = new Error('conta desativada - envio de WhatsApp bloqueado');
+    err.codigo = 'CONTA_INATIVA';
+    throw err;
+  }
+}
+
 // ---------- gestao de instancias (varios numeros possiveis) ----------
 
 export async function listarInstancias() {
@@ -91,6 +108,7 @@ export async function desconectarInstancia(nome) {
 // numero no formato so-digitos com DDI (ex: 5582991184771) - a propria API aceita nesse
 // formato e resolve pro jid do WhatsApp internamente
 export async function enviarMensagemTextoPor(instancia, numero, texto) {
+  await exigirContaAtiva(instancia);
   return chamar('POST', `/message/sendText/${instancia}`, {
     number: numero,
     text: texto,
@@ -99,6 +117,7 @@ export async function enviarMensagemTextoPor(instancia, numero, texto) {
 
 // mediatype: 'image' | 'video' | 'document'. media: base64 puro (sem "data:...;base64,")
 export async function enviarMidia(instancia, numero, { mediatype, mimetype, media, fileName, caption }) {
+  await exigirContaAtiva(instancia);
   return chamar('POST', `/message/sendMedia/${instancia}`, {
     number: numero,
     mediatype,
@@ -112,6 +131,7 @@ export async function enviarMidia(instancia, numero, { mediatype, mimetype, medi
 // audio como nota de voz (PTT) - o proprio Evolution API converte o formato recebido (ex: WAV
 // do Kokoro) pro ogg/opus que o WhatsApp espera, via ffmpeg internamente
 export async function enviarAudio(instancia, numero, mediaBase64) {
+  await exigirContaAtiva(instancia);
   return chamar('POST', `/message/sendWhatsAppAudio/${instancia}`, {
     number: numero,
     audio: mediaBase64,
@@ -131,6 +151,7 @@ export async function baixarMidiaMensagem(instancia, mensagemBruta) {
 // delayMs maior que o intervalo do heartbeat que renova essa chamada (ver server.js) - sem
 // essa folga, o indicador podia sumir por uma fracao de segundo entre uma renovacao e outra.
 export async function enviarPresenca(instancia, numero, presence, delayMs = 6000) {
+  await exigirContaAtiva(instancia);
   return chamar('POST', `/chat/sendPresence/${instancia}`, {
     number: numero,
     delay: delayMs,
