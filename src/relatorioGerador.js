@@ -47,6 +47,13 @@ async function garantirTabelas() {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS relatorios_gerados_tenant_idx ON relatorios_gerados (tenant_id);`);
+  // o que e preciso pra AJUSTAR um relatorio depois de gerado (sem buscar os numeros de novo) e
+  // pra mostrar o que foi pedido: numeros usados, analise+layout, pedido original e ajustes
+  await pool.query(`ALTER TABLE relatorios_gerados ADD COLUMN IF NOT EXISTS dados JSONB;`);
+  await pool.query(`ALTER TABLE relatorios_gerados ADD COLUMN IF NOT EXISTS config JSONB;`);
+  await pool.query(`ALTER TABLE relatorios_gerados ADD COLUMN IF NOT EXISTS instrucoes TEXT;`);
+  await pool.query(`ALTER TABLE relatorios_gerados ADD COLUMN IF NOT EXISTS cliente_nome TEXT;`);
+  await pool.query(`ALTER TABLE relatorios_gerados ADD COLUMN IF NOT EXISTS ajustes JSONB NOT NULL DEFAULT '[]'::jsonb;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS relatorio_temas_tenant_idx ON relatorio_temas (tenant_id);`);
 }
 export const tabelasProntas = garantirTabelas().catch((err) => {
@@ -173,11 +180,149 @@ function formatarDataBR(isoDate) {
   return `${dia}/${mes}/${ano}`;
 }
 
+// ---------- layout ajustavel pela IA ----------
+// O relatorio nao tem mais layout fixo: a IA devolve, junto com a analise, um "layout" (titulo,
+// quais metricas aparecem e em que ordem, nomes das secoes, quantas sugestoes, secoes extras,
+// notas, cores...). Assim qualquer pedido do usuario ("tira o CPM", "muda o titulo", "coloca 5
+// sugestoes", "adiciona uma secao sobre o criativo") vira mudanca real no relatorio. Os NUMEROS
+// continuam vindo da fonte (Meta Ads ou arquivo) - a IA so escolhe o que mostrar e como chamar.
+
+const METRICAS = {
+  investimento: { rotulo: () => 'Investimento Total', valor: (d) => fmtReais(d.investimento), icone: 'trending' },
+  resultados: { rotulo: (d) => d.tipoResultado || 'Resultados', valor: (d) => fmtNum(d.resultados), icone: 'check' },
+  custoPorResultado: { rotulo: () => 'Custo por Resultado', valor: (d) => fmtReais(d.custoPorResultado), icone: 'activity' },
+  alcance: { rotulo: () => 'Alcance Único', valor: (d) => fmtNum(d.alcance), icone: 'eye' },
+  impressoes: { rotulo: () => 'Impressões', valor: (d) => fmtNum(d.impressoes), icone: 'eye' },
+  cliques: { rotulo: () => 'Cliques Totais', valor: (d) => fmtNum(d.cliques), icone: 'click' },
+  frequencia: { rotulo: () => 'Frequência', valor: (d) => fmtNum(d.frequencia, 2), icone: 'activity' },
+  cpm: { rotulo: () => 'CPM Médio', valor: (d) => fmtReais(d.cpm), icone: 'trending' },
+  ctr: { rotulo: () => 'Taxa de Clique (CTR)', valor: (d) => fmtPct(d.ctr), icone: 'bars' },
+};
+const CHAVES_METRICAS = Object.keys(METRICAS);
+
+const LAYOUT_PADRAO = {
+  titulo: 'Relatório Estratégico',
+  subtitulo: 'Performance de Excelência',
+  clienteNome: '',
+  periodoTexto: '',
+  kpis: ['investimento', 'resultados', 'custoPorResultado', 'alcance'],
+  metricasEficiencia: ['impressoes', 'cliques', 'frequencia', 'cpm'],
+  destaque: 'ctr',
+  mostrarPainelDireito: true,
+  mostrarSugestoes: true,
+  nomes: {
+    eficiencia: 'Eficiência e Tráfego', painelDireito: '', analise: 'Análise Executiva e Plano de Ação',
+    analiseMetricas: 'Análise das Métricas', conclusao: 'Conclusões Estratégicas', sugestoes: 'Diretrizes de Crescimento',
+  },
+  rotulos: [],
+  secoesExtras: [],
+  notaFinal: '',
+  cores: {},
+};
+
+const SCHEMA_LAYOUT = {
+  type: 'object',
+  description: 'Estrutura visual do relatorio. Parta do layout atual (ou do padrao) e mude SO o que o usuario pediu.',
+  properties: {
+    titulo: { type: 'string', description: 'Titulo principal (a ultima palavra fica em destaque de cor). Padrao: "Relatório Estratégico"' },
+    subtitulo: { type: 'string', description: 'Linha pequena acima do titulo e abaixo da marca. Padrao: "Performance de Excelência"' },
+    clienteNome: { type: 'string', description: 'Sobrescreve o nome do cliente exibido; vazio = usa o dos dados' },
+    periodoTexto: { type: 'string', description: 'Sobrescreve o texto do periodo exibido; vazio = usa o dos dados' },
+    kpis: { type: 'array', items: { type: 'string', enum: CHAVES_METRICAS }, description: 'Cartoes grandes do topo, na ordem (0 a 6)' },
+    metricasEficiencia: { type: 'array', items: { type: 'string', enum: CHAVES_METRICAS }, description: 'Metricas do painel de eficiencia, na ordem (0 a 8)' },
+    destaque: { type: 'string', enum: [...CHAVES_METRICAS, ''], description: 'Metrica na caixa grande de destaque do painel de eficiencia; "" = sem caixa' },
+    mostrarPainelDireito: { type: 'boolean', description: 'Painel da direita (retencao de video ou engajamento estimado)' },
+    mostrarSugestoes: { type: 'boolean', description: 'Bloco de sugestoes/diretrizes' },
+    nomes: {
+      type: 'object',
+      description: 'Titulos das secoes',
+      properties: {
+        eficiencia: { type: 'string' }, painelDireito: { type: 'string', description: 'vazio = automatico' }, analise: { type: 'string' },
+        analiseMetricas: { type: 'string' }, conclusao: { type: 'string' }, sugestoes: { type: 'string' },
+      },
+    },
+    rotulos: {
+      type: 'array',
+      description: 'Renomeia o rotulo de uma metrica (ex: resultados -> "Pacientes captados")',
+      items: { type: 'object', properties: { metrica: { type: 'string', enum: CHAVES_METRICAS }, rotulo: { type: 'string' } }, required: ['metrica', 'rotulo'] },
+    },
+    secoesExtras: {
+      type: 'array',
+      description: 'Secoes de texto adicionais pedidas pelo usuario, exibidas depois da analise',
+      items: { type: 'object', properties: { titulo: { type: 'string' }, texto: { type: 'string' } }, required: ['titulo', 'texto'] },
+    },
+    notaFinal: { type: 'string', description: 'Observacao curta no fim do relatorio (vazio = nenhuma)' },
+    cores: {
+      type: 'object',
+      description: 'So quando o usuario pedir mudanca de cor: sobrescreve cores do tema, em #RRGGBB. Omita o que nao mudar.',
+      properties: {
+        bg: { type: 'string' }, panel: { type: 'string' }, texto: { type: 'string' }, muted: { type: 'string' }, accent: { type: 'string' }, accent2: { type: 'string' },
+      },
+    },
+  },
+};
+
+const PROPS_ANALISE = {
+  analiseMetricas: { type: 'string', description: 'Analise dos resultados, em portugues. Padrao 3 a 5 frases; siga o tamanho/tom que o usuario pedir' },
+  conclusaoEstrategica: { type: 'string', description: 'Conclusao estrategica do periodo. Padrao 3 a 5 frases; siga o tamanho/tom pedido' },
+  sugestoes: { type: 'array', items: { type: 'string' }, description: 'Sugestoes curtas e acionaveis. Padrao 3; use a quantidade que o usuario pedir (0 a 8)' },
+  layout: SCHEMA_LAYOUT,
+  avisos: { type: 'array', items: { type: 'string' }, description: 'Pedidos do usuario que NAO deu pra atender e o motivo (ex: dado que nao existe na fonte). Vazio se atendeu tudo.' },
+};
+
+const REGRAS_PEDIDO = `Como tratar o pedido do usuario:
+- Aplique TODOS os pedidos, sejam de texto (tom, tamanho, foco, linguagem) ou de estrutura (titulo, quais metricas aparecem e em que ordem, nomes de secoes, quantidade de sugestoes, secoes novas, notas, cores, nome do cliente, texto do periodo). Estrutura vai em "layout".
+- Pedido de metrica que nao existe na lista disponivel, ou de numero que nao esta na fonte: nao invente - registre em "avisos" o que nao deu pra fazer e por que.
+- NUNCA invente ou altere numeros. Use exatamente os dados fornecidos.
+- Sem pedido de estrutura, mantenha o layout atual (ou o padrao).
+- Metricas disponiveis: ${CHAVES_METRICAS.join(', ')}.`;
+
+const HEX_COR = /^#[0-9a-fA-F]{6}$/;
+const texto = (v, max) => String(v ?? '').trim().slice(0, max);
+
+// junta o que a IA devolveu com o padrao e descarta qualquer valor fora do formato
+function normalizarLayout(bruto, base = LAYOUT_PADRAO) {
+  const l = bruto && typeof bruto === 'object' ? bruto : {};
+  const lista = (v, padrao, max) => (Array.isArray(v) ? [...new Set(v.filter((k) => CHAVES_METRICAS.includes(k)))].slice(0, max) : padrao);
+  const nomes = { ...base.nomes };
+  for (const k of Object.keys(LAYOUT_PADRAO.nomes)) if (typeof l.nomes?.[k] === 'string') nomes[k] = texto(l.nomes[k], 80);
+  const cores = { ...(base.cores || {}) };
+  for (const k of ['bg', 'panel', 'texto', 'muted', 'accent', 'accent2']) if (HEX_COR.test(l.cores?.[k] || '')) cores[k] = l.cores[k];
+  return {
+    titulo: typeof l.titulo === 'string' && l.titulo.trim() ? texto(l.titulo, 80) : base.titulo,
+    subtitulo: typeof l.subtitulo === 'string' ? texto(l.subtitulo, 80) : base.subtitulo,
+    clienteNome: typeof l.clienteNome === 'string' ? texto(l.clienteNome, 100) : base.clienteNome,
+    periodoTexto: typeof l.periodoTexto === 'string' ? texto(l.periodoTexto, 80) : base.periodoTexto,
+    kpis: lista(l.kpis, base.kpis, 6),
+    metricasEficiencia: lista(l.metricasEficiencia, base.metricasEficiencia, 8),
+    destaque: l.destaque === '' || CHAVES_METRICAS.includes(l.destaque) ? l.destaque : base.destaque,
+    mostrarPainelDireito: typeof l.mostrarPainelDireito === 'boolean' ? l.mostrarPainelDireito : base.mostrarPainelDireito,
+    mostrarSugestoes: typeof l.mostrarSugestoes === 'boolean' ? l.mostrarSugestoes : base.mostrarSugestoes,
+    nomes,
+    rotulos: Array.isArray(l.rotulos)
+      ? l.rotulos.filter((r) => CHAVES_METRICAS.includes(r?.metrica) && String(r?.rotulo || '').trim()).map((r) => ({ metrica: r.metrica, rotulo: texto(r.rotulo, 60) })).slice(0, 9)
+      : base.rotulos,
+    secoesExtras: Array.isArray(l.secoesExtras)
+      ? l.secoesExtras.filter((s) => String(s?.titulo || '').trim() && String(s?.texto || '').trim()).map((s) => ({ titulo: texto(s.titulo, 100), texto: texto(s.texto, 3000) })).slice(0, 6)
+      : base.secoesExtras,
+    notaFinal: typeof l.notaFinal === 'string' ? texto(l.notaFinal, 500) : base.notaFinal,
+    cores,
+  };
+}
+
+function normalizarAnalise(bruto, base = {}) {
+  return {
+    analiseMetricas: texto(bruto?.analiseMetricas || base.analiseMetricas, 4000),
+    conclusaoEstrategica: texto(bruto?.conclusaoEstrategica || base.conclusaoEstrategica, 4000),
+    sugestoes: Array.isArray(bruto?.sugestoes) ? bruto.sugestoes.map((s) => texto(s, 300)).filter(Boolean).slice(0, 8) : (base.sugestoes || []),
+  };
+}
+
 // ---------- dados: fonte manual (extraidos por IA de arquivos anexados) ----------
 
 const TOOL_DADOS_E_ANALISE = {
   name: 'entregar_dados_e_analise',
-  description: 'Entrega os dados numericos extraidos dos arquivos anexados junto com a analise qualitativa do relatorio.',
+  description: 'Entrega os dados numericos extraidos dos arquivos anexados, a analise e o layout do relatorio.',
   input_schema: {
     type: 'object',
     properties: {
@@ -205,25 +350,19 @@ const TOOL_DADOS_E_ANALISE = {
           required: ['label', 'valor'],
         },
       },
-      analiseMetricas: { type: 'string', description: 'Paragrafo (3 a 5 frases) em portugues, analisando os resultados apresentados' },
-      conclusaoEstrategica: { type: 'string', description: 'Paragrafo (3 a 5 frases) em portugues com a conclusao estrategica do periodo' },
-      sugestoes: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 3, description: 'Exatamente 3 sugestoes curtas e acionaveis de proximos passos' },
+      ...PROPS_ANALISE,
     },
-    required: ['analiseMetricas', 'conclusaoEstrategica', 'sugestoes'],
+    required: ['analiseMetricas', 'conclusaoEstrategica', 'sugestoes', 'layout'],
   },
 };
 
 const TOOL_ANALISE = {
   name: 'entregar_analise',
-  description: 'Entrega a analise qualitativa do relatorio, escrita em cima dos numeros reais ja fornecidos.',
+  description: 'Entrega a analise do relatorio (escrita em cima dos numeros reais ja fornecidos) e o layout.',
   input_schema: {
     type: 'object',
-    properties: {
-      analiseMetricas: { type: 'string', description: 'Paragrafo (3 a 5 frases) em portugues, analisando os resultados apresentados' },
-      conclusaoEstrategica: { type: 'string', description: 'Paragrafo (3 a 5 frases) em portugues com a conclusao estrategica do periodo' },
-      sugestoes: { type: 'array', items: { type: 'string' }, minItems: 3, maxItems: 3, description: 'Exatamente 3 sugestoes curtas e acionaveis de proximos passos' },
-    },
-    required: ['analiseMetricas', 'conclusaoEstrategica', 'sugestoes'],
+    properties: PROPS_ANALISE,
+    required: ['analiseMetricas', 'conclusaoEstrategica', 'sugestoes', 'layout'],
   },
 };
 
@@ -240,11 +379,11 @@ async function montarBlocosArquivos(arquivos) {
     } else if (arq.mediaType === 'application/pdf') {
       blocos.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: arq.base64 } });
     } else if (EXCEL_TYPES.has(arq.mediaType)) {
-      const texto = await extrairTextoExcel(buffer);
-      blocos.push({ type: 'text', text: `Conteudo da planilha "${arq.name}":\n${texto}` });
+      const conteudo = await extrairTextoExcel(buffer);
+      blocos.push({ type: 'text', text: `Conteudo da planilha "${arq.name}":\n${conteudo}` });
     } else if (WORD_TYPES.has(arq.mediaType)) {
-      const texto = await extrairTextoWord(buffer);
-      blocos.push({ type: 'text', text: `Conteudo do documento "${arq.name}":\n${texto}` });
+      const conteudo = await extrairTextoWord(buffer);
+      blocos.push({ type: 'text', text: `Conteudo do documento "${arq.name}":\n${conteudo}` });
     } else if (arq.mediaType === 'text/csv' || arq.mediaType === 'text/plain') {
       blocos.push({ type: 'text', text: `Conteudo do arquivo "${arq.name}":\n${buffer.toString('utf8')}` });
     }
@@ -252,62 +391,97 @@ async function montarBlocosArquivos(arquivos) {
   return blocos;
 }
 
+function blocoPedido(instrucoes) {
+  return instrucoes
+    ? `\n\nPEDIDO DO USUARIO (aplique tudo):\n"""${instrucoes}"""`
+    : '\n\nO usuario nao fez pedido especifico: use o layout padrao e 3 sugestoes.';
+}
+
 async function extrairDadosEAnaliseDeArquivos({ tenantId, arquivos, instrucoes }) {
   const blocosArquivos = await montarBlocosArquivos(arquivos);
   if (!blocosArquivos.length) throw new Error('nenhum arquivo valido anexado');
 
-  const texto = `Voce e um analista de marketing/performance. Extraia os dados numericos de performance de anuncios ` +
+  const prompt = `Voce e um analista de marketing/performance. Extraia os dados numericos de performance de anuncios ` +
     `(investimento, resultados, alcance, impressoes, cliques, frequencia, CPM, CTR etc) dos arquivos anexados e escreva ` +
-    `uma analise qualitativa objetiva e profissional em portugues do Brasil.` +
-    (instrucoes ? `\n\nInstrucoes adicionais do usuario: ${instrucoes}` : '') +
-    `\n\nSe algum numero nao aparecer nos arquivos, simplesmente omita o campo (nao invente valor).`;
+    `uma analise objetiva e profissional em portugues do Brasil, montando tambem o layout do relatorio.` +
+    `\nSe algum numero nao aparecer nos arquivos, simplesmente omita o campo (nao invente valor).` +
+    `\n\n${REGRAS_PEDIDO}\n\nLayout padrao (ponto de partida):\n${JSON.stringify(LAYOUT_PADRAO)}${blocoPedido(instrucoes)}`;
 
   const resp = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 2000,
+    max_tokens: 6000,
     tools: [TOOL_DADOS_E_ANALISE],
     tool_choice: { type: 'tool', name: 'entregar_dados_e_analise' },
-    messages: [{ role: 'user', content: [{ type: 'text', text: texto }, ...blocosArquivos] }],
+    messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, ...blocosArquivos] }],
     _uso: { tenantId, modulo: 'gerador-relatorios' },
   });
 
   const toolUse = resp.content.find((b) => b.type === 'tool_use');
   if (!toolUse) throw new Error('a IA nao conseguiu extrair os dados dos arquivos');
-  const dados = toolUse.input;
-  dados.videoRows = Array.isArray(dados.retencaoVideo) && dados.retencaoVideo.length
-    ? dados.retencaoVideo.map((r) => ({ label: r.label, value: r.valor }))
+  const { analiseMetricas, conclusaoEstrategica, sugestoes, layout, avisos, retencaoVideo, ...dados } = toolUse.input;
+  dados.videoRows = Array.isArray(retencaoVideo) && retencaoVideo.length
+    ? retencaoVideo.map((r) => ({ label: r.label, value: r.valor }))
     : null;
-  delete dados.retencaoVideo;
-  return dados;
+  return {
+    dados,
+    analise: normalizarAnalise({ analiseMetricas, conclusaoEstrategica, sugestoes }),
+    layout: normalizarLayout(layout),
+    avisos: Array.isArray(avisos) ? avisos.map((a) => texto(a, 300)).filter(Boolean) : [],
+  };
 }
 
-async function gerarAnaliseComIA({ tenantId, dados, instrucoes }) {
-  const resumo = [
-    `Investimento: R$ ${dados.investimento?.toFixed(2)}`,
-    dados.resultados != null ? `${dados.tipoResultado || 'Resultados'}: ${dados.resultados}` : null,
-    dados.custoPorResultado != null ? `Custo por resultado: R$ ${dados.custoPorResultado.toFixed(2)}` : null,
-    `Alcance: ${dados.alcance}`, `Impressoes: ${dados.impressoes}`, `Cliques: ${dados.cliques}`,
-    `Frequencia: ${dados.frequencia?.toFixed(2)}`, `CPM: R$ ${dados.cpm?.toFixed(2)}`, `CTR: ${dados.ctr?.toFixed(2)}%`,
-  ].filter(Boolean).join('\n');
+function resumoNumeros(dados) {
+  const linhas = [`Cliente: ${dados.clienteNome || '-'}`, `Periodo: ${dados.periodo || '-'}`];
+  for (const k of CHAVES_METRICAS) {
+    if (dados[k] == null) continue;
+    linhas.push(`${k} (${METRICAS[k].rotulo(dados)}): ${METRICAS[k].valor(dados)}`);
+  }
+  if (Array.isArray(dados.videoRows) && dados.videoRows.length) {
+    linhas.push(`Retencao de video: ${dados.videoRows.map((r) => `${r.label}: ${r.value}`).join('; ')}`);
+  }
+  return linhas.join('\n');
+}
 
-  const texto = `Voce e um analista de marketing/performance. Com base nesses numeros REAIS de uma campanha de anuncios ` +
-    `no periodo de ${dados.periodo}, escreva uma analise qualitativa objetiva e profissional em portugues do Brasil. ` +
-    `NUNCA invente ou altere os numeros - use exatamente os que foram dados.` +
-    (instrucoes ? `\n\nInstrucoes adicionais do usuario: ${instrucoes}` : '') +
-    `\n\nNumeros do periodo:\n${resumo}`;
+// analise + layout em cima dos numeros reais. Com "atual", e um AJUSTE: a IA recebe o relatorio
+// como esta e devolve ele inteiro revisado, mudando so o que o usuario pediu
+async function gerarAnaliseComIA({ tenantId, dados, instrucoes, atual }) {
+  const partes = [
+    'Voce e um analista de marketing/performance. Com base nesses numeros REAIS de uma campanha de anuncios, escreva ' +
+      'uma analise objetiva e profissional em portugues do Brasil e monte o layout do relatorio.',
+    '',
+    REGRAS_PEDIDO,
+    '',
+    `Numeros do periodo:\n${resumoNumeros(dados)}`,
+  ];
+  if (atual) {
+    partes.push(
+      '',
+      'RELATORIO ATUAL (devolva ele COMPLETO revisado, mantendo tudo que o usuario nao pediu pra mudar):',
+      JSON.stringify({ analise: atual.analise, layout: atual.layout }),
+      atual.historico?.length ? `\nPedidos anteriores ja aplicados (contexto): ${atual.historico.map((p) => `"${p}"`).join('; ')}` : '',
+      `\nNOVO PEDIDO DE AJUSTE (aplique tudo):\n"""${instrucoes}"""`,
+    );
+  } else {
+    partes.push('', `Layout padrao (ponto de partida):\n${JSON.stringify(LAYOUT_PADRAO)}`, blocoPedido(instrucoes));
+  }
 
   const resp = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 1200,
+    max_tokens: 6000,
     tools: [TOOL_ANALISE],
     tool_choice: { type: 'tool', name: 'entregar_analise' },
-    messages: [{ role: 'user', content: texto }],
+    messages: [{ role: 'user', content: partes.join('\n') }],
     _uso: { tenantId, modulo: 'gerador-relatorios' },
   });
 
   const toolUse = resp.content.find((b) => b.type === 'tool_use');
   if (!toolUse) throw new Error('a IA nao conseguiu gerar a analise');
-  return toolUse.input;
+  const r = toolUse.input;
+  return {
+    analise: normalizarAnalise(r, atual?.analise),
+    layout: normalizarLayout(r.layout, atual?.layout || LAYOUT_PADRAO),
+    avisos: Array.isArray(r.avisos) ? r.avisos.map((a) => texto(a, 300)).filter(Boolean) : [],
+  };
 }
 
 // ---------- HTML ----------
@@ -368,26 +542,65 @@ function montarPainelDireito(dados) {
   return { titulo: 'Engajamento Estimado', rows };
 }
 
-function montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride, marca }) {
-  const clienteNome = esc(clienteNomeOverride || dados.clienteNome || 'Cliente');
-  const periodo = esc(dados.periodo || '-');
-  const sugestoes = (analise.sugestoes || []).slice(0, 3);
+const paragrafos = (t) => esc(t).split(/\n{2,}|\n/).filter((p) => p.trim()).map((p) => `<p>${p}</p>`).join('');
+
+function montarHtmlRelatorio({ tema: temaBase, dados, analise, layout: layoutBruto, clienteNomeOverride, marca }) {
+  const layout = normalizarLayout(layoutBruto);
+  const tema = { ...temaBase, ...layout.cores };
+  const rotulo = (k) => esc(layout.rotulos.find((r) => r.metrica === k)?.rotulo || METRICAS[k].rotulo(dados));
+  const clienteNome = esc(layout.clienteNome || clienteNomeOverride || dados.clienteNome || 'Cliente');
+  const periodo = esc(layout.periodoTexto || dados.periodo || '-');
+  const sugestoes = layout.mostrarSugestoes ? (analise.sugestoes || []) : [];
   const brandNome = esc(marca?.nome || 'Lumia');
   const logoHtml = marca?.logo
     ? `<img src="${esc(marca.logo)}" alt="${brandNome}" style="width:40px;height:40px;border-radius:10px;object-fit:cover;" />`
     : LOGO_PADRAO_SVG;
 
-  const painelDir = montarPainelDireito(dados);
-  const maiorValor = Math.max(1, ...painelDir.rows.map((r) => Number(r.value) || 0));
-  const painelDirRows = painelDir.rows.map((r) => {
-    const largura = Math.max(6, Math.min(100, ((Number(r.value) || 0) / maiorValor) * 100));
-    const valorFmt = r.isPct ? fmtPct(r.value) : fmtNum(r.value);
-    return `
+  // titulo com a ultima palavra em destaque de cor
+  const palavrasTitulo = layout.titulo.split(/\s+/);
+  const tituloHtml = palavrasTitulo.length > 1
+    ? `${esc(palavrasTitulo.slice(0, -1).join(' '))} <span>${esc(palavrasTitulo[palavrasTitulo.length - 1])}</span>`
+    : `<span>${esc(layout.titulo)}</span>`;
+
+  const kpisHtml = layout.kpis.map((k) => `
+    <div class="kpi"><div class="label">${rotulo(k)}</div><div class="value">${METRICAS[k].valor(dados)}</div></div>`).join('');
+
+  const temEficiencia = layout.metricasEficiencia.length || layout.destaque;
+  const eficienciaHtml = temEficiencia ? `
+    <section class="panel">
+      <h3 class="panel-title"><span class="bar"></span>${esc(layout.nomes.eficiencia)}</h3>
+      <div class="metrics">
+        ${layout.metricasEficiencia.map((k) => `<div class="metric"><div class="icon-row"><span class="icon-badge">${ICONES[METRICAS[k].icone]}</span><span>${rotulo(k)}</span></div><b>${METRICAS[k].valor(dados)}</b></div>`).join('')}
+        ${layout.destaque ? `<div class="ctr-box"><div class="icon-row">${ICONES[METRICAS[layout.destaque].icone]}<span>${rotulo(layout.destaque)}</span></div><b>${METRICAS[layout.destaque].valor(dados)}</b></div>` : ''}
+      </div>
+    </section>` : '';
+
+  let painelDireitoHtml = '';
+  if (layout.mostrarPainelDireito) {
+    const painelDir = montarPainelDireito(dados);
+    const maiorValor = Math.max(1, ...painelDir.rows.map((r) => Number(r.value) || 0));
+    const rows = painelDir.rows.map((r) => {
+      const largura = Math.max(6, Math.min(100, ((Number(r.value) || 0) / maiorValor) * 100));
+      const valorFmt = r.isPct ? fmtPct(r.value) : fmtNum(r.value);
+      return `
           <div class="row-item">
             <div class="row-top"><span>${esc(r.label)}</span><b>${valorFmt}</b></div>
             <div class="row-track"><div class="row-fill" style="width:${largura}%"></div></div>
           </div>`;
-  }).join('');
+    }).join('');
+    painelDireitoHtml = `
+    <section class="panel">
+      <h3 class="panel-title"><span class="bar"></span>${esc(layout.nomes.painelDireito || painelDir.titulo)}</h3>
+      ${rows}
+    </section>`;
+  }
+  const paineis = [eficienciaHtml, painelDireitoHtml].filter(Boolean);
+
+  const extrasHtml = layout.secoesExtras.map((s) => `
+  <section class="panel extra">
+    <h3 class="panel-title"><span class="bar"></span>${esc(s.titulo)}</h3>
+    <div class="extra-texto">${paragrafos(s.texto)}</div>
+  </section>`).join('');
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -429,6 +642,7 @@ function montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride, marca 
   .kpi .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--muted); margin-bottom: 10px; }
   .kpi .value { font-size: 26px; font-weight: 900; }
   .grid2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; margin-bottom: 24px; }
+  .grid2.um { grid-template-columns: 1fr; }
   @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
   .panel { background: var(--panel); border: 1px solid ${tema.accent}22; border-radius: 20px; padding: 24px; }
   .panel-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.15em; margin: 0 0 20px; display: flex; align-items: center; gap: 10px; }
@@ -456,12 +670,13 @@ function montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride, marca 
   .analise h2 { text-align: center; font-size: 20px; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 12px; }
   .analise .bar-centro { width: 60px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent2)); margin: 0 auto 24px; }
   .analise-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .analise-grid.um { grid-template-columns: 1fr; }
   @media (max-width: 760px) { .analise-grid { grid-template-columns: 1fr; } }
   .analise-item { display: flex; gap: 14px; margin-bottom: 20px; }
   .num { width: 36px; height: 36px; border-radius: 10px; background: var(--text); color: var(--panel); font-weight: 900;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .analise-item h4 { margin: 0 0 6px; font-size: 14px; text-transform: uppercase; }
-  .analise-item p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+  .analise-item p { margin: 0 0 8px; color: var(--muted); font-size: 13px; line-height: 1.6; }
   .sugestoes { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 20px; padding: 24px; color: var(--bg); }
   .sugestoes h4 { margin: 0 0 16px; font-size: 15px; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
   .sugestoes h4 svg { width: 16px; height: 16px; }
@@ -469,6 +684,9 @@ function montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride, marca 
   .sugestoes li { display: flex; gap: 8px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid rgba(0,0,0,0.15); font-size: 13px; font-weight: 600; }
   .sugestoes li svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
   .sugestoes li:last-child { border-bottom: none; }
+  .extra { margin-bottom: 24px; }
+  .extra-texto p { margin: 0 0 10px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+  .nota { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.6; padding: 4px 16px 8px; }
   footer { text-align: center; font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--muted); opacity: 0.6; padding-top: 24px; }
 </style>
 </head>
@@ -479,55 +697,37 @@ function montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride, marca 
       ${logoHtml}
       <div>
         <div class="brand-name">${brandNome}<span>.</span></div>
-        <div class="sub">Performance de Excelência</div>
+        ${layout.subtitulo ? `<div class="sub">${esc(layout.subtitulo)}</div>` : ''}
       </div>
     </div>
     <div class="titulo">
-      <div class="excelencia">${ICONES.sparkles}Performance de Excelência</div>
-      <h1>Relatório <span>Estratégico</span></h1>
+      ${layout.subtitulo ? `<div class="excelencia">${ICONES.sparkles}${esc(layout.subtitulo)}</div>` : ''}
+      <h1>${tituloHtml}</h1>
       <span class="pill">Cliente: ${clienteNome}</span>
       <span class="pill">Período: ${periodo}</span>
     </div>
   </header>
 
-  <section class="kpis">
-    <div class="kpi"><div class="label">Investimento Total</div><div class="value">${fmtReais(dados.investimento)}</div></div>
-    <div class="kpi"><div class="label">${esc(dados.tipoResultado || 'Resultados')}</div><div class="value">${fmtNum(dados.resultados)}</div></div>
-    <div class="kpi"><div class="label">Custo por Resultado</div><div class="value">${fmtReais(dados.custoPorResultado)}</div></div>
-    <div class="kpi"><div class="label">Alcance Único</div><div class="value">${fmtNum(dados.alcance)}</div></div>
-  </section>
+  ${layout.kpis.length ? `<section class="kpis">${kpisHtml}</section>` : ''}
 
-  <div class="grid2">
-    <section class="panel">
-      <h3 class="panel-title"><span class="bar"></span>Eficiência e Tráfego</h3>
-      <div class="metrics">
-        <div class="metric"><div class="icon-row"><span class="icon-badge">${ICONES.eye}</span><span>Impressões</span></div><b>${fmtNum(dados.impressoes)}</b></div>
-        <div class="metric"><div class="icon-row"><span class="icon-badge">${ICONES.click}</span><span>Cliques Totais</span></div><b>${fmtNum(dados.cliques)}</b></div>
-        <div class="metric"><div class="icon-row"><span class="icon-badge">${ICONES.activity}</span><span>Frequência</span></div><b>${fmtNum(dados.frequencia, 2)}</b></div>
-        <div class="metric"><div class="icon-row"><span class="icon-badge">${ICONES.trending}</span><span>CPM Médio</span></div><b>${fmtReais(dados.cpm)}</b></div>
-        <div class="ctr-box"><div class="icon-row">${ICONES.bars}<span>Taxa de Clique (CTR)</span></div><b>${fmtPct(dados.ctr)}</b></div>
-      </div>
-    </section>
-    <section class="panel">
-      <h3 class="panel-title"><span class="bar"></span>${esc(painelDir.titulo)}</h3>
-      ${painelDirRows}
-    </section>
-  </div>
+  ${paineis.length ? `<div class="grid2${paineis.length === 1 ? ' um' : ''}">${paineis.join('')}</div>` : ''}
 
   <section class="analise">
-    <h2>Análise Executiva e Plano de Ação</h2>
+    <h2>${esc(layout.nomes.analise)}</h2>
     <div class="bar-centro"></div>
-    <div class="analise-grid">
+    <div class="analise-grid${sugestoes.length ? '' : ' um'}">
       <div>
-        <div class="analise-item"><div class="num">01</div><div><h4>Análise das Métricas</h4><p>${esc(analise.analiseMetricas)}</p></div></div>
-        <div class="analise-item"><div class="num">02</div><div><h4>Conclusões Estratégicas</h4><p>${esc(analise.conclusaoEstrategica)}</p></div></div>
+        <div class="analise-item"><div class="num">01</div><div><h4>${esc(layout.nomes.analiseMetricas)}</h4>${paragrafos(analise.analiseMetricas)}</div></div>
+        <div class="analise-item"><div class="num">02</div><div><h4>${esc(layout.nomes.conclusao)}</h4>${paragrafos(analise.conclusaoEstrategica)}</div></div>
       </div>
-      <div class="sugestoes">
-        <h4>${ICONES.trending}Diretrizes de Crescimento</h4>
+      ${sugestoes.length ? `<div class="sugestoes">
+        <h4>${ICONES.trending}${esc(layout.nomes.sugestoes)}</h4>
         <ul>${sugestoes.map((s) => `<li>${ICONES.check}<span>${esc(s)}</span></li>`).join('')}</ul>
-      </div>
+      </div>` : ''}
     </div>
   </section>
+  ${extrasHtml}
+  ${layout.notaFinal ? `<div class="nota">${esc(layout.notaFinal)}</div>` : ''}
 
   <footer>Impulsionando resultados · ${brandNome}</footer>
 </div>
@@ -540,35 +740,67 @@ function montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride, marca 
 export async function gerarRelatorio(tenantId, { fonte, temaId, accountId, from, to, arquivos, instrucoes, clienteNome, titulo }) {
   const tema = await obterTema(tenantId, temaId);
   const marca = await obterMarcaRelatorio(tenantId);
+  const pedido = texto(instrucoes, 4000);
 
   let dados;
-  let analise;
+  let gerado;
   if (fonte === 'manual') {
-    const extraido = await extrairDadosEAnaliseDeArquivos({ tenantId, arquivos, instrucoes });
-    dados = extraido;
-    analise = { analiseMetricas: extraido.analiseMetricas, conclusaoEstrategica: extraido.conclusaoEstrategica, sugestoes: extraido.sugestoes };
+    const extraido = await extrairDadosEAnaliseDeArquivos({ tenantId, arquivos, instrucoes: pedido });
+    dados = extraido.dados;
+    gerado = extraido;
   } else {
     dados = await buscarDadosAutomatico(tenantId, { accountId, from, to });
-    analise = await gerarAnaliseComIA({ tenantId, dados, instrucoes });
+    gerado = await gerarAnaliseComIA({ tenantId, dados, instrucoes: pedido });
   }
 
-  const html = montarHtmlRelatorio({ tema, dados, analise, clienteNomeOverride: clienteNome, marca });
+  const html = montarHtmlRelatorio({ tema, dados, analise: gerado.analise, layout: gerado.layout, clienteNomeOverride: clienteNome, marca });
 
   const id = novoId();
   const tituloFinal = titulo || `Relatorio - ${clienteNome || dados.clienteNome || 'Cliente'} - ${new Date().toLocaleDateString('pt-BR')}`;
   if (pool) {
     await pool.query(
-      `INSERT INTO relatorios_gerados (id, tenant_id, titulo, tema_id, fonte, html) VALUES ($1, $2, $3, $4, $5, $6)`,
-      [id, tenantId, tituloFinal.slice(0, 200), tema.id, fonte, html],
+      `INSERT INTO relatorios_gerados (id, tenant_id, titulo, tema_id, fonte, html, dados, config, instrucoes, cliente_nome)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [id, tenantId, tituloFinal.slice(0, 200), tema.id, fonte, html, JSON.stringify(dados),
+        JSON.stringify({ analise: gerado.analise, layout: gerado.layout, avisos: gerado.avisos }), pedido || null, clienteNome || null],
     );
   }
-  return { id, titulo: tituloFinal, html };
+  return { id, titulo: tituloFinal, html, instrucoes: pedido || null, avisos: gerado.avisos, ajustes: [] };
+}
+
+// ajuste num relatorio ja gerado: reaproveita os MESMOS numeros (sem buscar no Meta de novo nem
+// reler arquivo), a IA revisa analise + layout aplicando o pedido, e o relatorio e atualizado
+export async function ajustarRelatorio(tenantId, id, pedidoBruto) {
+  if (!pool) throw new Error('banco de dados indisponivel');
+  const pedido = texto(pedidoBruto, 4000);
+  if (!pedido) throw new Error('descreva o ajuste que voce quer');
+  const rel = await buscarRelatorio(tenantId, id);
+  if (!rel) throw new Error('relatorio nao encontrado');
+  if (!rel.dados || !rel.config) {
+    throw new Error('esse relatorio foi gerado antes dos ajustes existirem - gere de novo pra poder pedir ajustes nele');
+  }
+  const ajustes = Array.isArray(rel.ajustes) ? rel.ajustes : [];
+  const historico = [rel.instrucoes, ...ajustes.map((a) => a.pedido)].filter(Boolean);
+  const revisado = await gerarAnaliseComIA({
+    tenantId, dados: rel.dados, instrucoes: pedido,
+    atual: { analise: rel.config.analise, layout: normalizarLayout(rel.config.layout), historico },
+  });
+  const tema = await obterTema(tenantId, rel.tema_id);
+  const marca = await obterMarcaRelatorio(tenantId);
+  const html = montarHtmlRelatorio({ tema, dados: rel.dados, analise: revisado.analise, layout: revisado.layout, clienteNomeOverride: rel.cliente_nome, marca });
+  const novosAjustes = [...ajustes, { pedido, em: new Date().toISOString(), avisos: revisado.avisos }].slice(-30);
+  await pool.query(
+    'UPDATE relatorios_gerados SET html = $3, config = $4, ajustes = $5 WHERE id = $1 AND tenant_id = $2',
+    [id, tenantId, html, JSON.stringify({ analise: revisado.analise, layout: revisado.layout, avisos: revisado.avisos }), JSON.stringify(novosAjustes)],
+  );
+  return { id, titulo: rel.titulo, html, instrucoes: rel.instrucoes, avisos: revisado.avisos, ajustes: novosAjustes };
 }
 
 export async function listarRelatorios(tenantId) {
   if (!pool) return [];
   const { rows } = await pool.query(
-    `SELECT id, titulo, tema_id, fonte, criado_em FROM relatorios_gerados WHERE tenant_id = $1 ORDER BY criado_em DESC LIMIT 100`,
+    `SELECT id, titulo, tema_id, fonte, criado_em, instrucoes, jsonb_array_length(coalesce(ajustes, '[]'::jsonb)) AS qtd_ajustes
+     FROM relatorios_gerados WHERE tenant_id = $1 ORDER BY criado_em DESC LIMIT 100`,
     [tenantId],
   );
   return rows;
@@ -577,7 +809,9 @@ export async function listarRelatorios(tenantId) {
 export async function buscarRelatorio(tenantId, id) {
   if (!pool) return null;
   const { rows } = await pool.query(`SELECT * FROM relatorios_gerados WHERE id = $1 AND tenant_id = $2`, [id, tenantId]);
-  return rows[0] || null;
+  const r = rows[0];
+  if (!r) return null;
+  return { ...r, avisos: r.config?.avisos || [], ajustes: r.ajustes || [] };
 }
 
 export async function apagarRelatorio(tenantId, id) {

@@ -2618,3 +2618,30 @@ html, body {
 .saldo-uso:empty { display: none; }
 .saldo-uso strong { color: var(--text); font-weight: 700; }
 .saldo-uso .linha { display: flex; justify-content: space-between; gap: 8px; }
+
+/* Gerador de Relatorios: campo do pedido pra IA (antes ficava espremido a 6px) e o resumo do que
+   foi pedido acima da pre-visualizacao */
+.cliente-form textarea.gr-pedido-campo {
+  min-height: 130px;
+  line-height: 1.5;
+  font-size: 13.5px;
+  resize: vertical;
+}
+.gr-pedido-dica { font-size: 11px; color: var(--text-dim); line-height: 1.5; margin-top: -2px; }
+.gr-ajuste { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+.gr-pedido-info {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(212, 175, 55, 0.06);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gr-pedido-titulo { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--gold-bright); font-weight: 700; }
+.gr-pedido-item { font-size: 12.5px; color: var(--text); line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.gr-pedido-item b { color: var(--gold-bright); margin-right: 6px; font-weight: 600; }
+.gr-pedido-item.aviso b { color: #f59e0b; }
+.gr-hist-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; font-size: 12.5px; }
+.gr-hist-pedido { font-size: 11px; color: var(--text-dim); overflow-wrap: anywhere; }

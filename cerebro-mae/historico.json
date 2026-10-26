@@ -580,5 +580,13 @@
     "tipo": "decisao",
     "titulo": "Editor de Vídeo removido do app",
     "conteudo": "Por decisão do dono, o Editor de Vídeo saiu da Lumia por completo: aba, rotas /api/video, liberação por cliente na aba Clientes, o código (public/video.js, src/videoEditor.js) e o serviço separado video-worker/ (docker service lumia-video na VPS). O histórico acima fica como registro do que foi construído."
+  },
+  {
+    "chave": "rel:pedidos-ia",
+    "modulo": "relatorios",
+    "data": "2026-10-26",
+    "tipo": "melhoria",
+    "titulo": "Gerador de Relatórios: IA aplica qualquer ajuste pedido e campo de pedido corrigido",
+    "conteudo": "O campo \"Instruções pra IA\" ficava espremido em 6px (classe de contêiner no textarea) e as instruções só mudavam o texto da análise - o layout era fixo, então pedidos como tirar métricas, mudar título ou quantidade de sugestões eram ignorados. Agora a IA devolve análise + layout (título, subtítulo, métricas e ordem, destaque, nomes de seções, sugestões 0-8, seções extras, nota, cores, nome do cliente/período) e avisa o que não deu pra fazer; números continuam vindo da fonte. Dá pra pedir ajuste num relatório já gerado (reaproveita os mesmos números) e o pedido/ajustes aparecem na prévia e na lista. Relatórios gerados antes disso não têm os dados salvos e precisam ser gerados de novo pra aceitar ajuste."
   }
 ]

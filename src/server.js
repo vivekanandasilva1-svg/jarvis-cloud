@@ -1726,6 +1726,16 @@ app.get('/api/gerador-relatorios/:id', async (req, res) => {
   }
 });
 
+// ajuste pedido em cima de um relatorio ja gerado (mesmos numeros, IA revisa texto + layout)
+app.post('/api/gerador-relatorios/:id/ajustar', async (req, res) => {
+  try {
+    res.json({ ok: true, ...(await relatorioGerador.ajustarRelatorio(req.tenantId, req.params.id, req.body?.pedido)) });
+  } catch (err) {
+    if (ehErroDeCredito(err)) return res.status(503).json({ erro: 'A IA está sem créditos na Anthropic no momento, por isso o ajuste não pôde ser feito. Recarregue os créditos e tente de novo.', semCredito: true });
+    res.status(400).json({ erro: err.message });
+  }
+});
+
 app.delete('/api/gerador-relatorios/:id', async (req, res) => {
   try {
     const apagou = await relatorioGerador.apagarRelatorio(req.tenantId, req.params.id);

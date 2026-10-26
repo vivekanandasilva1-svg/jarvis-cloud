@@ -4298,6 +4298,12 @@ const grTemaPreviewTexto = document.getElementById('grTemaPreviewTexto');
 const grTemaPreviewAccentBtn = document.getElementById('grTemaPreviewAccentBtn');
 const grClienteNome = document.getElementById('grClienteNome');
 const grInstrucoes = document.getElementById('grInstrucoes');
+const grInstrucoesContador = document.getElementById('grInstrucoesContador');
+const grPedidoInfo = document.getElementById('grPedidoInfo');
+const grAjusteTexto = document.getElementById('grAjusteTexto');
+const grAjustarBtn = document.getElementById('grAjustarBtn');
+const grAjusteErro = document.getElementById('grAjusteErro');
+let grIdAtual = null;
 const grGerarBtn = document.getElementById('grGerarBtn');
 const grErro = document.getElementById('grErro');
 const grHistoricoLista = document.getElementById('grHistoricoLista');
@@ -4515,7 +4521,19 @@ async function carregarHistoricoGerador() {
       const card = document.createElement('div');
       card.className = 'auto-arquivo-item';
       const info = document.createElement('span');
+      info.className = 'gr-hist-info';
       info.textContent = `${rel.titulo || 'Relatorio'} - ${grFormatarData(rel.criado_em)}`;
+      // o que foi pedido pra IA fica visivel na propria lista
+      if (rel.instrucoes || Number(rel.qtd_ajustes) > 0) {
+        const pedido = document.createElement('small');
+        pedido.className = 'gr-hist-pedido';
+        const partes = [];
+        if (rel.instrucoes) partes.push(`Pedido: ${rel.instrucoes.length > 110 ? `${rel.instrucoes.slice(0, 110)}…` : rel.instrucoes}`);
+        if (Number(rel.qtd_ajustes) > 0) partes.push(`${rel.qtd_ajustes} ajuste(s)`);
+        pedido.textContent = partes.join(' · ');
+        pedido.title = rel.instrucoes || '';
+        info.appendChild(pedido);
+      }
       const abrir = document.createElement('button');
       abrir.type = 'button';
       abrir.textContent = 'Abrir';
@@ -4535,15 +4553,88 @@ async function carregarHistoricoGerador() {
   }
 }
 
+// mostra o relatorio na pre-visualizacao junto com o que foi pedido pra IA (pedido original,
+// ajustes feitos depois e o que ela avisou que nao conseguiu fazer)
+function mostrarRelatorioGerado(d) {
+  grIdAtual = d.id;
+  grHtmlAtual = d.html;
+  grTituloAtual = d.titulo;
+  grPreviewIframe.srcdoc = d.html;
+  grPreviewWrap.hidden = false;
+  grAjusteErro.hidden = true;
+  renderizarPedidoGerador(d);
+}
+
+function renderizarPedidoGerador(d) {
+  const ajustes = Array.isArray(d.ajustes) ? d.ajustes : [];
+  const avisos = Array.isArray(d.avisos) ? d.avisos : [];
+  grPedidoInfo.innerHTML = '';
+  const titulo = document.createElement('div');
+  titulo.className = 'gr-pedido-titulo';
+  titulo.textContent = 'O que foi pedido pra IA';
+  grPedidoInfo.appendChild(titulo);
+  const item = (rotulo, textoItem, classe = '') => {
+    const el = document.createElement('div');
+    el.className = `gr-pedido-item ${classe}`;
+    const b = document.createElement('b');
+    b.textContent = rotulo;
+    const t = document.createElement('span');
+    t.textContent = textoItem;
+    el.append(b, t);
+    grPedidoInfo.appendChild(el);
+  };
+  item('Pedido inicial:', d.instrucoes || 'nenhum (relatório no padrão)');
+  ajustes.forEach((a, i) => item(`Ajuste ${i + 1}:`, a.pedido));
+  if (avisos.length) item('A IA avisou:', avisos.join(' · '), 'aviso');
+  grPedidoInfo.hidden = false;
+}
+
+grInstrucoes.addEventListener('input', () => {
+  grInstrucoesContador.textContent = `${grInstrucoes.value.length} / 4000`;
+});
+
+async function aplicarAjusteGerador() {
+  const pedido = grAjusteTexto.value.trim();
+  grAjusteErro.hidden = true;
+  if (!grIdAtual) return;
+  if (!pedido) {
+    grAjusteErro.textContent = 'Escreva o ajuste que você quer.';
+    grAjusteErro.hidden = false;
+    return;
+  }
+  grAjustarBtn.disabled = true;
+  grAjustarBtn.textContent = 'Aplicando ajuste...';
+  try {
+    const r = await fetch(`/api/gerador-relatorios/${grIdAtual}/ajustar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ pedido }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+    mostrarRelatorioGerado(d);
+    grAjusteTexto.value = '';
+    carregarHistoricoGerador();
+    addBubble(d.avisos?.length ? `Ajuste aplicado, com aviso da IA: ${d.avisos.join(' · ')}` : 'Ajuste aplicado no relatório.', 'system');
+  } catch (err) {
+    grAjusteErro.textContent = err.message;
+    grAjusteErro.hidden = false;
+  } finally {
+    grAjustarBtn.disabled = false;
+    grAjustarBtn.textContent = 'Aplicar ajuste';
+  }
+}
+grAjustarBtn.addEventListener('click', aplicarAjusteGerador);
+grAjusteTexto.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); aplicarAjusteGerador(); }
+});
+
 async function abrirRelatorioGerado(id) {
   try {
     const r = await fetch(`/api/gerador-relatorios/${id}`, { headers: { 'x-app-password': appPassword } });
     const d = await r.json();
     if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
-    grHtmlAtual = d.html;
-    grTituloAtual = d.titulo;
-    grPreviewIframe.srcdoc = d.html;
-    grPreviewWrap.hidden = false;
+    mostrarRelatorioGerado(d);
   } catch (err) {
     addBubble(`Erro abrindo relatorio: ${err.message}`, 'system');
   }
@@ -4583,10 +4674,7 @@ grGerarBtn.addEventListener('click', async () => {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
-    grHtmlAtual = d.html;
-    grTituloAtual = d.titulo;
-    grPreviewIframe.srcdoc = d.html;
-    grPreviewWrap.hidden = false;
+    mostrarRelatorioGerado(d);
     grArquivosPendentes = [];
     renderizarArquivosPendentesGerador();
     carregarHistoricoGerador();
@@ -4596,7 +4684,7 @@ grGerarBtn.addEventListener('click', async () => {
     grErro.hidden = false;
   } finally {
     grGerarBtn.disabled = false;
-    grGerarBtn.textContent = 'Gerar Relatorio';
+    grGerarBtn.textContent = 'Gerar Relatório';
   }
 });
 
