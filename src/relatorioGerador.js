@@ -267,7 +267,7 @@ const PROPS_ANALISE = {
   conclusaoEstrategica: { type: 'string', description: 'Conclusao estrategica do periodo. Padrao 3 a 5 frases; siga o tamanho/tom pedido' },
   sugestoes: { type: 'array', items: { type: 'string' }, description: 'Sugestoes curtas e acionaveis. Padrao 3; use a quantidade que o usuario pedir (0 a 8)' },
   layout: SCHEMA_LAYOUT,
-  avisos: { type: 'array', items: { type: 'string' }, description: 'Pedidos do usuario que NAO deu pra atender e o motivo (ex: dado que nao existe na fonte). Vazio se atendeu tudo.' },
+  avisos: { type: 'array', items: { type: 'string' }, description: 'SOMENTE pedidos que voce NAO conseguiu atender, com o motivo (ex: dado que nao existe na fonte). Nunca confirme o que foi feito. Lista vazia se atendeu tudo.' },
 };
 
 const REGRAS_PEDIDO = `Como tratar o pedido do usuario:
@@ -275,6 +275,8 @@ const REGRAS_PEDIDO = `Como tratar o pedido do usuario:
 - Pedido de metrica que nao existe na lista disponivel, ou de numero que nao esta na fonte: nao invente - registre em "avisos" o que nao deu pra fazer e por que.
 - NUNCA invente ou altere numeros. Use exatamente os dados fornecidos.
 - Sem pedido de estrutura, mantenha o layout atual (ou o padrao).
+- Num ajuste, o NOVO pedido sempre vale mais que os anteriores: se ele contradiz algo pedido antes (ex: antes 5 sugestoes, agora 3), siga o novo.
+- "avisos" e so pro que NAO deu pra fazer - nunca liste o que foi feito.
 - Metricas disponiveis: ${CHAVES_METRICAS.join(', ')}.`;
 
 const HEX_COR = /^#[0-9a-fA-F]{6}$/;
@@ -458,7 +460,7 @@ async function gerarAnaliseComIA({ tenantId, dados, instrucoes, atual }) {
       '',
       'RELATORIO ATUAL (devolva ele COMPLETO revisado, mantendo tudo que o usuario nao pediu pra mudar):',
       JSON.stringify({ analise: atual.analise, layout: atual.layout }),
-      atual.historico?.length ? `\nPedidos anteriores ja aplicados (contexto): ${atual.historico.map((p) => `"${p}"`).join('; ')}` : '',
+      atual.historico?.length ? `\nPedidos anteriores (ja estao aplicados no relatorio atual; se o novo pedido contradizer algum deles, vale o NOVO):${atual.historico.map((p) => `"${p}"`).join('; ')}` : '',
       `\nNOVO PEDIDO DE AJUSTE (aplique tudo):\n"""${instrucoes}"""`,
     );
   } else {
