@@ -197,7 +197,7 @@
       .ve-bloco .al { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; }
       .ve-bloco .al.e { left: 0; } .ve-bloco .al.d { right: 0; }
       .ve-bloco:hover .al { background: rgba(255,255,255,.35); }
-      .ve-bloco.sel { outline: 2px solid #fff; outline-offset: 1px; z-index: 2; box-shadow: 0 0 12px rgba(245,213,118,.6); }
+      .ve-bloco.sel { outline: 2px solid #fff; outline-offset: 1px; z-index: 2; box-shadow: 0 0 0 4px rgba(245,213,118,.55), 0 0 16px rgba(245,213,118,.8); filter: brightness(1.18); }
       .ve-bloco.atr { background: linear-gradient(135deg, #2a2618, #4a3f1c); border: 1px solid #d4af37; color: #f5d576; }
       .ve-bloco.fnd { background: repeating-linear-gradient(45deg, #1e1c14, #1e1c14 6px, #2a2618 6px, #2a2618 12px); border: 1px solid #9a968a; color: #f0ede4; }
       .ve-bloco.ele { background-color: #1e1c14; background-size: cover; background-position: center; border: 1px solid #f5d576; color: #fff; text-shadow: 0 1px 3px #000; }
@@ -207,6 +207,8 @@
       .ve-bloco.leg-off { background: transparent; border: 1px dashed #706c62; color: #9a968a; font-weight: 600; cursor: pointer; }
       .ve-marca-fx { cursor: grab; z-index: 1; }
       .ve-marca-fx.soco { background: #f5d576; } .ve-marca-fx.lento { background: #c9ccd1; } .ve-marca-fx.dramatico { background: #fff; box-shadow: 0 0 6px #f5d576; }
+      .ve-laco { position: absolute; z-index: 5; border: 1px dashed #f5d576; background: rgba(245,213,118,.12); pointer-events: none; border-radius: 3px; }
+      .ve-bloco.pre, .ve-marca-fx.pre { outline: 2px dashed #f5d576; outline-offset: 1px; }
       .ve-marca-fx.sel { outline: 2px solid #fff; outline-offset: 2px; }
       .ve-regua { cursor: pointer; }
       .ve-inspetor { border-color: rgba(245,213,118,.5); box-shadow: 0 0 0 1px rgba(245,213,118,.15), 0 10px 30px rgba(0,0,0,.4); }
@@ -265,6 +267,22 @@
       if (raiz.hidden || e.target.closest?.('textarea, input, select')) return;
       if (e.code === 'Space' && el.player) { e.preventDefault(); el.player.paused ? el.player.play() : el.player.pause(); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && ed) { e.preventDefault(); desfazer(); }
+      if (ed && lote.size > 1 && (e.key === 'Delete' || e.key === 'Backspace')) { e.preventDefault(); apagarLote(); return; }
+      if (ed && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); selecionarTudo(); return; }
+      if (ed && e.key === 'Escape' && (lote.size || selecionado)) { lote.clear(); selecionado = null; renderLinhaDoTempo(); renderInspetor(); return; }
+      if (ed && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && (lote.size || (selecionado && selecionado.k !== 'legenda'))) {
+        e.preventDefault();
+        const temporario = !lote.size;
+        if (temporario) lote.add(`${selecionado.k}:${selecionado.i}`);
+        const passo = (e.shiftKey ? (linha.fps || 30) : 1) * (e.key === 'ArrowLeft' ? -1 : 1);
+        const [min, max] = limitesLote(linha.duracaoFrames);
+        guardar();
+        deslocarLote(Math.max(min, Math.min(max, passo)));
+        if (temporario) lote.clear();
+        renderLinhaDoTempo();
+        renderInspetor();
+        return;
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selecionado && selecionado.k !== 'legenda' && ed) {
         e.preventDefault();
         guardar();
@@ -849,6 +867,7 @@
     ed.legendas = linha.legendas !== false;
     historico = [];
     selecionado = null;
+    lote.clear();
   }
   const sujo = () => historico.length > 0;
   function guardar() {
@@ -859,6 +878,7 @@
     if (!historico.length) return;
     ed = JSON.parse(historico.pop());
     selecionado = null;
+    lote.clear();
     renderLinhaDoTempo();
     renderInspetor();
   }
@@ -932,7 +952,7 @@
           <button type="button" data-add="zoom">+ Zoom</button><button type="button" data-add="transicao">+ Transição</button>
           <button type="button" data-add="midia">+ Mídia</button>
         </div>
-        <span class="ve-dica" style="margin-left:auto">Ctrl + rodinha: zoom · arraste pra mover · bordas pra esticar</span>
+        <span class="ve-dica" style="margin-left:auto">Ctrl + rodinha: zoom · arraste pra mover · bordas pra esticar · botão direito arrastado: selecionar vários</span>
         <div class="ve-zoom"><button type="button" data-z="-" title="Diminuir">−</button><button type="button" data-z="0" title="Caber na tela">⤢</button><button type="button" data-z="+" title="Aumentar">+</button></div>
         ${nEdicoes ? `<button class="ve-btn sec" type="button" data-a="desfazer" title="Ctrl+Z">↶ Desfazer</button>
           <button class="ve-btn sec" type="button" data-a="descartar">Descartar</button>
@@ -949,7 +969,7 @@
     inn.style.width = `${Math.max(larguraVisivel, dur * pps + 10)}px`;
     const x = (seg) => seg * pps;
     const xf = (frame) => (frame / fps) * pps;
-    const sel = (k, i) => selecionado && selecionado.k === k && selecionado.i === i;
+    const sel = (k, i) => lote.has(`${k}:${i}`) || (selecionado && selecionado.k === k && selecionado.i === i);
     let html = '';
 
     const passo = [0.5, 1, 2, 5, 10, 15, 30, 60].find((p) => p * pps >= 54) || 60;
@@ -1049,9 +1069,21 @@
     t.querySelector('[data-a=aplicar]')?.addEventListener('click', aplicarEdicoes);
     t.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => adicionar(b.dataset.add, fps)));
 
-    // arrastar: mover o item, esticar pelas bordas, ou arrastar o cursor na regua
+    // botao direito nao abre menu do navegador aqui - ele desenha o laco de selecao
+    inn.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // arrastar: mover o item (ou o lote selecionado), esticar pelas bordas, ou mexer o cursor;
+    // botao direito arrastado = laco que seleciona varios itens de varias faixas
     inn.addEventListener('pointerdown', (e) => {
+      if (e.button === 2) { iniciarLaco(e, inn); return; }
+      if (e.button !== 0) return;
       const alvo = e.target.closest('[data-k]');
+      if (!alvo && (lote.size || selecionado)) {
+        lote.clear();
+        selecionado = null;
+        renderLinhaDoTempo();
+        renderInspetor();
+      }
       if (!alvo) {
         // clique/arraste em area vazia ou na regua = mexe o cursor do video
         irPara(segDoEvento(e));
@@ -1074,8 +1106,21 @@
       const i = Number(alvo.dataset.i);
       const o = ed[k][i];
       const marca = k === 'zooms' || k === 'transicoes';
+      const chave = `${k}:${i}`;
+      // Ctrl/Shift + clique = poe/tira o item do lote, sem arrastar
+      if (e.ctrlKey || e.metaKey || e.shiftKey) {
+        if (selecionado && selecionado.k !== 'legenda' && !lote.size) lote.add(`${selecionado.k}:${selecionado.i}`);
+        if (lote.has(chave)) lote.delete(chave); else lote.add(chave);
+        selecionado = lote.size === 1 ? chaveParaSel([...lote][0]) : null;
+        renderLinhaDoTempo();
+        renderInspetor();
+        return;
+      }
       const r = alvo.getBoundingClientRect();
-      const modo = marca ? 'mover' : e.clientX - r.left < 7 ? 'inicio' : r.right - e.clientX < 7 ? 'fim' : 'mover';
+      const noLote = lote.size > 1 && lote.has(chave);
+      const modo = marca || noLote ? 'mover' : e.clientX - r.left < 7 ? 'inicio' : r.right - e.clientX < 7 ? 'fim' : 'mover';
+      if (noLote) { arrastarLote(e, alvo, inn, { fps, pps }); return; }
+      if (lote.size) lote.clear();
       const x0 = e.clientX;
       const orig = { ...o };
       let mexeu = false;
@@ -1113,6 +1158,143 @@
       alvo.addEventListener('pointermove', mover);
       alvo.addEventListener('pointerup', soltar);
     });
+  }
+
+  // ---------- selecao em lote ----------
+  const lote = new Set(); // chaves "textos:3"
+  const chaveParaSel = (c) => { const [k, i] = c.split(':'); return { k, i: Number(i) }; };
+  const itensDoLote = () => [...lote].map(chaveParaSel).filter(({ k, i }) => ed?.[k]?.[i]);
+
+  // laco: retangulo desenhado com o botao direito; seleciona tudo que ele tocar
+  function iniciarLaco(e, inn) {
+    e.preventDefault();
+    const base = inn.getBoundingClientRect();
+    const x0 = e.clientX - base.left;
+    const y0 = e.clientY - base.top;
+    const somar = e.ctrlKey || e.metaKey || e.shiftKey;
+    const laco = document.createElement('div');
+    laco.className = 've-laco';
+    inn.appendChild(laco);
+    const desenhar = (ev) => {
+      const b = inn.getBoundingClientRect();
+      const x1 = ev.clientX - b.left;
+      const y1 = ev.clientY - b.top;
+      Object.assign(laco.style, { left: `${Math.min(x0, x1)}px`, top: `${Math.min(y0, y1)}px`, width: `${Math.abs(x1 - x0)}px`, height: `${Math.abs(y1 - y0)}px` });
+      // realca ao vivo o que vai entrar
+      const area = laco.getBoundingClientRect();
+      inn.querySelectorAll('[data-k][data-i]').forEach((n) => {
+        const r = n.getBoundingClientRect();
+        n.classList.toggle('pre', r.right >= area.left && r.left <= area.right && r.bottom >= area.top && r.top <= area.bottom);
+      });
+    };
+    desenhar(e);
+    const soltar = (ev) => {
+      window.removeEventListener('pointermove', desenhar);
+      window.removeEventListener('pointerup', soltar);
+      desenhar(ev);
+      if (!somar) lote.clear();
+      inn.querySelectorAll('[data-k][data-i].pre').forEach((n) => lote.add(`${n.dataset.k}:${n.dataset.i}`));
+      laco.remove();
+      selecionado = lote.size === 1 ? chaveParaSel([...lote][0]) : null;
+      renderLinhaDoTempo();
+      renderInspetor();
+    };
+    window.addEventListener('pointermove', desenhar);
+    window.addEventListener('pointerup', soltar);
+  }
+
+  // quanto o lote inteiro pode andar sem nenhum item sair do video
+  function limitesLote(total) {
+    let min = -Infinity;
+    let max = Infinity;
+    for (const { k, i } of itensDoLote()) {
+      const o = ed[k][i];
+      if (k === 'zooms' || k === 'transicoes') { min = Math.max(min, 1 - o.frame); max = Math.min(max, total - 2 - o.frame); } else { min = Math.max(min, -o.inicio); max = Math.min(max, total - o.fim); }
+    }
+    return [min, max];
+  }
+
+  function deslocarLote(df) {
+    for (const { k, i } of itensDoLote()) {
+      const o = ed[k][i];
+      if (k === 'zooms' || k === 'transicoes') o.frame += df; else { o.inicio += df; o.fim += df; }
+    }
+  }
+
+  function arrastarLote(e, alvo, inn, { fps, pps }) {
+    const x0 = e.clientX;
+    const originais = itensDoLote().map(({ k, i }) => ({ k, i, o: { ...ed[k][i] } }));
+    const [min, max] = limitesLote(linha.duracaoFrames);
+    let mexeu = false;
+    try { alvo.setPointerCapture(e.pointerId); } catch { /* segue sem captura */ }
+    const mover = (ev) => {
+      if (!mexeu && Math.abs(ev.clientX - x0) < 3) return;
+      if (!mexeu) { guardar(); mexeu = true; }
+      const df = Math.max(min, Math.min(max, Math.round(((ev.clientX - x0) / pps) * fps)));
+      for (const { k, i, o } of originais) {
+        const atualO = ed[k][i];
+        const n = inn.querySelector(`[data-k="${k}"][data-i="${i}"]`);
+        if (k === 'zooms' || k === 'transicoes') { atualO.frame = o.frame + df; if (n) n.style.left = `${(atualO.frame / fps) * pps}px`; } else {
+          atualO.inicio = o.inicio + df;
+          atualO.fim = o.fim + df;
+          if (n) n.style.left = `${(atualO.inicio / fps) * pps}px`;
+        }
+      }
+    };
+    const soltar = () => {
+      alvo.removeEventListener('pointermove', mover);
+      alvo.removeEventListener('pointerup', soltar);
+      renderLinhaDoTempo();
+      renderInspetor();
+    };
+    alvo.addEventListener('pointermove', mover);
+    alvo.addEventListener('pointerup', soltar);
+  }
+
+  function apagarLote() {
+    if (!lote.size) return;
+    guardar();
+    const porLista = {};
+    for (const { k, i } of itensDoLote()) (porLista[k] ||= []).push(i);
+    for (const [k, idx] of Object.entries(porLista)) idx.sort((a, b) => b - a).forEach((i) => ed[k].splice(i, 1));
+    lote.clear();
+    selecionado = null;
+    renderLinhaDoTempo();
+    renderInspetor();
+  }
+
+  // copia o lote inteiro logo depois do fim dele, mantendo o espacamento entre os itens
+  function duplicarLote() {
+    const itens = itensDoLote();
+    if (!itens.length) return;
+    const fps = linha.fps || 30;
+    const fimGrupo = Math.max(...itens.map(({ k, i }) => (k === 'zooms' || k === 'transicoes' ? ed[k][i].frame + fps : ed[k][i].fim)));
+    const iniGrupo = Math.min(...itens.map(({ k, i }) => (k === 'zooms' || k === 'transicoes' ? ed[k][i].frame : ed[k][i].inicio)));
+    const df = fimGrupo - iniGrupo;
+    const total = linha.duracaoFrames;
+    guardar();
+    const novos = [];
+    for (const { k, i } of itens) {
+      const c = clonar(ed[k][i]);
+      if (k === 'zooms' || k === 'transicoes') { c.frame += df; if (c.frame >= total - 2) continue; } else { c.inicio += df; c.fim += df; if (c.fim > total) continue; }
+      ed[k].push(c);
+      novos.push(`${k}:${ed[k].length - 1}`);
+    }
+    lote.clear();
+    novos.forEach((c) => lote.add(c));
+    selecionado = lote.size === 1 ? chaveParaSel(novos[0]) : null;
+    if (novos.length < itens.length) aviso('Alguns itens não couberam depois do fim do vídeo e não foram duplicados.');
+    renderLinhaDoTempo();
+    renderInspetor();
+  }
+
+  function selecionarTudo() {
+    if (!ed) return;
+    lote.clear();
+    for (const k of LISTAS_EDITAVEIS) (ed[k] || []).forEach((_, i) => lote.add(`${k}:${i}`));
+    selecionado = lote.size === 1 ? chaveParaSel([...lote][0]) : null;
+    renderLinhaDoTempo();
+    renderInspetor();
   }
 
   // novo item na posicao do cursor
@@ -1159,6 +1341,20 @@
   function renderInspetor() {
     const caixa = el.dir?.querySelector('[data-a=inspetor]');
     if (!caixa) return;
+    if (ed && lote.size > 1) {
+      caixa.hidden = false;
+      const itens = itensDoLote();
+      const porTipo = {};
+      for (const { k } of itens) porTipo[NOMES[k] || k] = (porTipo[NOMES[k] || k] || 0) + 1;
+      caixa.innerHTML = `<div class="ve-rot">${itens.length} itens selecionados <button class="ve-x" type="button" data-a="fechar">✕</button></div>
+        <div class="ve-dica">${Object.entries(porTipo).map(([n, q]) => `${q} × ${esc(n.toLowerCase())}`).join(' · ')}</div>
+        <div class="ve-dica">Arraste qualquer um deles pra mover todos juntos. Setas movem 1 quadro (Shift + setas: 1 segundo). Delete apaga.</div>
+        <div class="ve-linha-op"><button class="ve-btn perigo" type="button" data-a="apagar">Apagar todos</button><button class="ve-btn sec" type="button" data-a="duplicar">Duplicar todos</button></div>`;
+      caixa.querySelector('[data-a=apagar]').addEventListener('click', apagarLote);
+      caixa.querySelector('[data-a=duplicar]').addEventListener('click', duplicarLote);
+      caixa.querySelector('[data-a=fechar]').addEventListener('click', () => { lote.clear(); selecionado = null; renderLinhaDoTempo(); renderInspetor(); });
+      return;
+    }
     if (!selecionado || !ed) { caixa.hidden = true; caixa.innerHTML = ''; return; }
     caixa.hidden = false;
     const fps = linha.fps || 30;

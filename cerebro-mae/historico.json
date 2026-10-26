@@ -556,5 +556,21 @@
     "tipo": "fato",
     "titulo": "Editor de Vídeo: criação e evolução do dia",
     "conteudo": "Serviço separado com senha interna derivada do SESSION_SECRET (sem env nova). Render com cache 96MB e arquivo final mais leve; deploy no meio de um render devolve a edição para a fila sem corromper estado. Editor em tela cheia com linha do tempo em camadas, vídeo de referência e mídias de apoio; a IA vê quadros do vídeo antes de planejar (desliga a própria legenda se o vídeo já tem, ajusta altura do texto pelo rosto, avisa limitações). Não transcreve áudio em silêncio (Whisper inventava frases)."
+  },
+  {
+    "chave": "vid:mestre",
+    "modulo": "video",
+    "data": "2026-10-08",
+    "tipo": "decisao",
+    "titulo": "Editor de Vídeo: IA mestre em edição, tudo criativo feito pelo Claude",
+    "conteudo": "O diretor (Claude) ganhou repertório de motion design: texto 3D, texto atrás da pessoa, fundo trocado, tela dividida, efeitos, zoom dramático e transições, guiado por um manual de edição no prompt. Por decisão do dono, imagens/objetos 3D/fundos são desenhados pelo próprio Claude em SVG (rasterizados pelo Chrome do render) - nada de Gemini/outra IA de imagem. Exceção: transcrição pelo Gemini (Claude não recebe áudio), com Whisper da VPS de reserva; Gemini Pro exige faturamento na API (no gratuito usa Flash). Recorte da pessoa por modelo local (RVM). Plano em JSON validado no código (schema grande demais pro structured output). Render em partes de 30s com retomada e áudio montado no ffmpeg, depois de um vídeo de 6,5 min estourar memória. Pendente: com 1 CPU um vídeo de 5 min com fundo trocado leva 1h30-2h; GPU na nuvem reduziria pra minutos."
+  },
+  {
+    "chave": "vid:selecao-lote",
+    "modulo": "video",
+    "data": "2026-10-26",
+    "tipo": "melhoria",
+    "titulo": "Linha do tempo: seleção em lote com o botão direito",
+    "conteudo": "Pedido do dono pra organizar a linha do tempo: botão direito arrastado desenha um laço que seleciona itens de várias faixas; arrastar qualquer selecionado move o lote junto (sem passar do começo/fim do vídeo); Ctrl+clique soma/tira, Ctrl+A tudo, Esc limpa, setas movem 1 quadro (Shift: 1s), Delete apaga; painel mostra apagar/duplicar todos."
   }
 ]
