@@ -1,4 +1,2 @@
 node_modules
 .env
-video-worker/node_modules
-video-worker/bundle

@@ -572,5 +572,13 @@
     "tipo": "melhoria",
     "titulo": "Linha do tempo: seleção em lote com o botão direito",
     "conteudo": "Pedido do dono pra organizar a linha do tempo: botão direito arrastado desenha um laço que seleciona itens de várias faixas; arrastar qualquer selecionado move o lote junto (sem passar do começo/fim do vídeo); Ctrl+clique soma/tira, Ctrl+A tudo, Esc limpa, setas movem 1 quadro (Shift: 1s), Delete apaga; painel mostra apagar/duplicar todos."
+  },
+  {
+    "chave": "vid:removido",
+    "modulo": "video",
+    "data": "2026-10-26",
+    "tipo": "decisao",
+    "titulo": "Editor de Vídeo removido do app",
+    "conteudo": "Por decisão do dono, o Editor de Vídeo saiu da Lumia por completo: aba, rotas /api/video, liberação por cliente na aba Clientes, o código (public/video.js, src/videoEditor.js) e o serviço separado video-worker/ (docker service lumia-video na VPS). O histórico acima fica como registro do que foi construído."
   }
 ]

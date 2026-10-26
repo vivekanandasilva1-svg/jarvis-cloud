@@ -73,7 +73,6 @@ const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
 const tabBtnGeradorRelatorios = document.getElementById('tabBtnGeradorRelatorios');
 const tabBtnIntegracoes = document.getElementById('tabBtnIntegracoes');
 const tabBtnCerebro = document.getElementById('tabBtnCerebro');
-const tabBtnVideo = document.getElementById('tabBtnVideo');
 const tabBtnClientes = document.getElementById('tabBtnClientes');
 const tabBtnPropostasAdmin = document.getElementById('tabBtnPropostasAdmin');
 const tabPainel = document.getElementById('tabPainel');
@@ -86,7 +85,6 @@ const tabRelatorios = document.getElementById('tabRelatorios');
 const tabGeradorRelatorios = document.getElementById('tabGeradorRelatorios');
 const tabIntegracoes = document.getElementById('tabIntegracoes');
 const tabCerebro = document.getElementById('tabCerebro');
-const tabVideo = document.getElementById('tabVideo');
 const tabClientes = document.getElementById('tabClientes');
 const tabPropostasAdmin = document.getElementById('tabPropostasAdmin');
 
@@ -331,7 +329,6 @@ let minhasTabsHabilitadas = null; // null = tudo liberado (default); array = so 
 let meuPermiteColaboradores = false; // beneficio liberado pelo super_admin (aba Clientes) - ver tenants.permite_colaboradores
 // Cerebro de IA e recurso pago a parte - false ate o admin liberar (super_admin sempre tem)
 let meuCerebroLiberado = false;
-let meuVideoLiberado = false; // Editor de Video - tambem pago a parte
 
 
 // confirma que o token guardado ainda e valido (nao expirou, tenant continua ativo) - chamado
@@ -348,7 +345,6 @@ async function tokenValido() {
     minhasTabsHabilitadas = Array.isArray(data?.tabsHabilitadas) && data.tabsHabilitadas.length ? data.tabsHabilitadas : null;
     meuPermiteColaboradores = !!data?.permiteColaboradores;
     meuCerebroLiberado = !!data?.cerebroLiberado;
-    meuVideoLiberado = !!data?.videoLiberado;
     return true;
   } catch {
     return false;
@@ -376,7 +372,6 @@ function mostrarApp() {
   tabBtnGeradorRelatorios.hidden = !abaLiberada('geradorRelatorios');
   tabBtnIntegracoes.hidden = !abaLiberada('integracoes');
   tabBtnCerebro.hidden = !meuCerebroLiberado;
-  tabBtnVideo.hidden = !meuVideoLiberado;
   // se a aba visivel por padrao (Painel) foi restringida, pula pra primeira aba liberada em
   // vez de deixar a tela em branco
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
@@ -1854,14 +1849,7 @@ async function capturarFrameCamera() {
 }
 
 // ---------- Abas: Painel / Agenda / WhatsApp ----------
-// o Editor de Video abre por cima do app inteiro - ao fechar, volta pra aba onde a pessoa estava
-let abaAtualApp = 'painel';
-let abaAntesDoVideo = 'painel';
-window.lumiaFecharVideo = () => mudarAba(abaAntesDoVideo === 'video' ? 'painel' : abaAntesDoVideo);
-
 function mudarAba(aba) {
-  if (aba === 'video' && abaAtualApp !== 'video') abaAntesDoVideo = abaAtualApp;
-  abaAtualApp = aba;
   tabPainel.hidden = aba !== 'painel';
   tabAgenda.hidden = aba !== 'agenda';
   tabWhatsapp.hidden = aba !== 'whatsapp';
@@ -1872,7 +1860,6 @@ function mudarAba(aba) {
   tabGeradorRelatorios.hidden = aba !== 'geradorRelatorios';
   tabIntegracoes.hidden = aba !== 'integracoes';
   tabCerebro.hidden = aba !== 'cerebro';
-  tabVideo.hidden = aba !== 'video';
   tabClientes.hidden = aba !== 'clientes';
   tabPropostasAdmin.hidden = aba !== 'propostasAdmin';
   tabBtnPainel.classList.toggle('active', aba === 'painel');
@@ -1885,7 +1872,6 @@ function mudarAba(aba) {
   tabBtnGeradorRelatorios.classList.toggle('active', aba === 'geradorRelatorios');
   tabBtnIntegracoes.classList.toggle('active', aba === 'integracoes');
   tabBtnCerebro.classList.toggle('active', aba === 'cerebro');
-  tabBtnVideo.classList.toggle('active', aba === 'video');
   tabBtnClientes.classList.toggle('active', aba === 'clientes');
   tabBtnPropostasAdmin.classList.toggle('active', aba === 'propostasAdmin');
   if (aba === 'agenda') {
@@ -1921,26 +1907,6 @@ function mudarAba(aba) {
   // o grafo 3D do Cerebro para de renderizar quando a aba nao esta visivel (nao gasta GPU/bateria a toa)
   if (aba === 'cerebro') abrirCerebro();
   else if (window.cerebroPausar) window.cerebroPausar();
-  if (aba === 'video') abrirVideo();
-  else if (window.videoPausar) window.videoPausar();
-}
-
-// video.js so e baixado na primeira vez que a aba Editor de Video e aberta (mesma ideia do Cerebro)
-let videoCarregando = null;
-function abrirVideo() {
-  if (window.videoAbrir) return window.videoAbrir(tabVideo, appPassword);
-  if (!videoCarregando) {
-    videoCarregando = new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = '/video.js?v=6';
-      s.onload = resolve;
-      s.onerror = () => { videoCarregando = null; reject(new Error('falha ao carregar o Editor de Vídeo')); };
-      document.head.appendChild(s);
-    });
-  }
-  videoCarregando
-    .then(() => { if (!tabVideo.hidden) window.videoAbrir(tabVideo, appPassword); })
-    .catch((err) => addBubble(err.message, 'system'));
 }
 
 // cerebro.js (+ a biblioteca do grafo 3D) so e baixado na PRIMEIRA vez que a aba e aberta -
@@ -1984,7 +1950,6 @@ tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
 tabBtnFollowUp.addEventListener('click', () => mudarAba('followUp'));
 tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
 tabBtnCerebro.addEventListener('click', () => mudarAba('cerebro'));
-tabBtnVideo.addEventListener('click', () => mudarAba('video'));
 tabBtnClientes.addEventListener('click', () => mudarAba('clientes'));
 tabBtnPropostasAdmin.addEventListener('click', () => mudarAba('propostasAdmin'));
 
@@ -5941,42 +5906,6 @@ async function selecionarCliente(id, nome, username) {
       const d = await r.json();
       cerebroCb.checked = !!d.liberado;
       cerebroCb.disabled = false;
-    } catch (e) {}
-  })();
-
-  // ---- Editor de Video (recurso pago a parte - desligado ate liberar aqui) ----
-  const videoLabel = document.createElement('label'); videoLabel.className = 'auto-label'; videoLabel.textContent = 'Editor de Vídeo com IA (recurso pago)';
-  clienteIntegracoesPainel.appendChild(videoLabel);
-  const videoWrap = document.createElement('label');
-  videoWrap.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);margin-bottom:10px;cursor:pointer;';
-  const videoCb = document.createElement('input');
-  videoCb.type = 'checkbox';
-  videoCb.disabled = true;
-  videoWrap.appendChild(videoCb);
-  videoWrap.appendChild(document.createTextNode('Liberar a aba Editor de Vídeo pra esse cliente'));
-  clienteIntegracoesPainel.appendChild(videoWrap);
-  videoCb.addEventListener('change', async () => {
-    const liberado = videoCb.checked;
-    try {
-      const r = await fetch(`/api/admin/tenants/${id}/video`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-        body: JSON.stringify({ liberado }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
-      addBubble(`Editor de Vídeo ${liberado ? 'liberado' : 'bloqueado'} pra "${nome}".`, 'system');
-    } catch (err) {
-      videoCb.checked = !liberado;
-      addBubble(`Erro alterando o Editor de Vídeo: ${err.message}`, 'system');
-    }
-  });
-  (async () => {
-    try {
-      const r = await fetch(`/api/admin/tenants/${id}/video`, { headers: { 'x-app-password': appPassword } });
-      const d = await r.json();
-      videoCb.checked = !!d.liberado;
-      videoCb.disabled = false;
     } catch (e) {}
   })();
 
