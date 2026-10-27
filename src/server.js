@@ -1794,6 +1794,22 @@ app.post('/api/crm/mensagens', async (req, res) => {
   }
 });
 
+// envio de midia pela aba Conversas (foto, video, documento ou audio gravado no navegador) - o
+// arquivo sobe em base64 no JSON (limite de 20mb do express.json)
+app.post('/api/crm/mensagens/midia', async (req, res) => {
+  const { numero, instancia, tipo, mimetype, base64, fileName, legenda } = req.body || {};
+  if (!numero || !instancia || !tipo || !base64) return res.status(400).json({ erro: 'numero, instancia, tipo e arquivo sao obrigatorios' });
+  try {
+    const resposta = await crm.enviarMidiaContato(req.tenantId, String(numero), String(instancia), {
+      tipo, mimetype, base64, fileName, legenda: typeof legenda === 'string' ? legenda.trim().slice(0, 1000) : '',
+    });
+    lembrarEnviada(resposta);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.post('/api/crm/contatos/:id/etapa', async (req, res) => {
   const { etapa } = req.body || {};
   if (!etapa) return res.status(400).json({ erro: 'etapa e obrigatoria' });

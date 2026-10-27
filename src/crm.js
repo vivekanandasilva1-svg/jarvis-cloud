@@ -466,3 +466,25 @@ export async function enviarMensagem(tenantId, numero, instancia, texto) {
   await evolutionApi.enviarMensagemTextoPor(instancia, numero, texto);
   await registrarMensagem(tenantId, { numero, instancia, direcao: 'saida', tipo: 'text', texto });
 }
+
+// manda midia (foto, video, documento ou audio gravado) pela aba Conversas, na mesma instancia do
+// contato, e registra como saida. Guarda o base64 so de imagem/audio (mesma regra do que chega pelo
+// webhook - video/documento ficam so como registro, pra nao pesar o banco). Devolve a resposta do
+// Evolution pra quem chamou marcar o id como "enviado por nos" (o eco do webhook nao duplica).
+const TIPOS_MIDIA_ENVIO = new Set(['image', 'video', 'document', 'audio']);
+export async function enviarMidiaContato(tenantId, numero, instancia, { tipo, mimetype, base64, fileName, legenda }) {
+  if (!TIPOS_MIDIA_ENVIO.has(tipo)) throw new Error(`Tipo de midia invalido: "${tipo}"`);
+  if (!base64) throw new Error('arquivo vazio');
+  const resposta = tipo === 'audio'
+    ? await evolutionApi.enviarAudio(instancia, numero, base64)
+    : await evolutionApi.enviarMidia(instancia, numero, { mediatype: tipo, mimetype, media: base64, fileName, caption: legenda || undefined });
+  const guardarMidia = tipo === 'image' || tipo === 'audio';
+  await registrarMensagem(tenantId, {
+    numero, instancia, direcao: 'saida', tipo,
+    texto: legenda || (tipo === 'document' ? fileName || 'documento' : ''),
+    midiaBase64: guardarMidia ? base64 : null,
+    midiaMimetype: guardarMidia ? mimetype : null,
+    waId: resposta?.key?.id || null,
+  });
+  return resposta;
+}

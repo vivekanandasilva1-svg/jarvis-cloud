@@ -596,5 +596,13 @@
     "tipo": "melhoria",
     "titulo": "Visual profissional: cinza médio sólido, menu em grupos e sinalização vermelho/verde",
     "conteudo": "Seguindo o modelo do app Zonic aprovado pelo dono: tema trocou os vidros/gradientes pretos por superfícies sólidas em cinza médio mantendo dourado/preto/branco, janela em tela cheia, menu lateral agrupado (Atendimento, Clientes, Automação, Configurações, Administração - grupo some se nenhum item estiver liberado pra conta) e cabeçalho de página (etiqueta + título + descrição) em toda aba. Sinalização padrão: alteração não salva deixa o botão de salvar vermelho e põe um ponto vermelho na aba do menu (e avisa ao sair da página); salvar com sucesso pisca verde e mostra 'Salvo e atualizado'. Feito com rastrearAlteracoes/marcarSalvo no app.js, já ligado em Auto Atendimento, Follow Up, número do WhatsApp, marca/tema do Gerador, alerta de retorno do CRM e saldo da IA. A aba antiga 'Relatórios' virou 'Relatórios automáticos' pra liberar o nome pro futuro painel. Próximas fases: Conversas, Contatos (importar/exportar), painel de Relatórios, assistente Lumien (coruja) e integração com Instagram."
+  },
+  {
+    "chave": "crm:aba-conversas",
+    "modulo": "crm",
+    "data": "2026-10-27",
+    "tipo": "melhoria",
+    "titulo": "Aba Conversas: caixa de entrada estilo WhatsApp Web pra atender pelo app",
+    "conteudo": "Nova aba Conversas (grupo Atendimento) usando a mesma base do CRM (crm_contatos/crm_mensagens + tempo real por SSE): lista com busca, filtros (Todas, Não lidas, IA atendendo, IA pausada), filtro por número quando há mais de uma instância, contador de não lidas no menu, etiquetas de etapa/IA pausada/retorno hoje; conversa com bolhas do WhatsApp, troca de etapa e botão pra pausar/retomar a IA só naquele contato; envio de texto (Enter envia, Shift+Enter quebra linha), foto/vídeo/documento com legenda e áudio gravado no navegador (rota nova POST /api/crm/mensagens/midia, guarda base64 só de imagem/áudio, id do WhatsApp evita duplicar com o eco do webhook). Segue a mesma permissão da aba CRM (não criou chave nova em TABS_VALIDAS). Sem disparador em massa, por decisão do dono. O sino de notificações agora abre a conversa direto nessa aba. Pendente: responder citando mensagem e atribuir atendente."
   }
 ]

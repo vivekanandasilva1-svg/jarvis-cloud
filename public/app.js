@@ -79,6 +79,9 @@ const tabPainel = document.getElementById('tabPainel');
 const tabAgenda = document.getElementById('tabAgenda');
 const tabWhatsapp = document.getElementById('tabWhatsapp');
 const tabCrm = document.getElementById('tabCrm');
+const tabConversas = document.getElementById('tabConversas');
+const tabBtnConversas = document.getElementById('tabBtnConversas');
+const conversasBadge = document.getElementById('conversasBadge');
 const tabAuto = document.getElementById('tabAuto');
 const tabFollowUp = document.getElementById('tabFollowUp');
 const tabRelatorios = document.getElementById('tabRelatorios');
@@ -366,6 +369,7 @@ function mostrarApp() {
   tabBtnAgenda.hidden = !abaLiberada('agenda');
   tabBtnWhatsapp.hidden = !abaLiberada('whatsapp');
   tabBtnCrm.hidden = !abaLiberada('crm');
+  tabBtnConversas.hidden = !abaLiberada('crm'); // mesmas conversas do CRM, mesma permissao
   tabBtnAuto.hidden = !abaLiberada('auto');
   tabBtnFollowUp.hidden = !abaLiberada('followUp');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
@@ -378,7 +382,7 @@ function mostrarApp() {
   // vez de deixar a tela em branco
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
     const primeiraLiberada = [
-      ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm],
+      ['conversas', tabBtnConversas], ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm],
       ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
     ].find(([, btn]) => !btn.hidden);
     if (primeiraLiberada) mudarAba(primeiraLiberada[0]);
@@ -1914,6 +1918,7 @@ const CABECALHOS_ABA = {
   agenda: ['Atendimento', 'Agenda', 'Compromissos e agendamentos, integrados ao Google Agenda.'],
   whatsapp: ['Atendimento', 'WhatsApp', 'Números conectados e status de cada instância.'],
   followUp: ['Atendimento', 'Follow Up', 'Retome automaticamente os leads que pararam de responder.'],
+  conversas: ['Atendimento', 'Conversas', 'Atenda o WhatsApp direto pela Lumia, em tempo real.'],
   crm: ['Clientes', 'CRM', 'Seus leads em cada etapa do funil, com a conversa do WhatsApp.'],
   auto: ['Automação', 'Auto Atendimento', 'Configure a IA que atende os contatos no WhatsApp.'],
   relatorios: ['Automação', 'Relatórios automáticos', 'Relatórios enviados sozinhos no WhatsApp, na frequência que você escolher.'],
@@ -1927,7 +1932,7 @@ function atualizarCabecalhoAba(aba) {
   const cab = CABECALHOS_ABA[aba];
   const el = document.getElementById('pageHeader');
   if (!el) return;
-  el.hidden = !cab || aba === 'cerebro';
+  el.hidden = !cab || aba === 'cerebro' || aba === 'conversas'; // telas de tela cheia
   if (!cab) return;
   document.getElementById('pageHeaderEtiqueta').textContent = cab[0];
   document.getElementById('pageHeaderTitulo').textContent = cab[1];
@@ -1956,6 +1961,7 @@ function mudarAba(aba) {
   tabAgenda.hidden = aba !== 'agenda';
   tabWhatsapp.hidden = aba !== 'whatsapp';
   tabCrm.hidden = aba !== 'crm';
+  tabConversas.hidden = aba !== 'conversas';
   tabAuto.hidden = aba !== 'auto';
   tabFollowUp.hidden = aba !== 'followUp';
   tabRelatorios.hidden = aba !== 'relatorios';
@@ -1968,6 +1974,7 @@ function mudarAba(aba) {
   tabBtnAgenda.classList.toggle('active', aba === 'agenda');
   tabBtnWhatsapp.classList.toggle('active', aba === 'whatsapp');
   tabBtnCrm.classList.toggle('active', aba === 'crm');
+  tabBtnConversas.classList.toggle('active', aba === 'conversas');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   tabBtnFollowUp.classList.toggle('active', aba === 'followUp');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
@@ -1984,6 +1991,8 @@ function mudarAba(aba) {
     carregarInstanciasWhatsapp();
   } else if (aba === 'crm') {
     carregarCrm();
+  } else if (aba === 'conversas') {
+    carregarConversas();
   } else if (aba === 'auto') {
     carregarConfigAutoAtendimento();
   } else if (aba === 'followUp') {
@@ -2005,6 +2014,10 @@ function mudarAba(aba) {
   // batendo na API/banco a toa em segundo plano pra sempre
   pararPollingCrm();
   if (aba === 'crm') iniciarPollingCrm();
+  if (aba === 'conversas') {
+    conectarEventosCrm();
+    crmPollingContatos = setInterval(carregarConversas, 20000); // rede de seguranca do SSE
+  }
   fecharSidebarMobile(); // no celular, escolher uma aba ja fecha a gaveta sozinho
   // o grafo 3D do Cerebro para de renderizar quando a aba nao esta visivel (nao gasta GPU/bateria a toa)
   if (aba === 'cerebro') abrirCerebro();
@@ -2046,6 +2059,7 @@ tabBtnPainel.addEventListener('click', () => mudarAba('painel'));
 tabBtnAgenda.addEventListener('click', () => mudarAba('agenda'));
 tabBtnWhatsapp.addEventListener('click', () => mudarAba('whatsapp'));
 tabBtnCrm.addEventListener('click', () => mudarAba('crm'));
+tabBtnConversas.addEventListener('click', () => mudarAba('conversas'));
 tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnGeradorRelatorios.addEventListener('click', () => mudarAba('geradorRelatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
@@ -2729,6 +2743,7 @@ function conectarEventosCrm() {
     let data;
     try { data = JSON.parse(ev.data); } catch { return; }
     if (data.tipo === 'conta-inativa') { sairPorContaDesativada(); return; }
+    if (!tabConversas.hidden) { cvTratarEvento(data); atualizarSino(); return; }
     if (data.tipo === 'mensagem') {
       carregarCrm(); // preview/ordem dos cards muda a cada mensagem nova
       if (crmContatoAberto && data.numero === crmContatoAberto.numero && data.instancia === crmContatoAberto.instancia) {
@@ -2789,8 +2804,8 @@ function crmFormatarSeparadorData(iso) {
 // visual proposital diferente do chat principal da Lumia - bolhas verde/cinza no estilo
 // classico do WhatsApp (ver .crm-msg no CSS), com separador de data e timestamp+check em cada
 // mensagem, pra essa aba parecer "a conversa de verdade" em vez do tema dourado do resto do app
-function crmRenderizarMensagens(mensagens) {
-  crmConversaLog.textContent = '';
+function crmRenderizarMensagens(mensagens, log = crmConversaLog) {
+  log.textContent = '';
   let ultimaDataSeparador = null;
 
   for (const m of mensagens) {
@@ -2799,7 +2814,7 @@ function crmRenderizarMensagens(mensagens) {
       const sep = document.createElement('div');
       sep.className = 'crm-msg-data-separador';
       sep.textContent = separador;
-      crmConversaLog.appendChild(sep);
+      log.appendChild(sep);
       ultimaDataSeparador = separador;
     }
 
@@ -2856,9 +2871,9 @@ function crmRenderizarMensagens(mensagens) {
     }
     bubble.appendChild(meta);
 
-    crmConversaLog.appendChild(bubble);
+    log.appendChild(bubble);
   }
-  crmConversaLog.scrollTop = crmConversaLog.scrollHeight;
+  log.scrollTop = log.scrollHeight;
 }
 
 async function carregarMensagensCrm() {
@@ -2912,6 +2927,462 @@ function abrirConversaCrm(contato) {
   // so uma rede de seguranca bem espacada, caso a conexao caia sem reconectar
   crmPollingConversa = setInterval(carregarMensagensCrm, 20000);
 }
+
+// ---------- Conversas (caixa de entrada estilo WhatsApp) ----------
+// mesma base do CRM (crm_contatos/crm_mensagens + tempo real via /api/crm/eventos), so que no
+// formato lista + conversa, pra atendente trabalhar o dia todo pelo app como no WhatsApp Web.
+// Tudo que sai daqui vai pelo mesmo numero (instancia) do contato, e o que o dono responde pelo
+// celular tambem aparece aqui (o webhook registra os "fromMe" como saida).
+const cvBusca = document.getElementById('cvBusca');
+const cvFiltros = document.getElementById('cvFiltros');
+const cvInstancia = document.getElementById('cvInstancia');
+const cvLista = document.getElementById('cvLista');
+const cvVazio = document.getElementById('cvVazio');
+const cvChatInner = document.getElementById('cvChatInner');
+const cvVoltar = document.getElementById('cvVoltar');
+const cvAvatar = document.getElementById('cvAvatar');
+const cvNome = document.getElementById('cvNome');
+const cvSub = document.getElementById('cvSub');
+const cvEtapa = document.getElementById('cvEtapa');
+const cvIaBtn = document.getElementById('cvIaBtn');
+const cvLog = document.getElementById('cvLog');
+const cvAnexoPreview = document.getElementById('cvAnexoPreview');
+const cvAnexoNome = document.getElementById('cvAnexoNome');
+const cvAnexoLegenda = document.getElementById('cvAnexoLegenda');
+const cvAnexoCancelar = document.getElementById('cvAnexoCancelar');
+const cvAnexoEnviar = document.getElementById('cvAnexoEnviar');
+const cvForm = document.getElementById('cvForm');
+const cvAnexarBtn = document.getElementById('cvAnexarBtn');
+const cvArquivo = document.getElementById('cvArquivo');
+const cvTexto = document.getElementById('cvTexto');
+const cvGravarBtn = document.getElementById('cvGravarBtn');
+const cvEnviarBtn = document.getElementById('cvEnviarBtn');
+const cvErro = document.getElementById('cvErro');
+
+let cvContatos = [];
+let cvEtapas = [];
+let cvAberto = null;
+let cvFiltro = 'todas';
+let cvAnexo = null; // { file, tipo }
+let cvGravador = null; // { recorder, partes, stream }
+
+const CV_LIMITE_ARQUIVO = 14 * 1024 * 1024; // em base64 vira ~19mb, dentro dos 20mb do servidor
+
+function cvHoraLista(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const rotulo = crmFormatarSeparadorData(iso);
+  if (rotulo === 'Hoje') return crmFormatarHora(iso);
+  if (rotulo === 'Ontem') return 'Ontem';
+  return d.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit' });
+}
+
+function cvIniciais(c) {
+  const base = (c.nome || '').trim();
+  if (!base) return '#';
+  const partes = base.split(/\s+/);
+  return ((partes[0][0] || '') + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+}
+
+function cvMostrarErro(msg) {
+  cvErro.textContent = msg;
+  cvErro.hidden = !msg;
+}
+
+function atualizarBadgeConversas(qtd) {
+  conversasBadge.textContent = qtd > 99 ? '99+' : String(qtd);
+  conversasBadge.hidden = !qtd;
+}
+
+async function carregarConversas() {
+  try {
+    const res = await fetch('/api/crm/contatos', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    cvContatos = data.contatos || [];
+    cvEtapas = data.etapas || [];
+
+    const instancias = [...new Set(cvContatos.map((c) => c.instancia))].sort();
+    const atual = cvInstancia.value;
+    cvInstancia.textContent = '';
+    cvInstancia.appendChild(new Option('Todos os números', ''));
+    for (const i of instancias) cvInstancia.appendChild(new Option(i, i));
+    cvInstancia.value = instancias.includes(atual) ? atual : '';
+    cvInstancia.hidden = instancias.length < 2;
+
+    if (cvAberto) {
+      const novo = cvContatos.find((c) => c.id === cvAberto.id);
+      if (novo) { cvAberto = { ...novo, nao_lida: false }; cvAtualizarTopo(); }
+    }
+    renderizarListaConversas();
+    atualizarBadgeConversas(cvContatos.filter((c) => c.nao_lida && c.id !== cvAberto?.id).length);
+  } catch (err) {
+    cvLista.textContent = '';
+    const p = document.createElement('p');
+    p.className = 'agenda-vazia';
+    p.textContent = `Nao consegui carregar as conversas: ${err.message}`;
+    cvLista.appendChild(p);
+  }
+}
+
+function renderizarListaConversas() {
+  const termo = cvBusca.value.trim().toLowerCase();
+  const soDigitos = termo.replace(/\D/g, '');
+  const lista = cvContatos.filter((c) => {
+    if (cvInstancia.value && c.instancia !== cvInstancia.value) return false;
+    if (cvFiltro === 'naoLidas' && !(c.nao_lida && c.id !== cvAberto?.id)) return false;
+    if (cvFiltro === 'ia' && c.auto_pausado) return false;
+    if (cvFiltro === 'humano' && !c.auto_pausado) return false;
+    if (!termo) return true;
+    return (c.nome || '').toLowerCase().includes(termo)
+      || (soDigitos && c.numero.includes(soDigitos))
+      || (c.ultima_mensagem || '').toLowerCase().includes(termo);
+  });
+
+  cvLista.textContent = '';
+  if (!lista.length) {
+    const vazio = document.createElement('div');
+    vazio.className = 'cv-lista-vazia';
+    vazio.textContent = cvContatos.length ? 'Nenhuma conversa com esse filtro.' : 'Nenhuma conversa ainda. Quando alguém mandar mensagem no WhatsApp conectado, aparece aqui.';
+    cvLista.appendChild(vazio);
+    return;
+  }
+
+  const nomeEtapa = Object.fromEntries(cvEtapas.map((e) => [e.id, e.nome]));
+  for (const c of lista) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'cv-item';
+    const naoLida = !!c.nao_lida && c.id !== cvAberto?.id;
+    item.classList.toggle('ativo', c.id === cvAberto?.id);
+    item.classList.toggle('nao-lida', naoLida);
+
+    const avatar = document.createElement('div');
+    avatar.className = 'cv-avatar';
+    avatar.textContent = cvIniciais(c);
+
+    const meio = document.createElement('div');
+    meio.className = 'cv-item-meio';
+    const linha1 = document.createElement('div');
+    linha1.className = 'cv-item-linha';
+    const nome = document.createElement('strong');
+    nome.textContent = c.nome || `+${c.numero}`;
+    const hora = document.createElement('span');
+    hora.className = 'cv-item-hora';
+    hora.textContent = cvHoraLista(c.ultima_mensagem_em);
+    linha1.append(nome, hora);
+
+    const linha2 = document.createElement('div');
+    linha2.className = 'cv-item-linha';
+    const preview = document.createElement('span');
+    preview.className = 'cv-item-preview';
+    preview.textContent = c.ultima_mensagem || '';
+    linha2.appendChild(preview);
+    if (naoLida) {
+      const ponto = document.createElement('span');
+      ponto.className = 'cv-item-badge';
+      ponto.textContent = '●';
+      linha2.appendChild(ponto);
+    }
+
+    const tags = document.createElement('div');
+    tags.className = 'cv-item-tags';
+    const etapa = document.createElement('span');
+    etapa.className = 'cv-tag';
+    etapa.textContent = nomeEtapa[c.etapa] || c.etapa;
+    tags.appendChild(etapa);
+    if (c.auto_pausado) {
+      const ia = document.createElement('span');
+      ia.className = 'cv-tag cv-tag-humano';
+      ia.textContent = 'IA pausada';
+      tags.appendChild(ia);
+    }
+    if (c.retorno_hoje) {
+      const ret = document.createElement('span');
+      ret.className = 'cv-tag cv-tag-alerta';
+      ret.textContent = 'Retorno hoje';
+      tags.appendChild(ret);
+    }
+
+    meio.append(linha1, linha2, tags);
+    item.append(avatar, meio);
+    item.addEventListener('click', () => abrirConversa(c));
+    cvLista.appendChild(item);
+  }
+}
+
+function cvAtualizarTopo() {
+  const c = cvAberto;
+  if (!c) return;
+  cvAvatar.textContent = cvIniciais(c);
+  cvNome.textContent = c.nome || `+${c.numero}`;
+  cvSub.textContent = `+${c.numero} · ${c.instancia}`;
+  cvEtapa.textContent = '';
+  for (const e of cvEtapas) cvEtapa.appendChild(new Option(e.nome, e.id));
+  cvEtapa.value = c.etapa;
+  cvIaBtn.textContent = c.auto_pausado ? 'IA pausada' : 'IA atendendo';
+  cvIaBtn.classList.toggle('pausada', !!c.auto_pausado);
+  cvIaBtn.title = c.auto_pausado
+    ? 'A IA não responde esta conversa - clique para ela voltar a atender'
+    : 'A IA está respondendo esta conversa - clique para pausar e atender você mesmo';
+}
+
+function abrirConversa(contato) {
+  const trocou = cvAberto?.id !== contato.id;
+  cvAberto = { ...contato, nao_lida: false };
+  cvVazio.hidden = true;
+  cvChatInner.hidden = false;
+  tabConversas.classList.add('cv-com-chat');
+  cvMostrarErro('');
+  cvAtualizarTopo();
+  if (trocou) {
+    cvLog.textContent = '';
+    cvCancelarAnexo();
+  }
+  crmMarcarLido(contato.id);
+  const local = cvContatos.find((c) => c.id === contato.id);
+  if (local) local.nao_lida = false;
+  renderizarListaConversas();
+  atualizarBadgeConversas(cvContatos.filter((c) => c.nao_lida && c.id !== cvAberto.id).length);
+  carregarMensagensConversa();
+  if (window.matchMedia('(min-width: 900px)').matches) cvTexto.focus();
+}
+
+function fecharConversa() {
+  cvAberto = null;
+  cvChatInner.hidden = true;
+  cvVazio.hidden = false;
+  tabConversas.classList.remove('cv-com-chat');
+  renderizarListaConversas();
+}
+
+async function carregarMensagensConversa() {
+  if (!cvAberto) return;
+  const pedido = cvAberto.id;
+  try {
+    const params = new URLSearchParams({ numero: cvAberto.numero, instancia: cvAberto.instancia });
+    const res = await fetch(`/api/crm/mensagens?${params}`, { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    if (cvAberto?.id !== pedido) return; // trocou de conversa enquanto carregava
+    crmRenderizarMensagens(data.mensagens || [], cvLog);
+  } catch (err) {
+    cvMostrarErro(`Nao consegui carregar a conversa: ${err.message}`);
+  }
+}
+
+// tempo real: chamado pelo SSE do CRM (conectarEventosCrm) enquanto a aba Conversas esta aberta
+function cvTratarEvento(data) {
+  if (data.tipo === 'mensagem') {
+    if (cvAberto && data.numero === cvAberto.numero && data.instancia === cvAberto.instancia) {
+      carregarMensagensConversa();
+      crmMarcarLido(cvAberto.id);
+    }
+    carregarConversas();
+  } else if (data.tipo === 'contato-atualizado') {
+    if (data.apagado && cvAberto?.id === data.contatoId) fecharConversa();
+    carregarConversas();
+  }
+}
+
+cvBusca.addEventListener('input', renderizarListaConversas);
+cvInstancia.addEventListener('change', renderizarListaConversas);
+cvFiltros.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('.cv-filtro');
+  if (!btn) return;
+  cvFiltro = btn.dataset.filtro;
+  for (const b of cvFiltros.querySelectorAll('.cv-filtro')) b.classList.toggle('ativo', b === btn);
+  renderizarListaConversas();
+});
+cvVoltar.addEventListener('click', fecharConversa);
+
+cvEtapa.addEventListener('change', async () => {
+  if (!cvAberto) return;
+  const etapa = cvEtapa.value;
+  try {
+    const res = await fetch(`/api/crm/contatos/${cvAberto.id}/etapa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ etapa }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    cvAberto.etapa = etapa;
+    mostrarAviso(`Movido para "${cvEtapa.selectedOptions[0]?.textContent || etapa}"`);
+    carregarConversas();
+  } catch (err) {
+    cvEtapa.value = cvAberto.etapa;
+    mostrarAviso(`Não consegui mudar a etapa: ${err.message}`, 'erro');
+  }
+});
+
+cvIaBtn.addEventListener('click', async () => {
+  if (!cvAberto) return;
+  const pausado = !cvAberto.auto_pausado;
+  cvIaBtn.disabled = true;
+  try {
+    const res = await fetch(`/api/crm/contatos/${cvAberto.id}/auto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ pausado }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    cvAberto.auto_pausado = pausado;
+    cvAtualizarTopo();
+    mostrarAviso(pausado ? 'IA pausada nesta conversa - agora é com você' : 'IA voltou a atender esta conversa');
+    carregarConversas();
+  } catch (err) {
+    mostrarAviso(`Não consegui mudar: ${err.message}`, 'erro');
+  } finally {
+    cvIaBtn.disabled = false;
+  }
+});
+
+// texto: Enter envia, Shift+Enter quebra linha (igual WhatsApp Web); a caixa cresce ate ~6 linhas
+function cvAjustarAltura() {
+  cvTexto.style.height = 'auto';
+  cvTexto.style.height = `${Math.min(cvTexto.scrollHeight, 140)}px`;
+}
+cvTexto.addEventListener('input', cvAjustarAltura);
+cvTexto.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
+    ev.preventDefault();
+    cvForm.requestSubmit();
+  }
+});
+
+cvForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (!cvAberto) return;
+  const texto = cvTexto.value.trim();
+  if (!texto) return;
+  cvMostrarErro('');
+  cvEnviarBtn.disabled = true;
+  try {
+    const res = await fetch('/api/crm/mensagens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ numero: cvAberto.numero, instancia: cvAberto.instancia, texto }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    cvTexto.value = '';
+    cvAjustarAltura();
+    carregarMensagensConversa();
+  } catch (err) {
+    cvMostrarErro(`Não enviou: ${err.message}`);
+  } finally {
+    cvEnviarBtn.disabled = false;
+    cvTexto.focus();
+  }
+});
+
+// anexo: foto/video/documento -> barra de confirmacao com legenda antes de mandar
+function cvTipoDoArquivo(file) {
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type.startsWith('video/')) return 'video';
+  if (file.type.startsWith('audio/')) return 'audio';
+  return 'document';
+}
+function cvCancelarAnexo() {
+  cvAnexo = null;
+  cvAnexoPreview.hidden = true;
+  cvAnexoLegenda.value = '';
+}
+cvAnexarBtn.addEventListener('click', () => cvArquivo.click());
+cvArquivo.addEventListener('change', () => {
+  const file = cvArquivo.files?.[0];
+  cvArquivo.value = '';
+  if (!file) return;
+  if (file.size > CV_LIMITE_ARQUIVO) {
+    cvMostrarErro('Arquivo grande demais (máximo 14 MB).');
+    return;
+  }
+  cvMostrarErro('');
+  cvAnexo = { file, tipo: cvTipoDoArquivo(file) };
+  const icone = { image: '🖼️', video: '🎥', audio: '🎵', document: '📄' }[cvAnexo.tipo];
+  cvAnexoNome.textContent = `${icone} ${file.name}`;
+  cvAnexoLegenda.hidden = cvAnexo.tipo === 'audio';
+  cvAnexoPreview.hidden = false;
+  if (!cvAnexoLegenda.hidden) cvAnexoLegenda.focus();
+});
+cvAnexoCancelar.addEventListener('click', cvCancelarAnexo);
+cvAnexoLegenda.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') { ev.preventDefault(); cvAnexoEnviar.click(); }
+});
+
+async function cvEnviarMidia({ tipo, base64, mimetype, fileName, legenda }) {
+  const res = await fetch('/api/crm/mensagens/midia', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+    body: JSON.stringify({ numero: cvAberto.numero, instancia: cvAberto.instancia, tipo, base64, mimetype, fileName, legenda }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+  carregarMensagensConversa();
+}
+
+cvAnexoEnviar.addEventListener('click', async () => {
+  if (!cvAnexo || !cvAberto) return;
+  cvAnexoEnviar.disabled = true;
+  cvAnexoEnviar.textContent = 'Enviando...';
+  cvMostrarErro('');
+  try {
+    const { file, tipo } = cvAnexo;
+    const base64 = await arquivoParaBase64(file);
+    await cvEnviarMidia({ tipo, base64, mimetype: file.type || 'application/octet-stream', fileName: file.name, legenda: cvAnexoLegenda.value.trim() });
+    cvCancelarAnexo();
+  } catch (err) {
+    cvMostrarErro(`Não enviou o arquivo: ${err.message}`);
+  } finally {
+    cvAnexoEnviar.disabled = false;
+    cvAnexoEnviar.textContent = 'Enviar';
+  }
+});
+
+// audio: 1o clique comeca a gravar (botao fica vermelho), 2o clique para e manda como nota de voz
+// (o Evolution converte pro formato do WhatsApp)
+cvGravarBtn.addEventListener('click', async () => {
+  if (!cvAberto) return;
+  if (cvGravador) { cvGravador.recorder.stop(); return; }
+  cvMostrarErro('');
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    cvMostrarErro(`Não consegui usar o microfone: ${err.message}`);
+    return;
+  }
+  const tipoPreferido = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm'].find((t) => window.MediaRecorder?.isTypeSupported?.(t));
+  const recorder = new MediaRecorder(stream, tipoPreferido ? { mimeType: tipoPreferido } : undefined);
+  const partes = [];
+  cvGravador = { recorder, partes, stream };
+  recorder.addEventListener('dataavailable', (e) => { if (e.data.size) partes.push(e.data); });
+  recorder.addEventListener('stop', async () => {
+    stream.getTracks().forEach((t) => t.stop());
+    cvGravador = null;
+    cvGravarBtn.classList.remove('gravando');
+    cvGravarBtn.textContent = '🎤';
+    cvGravarBtn.title = 'Gravar áudio';
+    const blob = new Blob(partes, { type: recorder.mimeType || 'audio/webm' });
+    if (blob.size < 1500) return; // clique sem querer, nada gravado
+    cvGravarBtn.disabled = true;
+    try {
+      const base64 = await arquivoParaBase64(blob);
+      await cvEnviarMidia({ tipo: 'audio', base64, mimetype: blob.type.split(';')[0], fileName: 'audio' });
+    } catch (err) {
+      cvMostrarErro(`Não enviou o áudio: ${err.message}`);
+    } finally {
+      cvGravarBtn.disabled = false;
+    }
+  });
+  recorder.start();
+  cvGravarBtn.classList.add('gravando');
+  cvGravarBtn.textContent = '⏹';
+  cvGravarBtn.title = 'Parar e enviar o áudio';
+});
 
 // ---------- Alerta de retorno (conversa do CRM) ----------
 const crmConversaRetorno = document.getElementById('crmConversaRetorno');
@@ -3057,12 +3528,13 @@ function sinoItem(titulo, detalhe, classe, aoClicar, recarregar) {
 
 async function sinoAbrirContato(id) {
   sinoPainel.hidden = true;
-  mudarAba('crm');
+  const emConversas = !tabBtnConversas.hidden;
+  mudarAba(emConversas ? 'conversas' : 'crm');
   try {
     const res = await fetch('/api/crm/contatos', { headers: { 'x-app-password': appPassword } });
     const data = await res.json();
     const contato = (data.contatos || []).find((c) => c.id === id);
-    if (contato) abrirConversaCrm(contato);
+    if (contato) (emConversas ? abrirConversa : abrirConversaCrm)(contato);
   } catch { /* o board ja carrega sozinho ao entrar na aba */ }
 }
 
@@ -3073,6 +3545,7 @@ async function atualizarSino() {
     if (!res.ok) return;
     const d = await res.json();
     sinoBadge.hidden = !d.total;
+    if (tabConversas.hidden) atualizarBadgeConversas(d.naoLidas?.length || 0);
     sinoTotal.textContent = d.total ? `${d.total} pendente(s)` : '';
     sinoLista.textContent = '';
     if (!d.total) {
