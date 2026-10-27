@@ -86,6 +86,8 @@ const tabContatos = document.getElementById('tabContatos');
 const tabBtnContatos = document.getElementById('tabBtnContatos');
 const tabResultados = document.getElementById('tabResultados');
 const tabBtnResultados = document.getElementById('tabBtnResultados');
+const tabInstagram = document.getElementById('tabInstagram');
+const tabBtnInstagram = document.getElementById('tabBtnInstagram');
 const tabAuto = document.getElementById('tabAuto');
 const tabFollowUp = document.getElementById('tabFollowUp');
 const tabRelatorios = document.getElementById('tabRelatorios');
@@ -376,6 +378,7 @@ function mostrarApp() {
   tabBtnConversas.hidden = !abaLiberada('crm'); // mesmas conversas do CRM, mesma permissao
   tabBtnContatos.hidden = !abaLiberada('crm'); // a base e a mesma tabela de contatos do CRM
   tabBtnResultados.hidden = !abaLiberada('crm'); // indicadores calculados sobre as conversas do CRM
+  tabBtnInstagram.hidden = !abaLiberada('instagram');
   tabBtnAuto.hidden = !abaLiberada('auto');
   tabBtnFollowUp.hidden = !abaLiberada('followUp');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
@@ -389,7 +392,7 @@ function mostrarApp() {
   // vez de deixar a tela em branco
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
     const primeiraLiberada = [
-      ['conversas', tabBtnConversas], ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm], ['contatos', tabBtnContatos], ['resultados', tabBtnResultados],
+      ['conversas', tabBtnConversas], ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm], ['contatos', tabBtnContatos], ['resultados', tabBtnResultados], ['instagram', tabBtnInstagram],
       ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
     ].find(([, btn]) => !btn.hidden);
     if (primeiraLiberada) mudarAba(primeiraLiberada[0]);
@@ -1928,6 +1931,7 @@ const CABECALHOS_ABA = {
   conversas: ['Atendimento', 'Conversas', 'Atenda o WhatsApp direto pela Lumia, em tempo real.'],
   crm: ['Clientes', 'CRM', 'Seus leads em cada etapa do funil, com a conversa do WhatsApp.'],
   contatos: ['Clientes', 'Contatos', 'Toda a sua base de leads: cadastre, importe e exporte planilhas.'],
+  instagram: ['Redes sociais', 'Instagram', 'Publique e agende posts, responda comentários e atenda o direct.'],
   resultados: ['Clientes', 'Resultados', 'Como está o atendimento: volume, velocidade de resposta e conversão do funil.'],
   auto: ['Automação', 'Auto Atendimento', 'Configure a IA que atende os contatos no WhatsApp.'],
   relatorios: ['Automação', 'Relatórios automáticos', 'Relatórios enviados sozinhos no WhatsApp, na frequência que você escolher.'],
@@ -1974,6 +1978,7 @@ function mudarAba(aba) {
   tabConversas.hidden = aba !== 'conversas';
   tabContatos.hidden = aba !== 'contatos';
   tabResultados.hidden = aba !== 'resultados';
+  tabInstagram.hidden = aba !== 'instagram';
   tabAuto.hidden = aba !== 'auto';
   tabFollowUp.hidden = aba !== 'followUp';
   tabRelatorios.hidden = aba !== 'relatorios';
@@ -1989,6 +1994,7 @@ function mudarAba(aba) {
   tabBtnConversas.classList.toggle('active', aba === 'conversas');
   tabBtnContatos.classList.toggle('active', aba === 'contatos');
   tabBtnResultados.classList.toggle('active', aba === 'resultados');
+  tabBtnInstagram.classList.toggle('active', aba === 'instagram');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   tabBtnFollowUp.classList.toggle('active', aba === 'followUp');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
@@ -2011,6 +2017,8 @@ function mudarAba(aba) {
     carregarContatos();
   } else if (aba === 'resultados') {
     carregarResultados();
+  } else if (aba === 'instagram') {
+    carregarInstagram();
   } else if (aba === 'auto') {
     carregarConfigAutoAtendimento();
   } else if (aba === 'followUp') {
@@ -2080,6 +2088,7 @@ tabBtnCrm.addEventListener('click', () => mudarAba('crm'));
 tabBtnConversas.addEventListener('click', () => mudarAba('conversas'));
 tabBtnContatos.addEventListener('click', () => mudarAba('contatos'));
 tabBtnResultados.addEventListener('click', () => mudarAba('resultados'));
+tabBtnInstagram.addEventListener('click', () => mudarAba('instagram'));
 tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnGeradorRelatorios.addEventListener('click', () => mudarAba('geradorRelatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
@@ -2998,6 +3007,10 @@ function cvHoraLista(iso) {
   return d.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit' });
 }
 
+// contato do Instagram: "numero" e o id interno da pessoa no Instagram, nao um telefone
+const ehInstagram = (c) => String(c?.instancia || '').startsWith('ig:');
+const rotuloContato = (c) => (ehInstagram(c) ? 'Contato do Instagram' : `+${c.numero}`);
+
 function cvIniciais(c) {
   const base = (c.nome || '').trim();
   if (!base) return '#';
@@ -3027,7 +3040,7 @@ async function carregarConversas() {
     const atual = cvInstancia.value;
     cvInstancia.textContent = '';
     cvInstancia.appendChild(new Option('Todos os números', ''));
-    for (const i of instancias) cvInstancia.appendChild(new Option(i, i));
+    for (const i of instancias) cvInstancia.appendChild(new Option(i.startsWith('ig:') ? `Instagram @${i.slice(3)}` : i, i));
     cvInstancia.value = instancias.includes(atual) ? atual : '';
     cvInstancia.hidden = instancias.length < 2;
 
@@ -3087,7 +3100,7 @@ function renderizarListaConversas() {
     const linha1 = document.createElement('div');
     linha1.className = 'cv-item-linha';
     const nome = document.createElement('strong');
-    nome.textContent = c.nome || `+${c.numero}`;
+    nome.textContent = c.nome || rotuloContato(c);
     const hora = document.createElement('span');
     hora.className = 'cv-item-hora';
     hora.textContent = cvHoraLista(c.ultima_mensagem_em);
@@ -3136,8 +3149,11 @@ function cvAtualizarTopo() {
   const c = cvAberto;
   if (!c) return;
   cvAvatar.textContent = cvIniciais(c);
-  cvNome.textContent = c.nome || `+${c.numero}`;
-  cvSub.textContent = `+${c.numero} · ${c.instancia}`;
+  cvNome.textContent = c.nome || rotuloContato(c);
+  cvSub.textContent = ehInstagram(c) ? `Instagram · @${c.instancia.slice(3)}` : `+${c.numero} · ${c.instancia}`;
+  // Instagram: resposta pela Lumia so em texto por enquanto
+  cvAnexarBtn.hidden = ehInstagram(c);
+  cvGravarBtn.hidden = ehInstagram(c);
   cvEtapa.textContent = '';
   for (const e of cvEtapas) cvEtapa.appendChild(new Option(e.nome, e.id));
   cvEtapa.value = c.etapa;
@@ -3469,7 +3485,8 @@ let ctImpCabecalho = [];
 
 const ctSemAcento = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
-function ctFormatarTelefone(numero) {
+function ctFormatarTelefone(numero, instancia) {
+  if (String(instancia || '').startsWith('ig:')) return `Instagram @${instancia.slice(3)}`;
   const n = String(numero || '');
   let m = n.match(/^55(\d{2})(\d{5})(\d{4})$/);
   if (m) return `+55 (${m[1]}) ${m[2]}-${m[3]}`;
@@ -3557,7 +3574,7 @@ function renderizarContatos() {
     };
     const tdNome = celula(c.nome || 'Sem nome', c.nome ? 'ct-nome' : 'ct-nome ct-vazio');
     tdNome.dataset.rotulo = 'Nome';
-    celula(ctFormatarTelefone(c.numero), 'ct-tel').dataset.rotulo = 'WhatsApp';
+    celula(ctFormatarTelefone(c.numero, c.instancia), 'ct-tel').dataset.rotulo = 'WhatsApp';
     celula(c.email || '', 'ct-email').dataset.rotulo = 'E-mail';
     const tdTags = celula('', 'ct-tags');
     tdTags.dataset.rotulo = 'Etiquetas';
@@ -4615,6 +4632,504 @@ function lumienRecarregarTela() {
   else if (aba === 'conversas') carregarConversas();
   else if (aba === 'crm') carregarCrm();
 }
+
+// ---------- Instagram (conexao, publicacoes, respostas a comentario e direct) ----------
+const igConta = document.getElementById('igConta');
+const igConectadoBloco = document.getElementById('igConectadoBloco');
+const igTipos = document.getElementById('igTipos');
+const igTipoDica = document.getElementById('igTipoDica');
+const igArquivos = document.getElementById('igArquivos');
+const igArquivosTexto = document.getElementById('igArquivosTexto');
+const igPrevias = document.getElementById('igPrevias');
+const igLegendaCampo = document.getElementById('igLegendaCampo');
+const igLegenda = document.getElementById('igLegenda');
+const igLegendaConta = document.getElementById('igLegendaConta');
+const igAgendarPara = document.getElementById('igAgendarPara');
+const igPostErro = document.getElementById('igPostErro');
+const igPublicarBtn = document.getElementById('igPublicarBtn');
+const igPosts = document.getElementById('igPosts');
+const igRegraTitulo = document.getElementById('igRegraTitulo');
+const igRegraPalavras = document.getElementById('igRegraPalavras');
+const igRegraPost = document.getElementById('igRegraPost');
+const igRegraPublica = document.getElementById('igRegraPublica');
+const igRegraDm = document.getElementById('igRegraDm');
+const igRegraErro = document.getElementById('igRegraErro');
+const igRegraSalvar = document.getElementById('igRegraSalvar');
+const igRegraCancelar = document.getElementById('igRegraCancelar');
+const igRegras = document.getElementById('igRegras');
+const igDmIa = document.getElementById('igDmIa');
+const igDmIaLabel = document.getElementById('igDmIaLabel');
+
+const IG_TIPOS = {
+  feed: { nome: 'Foto no feed', aceita: 'image/*', varios: false, dica: 'Uma foto. A Lumia ajusta pra proporção aceita pelo feed (entre 4:5 em pé e 1,91:1 deitada).', botao: 'Escolher foto' },
+  carrossel: { nome: 'Carrossel', aceita: 'image/*,video/mp4,video/quicktime', varios: true, dica: 'De 2 a 10 fotos ou vídeos, na ordem em que você escolher.', botao: 'Escolher fotos e vídeos' },
+  reels: { nome: 'Reels', aceita: 'video/mp4,video/quicktime', varios: false, dica: 'Um vídeo MP4 ou MOV em pé (9:16), de 3 segundos a 15 minutos, até 100 MB.', botao: 'Escolher vídeo' },
+  story: { nome: 'Story', aceita: 'image/*,video/mp4,video/quicktime', varios: false, dica: 'Uma foto ou um vídeo em pé (9:16). Story não tem legenda pela API do Instagram.', botao: 'Escolher foto ou vídeo' },
+};
+const IG_STATUS = { agendado: 'Agendado', processando: 'Publicando...', publicado: 'Publicado', erro: 'Erro', cancelado: 'Cancelado' };
+
+let igStatus = null;
+let igTipo = 'feed';
+let igSelecionados = []; // File[]
+let igRegrasLista = [];
+let igRegraEditando = null;
+let igPollTimer = null;
+
+async function igApi(caminho, opcoes = {}) {
+  const res = await fetch(caminho, {
+    ...opcoes,
+    headers: { 'x-app-password': appPassword, ...(opcoes.body && typeof opcoes.body === 'string' ? { 'Content-Type': 'application/json' } : {}), ...(opcoes.headers || {}) },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.erro || `erro ${res.status}`);
+  return data;
+}
+
+async function carregarInstagram() {
+  clearInterval(igPollTimer);
+  try {
+    igStatus = await igApi('/api/instagram/status');
+  } catch (err) {
+    igConta.textContent = '';
+    igConta.appendChild(Object.assign(document.createElement('p'), { className: 'rs-sub', textContent: `Não consegui carregar: ${err.message}` }));
+    return;
+  }
+  igRenderizarConta();
+  igConectadoBloco.hidden = !igStatus.conectado;
+  if (!igStatus.conectado) return;
+  igDmIa.checked = !!igStatus.conta.dmIaAtiva;
+  igAtualizarRotuloDm();
+  igAtualizarTipo();
+  carregarPostsInstagram();
+  carregarRegrasInstagram();
+  carregarPublicacoesInstagram();
+  igPollTimer = setInterval(() => { if (!tabInstagram.hidden) carregarPostsInstagram(); else clearInterval(igPollTimer); }, 30000);
+}
+
+function igRenderizarConta() {
+  igConta.textContent = '';
+  const s = igStatus;
+  const linha = document.createElement('div');
+  linha.className = 'ig-conta-linha';
+  const info = document.createElement('div');
+  info.className = 'ig-conta-info';
+  const titulo = document.createElement('h3');
+  const sub = document.createElement('p');
+  sub.className = 'rs-sub';
+  if (!s.configurado) {
+    titulo.textContent = 'Instagram: aguardando liberação da Meta';
+    sub.textContent = 'A integração já está pronta aqui na Lumia. Falta a Meta aprovar o app que dá acesso às DMs, comentários e publicações. Assim que for aprovado, o botão de conectar aparece aqui.';
+    info.append(titulo, sub);
+    linha.appendChild(info);
+  } else if (!s.conectado) {
+    titulo.textContent = 'Conecte o Instagram da sua empresa';
+    sub.textContent = 'Precisa ser uma conta profissional (comercial ou criador de conteúdo). Você entra com o login do Instagram e autoriza a Lumia a ler e responder as mensagens e comentários e a publicar.';
+    info.append(titulo, sub);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'relatorio-config-enviar';
+    btn.textContent = 'Conectar Instagram';
+    btn.addEventListener('click', () => { window.location.href = `/api/instagram/conectar?token=${encodeURIComponent(appPassword)}`; });
+    linha.append(info, btn);
+  } else {
+    const c = s.conta;
+    if (c.fotoUrl) {
+      const img = document.createElement('img');
+      img.className = 'ig-foto';
+      img.src = c.fotoUrl;
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      linha.appendChild(img);
+    }
+    titulo.textContent = `@${c.username}${c.nome ? ` · ${c.nome}` : ''}`;
+    sub.textContent = `Conectado desde ${new Date(c.conectadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Maceio' })}. O acesso renova sozinho.`;
+    info.append(titulo, sub);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'crm-btn-secundario';
+    btn.textContent = 'Desconectar';
+    btn.addEventListener('click', async () => {
+      if (!confirm(`Desconectar @${c.username}? As DMs e comentários param de chegar e as publicações agendadas não saem até conectar de novo.`)) return;
+      try {
+        await igApi('/api/instagram/desconectar', { method: 'POST' });
+        mostrarAviso('Instagram desconectado');
+        carregarInstagram();
+      } catch (err) {
+        mostrarAviso(`Não consegui desconectar: ${err.message}`, 'erro');
+      }
+    });
+    linha.append(info, btn);
+  }
+  igConta.appendChild(linha);
+}
+
+// sub-abas (Publicar / Respostas a comentarios / Direct)
+document.querySelector('.ig-abas').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button[data-ig-sec]');
+  if (!btn) return;
+  for (const b of document.querySelectorAll('.ig-abas button')) b.classList.toggle('ativo', b === btn);
+  for (const p of document.querySelectorAll('[data-ig-painel]')) p.hidden = p.dataset.igPainel !== btn.dataset.igSec;
+});
+
+// ---------- publicar ----------
+
+function igAtualizarTipo() {
+  const t = IG_TIPOS[igTipo];
+  for (const b of igTipos.querySelectorAll('button')) b.classList.toggle('ativo', b.dataset.tipo === igTipo);
+  igTipoDica.textContent = t.dica;
+  igArquivos.accept = t.aceita;
+  igArquivos.multiple = t.varios;
+  igArquivosTexto.textContent = t.botao;
+  igLegendaCampo.hidden = igTipo === 'story';
+  igSelecionados = [];
+  igRenderizarPrevias();
+}
+igTipos.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button[data-tipo]');
+  if (!btn) return;
+  igTipo = btn.dataset.tipo;
+  igAtualizarTipo();
+});
+
+igArquivos.addEventListener('change', () => {
+  const novos = [...(igArquivos.files || [])];
+  igSelecionados = IG_TIPOS[igTipo].varios ? [...igSelecionados, ...novos].slice(0, 10) : novos.slice(0, 1);
+  igArquivos.value = '';
+  igRenderizarPrevias();
+});
+
+function igRenderizarPrevias() {
+  for (const url of igPrevias.querySelectorAll('[data-url]')) URL.revokeObjectURL(url.dataset.url);
+  igPrevias.textContent = '';
+  igSelecionados.forEach((arq, i) => {
+    const item = document.createElement('div');
+    item.className = 'ig-previa';
+    const url = URL.createObjectURL(arq);
+    item.dataset.url = url;
+    const midia = document.createElement(arq.type.startsWith('video/') ? 'video' : 'img');
+    midia.src = url;
+    if (midia.tagName === 'VIDEO') { midia.muted = true; midia.playsInline = true; }
+    const remover = document.createElement('button');
+    remover.type = 'button';
+    remover.textContent = '✕';
+    remover.title = 'Tirar';
+    remover.addEventListener('click', () => { igSelecionados.splice(i, 1); igRenderizarPrevias(); });
+    item.append(midia, remover);
+    if (igSelecionados.length > 1) {
+      const n = document.createElement('span');
+      n.className = 'ig-previa-n';
+      n.textContent = String(i + 1);
+      item.appendChild(n);
+    }
+    igPrevias.appendChild(item);
+  });
+}
+
+igLegenda.addEventListener('input', () => { igLegendaConta.textContent = `${igLegenda.value.length} / 2200`; });
+for (const r of document.querySelectorAll('input[name="igQuando"]')) {
+  r.addEventListener('change', () => {
+    const agendar = document.querySelector('input[name="igQuando"]:checked').value === 'agendar';
+    igAgendarPara.hidden = !agendar;
+    igPublicarBtn.textContent = agendar ? 'Agendar publicação' : 'Publicar agora';
+    if (agendar && !igAgendarPara.value) {
+      const d = new Date(Date.now() + 60 * 60 * 1000);
+      d.setMinutes(0, 0, 0);
+      igAgendarPara.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    }
+  });
+}
+
+// o Instagram so publica foto em JPEG e recusa proporcao fora de 4:5..1,91:1 no feed - converte
+// e corta pelo centro aqui no navegador, antes de subir
+async function igPrepararFoto(arquivo, tipo) {
+  const bitmap = await createImageBitmap(arquivo);
+  let { width: w, height: h } = bitmap;
+  let sx = 0;
+  let sy = 0;
+  if (tipo !== 'story') {
+    const r = w / h;
+    if (r < 0.8) { const nh = Math.round(w / 0.8); sy = Math.round((h - nh) / 2); h = nh; }
+    else if (r > 1.91) { const nw = Math.round(h * 1.91); sx = Math.round((w - nw) / 2); w = nw; }
+  }
+  const escala = Math.min(1, 1440 / w);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(w * escala);
+  canvas.height = Math.round(h * escala);
+  canvas.getContext('2d').drawImage(bitmap, sx, sy, w, h, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('não consegui converter a foto'))), 'image/jpeg', 0.9));
+}
+
+function igMostrarErroPost(msg) {
+  igPostErro.textContent = msg || '';
+  igPostErro.hidden = !msg;
+}
+
+igPublicarBtn.addEventListener('click', async () => {
+  igMostrarErroPost('');
+  if (!igSelecionados.length) return igMostrarErroPost('Escolha o arquivo da publicação.');
+  if (igTipo === 'carrossel' && igSelecionados.length < 2) return igMostrarErroPost('Carrossel precisa de pelo menos 2 arquivos.');
+  const agendar = document.querySelector('input[name="igQuando"]:checked').value === 'agendar';
+  if (agendar && (!igAgendarPara.value || new Date(igAgendarPara.value) <= new Date())) return igMostrarErroPost('Escolha uma data e hora no futuro.');
+  const textoBotao = igPublicarBtn.textContent;
+  igPublicarBtn.disabled = true;
+  try {
+    const tokens = [];
+    for (const [i, arq] of igSelecionados.entries()) {
+      igPublicarBtn.textContent = `Enviando arquivo ${i + 1} de ${igSelecionados.length}...`;
+      let corpo = arq;
+      let tipoMime = arq.type;
+      if (arq.type.startsWith('image/')) {
+        corpo = await igPrepararFoto(arq, igTipo);
+        tipoMime = 'image/jpeg';
+      } else if (!/^video\/(mp4|quicktime)$/.test(arq.type)) {
+        throw new Error(`"${arq.name}" não é foto nem vídeo MP4/MOV.`);
+      } else if (arq.size > 100 * 1024 * 1024) {
+        throw new Error(`"${arq.name}" passa de 100 MB.`);
+      }
+      const r = await igApi('/api/instagram/midias', { method: 'POST', body: corpo, headers: { 'Content-Type': tipoMime, 'x-nome-arquivo': encodeURIComponent(arq.name) } });
+      tokens.push(r.token);
+    }
+    igPublicarBtn.textContent = agendar ? 'Agendando...' : 'Publicando...';
+    await igApi('/api/instagram/posts', {
+      method: 'POST',
+      body: JSON.stringify({ tipo: igTipo, legenda: igLegenda.value, midias: tokens, agendadoPara: agendar ? new Date(igAgendarPara.value).toISOString() : null }),
+    });
+    mostrarAviso(agendar ? 'Publicação agendada' : 'Publicando no Instagram - em instantes aparece como publicada');
+    igSelecionados = [];
+    igRenderizarPrevias();
+    igLegenda.value = '';
+    igLegendaConta.textContent = '0 / 2200';
+    carregarPostsInstagram();
+  } catch (err) {
+    igMostrarErroPost(err.message);
+  } finally {
+    igPublicarBtn.disabled = false;
+    igPublicarBtn.textContent = textoBotao;
+  }
+});
+
+async function carregarPostsInstagram() {
+  try {
+    const { posts } = await igApi('/api/instagram/posts');
+    igPosts.textContent = '';
+    if (!posts.length) {
+      igPosts.appendChild(Object.assign(document.createElement('p'), { className: 'rs-vazio', textContent: 'Nenhuma publicação feita pela Lumia ainda.' }));
+      return;
+    }
+    const quando = (iso) => new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    for (const p of posts) {
+      const item = document.createElement('div');
+      item.className = 'ig-item';
+      const topo = document.createElement('div');
+      topo.className = 'ig-item-topo';
+      const nome = document.createElement('strong');
+      nome.textContent = `${IG_TIPOS[p.tipo]?.nome || p.tipo}${p.midias.length > 1 ? ` · ${p.midias.length} arquivos` : ''}`;
+      const chip = document.createElement('span');
+      chip.className = `ig-status ${p.status}`;
+      chip.textContent = p.status === 'agendado' ? `Agendado · ${quando(p.agendado_para)}`
+        : p.status === 'publicado' ? `Publicado · ${quando(p.publicado_em)}` : IG_STATUS[p.status] || p.status;
+      topo.append(nome, chip);
+      item.appendChild(topo);
+      if (p.legenda) item.appendChild(Object.assign(document.createElement('p'), { className: 'ig-item-texto', textContent: p.legenda.length > 160 ? `${p.legenda.slice(0, 160)}…` : p.legenda }));
+      if (p.erro) item.appendChild(Object.assign(document.createElement('p'), { className: 'ig-item-erro', textContent: p.erro }));
+      const acoes = document.createElement('div');
+      acoes.className = 'ig-item-acoes';
+      if (p.permalink) {
+        const a = document.createElement('a');
+        a.href = p.permalink;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = 'Ver no Instagram';
+        acoes.appendChild(a);
+      }
+      if (p.status === 'agendado') {
+        const cancelar = document.createElement('button');
+        cancelar.type = 'button';
+        cancelar.className = 'ct-link';
+        cancelar.textContent = 'Cancelar';
+        cancelar.addEventListener('click', async () => {
+          if (!confirm('Cancelar essa publicação agendada?')) return;
+          try {
+            await igApi(`/api/instagram/posts/${p.id}/cancelar`, { method: 'POST' });
+            carregarPostsInstagram();
+          } catch (err) {
+            mostrarAviso(err.message, 'erro');
+          }
+        });
+        acoes.appendChild(cancelar);
+      }
+      if (acoes.childElementCount) item.appendChild(acoes);
+      igPosts.appendChild(item);
+    }
+  } catch (err) {
+    igPosts.textContent = `Não consegui carregar as publicações: ${err.message}`;
+  }
+}
+document.getElementById('igPostsAtualizar').addEventListener('click', carregarPostsInstagram);
+
+// ---------- respostas a comentarios ----------
+
+async function carregarPublicacoesInstagram() {
+  try {
+    const { publicacoes } = await igApi('/api/instagram/publicacoes');
+    const atual = igRegraPost.value;
+    igRegraPost.textContent = '';
+    igRegraPost.appendChild(new Option('Todas as publicações', ''));
+    for (const p of publicacoes) {
+      const data = new Date(p.em).toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit' });
+      igRegraPost.appendChild(new Option(`${data} · ${p.legenda || '(sem legenda)'}`.slice(0, 80), p.id));
+    }
+    igRegraPost.value = [...igRegraPost.options].some((o) => o.value === atual) ? atual : '';
+  } catch { /* fica so "Todas as publicacoes" */ }
+}
+
+function igMostrarErroRegra(msg) {
+  igRegraErro.textContent = msg || '';
+  igRegraErro.hidden = !msg;
+}
+
+function igEditarRegra(regra) {
+  igRegraEditando = regra;
+  igRegraTitulo.textContent = regra ? 'Editar resposta automática' : 'Nova resposta automática';
+  igRegraPalavras.value = regra ? regra.palavras.join(', ') : '';
+  if (regra?.media_id && ![...igRegraPost.options].some((o) => o.value === regra.media_id)) {
+    igRegraPost.appendChild(new Option(regra.media_legenda || 'Publicação escolhida', regra.media_id));
+  }
+  igRegraPost.value = regra?.media_id || '';
+  igRegraPublica.value = regra?.resposta_publica || '';
+  igRegraDm.value = regra?.resposta_dm || '';
+  igRegraCancelar.hidden = !regra;
+  igMostrarErroRegra('');
+  limparPendente(igRegraSalvar);
+  if (regra) igRegraPalavras.focus();
+}
+igRegraCancelar.addEventListener('click', () => igEditarRegra(null));
+rastrearAlteracoes(igRegraSalvar, [igRegraPalavras, igRegraPost, igRegraPublica, igRegraDm]);
+
+igRegraSalvar.addEventListener('click', async () => {
+  igMostrarErroRegra('');
+  igRegraSalvar.disabled = true;
+  try {
+    const opcao = igRegraPost.selectedOptions[0];
+    await igApi('/api/instagram/regras', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: igRegraEditando?.id || null,
+        palavras: igRegraPalavras.value,
+        mediaId: igRegraPost.value || null,
+        mediaLegenda: igRegraPost.value ? opcao?.textContent : null,
+        respostaPublica: igRegraPublica.value,
+        respostaDm: igRegraDm.value,
+      }),
+    });
+    marcarSalvo(igRegraSalvar, igRegraEditando ? 'Resposta atualizada' : 'Resposta automática criada');
+    igEditarRegra(null);
+    carregarRegrasInstagram();
+  } catch (err) {
+    igMostrarErroRegra(err.message);
+  } finally {
+    igRegraSalvar.disabled = false;
+  }
+});
+
+async function carregarRegrasInstagram() {
+  try {
+    const { regras } = await igApi('/api/instagram/regras');
+    igRegrasLista = regras;
+    igRegras.textContent = '';
+    if (!regras.length) {
+      igRegras.appendChild(Object.assign(document.createElement('p'), { className: 'rs-vazio', textContent: 'Nenhuma resposta automática ainda.' }));
+      return;
+    }
+    for (const r of regras) {
+      const item = document.createElement('div');
+      item.className = `ig-item${r.ativo ? '' : ' inativo'}`;
+      const topo = document.createElement('div');
+      topo.className = 'ig-item-topo';
+      const chips = document.createElement('div');
+      chips.className = 'ig-chips';
+      for (const p of r.palavras) chips.appendChild(Object.assign(document.createElement('span'), { className: 'ct-chip', textContent: p }));
+      const chave = document.createElement('label');
+      chave.className = 'auto-switch ig-switch';
+      chave.title = r.ativo ? 'Ligada - clique para pausar' : 'Pausada - clique para ligar';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = r.ativo;
+      cb.addEventListener('change', async () => {
+        try {
+          await igApi(`/api/instagram/regras/${r.id}/ativo`, { method: 'POST', body: JSON.stringify({ ativo: cb.checked }) });
+          carregarRegrasInstagram();
+        } catch (err) {
+          mostrarAviso(err.message, 'erro');
+          cb.checked = !cb.checked;
+        }
+      });
+      const trilho = document.createElement('span');
+      trilho.className = 'auto-switch-track';
+      trilho.appendChild(Object.assign(document.createElement('span'), { className: 'auto-switch-thumb' }));
+      chave.append(cb, trilho);
+      topo.append(chips, chave);
+      item.appendChild(topo);
+      item.appendChild(Object.assign(document.createElement('p'), { className: 'rs-sub', textContent: `${r.media_id ? `Só em: ${r.media_legenda || 'uma publicação'}` : 'Todas as publicações'} · respondeu ${r.disparos} ${r.disparos === 1 ? 'vez' : 'vezes'}` }));
+      if (r.resposta_publica) item.appendChild(Object.assign(document.createElement('p'), { className: 'ig-item-texto', textContent: `Comentário: ${r.resposta_publica}` }));
+      if (r.resposta_dm) item.appendChild(Object.assign(document.createElement('p'), { className: 'ig-item-texto', textContent: `Direct: ${r.resposta_dm}` }));
+      const acoes = document.createElement('div');
+      acoes.className = 'ig-item-acoes';
+      const editar = Object.assign(document.createElement('button'), { type: 'button', className: 'ct-link', textContent: 'Editar' });
+      editar.addEventListener('click', () => { igEditarRegra(r); igRegraPalavras.scrollIntoView({ block: 'center' }); });
+      const apagar = Object.assign(document.createElement('button'), { type: 'button', className: 'ct-link ig-perigo', textContent: 'Apagar' });
+      apagar.addEventListener('click', async () => {
+        if (!confirm(`Apagar a resposta automática para "${r.palavras.join(', ')}"?`)) return;
+        try {
+          await igApi(`/api/instagram/regras/${r.id}`, { method: 'DELETE' });
+          if (igRegraEditando?.id === r.id) igEditarRegra(null);
+          carregarRegrasInstagram();
+        } catch (err) {
+          mostrarAviso(err.message, 'erro');
+        }
+      });
+      acoes.append(editar, apagar);
+      item.appendChild(acoes);
+      igRegras.appendChild(item);
+    }
+  } catch (err) {
+    igRegras.textContent = `Não consegui carregar as respostas: ${err.message}`;
+  }
+}
+
+// ---------- direct ----------
+
+function igAtualizarRotuloDm() {
+  igDmIaLabel.textContent = igDmIa.checked ? 'IA respondendo o direct' : 'IA desligada no direct';
+}
+igDmIa.addEventListener('change', async () => {
+  igAtualizarRotuloDm();
+  try {
+    await igApi('/api/instagram/dm-ia', { method: 'POST', body: JSON.stringify({ ativa: igDmIa.checked }) });
+    mostrarAviso(igDmIa.checked ? 'A IA passa a responder o direct' : 'IA desligada no direct');
+  } catch (err) {
+    igDmIa.checked = !igDmIa.checked;
+    igAtualizarRotuloDm();
+    mostrarAviso(err.message, 'erro');
+  }
+});
+
+// volta do login do Instagram (?instagram=conectado|erro)
+(function tratarRetornoInstagram() {
+  const params = new URLSearchParams(window.location.search);
+  const resultado = params.get('instagram');
+  if (!resultado) return;
+  const msg = params.get('msg');
+  params.delete('instagram');
+  params.delete('msg');
+  window.history.replaceState({}, '', window.location.pathname + (params.toString() ? `?${params}` : ''));
+  setTimeout(() => {
+    if (resultado === 'conectado') mostrarAviso('Instagram conectado');
+    else mostrarAviso(`Não consegui conectar o Instagram: ${msg || 'erro desconhecido'}`, 'erro');
+    if (appPassword) mudarAba('instagram');
+  }, 600);
+})();
 
 // ---------- Alerta de retorno (conversa do CRM) ----------
 const crmConversaRetorno = document.getElementById('crmConversaRetorno');
@@ -7673,7 +8188,7 @@ async function selecionarCliente(id, nome, username) {
   tabsAviso.textContent = 'Nenhuma marcada = tudo liberado (padrão). Marque só pra restringir.';
   clienteIntegracoesPainel.appendChild(tabsAviso);
 
-  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações' };
+  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
   const tabsForm = document.createElement('div');
   tabsForm.className = 'cliente-form';
   const tabsCheckboxes = {};

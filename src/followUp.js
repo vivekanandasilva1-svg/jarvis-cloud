@@ -372,6 +372,9 @@ async function processarContato(tenantId, contato, etapas, config) {
   // fora do horario de funcionamento - nao manda tentativa nenhuma agora; o proprio agendador
   // (roda a cada 15min) pega essa tentativa vencida assim que o horario configurado abrir
   if (!dentroDoHorarioFuncionamento(config)) return;
+  // Instagram so deixa mandar mensagem ate 24h depois da ultima da pessoa - a cadencia de dias
+  // do Follow Up nao funciona la
+  if (String(contato.instancia).startsWith('ig:')) return;
 
   const diasDesdeEntrada = (Date.now() - new Date(contato.entrou_em).getTime()) / (24 * 60 * 60 * 1000);
   const ultimaOrdem = contato.ultima_etapa_enviada || 0;

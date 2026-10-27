@@ -665,6 +665,13 @@ async function alinharNumeroPeloEnvio(tenantId, numero, instancia, resposta) {
 }
 
 export async function enviarMensagem(tenantId, numero, instancia, texto) {
+  // contato do Instagram (instancia "ig:<conta>", numero = id da pessoa no Instagram)
+  if (String(instancia).startsWith('ig:')) {
+    const instagram = await import('./instagram.js');
+    const r = await instagram.enviarDMDoCrm(tenantId, numero, texto);
+    await registrarMensagem(tenantId, { numero, instancia, direcao: 'saida', tipo: 'text', texto, waId: r?.message_id || null, autor: 'humano' });
+    return null;
+  }
   const resposta = await evolutionApi.enviarMensagemTextoPor(instancia, numero, texto);
   const numeroReal = await alinharNumeroPeloEnvio(tenantId, numero, instancia, resposta);
   await registrarMensagem(tenantId, { numero: numeroReal, instancia, direcao: 'saida', tipo: 'text', texto, waId: resposta?.key?.id || null, autor: 'humano' });
@@ -678,6 +685,7 @@ export async function enviarMensagem(tenantId, numero, instancia, texto) {
 const TIPOS_MIDIA_ENVIO = new Set(['image', 'video', 'document', 'audio']);
 export async function enviarMidiaContato(tenantId, numero, instancia, { tipo, mimetype, base64, fileName, legenda }) {
   if (!TIPOS_MIDIA_ENVIO.has(tipo)) throw new Error(`Tipo de midia invalido: "${tipo}"`);
+  if (String(instancia).startsWith('ig:')) throw new Error('No Instagram, por enquanto, a resposta pela Lumia e so em texto.');
   if (!base64) throw new Error('arquivo vazio');
   const resposta = tipo === 'audio'
     ? await evolutionApi.enviarAudio(instancia, numero, base64)

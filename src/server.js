@@ -16,6 +16,7 @@ import * as evolutionApi from './evolutionApi.js';
 import { enviarMensagemTexto } from './evolutionApi.js';
 import * as agenda from './agenda.js';
 import * as googleCalendar from './googleCalendar.js';
+import * as instagram from './instagram.js';
 import * as whatsappInstances from './whatsappInstances.js';
 import * as autoAtendimento from './autoAtendimento.js';
 import * as autoArquivos from './autoAtendimentoArquivos.js';
@@ -83,6 +84,7 @@ const TAB_ROTA_PREFIXO = {
   relatorios: '/api/relatorios',
   geradorRelatorios: '/api/gerador-relatorios',
   integracoes: '/api/integracoes',
+  instagram: '/api/instagram',
 };
 
 // endpoint MCP do Cerebro (Claude/ChatGPT/Cursor conectam aqui) - registrado ANTES do auth geral
@@ -97,6 +99,10 @@ app.use(async (req, res, next) => {
     req.path === '/webhook/whatsapp' ||
     req.path === '/api/whatsapp-evolution/webhook' ||
     req.path === '/api/agenda/google/callback' ||
+    // webhook do Instagram (quem chama e a Meta - protegido pela assinatura do app) e a volta do
+    // login do Instagram (protegida pelo state assinado)
+    req.path === '/api/instagram/webhook' ||
+    req.path === '/api/instagram/callback' ||
     // EventSource nativo do browser nao manda headers customizados - a senha vai por query
     // string aqui, e o proprio handler da rota confere ela antes de abrir o stream
     req.path === '/api/crm/eventos' ||
@@ -111,7 +117,7 @@ app.use(async (req, res, next) => {
   // /api/agenda/google/conectar e navegacao de pagina de verdade (o navegador redireciona pro
   // consentimento do Google), nao um fetch que consiga mandar header - o token vem por query
   // param SO nesse caso especifico, nunca como mecanismo geral de auth
-  const provided = req.path === '/api/agenda/google/conectar'
+  const provided = req.path === '/api/agenda/google/conectar' || req.path === '/api/instagram/conectar'
     ? req.query.token
     : req.header('x-app-password');
 
@@ -1773,6 +1779,81 @@ app.get('/api/crm/contatos', async (req, res) => {
   }
 });
 
+// ---------- Instagram (DMs, respostas a comentario e publicacoes - ver instagram.js) ----------
+
+app.get('/api/instagram/webhook', (req, res) => {
+  const ok = req.query['hub.mode'] === 'subscribe' && process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN
+    && req.query['hub.verify_token'] === process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN;
+  if (!ok) return res.sendStatus(403);
+  res.send(String(req.query['hub.challenge'] || ''));
+});
+
+app.post('/api/instagram/webhook', (req, res) => {
+  if (!instagram.verificarAssinatura(req.rawBody, req.header('x-hub-signature-256'))) return res.sendStatus(401);
+  res.sendStatus(200); // responde na hora - a Meta reenvia se demorar
+  instagram.processarWebhook(req.body).catch((err) => console.error('Erro no webhook do Instagram:', err.message));
+});
+
+app.get('/api/instagram/conectar', (req, res) => {
+  if (!req.tenantId) return res.status(401).send('Sessao invalida - abre essa tela de dentro do app, nao direto pela URL.');
+  try {
+    res.redirect(instagram.urlAutorizacao(req.tenantId));
+  } catch (err) {
+    res.redirect(`/?instagram=erro&msg=${encodeURIComponent(err.message)}`);
+  }
+});
+
+app.get('/api/instagram/callback', async (req, res) => {
+  const { code, state, error_description: erroDesc, error } = req.query;
+  if (error || !code) return res.redirect(`/?instagram=erro&msg=${encodeURIComponent(String(erroDesc || error || 'conexao cancelada'))}`);
+  try {
+    await instagram.concluirConexao(state, code);
+    res.redirect('/?instagram=conectado');
+  } catch (err) {
+    res.redirect(`/?instagram=erro&msg=${encodeURIComponent(err.message)}`);
+  }
+});
+
+const rotaIg = (fn) => async (req, res) => {
+  try {
+    await fn(req, res);
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+};
+
+app.get('/api/instagram/status', rotaIg(async (req, res) => res.json(await instagram.status(req.tenantId))));
+app.post('/api/instagram/desconectar', rotaIg(async (req, res) => { await instagram.desconectar(req.tenantId); res.json({ ok: true }); }));
+app.post('/api/instagram/dm-ia', rotaIg(async (req, res) => { await instagram.definirDmIa(req.tenantId, !!req.body?.ativa); res.json({ ok: true }); }));
+app.get('/api/instagram/publicacoes', rotaIg(async (req, res) => res.json({ publicacoes: await instagram.listarPublicacoes(req.tenantId) })));
+
+app.get('/api/instagram/regras', rotaIg(async (req, res) => res.json({ regras: await instagram.listarRegras(req.tenantId) })));
+app.post('/api/instagram/regras', rotaIg(async (req, res) => res.json({ ok: true, id: await instagram.salvarRegra(req.tenantId, req.body || {}) })));
+app.post('/api/instagram/regras/:id/ativo', rotaIg(async (req, res) => { await instagram.alternarRegra(req.tenantId, req.params.id, !!req.body?.ativo); res.json({ ok: true }); }));
+app.delete('/api/instagram/regras/:id', rotaIg(async (req, res) => { await instagram.apagarRegra(req.tenantId, req.params.id); res.json({ ok: true }); }));
+
+// arquivo cru no corpo (foto JPG ou video MP4/MOV de ate 100mb) - nao cabe no JSON em base64
+app.post('/api/instagram/midias', express.raw({ type: ['image/jpeg', 'video/mp4', 'video/quicktime'], limit: '100mb' }), rotaIg(async (req, res) => {
+  const nome = decodeURIComponent(req.header('x-nome-arquivo') || '');
+  res.json({ ok: true, ...(await instagram.guardarMidia(req.tenantId, { buffer: Buffer.isBuffer(req.body) ? req.body : null, mimetype: req.header('content-type'), nome })) });
+}));
+app.get('/api/instagram/posts', rotaIg(async (req, res) => res.json({ posts: await instagram.listarPosts(req.tenantId) })));
+app.post('/api/instagram/posts', rotaIg(async (req, res) => res.json({ ok: true, id: await instagram.criarPost(req.tenantId, req.body || {}) })));
+app.post('/api/instagram/posts/:id/cancelar', rotaIg(async (req, res) => { await instagram.cancelarPost(req.tenantId, req.params.id); res.json({ ok: true }); }));
+
+// midia publica pra Meta buscar na hora de publicar (token aleatorio de 48 hex = nao da pra adivinhar)
+app.get('/ig-midia/:token', async (req, res) => {
+  try {
+    const midia = await instagram.lerMidiaPublica(req.params.token);
+    if (!midia) return res.sendStatus(404);
+    res.setHeader('Content-Type', midia.mimetype);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.send(midia.dados);
+  } catch {
+    res.sendStatus(500);
+  }
+});
+
 // ---------- Resultados (indicadores do atendimento por periodo) ----------
 
 app.get('/api/crm/resultados', async (req, res) => {
@@ -2234,6 +2315,7 @@ app.delete('/api/cerebro/tokens/:id', rotaCerebro(async (req, res) => {
 }));
 
 iniciarSchedulerLembretes();
+instagram.iniciarAgendadorInstagram();
 iniciarSchedulerSecretaria();
 iniciarCerebroMae();
 // O alerta de saldo baixo fixo (env var LUMIA_WHATSAPP_ADMIN, sem configuracao de

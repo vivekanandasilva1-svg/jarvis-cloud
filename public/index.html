@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261027e" />
+  <link rel="stylesheet" href="style.css?v=20261027f" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -93,6 +93,11 @@
         <button type="button" class="nav-btn" id="tabBtnResultados" data-tab="resultados">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3h2v16h16v2H3V3zm4 10h3v4H7v-4zm5-5h3v9h-3V8zm5-3h3v12h-3V5z"/></svg>
           <span>Resultados</span>
+        </button>
+        <div class="nav-grupo">Redes sociais</div>
+        <button type="button" class="nav-btn" id="tabBtnInstagram" data-tab="instagram">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM17.3 5.6a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2z"/></svg>
+          <span>Instagram</span>
         </button>
         <div class="nav-grupo">Automação</div>
         <button type="button" class="nav-btn" id="tabBtnAuto" data-tab="auto">
@@ -536,6 +541,91 @@
           <p class="agenda-erro cv-erro" id="cvErro" hidden></p>
         </div>
       </section>
+    </div>
+
+    <div class="window-body tab-instagram" id="tabInstagram" hidden>
+      <section class="rs-card ig-conta" id="igConta">
+        <p class="rs-sub">Carregando...</p>
+      </section>
+
+      <div id="igConectadoBloco" hidden>
+        <div class="ig-abas" role="tablist">
+          <button type="button" class="ativo" data-ig-sec="publicar">Publicar</button>
+          <button type="button" data-ig-sec="comentarios">Respostas a comentários</button>
+          <button type="button" data-ig-sec="direct">Direct</button>
+        </div>
+
+        <section class="rs-card" data-ig-painel="publicar">
+          <h3>Nova publicação</h3>
+          <div class="ig-tipos" id="igTipos" role="radiogroup" aria-label="Tipo">
+            <button type="button" data-tipo="feed" class="ativo">Foto no feed</button>
+            <button type="button" data-tipo="carrossel">Carrossel</button>
+            <button type="button" data-tipo="reels">Reels</button>
+            <button type="button" data-tipo="story">Story</button>
+          </div>
+          <p class="rs-sub" id="igTipoDica"></p>
+          <label class="ct-arquivo">
+            <input type="file" id="igArquivos" accept="image/*,video/mp4,video/quicktime" />
+            <span id="igArquivosTexto">Escolher foto</span>
+          </label>
+          <div class="ig-previas" id="igPrevias"></div>
+          <label class="ct-campo" id="igLegendaCampo">Legenda <small id="igLegendaConta">0 / 2200</small>
+            <textarea id="igLegenda" rows="4" maxlength="2200" placeholder="Escreva a legenda, com hashtags se quiser"></textarea>
+          </label>
+          <div class="ig-quando">
+            <label class="ig-radio"><input type="radio" name="igQuando" value="agora" checked /> Publicar agora</label>
+            <label class="ig-radio"><input type="radio" name="igQuando" value="agendar" /> Agendar</label>
+            <input type="datetime-local" id="igAgendarPara" hidden />
+          </div>
+          <p class="crm-conversa-erro" id="igPostErro" hidden></p>
+          <div class="ct-rodape">
+            <span class="ct-espaco"></span>
+            <button type="button" id="igPublicarBtn" class="relatorio-config-enviar">Publicar agora</button>
+          </div>
+        </section>
+
+        <section class="rs-card" data-ig-painel="publicar">
+          <div class="rs-card-topo">
+            <h3>Agendadas e recentes</h3>
+            <button type="button" id="igPostsAtualizar" class="ct-link">Atualizar</button>
+          </div>
+          <div class="ig-lista" id="igPosts"></div>
+        </section>
+
+        <section class="rs-card" data-ig-painel="comentarios" hidden>
+          <h3 id="igRegraTitulo">Nova resposta automática</h3>
+          <p class="rs-sub">Quando alguém comentar uma das palavras-chave, a Lumia responde o comentário e/ou manda uma mensagem no direct da pessoa. Use {nome} para citar o @ de quem comentou.</p>
+          <label class="ct-campo">Palavras-chave <small>(separe por vírgula)</small><input type="text" id="igRegraPalavras" placeholder="ex: preço, valor, quero" /></label>
+          <label class="ct-campo">Vale para
+            <select id="igRegraPost"><option value="">Todas as publicações</option></select>
+          </label>
+          <label class="ct-campo">Resposta no comentário <small>(pública, opcional)</small><input type="text" id="igRegraPublica" maxlength="300" placeholder="ex: {nome} te mandei os detalhes no direct!" /></label>
+          <label class="ct-campo">Mensagem no direct <small>(opcional)</small><textarea id="igRegraDm" rows="3" maxlength="1000" placeholder="ex: Oi! Vi seu comentário. O valor da avaliação é..."></textarea></label>
+          <p class="crm-conversa-erro" id="igRegraErro" hidden></p>
+          <div class="ct-rodape">
+            <button type="button" id="igRegraCancelar" class="crm-btn-secundario" hidden>Cancelar edição</button>
+            <span class="ct-espaco"></span>
+            <button type="button" id="igRegraSalvar" class="relatorio-config-enviar">Salvar resposta</button>
+          </div>
+        </section>
+        <section class="rs-card" data-ig-painel="comentarios" hidden>
+          <h3>Respostas ativas</h3>
+          <div class="ig-lista" id="igRegras"></div>
+        </section>
+
+        <section class="rs-card" data-ig-painel="direct" hidden>
+          <h3>Atendimento no direct</h3>
+          <p class="rs-sub">As mensagens do direct aparecem na aba Conversas, junto com o WhatsApp, e você responde por lá. Ligando a opção abaixo, a mesma IA do Auto Atendimento (com o mesmo prompt e horário) responde sozinha.</p>
+          <div class="auto-toggle-row">
+            <label class="auto-switch">
+              <input type="checkbox" id="igDmIa" />
+              <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+            </label>
+            <span id="igDmIaLabel">IA desligada no direct</span>
+          </div>
+          <p class="wa-hint">O Instagram só permite responder até 24 horas depois da última mensagem da pessoa. Por isso o Follow Up automático não vale para o direct.</p>
+        </section>
+      </div>
     </div>
 
     <div class="window-body tab-resultados" id="tabResultados" hidden>
@@ -1244,6 +1334,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261027e"></script>
+  <script src="app.js?v=20261027f"></script>
 </body>
 </html>

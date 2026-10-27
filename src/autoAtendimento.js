@@ -1059,7 +1059,8 @@ const AVISO_RETORNO = '\n\nCONTEXTO: chegou o dia/horario de retorno combinado c
 const AVISO_RETOMADA = '\n\nCONTEXTO: o contato escreveu enquanto o atendimento estava indisponivel (fora do horario ou fora do ar - as mensagens estao no fim do historico, marcadas como "ainda nao respondida") e so agora o horario abriu. Responda a elas de uma vez, de forma natural - pode mencionar de leve que viu a mensagem so agora (ex: "bom dia, vi sua mensagem de ontem a noite"), sem se desculpar demais nem repetir o marcador.';
 
 // tipo: 'text' | 'image' | 'audio' | 'video' (o que o CONTATO mandou, se nao for so texto)
-export async function processarMensagem(tenantId, numero, instancia, { texto, tipo, mensagemBruta, retomarPendente = false, retomadaRetorno = null }) {
+// semAudio: canal que nao toca nota de voz gerada (Instagram) - a resposta sai sempre em texto
+export async function processarMensagem(tenantId, numero, instancia, { texto, tipo, mensagemBruta, retomarPendente = false, retomadaRetorno = null, semAudio = false }) {
   const config = await obterConfig(tenantId);
   if (!config.ativo || !config.prompt) throw new Error('Auto atendimento nao esta ativo.');
 
@@ -1096,7 +1097,7 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   // (se a opcao estiver ligada), ou a cada N mensagens (cadencia configurada). Precisa saber
   // isso agora (nao so depois) pra poder avisar a IA no proprio prompt desta chamada.
   const novaContagem = contagem + 1;
-  const vaiSerAudio = decidirSeAudio(config, novaContagem, tipo);
+  const vaiSerAudio = semAudio ? false : decidirSeAudio(config, novaContagem, tipo);
 
   const listaArquivos = await arquivos.listarArquivos(tenantId);
   const TOOLS = montarTools(config, listaArquivos);

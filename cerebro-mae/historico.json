@@ -628,5 +628,21 @@
     "tipo": "melhoria",
     "titulo": "Lumien: coruja assistente flutuante que executa ações no app",
     "conteudo": "Botão de coruja no canto de todas as telas (menos no Início, que já é a conversa com a Lumia), com painel de chat. Usa o mesmo /api/chat da Lumia numa sessão própria (sessionId com ':lumien:'), sem as ferramentas de controle do PC e com uma instrução extra de respostas curtas. Cada mensagem leva o contexto da tela (aba e conversa/ficha aberta), então 'resuma esta conversa' funciona sem repetir o nome. Ferramentas novas no cloudAgent (também disponíveis pra Lumia no Início e no WhatsApp): crm_buscar_contatos, crm_ler_conversa, crm_conversas_aguardando, crm_mover_etapa (inicia/encerra o Follow Up como a tela), crm_pausar_ia, crm_cadastrar_contato, crm_editar_contato, crm_resultados e crm_enviar_mensagem, que fica pendente de confirmação (mensagem pra pessoa de verdade) e aparece com botões Sim/Não; app_abrir_tela abre telas e conversas no navegador (o chat devolve acoesTela). Todas respeitam a permissão da aba CRM do tenant. Sugestões rápidas mudam conforme a tela. Pendente: voz no Lumien e ações de agenda/Clinicorp pelo contexto da conversa aberta."
+  },
+  {
+    "chave": "mod:instagram",
+    "hub": true,
+    "modulo": "instagram",
+    "tipo": "contexto",
+    "titulo": "Módulo: Instagram (direct, comentários e publicações)",
+    "conteudo": "Integração com o Instagram profissional de cada conta pela API do Instagram com login do Instagram: o direct entra no CRM e na aba Conversas, respostas automáticas a comentário por palavra-chave e publicação de feed, carrossel, reels e story, na hora ou agendada."
+  },
+  {
+    "chave": "instagram:integracao",
+    "modulo": "instagram",
+    "data": "2026-10-27",
+    "tipo": "melhoria",
+    "titulo": "Integração com o Instagram: direct, respostas a comentário e publicações agendadas",
+    "conteudo": "Nova aba Instagram (grupo Redes sociais, chave de permissão 'instagram'; src/instagram.js). Conexão por OAuth do Instagram por tenant (token longo de 60 dias, criptografado, renovado sozinho; 1 conta por tenant, a mesma conta não entra em 2 tenants). Webhook /api/instagram/webhook com assinatura do app: o direct entra no CRM como mais um número (instancia 'ig:<conta>', numero = id da pessoa no Instagram) e aparece na aba Conversas, onde se responde em texto (mídia ainda não); opção de a mesma IA do Auto Atendimento responder o direct (sem áudio, mesmo prompt e horário, respeita IA pausada). Respostas a comentário por palavra-chave (palavra inteira, sem acento), em todas as publicações ou numa específica, com resposta pública e/ou mensagem no direct ({nome} vira o @). Publicação de foto no feed (cortada no navegador pra 4:5–1,91:1 e convertida pra JPEG), carrossel (2–10), reels e story, agora ou agendada (até 75 dias); arquivos de até 100 MB ficam em instagram_midias e são servidos à Meta por /ig-midia/<token aleatório>, apagados depois de publicar; agendador a cada minuto cria os containers, espera o processamento do vídeo e publica. Follow Up não manda pro Instagram (janela de 24h da Meta). Pendente: criar o app na Meta, pedir aprovação das permissões instagram_business_basic/manage_messages/manage_comments/content_publish e pôr INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET e INSTAGRAM_WEBHOOK_VERIFY_TOKEN no ambiente; até lá a aba mostra 'aguardando liberação da Meta'."
   }
 ]
