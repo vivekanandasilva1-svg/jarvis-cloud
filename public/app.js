@@ -384,6 +384,7 @@ function mostrarApp() {
   tabBtnCerebro.hidden = !meuCerebroLiberado;
   atualizarGruposMenu();
   atualizarCabecalhoAba(document.querySelector('.nav-btn.active')?.dataset.tab || 'painel');
+  lumienAoMudarAba(document.querySelector('.nav-btn.active')?.dataset.tab || 'painel');
   // se a aba visivel por padrao (Painel) foi restringida, pula pra primeira aba liberada em
   // vez de deixar a tela em branco
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
@@ -1964,6 +1965,7 @@ function atualizarGruposMenu() {
 // ---------- Abas: Painel / Agenda / WhatsApp ----------
 function mudarAba(aba) {
   atualizarCabecalhoAba(aba);
+  lumienAoMudarAba(aba);
   atualizarGruposMenu();
   tabPainel.hidden = aba !== 'painel';
   tabAgenda.hidden = aba !== 'agenda';
@@ -4375,6 +4377,244 @@ new ResizeObserver(() => {
   rsRedesenhoTimer = setTimeout(rsDesenharGraficos, 120);
 }).observe(rsGraficoDias);
 document.addEventListener('scroll', () => { rsTooltip.hidden = true; }, true);
+
+// ---------- Lumien (assistente flutuante: conversa com a Lumia e executa acoes no app) ----------
+// usa o mesmo /api/chat da Lumia com uma sessao propria ("lumien:...") - o servidor reconhece esse
+// prefixo, tira o controle do PC e devolve acoesTela (telas pra abrir) e aguardandoConfirmacao
+const lumienBtn = document.getElementById('lumienBtn');
+const lumienPainel = document.getElementById('lumienPainel');
+const lumienLog = document.getElementById('lumienLog');
+const lumienSugestoes = document.getElementById('lumienSugestoes');
+const lumienForm = document.getElementById('lumienForm');
+const lumienTexto = document.getElementById('lumienTexto');
+const lumienEnviar = document.getElementById('lumienEnviar');
+const lumienSub = document.getElementById('lumienSub');
+
+const LUMIEN_CHAVE_SESSAO = 'lumien_session_id';
+let lumienSessao = null;
+let lumienOcupado = false;
+let lumienPollTimer = null;
+
+function lumienNovaSessao() {
+  lumienSessao = `lumien:${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+  try { localStorage.setItem(LUMIEN_CHAVE_SESSAO, lumienSessao); } catch { /* sem storage: vale so nesta aba */ }
+}
+try { lumienSessao = localStorage.getItem(LUMIEN_CHAVE_SESSAO); } catch { lumienSessao = null; }
+if (!lumienSessao) lumienNovaSessao();
+
+// chamado pelo mudarAba/mostrarApp - le os elementos direto do DOM porque pode rodar antes deste
+// trecho do arquivo ter sido executado
+function lumienAoMudarAba(aba) {
+  const btn = document.getElementById('lumienBtn');
+  const painel = document.getElementById('lumienPainel');
+  if (!btn || !painel) return;
+  const noInicio = aba === 'painel'; // o Inicio ja e a conversa com a Lumia
+  btn.hidden = noInicio || !painel.hidden;
+  if (noInicio) painel.hidden = true;
+  document.body.classList.toggle('lumien-em-conversas', aba === 'conversas');
+  if (!painel.hidden && typeof lumienAtualizarSugestoes === 'function') lumienAtualizarSugestoes();
+}
+
+function lumienAbaAtual() {
+  return document.querySelector('.nav-btn.active')?.dataset.tab || 'painel';
+}
+
+// o que o usuario esta vendo agora - vai junto de cada mensagem pra "essa conversa", "esse
+// contato" funcionarem sem ele repetir o nome
+function lumienContexto() {
+  const aba = lumienAbaAtual();
+  const nome = CABECALHOS_ABA[aba]?.[1] || aba;
+  const partes = [`aba ${nome}`];
+  if (aba === 'conversas' && cvAberto) partes.push(`conversa aberta com ${cvAberto.nome || `+${cvAberto.numero}`} (contatoId ${cvAberto.id})`);
+  if (aba === 'contatos' && !ctModal.hidden && ctEditando) partes.push(`ficha aberta de ${ctEditando.nome || `+${ctEditando.numero}`} (contatoId ${ctEditando.id})`);
+  if (aba === 'crm' && typeof crmContatoAberto !== 'undefined' && crmContatoAberto) partes.push(`conversa aberta com ${crmContatoAberto.nome || `+${crmContatoAberto.numero}`} (contatoId ${crmContatoAberto.id})`);
+  return `[Tela atual: ${partes.join(' · ')}]`;
+}
+
+function lumienSugestoesDaTela() {
+  const aba = lumienAbaAtual();
+  if (aba === 'conversas' && cvAberto) return ['Resuma esta conversa', 'Sugira uma resposta', cvAberto.auto_pausado ? 'Volte a IA nesta conversa' : 'Pause a IA nesta conversa'];
+  if (aba === 'resultados') return ['Como foi o atendimento esta semana?', 'O que posso melhorar?'];
+  if (aba === 'contatos') return ['Quem está esperando resposta?', 'Cadastre um contato'];
+  return ['Quem está esperando resposta?', 'Como foi o atendimento hoje?'];
+}
+
+function lumienAtualizarSugestoes() {
+  lumienSugestoes.textContent = '';
+  if (lumienOcupado) return;
+  for (const texto of lumienSugestoesDaTela()) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = texto;
+    b.addEventListener('click', () => lumienMandar(texto));
+    lumienSugestoes.appendChild(b);
+  }
+}
+
+function lumienBolha(texto, tipo) {
+  const div = document.createElement('div');
+  div.className = `lumien-msg ${tipo}`;
+  div.textContent = texto;
+  lumienLog.appendChild(div);
+  lumienLog.scrollTop = lumienLog.scrollHeight;
+  return div;
+}
+
+function lumienBoasVindas() {
+  if (lumienLog.childElementCount) return;
+  lumienBolha('Oi! Sou o Lumien. Posso achar contatos, resumir conversas, mover etapas, pausar a IA, cadastrar leads, mostrar resultados e abrir telas pra você. Mensagem pra paciente eu só envio depois que você confirmar.', 'lumien');
+}
+
+function lumienAbrir() {
+  lumienPainel.hidden = false;
+  lumienBtn.hidden = true;
+  lumienBoasVindas();
+  lumienAtualizarSugestoes();
+  if (window.matchMedia('(min-width: 900px)').matches) lumienTexto.focus();
+}
+function lumienFechar() {
+  lumienPainel.hidden = true;
+  lumienBtn.hidden = lumienAbaAtual() === 'painel';
+}
+lumienBtn.addEventListener('click', lumienAbrir);
+document.getElementById('lumienFechar').addEventListener('click', lumienFechar);
+document.getElementById('lumienNova').addEventListener('click', () => {
+  if (lumienOcupado) return;
+  lumienNovaSessao();
+  lumienLog.textContent = '';
+  lumienBoasVindas();
+  lumienAtualizarSugestoes();
+});
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && !lumienPainel.hidden && ctModal.hidden && ctImpModal.hidden) lumienFechar();
+});
+
+function lumienAjustarAltura() {
+  lumienTexto.style.height = 'auto';
+  lumienTexto.style.height = `${Math.min(lumienTexto.scrollHeight, 120)}px`;
+}
+lumienTexto.addEventListener('input', lumienAjustarAltura);
+lumienTexto.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter' && !ev.shiftKey) {
+    ev.preventDefault();
+    lumienForm.requestSubmit();
+  }
+});
+lumienForm.addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const texto = lumienTexto.value.trim();
+  if (!texto) return;
+  lumienTexto.value = '';
+  lumienAjustarAltura();
+  lumienMandar(texto);
+});
+
+function lumienPararPolling() {
+  clearInterval(lumienPollTimer);
+  lumienPollTimer = null;
+}
+
+async function lumienMandar(texto) {
+  if (lumienOcupado) return;
+  lumienOcupado = true;
+  lumienEnviar.disabled = true;
+  lumienSugestoes.textContent = '';
+  for (const b of lumienLog.querySelectorAll('.lumien-confirmar')) b.remove();
+  lumienBolha(texto, 'usuario');
+  const pensando = lumienBolha('Pensando...', 'lumien pensando');
+  lumienPollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/chat/status?sessionId=${encodeURIComponent(lumienSessao)}`, { headers: { 'x-app-password': appPassword } });
+      const data = res.ok ? await res.json() : null;
+      if (data?.detalhe) pensando.textContent = data.detalhe;
+    } catch { /* so indicador visual */ }
+  }, 900);
+
+  try {
+    // confirmacao ("sim"/"nao") vai sem prefixo - o servidor confere o comeco da mensagem
+    const ehResposta = /^\s*(sim|s|n[aã]o|n)\s*[.!]?\s*$/i.test(texto);
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ message: ehResposta ? texto : `${lumienContexto()}\n${texto}`, sessionId: lumienSessao }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    lumienPararPolling();
+    pensando.remove();
+    const bolha = lumienBolha(data.reply || 'Feito.', 'lumien');
+    if (data.arquivo) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'lumien-baixar';
+      btn.textContent = `⬇ Baixar ${data.arquivo.nomeArquivo}`;
+      btn.addEventListener('click', () => baixarArquivo(data.arquivo.id, data.arquivo.nomeArquivo, btn));
+      bolha.appendChild(btn);
+    }
+    if (data.aguardandoConfirmacao) lumienBotoesConfirmar();
+    if (data.acoesTela?.length) await lumienExecutarTelas(data.acoesTela);
+    lumienRecarregarTela();
+  } catch (err) {
+    lumienPararPolling();
+    pensando.remove();
+    lumienBolha(`Não consegui: ${err.message}`, 'lumien erro');
+  } finally {
+    lumienOcupado = false;
+    lumienEnviar.disabled = false;
+    if (!lumienLog.querySelector('.lumien-confirmar')) lumienAtualizarSugestoes();
+  }
+}
+
+function lumienBotoesConfirmar() {
+  const linha = document.createElement('div');
+  linha.className = 'lumien-confirmar';
+  const sim = document.createElement('button');
+  sim.type = 'button';
+  sim.className = 'sim';
+  sim.textContent = 'Sim, pode fazer';
+  sim.addEventListener('click', () => lumienMandar('sim'));
+  const nao = document.createElement('button');
+  nao.type = 'button';
+  nao.textContent = 'Não';
+  nao.addEventListener('click', () => lumienMandar('não'));
+  linha.append(sim, nao);
+  lumienLog.appendChild(linha);
+  lumienLog.scrollTop = lumienLog.scrollHeight;
+}
+
+// abre as telas que o Lumien pediu (app_abrir_tela)
+async function lumienExecutarTelas(acoes) {
+  for (const { tela, contatoId } of acoes) {
+    const btn = document.querySelector(`.nav-btn[data-tab="${tela}"]`);
+    if (!btn || btn.hidden) continue;
+    mudarAba(tela);
+    if (!contatoId) continue;
+    if (tela === 'conversas') {
+      await carregarConversas();
+      let c = cvContatos.find((x) => x.id === contatoId);
+      if (!c) {
+        // contato que ainda nao conversou nao aparece na lista - busca na base
+        await carregarContatos();
+        c = ctContatos.find((x) => x.id === contatoId);
+        if (!cvEtapas.length) cvEtapas = ctEtapas;
+      }
+      if (c) abrirConversa(c);
+    } else if (tela === 'contatos') {
+      await carregarContatos();
+      const c = ctContatos.find((x) => x.id === contatoId);
+      if (c) abrirModalContato(c);
+    }
+  }
+}
+
+// depois de uma acao, recarrega os dados da tela visivel (as que nao tem tempo real proprio)
+function lumienRecarregarTela() {
+  const aba = lumienAbaAtual();
+  if (aba === 'contatos' && ctModal.hidden) carregarContatos();
+  else if (aba === 'resultados') carregarResultados();
+  else if (aba === 'conversas') carregarConversas();
+  else if (aba === 'crm') carregarCrm();
+}
 
 // ---------- Alerta de retorno (conversa do CRM) ----------
 const crmConversaRetorno = document.getElementById('crmConversaRetorno');

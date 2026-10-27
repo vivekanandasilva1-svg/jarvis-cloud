@@ -3264,3 +3264,114 @@ select option:checked, select option:hover { background-color: var(--gold); colo
 .ct-barra select:focus, .ct-barra input:focus, .ct-campo input:focus, .ct-campo select:focus, .ct-campo textarea:focus,
 .rs-filtros select:focus, .rs-custom input:focus { outline: none; border-color: var(--gold); }
 .rs-custom input { color-scheme: dark; }
+
+/* ---------- Lumien (assistente flutuante) ---------- */
+.lumien-btn {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 55;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 1px solid var(--gold);
+  background: radial-gradient(circle at 50% 35%, #41444a, #26282c 70%);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45), 0 0 0 4px rgba(212, 175, 55, 0.12);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.lumien-btn:hover { transform: translateY(-2px) scale(1.04); box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5), 0 0 0 5px rgba(212, 175, 55, 0.2); }
+.lumien-btn:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 3px; }
+.lumien-olho { animation: lumienPiscar 5s infinite; transform-origin: center; transform-box: fill-box; }
+@keyframes lumienPiscar { 0%, 94%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+/* na aba Conversas sobe um pouco, pra nao cobrir o botao de enviar */
+body.lumien-em-conversas .lumien-btn { bottom: 92px; }
+
+.lumien-painel {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 56;
+  width: min(380px, calc(100vw - 32px));
+  height: min(560px, calc(100vh - 44px));
+  display: flex;
+  flex-direction: column;
+  background: var(--lateral);
+  border: 1px solid var(--borda);
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.lumien-topo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 14px;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borda);
+}
+.lumien-titulo { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; }
+.lumien-titulo strong { color: var(--gold-bright); font-size: 15px; }
+.lumien-titulo span { color: var(--text-dim); font-size: 12px; }
+.lumien-icone { background: none; border: none; color: var(--text-dim); font-size: 16px; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; }
+.lumien-icone:hover { background: var(--superficie-2); color: var(--white); }
+.lumien-log { flex: 1 1 auto; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 8px; }
+.lumien-msg {
+  max-width: 88%;
+  padding: 8px 11px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.lumien-msg.usuario { align-self: flex-end; background: rgba(212, 175, 55, 0.18); color: var(--text); border-bottom-right-radius: 4px; }
+.lumien-msg.lumien { align-self: flex-start; background: var(--superficie-2); color: var(--text); border-bottom-left-radius: 4px; }
+.lumien-msg.pensando { color: var(--text-dim); font-style: italic; animation: ledBlink 1.4s ease-in-out infinite; }
+.lumien-msg.erro { background: var(--vermelho-fundo); border: 1px solid var(--vermelho); }
+.lumien-baixar { display: block; margin-top: 8px; background: var(--superficie); border: 1px solid var(--borda); color: var(--gold-bright); border-radius: 8px; padding: 6px 10px; cursor: pointer; font: inherit; font-size: 12.5px; }
+.lumien-confirmar { display: flex; gap: 8px; align-self: flex-start; }
+.lumien-confirmar button { border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 13px; cursor: pointer; border: 1px solid var(--borda); background: var(--superficie); color: var(--text); }
+.lumien-confirmar button.sim { background: var(--verde); border-color: var(--verde); color: #fff; }
+.lumien-sugestoes { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 8px; }
+.lumien-sugestoes:empty { display: none; }
+.lumien-sugestoes button {
+  border: 1px solid rgba(212, 175, 55, 0.4);
+  background: rgba(212, 175, 55, 0.08);
+  color: var(--gold-bright);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.lumien-sugestoes button:hover { background: rgba(212, 175, 55, 0.18); }
+.lumien-form { display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px 12px; border-top: 1px solid var(--borda); background: var(--superficie); }
+.lumien-form textarea {
+  flex: 1 1 auto;
+  resize: none;
+  min-height: 38px;
+  max-height: 120px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--borda);
+  background: var(--campo);
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+.lumien-form textarea:focus { outline: none; border-color: var(--gold); }
+.lumien-form button { width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--gold); color: #1b1c1f; font-size: 15px; cursor: pointer; flex: 0 0 auto; }
+.lumien-form button:disabled { opacity: 0.5; cursor: default; }
+
+@media (max-width: 900px) {
+  .lumien-btn { right: 14px; bottom: 14px; width: 54px; height: 54px; }
+  body.lumien-em-conversas .lumien-btn { bottom: 84px; }
+  /* com uma conversa aberta no celular, a coruja sai da frente (a tela ja e so a conversa) */
+  body:has(.tab-conversas.cv-com-chat:not([hidden])) .lumien-btn { display: none; }
+  .lumien-painel { right: 0; bottom: 0; width: 100vw; height: 100dvh; max-height: none; border-radius: 0; border: none; }
+}

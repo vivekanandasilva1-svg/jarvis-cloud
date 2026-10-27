@@ -14,7 +14,10 @@ import { gerarRelatorioDiario } from './relatorioDiario.js';
 import * as trello from './trello.js';
 import * as googleSheets from './googleSheets.js';
 import * as whatsappInstances from './whatsappInstances.js';
-import { tabelasProntas as tenantsProntos } from './tenants.js';
+import { tabelasProntas as tenantsProntos, obterPorId as obterTenantPorId, listarInstanciasDoTenant } from './tenants.js';
+import * as crm from './crm.js';
+import * as followUp from './followUp.js';
+import * as tenantConfig from './tenantConfig.js';
 
 
 async function garantirTabelas() {
@@ -386,6 +389,120 @@ async function systemPromptBlocos(tenantId) {
 }
 
 const tools = [
+  // ---------- atendimento (CRM/Conversas/Contatos) - usadas principalmente pelo Lumien ----------
+  {
+    name: 'crm_buscar_contatos',
+    description: 'Procura contatos/leads do CRM da conta por nome, telefone, e-mail ou etiqueta, e/ou filtra por etapa do funil. Devolve id (use nas outras ferramentas crm_*), nome, numero, etapa, etiquetas, se a IA esta pausada e a ultima mensagem. Use sempre antes de agir num contato citado pelo nome.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        termo: { type: 'string', description: 'Parte do nome, telefone (so digitos), e-mail ou etiqueta' },
+        etapa: { type: 'string', enum: ['novo_lead', 'em_atendimento', 'em_negociacao', 'pre_agendado', 'agendado', 'compareceu', 'follow_up', 'perdido'] },
+        etiqueta: { type: 'string', description: 'Etiqueta exata (ex: implante)' },
+        semConversa: { type: 'boolean', description: 'true = so contatos importados/cadastrados que ainda nao conversaram; false = so os que ja conversaram' },
+        limite: { type: 'number', description: 'Maximo de contatos (padrao 20, max 100)' },
+      },
+    },
+  },
+  {
+    name: 'crm_ler_conversa',
+    description: 'Le as ultimas mensagens da conversa de WhatsApp de um contato (entrada = contato, saida = nos; autor da saida: ia, followup ou humano). Use pra resumir a conversa, entender o que o lead quer ou sugerir uma resposta.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        contatoId: { type: 'number' },
+        limite: { type: 'number', description: 'Quantas mensagens (padrao 30, max 80)' },
+      },
+      required: ['contatoId'],
+    },
+  },
+  {
+    name: 'crm_conversas_aguardando',
+    description: 'Lista as conversas em que a ultima mensagem foi do contato e ninguem respondeu ainda, da espera mais longa pra mais curta, com quantos minutos esta esperando.',
+    input_schema: {
+      type: 'object',
+      properties: { minutos: { type: 'number', description: 'So as que esperam ha pelo menos X minutos (padrao 0)' } },
+    },
+  },
+  {
+    name: 'crm_mover_etapa',
+    description: 'Move um contato pra outra etapa do funil do CRM. Entrar em follow_up comeca a cadencia automatica de retomada; sair dela para a cadencia.',
+    input_schema: {
+      type: 'object',
+      properties: { contatoId: { type: 'number' }, etapa: { type: 'string', enum: ['novo_lead', 'em_atendimento', 'em_negociacao', 'pre_agendado', 'agendado', 'compareceu', 'follow_up', 'perdido'] } },
+      required: ['contatoId', 'etapa'],
+    },
+  },
+  {
+    name: 'crm_pausar_ia',
+    description: 'Pausa (pausado=true) ou retoma (pausado=false) a IA de auto atendimento so na conversa desse contato - usado quando a equipe vai assumir o atendimento.',
+    input_schema: {
+      type: 'object',
+      properties: { contatoId: { type: 'number' }, pausado: { type: 'boolean' } },
+      required: ['contatoId', 'pausado'],
+    },
+  },
+  {
+    name: 'crm_cadastrar_contato',
+    description: 'Cadastra um contato novo na base (aba Contatos). Nao manda mensagem nenhuma pra ele.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        nome: { type: 'string' },
+        telefone: { type: 'string', description: 'Com DDD (ex: 82999990000)' },
+        email: { type: 'string' },
+        etiquetas: { type: 'array', items: { type: 'string' } },
+        observacoes: { type: 'string' },
+        instancia: { type: 'string', description: 'Numero de WhatsApp da conta que vai atender (so precisa se a conta tiver mais de um)' },
+      },
+      required: ['telefone'],
+    },
+  },
+  {
+    name: 'crm_editar_contato',
+    description: 'Altera nome, e-mail, etiquetas ou observacoes de um contato. Os campos nao enviados ficam como estao. etiquetas substitui a lista inteira (pra acrescentar uma, mande as atuais + a nova).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        contatoId: { type: 'number' },
+        nome: { type: 'string' },
+        email: { type: 'string' },
+        etiquetas: { type: 'array', items: { type: 'string' } },
+        observacoes: { type: 'string' },
+      },
+      required: ['contatoId'],
+    },
+  },
+  {
+    name: 'crm_resultados',
+    description: 'Indicadores do atendimento num periodo (mesmos da aba Resultados): novos contatos, conversas, mensagens recebidas/enviadas, tempo mediano da 1a resposta, % respondidos em ate 5 min, agendamentos, quem respondeu (IA/follow up/equipe), funil e comparacao com o periodo anterior.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        de: { type: 'string', description: 'AAAA-MM-DD' },
+        ate: { type: 'string', description: 'AAAA-MM-DD' },
+      },
+      required: ['de', 'ate'],
+    },
+  },
+  {
+    name: 'crm_enviar_mensagem',
+    description: 'Manda uma mensagem de texto no WhatsApp pra um contato, pelo numero que atende ele. Fica pendente de confirmacao do usuario antes de sair, porque vai pra uma pessoa de verdade. Mostre o texto exato que vai ser enviado.',
+    input_schema: {
+      type: 'object',
+      properties: { contatoId: { type: 'number' }, texto: { type: 'string' } },
+      required: ['contatoId', 'texto'],
+    },
+  },
+  {
+    name: 'app_abrir_tela',
+    description: 'Abre uma tela do app pro usuario (so funciona na conversa pelo Lumien, dentro do app). Com contatoId em "conversas" abre a conversa daquele contato; em "contatos" abre a ficha dele.',
+    input_schema: {
+      type: 'object',
+      properties: { tela: { type: 'string', enum: ['conversas', 'contatos', 'crm', 'resultados', 'agenda', 'whatsapp', 'auto', 'followUp', 'relatorios', 'geradorRelatorios', 'integracoes'] }, contatoId: { type: 'number' } },
+      required: ['tela'],
+    },
+  },
   {
     name: 'ads_listar_contas',
     description: 'Lista todas as contas de anuncio da Meta (Facebook/Instagram Ads) que o usuario gerencia, com nome, id, cliente/empresa e dados financeiros: amountSpentReais (total gasto acumulado), tipoConta ("prepago" ou "pos-pago (fatura)"), saldoDisponivel (so pra conta prepaga - quanto ainda tem pra gastar, em reais; 0 ou negativo = saldo esgotado), valorEmAberto (so pra conta pos-paga - quanto esta em aberto pra pagar na fatura), saldoTexto (o mesmo texto que aparece no gerenciador de anuncios). Use isso pra responder sobre saldo/quanto falta gastar, sem precisar de outra ferramenta.',
@@ -1228,7 +1345,7 @@ const tools = [
   },
 ];
 
-const CONFIRM_TOOLS = new Set(['ads_criar_campanha', 'ads_alterar_status_campanha', 'ads_alterar_orcamento_adset']);
+const CONFIRM_TOOLS = new Set(['ads_criar_campanha', 'ads_alterar_status_campanha', 'ads_alterar_orcamento_adset', 'crm_enviar_mensagem']);
 
 function describePendingAction(name, input) {
   switch (name) {
@@ -1238,6 +1355,8 @@ function describePendingAction(name, input) {
       return `mudar o status da campanha ${input.campaignId} para ${input.status}${input.status === 'ACTIVE' ? ' - isso passa a gastar dinheiro real' : ''}`;
     case 'ads_alterar_orcamento_adset':
       return `mudar o orcamento diario do conjunto ${input.adSetId} para R$${input.dailyBudgetReais}/dia`;
+    case 'crm_enviar_mensagem':
+      return `mandar no WhatsApp para ${input._nome || `+${input._numero}`}: "${input.texto}"`;
     default:
       return JSON.stringify(input);
   }
@@ -1251,6 +1370,13 @@ async function executeConfirmedAction(tenantId, name, input) {
       return metaAds.updateCampaignStatus(tenantId, input);
     case 'ads_alterar_orcamento_adset':
       return metaAds.updateAdSetBudget(tenantId, { adSetId: input.adSetId, dailyBudgetCents: Math.round(input.dailyBudgetReais * 100) });
+    case 'crm_enviar_mensagem': {
+      // confere de novo na hora de enviar (o contato pode ter sido apagado entre o pedido e o "sim")
+      const c = await crm.obterContatoPorId(tenantId, input.contatoId);
+      if (!c) throw new Error('Contato nao encontrado.');
+      await crm.enviarMensagem(tenantId, c.numero, c.instancia, input.texto);
+      return { ok: true, enviadoPara: c.nome || c.numero };
+    }
     default:
       throw new Error(`Acao desconhecida: ${name}`);
   }
@@ -1597,7 +1723,118 @@ const toolHandlers = {
   },
 };
 
+// telas que o Lumien pediu pra abrir durante o turno - o navegador recebe junto da resposta
+// (chat() devolve em acoesTela) e executa. So em RAM: vale so pro turno que esta rodando
+const acoesTelaDoTurno = new Map();
+
+// ferramentas crm_* seguem a mesma permissao da aba CRM (tabs_habilitadas do tenant)
+async function crmLiberadoPara(tenantId) {
+  const tenant = await obterTenantPorId(tenantId);
+  if (tenant?.super_admin) return true;
+  const habilitadas = await tenantConfig.obterTabsHabilitadas(tenantId);
+  return !habilitadas || habilitadas.includes('crm');
+}
+
+function resumirContato(c) {
+  return {
+    id: c.id, nome: c.nome || null, numero: c.numero, numeroAtendimento: c.instancia, etapa: c.etapa,
+    etiquetas: c.etiquetas || [], email: c.email || undefined, iaPausada: !!c.auto_pausado,
+    ultimaMensagem: c.ultima_mensagem || undefined, ultimaMensagemEm: c.ultima_mensagem_em || undefined, origem: c.origem,
+  };
+}
+
+async function runToolCrm(name, input, session, sessionId) {
+  const tenantId = session.tenantId;
+  if (!(await crmLiberadoPara(tenantId))) return { erro: 'O acesso dessa conta nao inclui o CRM.' };
+  const contato = async () => {
+    const c = await crm.obterContatoPorId(tenantId, input.contatoId);
+    if (!c) throw new Error(`Contato ${input.contatoId} nao encontrado - use crm_buscar_contatos pra achar o id certo.`);
+    return c;
+  };
+  switch (name) {
+    case 'crm_buscar_contatos': {
+      const lista = await crm.buscarContatos(tenantId, input || {});
+      return { total: Number(lista[0]?.total || 0), contatos: lista.map(resumirContato) };
+    }
+    case 'crm_ler_conversa': {
+      const c = await contato();
+      const msgs = await crm.ultimasMensagens(tenantId, c.numero, c.instancia, input.limite);
+      return {
+        contato: resumirContato(c),
+        mensagens: msgs.map((m) => ({ de: m.direcao === 'entrada' ? 'contato' : (m.autor || 'nos'), tipo: m.tipo, texto: (m.texto || '').slice(0, 1500), em: m.criado_em })),
+      };
+    }
+    case 'crm_conversas_aguardando': {
+      const lista = await crm.conversasAguardando(tenantId, { minutos: input?.minutos });
+      return { total: lista.length, conversas: lista.map((c) => ({ id: c.id, nome: c.nome || null, numero: c.numero, etapa: c.etapa, iaPausada: !!c.auto_pausado, ultimaMensagem: c.ultima_mensagem, esperandoMin: c.esperando_min })) };
+    }
+    case 'crm_mover_etapa': {
+      const c = await contato();
+      await crm.moverEtapa(tenantId, c.id, input.etapa);
+      if (input.etapa === 'follow_up') await followUp.iniciarAcompanhamento(tenantId, c.id);
+      else await followUp.encerrarAcompanhamento(tenantId, c.id);
+      return { ok: true, contato: c.nome || c.numero, etapa: input.etapa };
+    }
+    case 'crm_pausar_ia': {
+      const c = await contato();
+      await crm.alternarAutoAtendimento(tenantId, c.id, !!input.pausado);
+      return { ok: true, contato: c.nome || c.numero, iaPausada: !!input.pausado };
+    }
+    case 'crm_cadastrar_contato': {
+      const lista = await listarInstanciasDoTenant(tenantId);
+      const instancia = input.instancia && lista.includes(input.instancia) ? input.instancia : (lista.length === 1 ? lista[0] : null);
+      if (!lista.length) return { erro: 'Essa conta ainda nao tem numero de WhatsApp conectado.' };
+      if (!instancia) return { erro: `Essa conta tem mais de um numero (${lista.join(', ')}) - pergunte por qual deles esse contato vai ser atendido.` };
+      const id = await crm.salvarContatoBase(tenantId, { nome: input.nome, numero: input.telefone, instancia, email: input.email, etiquetas: input.etiquetas, observacoes: input.observacoes });
+      return { ok: true, id, mensagem: 'Contato cadastrado na aba Contatos.' };
+    }
+    case 'crm_editar_contato': {
+      const c = await contato();
+      await crm.salvarContatoBase(tenantId, {
+        id: c.id,
+        nome: input.nome ?? c.nome,
+        email: input.email ?? c.email,
+        etiquetas: input.etiquetas ?? c.etiquetas,
+        observacoes: input.observacoes ?? c.observacoes,
+      });
+      return { ok: true, contato: input.nome ?? c.nome ?? c.numero };
+    }
+    case 'crm_resultados': {
+      const r = await crm.resultadosAtendimento(tenantId, { de: input.de, ate: input.ate });
+      const pico = r.porHora.reduce((m, h) => (h.recebidas > m.recebidas ? h : m), { hora: null, recebidas: 0 });
+      return {
+        periodo: { de: input.de, ate: input.ate }, atual: r.atual, periodoAnterior: r.anterior,
+        horaDePico: pico.hora, funil: r.funil, registroDesde: r.registroDesde,
+        observacao: 'mediana_seg = tempo mediano da 1a resposta em segundos. Agendamentos e autor das mensagens so sao registrados a partir de registroDesde.',
+      };
+    }
+    case 'crm_enviar_mensagem': {
+      const c = await contato();
+      if (!String(input.texto || '').trim()) return { erro: 'Texto vazio.' };
+      // guarda nome/numero junto da pendencia pra pergunta de confirmacao ficar clara
+      session.pendingAction = { name, input: { contatoId: c.id, texto: String(input.texto).trim(), _nome: c.nome, _numero: c.numero } };
+      return { status: 'aguardando_confirmacao', mensagem: `Preciso da sua confirmacao para ${describePendingAction(name, session.pendingAction.input)}. Responda "sim" ou "nao".` };
+    }
+    case 'app_abrir_tela': {
+      if (!sessionId?.includes(':lumien:')) return { erro: 'Abrir telas so funciona pela conversa com o Lumien, dentro do app.' };
+      const lista = acoesTelaDoTurno.get(sessionId) || [];
+      lista.push({ tela: input.tela, contatoId: input.contatoId || null });
+      acoesTelaDoTurno.set(sessionId, lista);
+      return { ok: true, mensagem: 'A tela vai abrir assim que voce responder.' };
+    }
+    default:
+      return { erro: `Ferramenta desconhecida: ${name}` };
+  }
+}
+
 async function runTool(name, input, session, sessionId) {
+  if (name.startsWith('crm_') || name === 'app_abrir_tela') {
+    try {
+      return await runToolCrm(name, input || {}, session, sessionId);
+    } catch (err) {
+      return { erro: err.message };
+    }
+  }
   if (name === 'esquecer_conversa') {
     await limparSessao(sessionId);
     session.history = [];
@@ -1806,12 +2043,25 @@ function extractText(response) {
   return response.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
 }
 
+const INSTRUCAO_LUMIEN = `NESTA CONVERSA voce aparece como LUMIEN, a corujinha assistente que flutua no canto de todas as telas do app. Quem fala com voce e a equipe da conta (dono ou atendente), nunca o paciente/lead.
+- Respostas CURTAS e diretas (o painel e pequeno): no maximo 3 a 5 linhas, listas curtas, sem markdown pesado (nada de tabelas ou titulos).
+- Cada mensagem chega com um prefixo [Tela atual: ...] dizendo onde o usuario esta e qual contato esta aberto - use isso pra entender "essa conversa", "esse contato", "aqui".
+- Voce EXECUTA acoes no app: crm_buscar_contatos, crm_ler_conversa, crm_conversas_aguardando, crm_mover_etapa, crm_pausar_ia, crm_cadastrar_contato, crm_editar_contato, crm_resultados, crm_enviar_mensagem (sempre pede confirmacao) e app_abrir_tela (abre a tela/conversa pro usuario). Nao diga que fez algo sem ter chamado a ferramenta e recebido ok.
+- Nome ambiguo (mais de um contato bate): liste as opcoes e pergunte qual, antes de agir.
+- Pra sugerir resposta a um lead, leia a conversa antes e entregue o texto pronto; so envie se o usuario pedir, e o envio passa pela confirmacao.
+- Depois de agir, confirme em uma frase o que mudou.`;
+
 async function callClaude(tenantId, history, sessionId) {
   // sessao do WhatsApp (ver processarMensagemEvolution em server.js) - ver comentario em
   // TOOLS_SEM_CONTROLE_PC pra entender por que ela nao pode ver as ferramentas de PC. Usa
   // includes (nao startsWith) porque o sessionId agora vem prefixado com o tenant
   // ("t3:whatsapp-evo:5582...")
   const ehWhatsapp = sessionId?.includes('whatsapp-evo:') || sessionId?.includes(':whatsapp:');
+  // Lumien (coruja flutuante do app): mesma Lumia, mas sem controle do PC (o painel flutuante
+  // nao roda o agente local) e com uma instrucao extra de tom/escopo
+  const ehLumien = sessionId?.includes(':lumien:');
+  const system = await systemPromptBlocos(tenantId);
+  if (ehLumien) system.push({ type: 'text', text: INSTRUCAO_LUMIEN });
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-5',
     // 1500 era curto demais pra analise de anexo pesado (PDF/foto com bastante conteudo) -
@@ -1836,8 +2086,8 @@ async function callClaude(tenantId, history, sessionId) {
     max_tokens: 16000,
     thinking: { type: 'adaptive' },
     output_config: { effort: 'low' },
-    system: await systemPromptBlocos(tenantId),
-    tools: ehWhatsapp ? TOOLS_SEM_CONTROLE_PC : tools,
+    system,
+    tools: ehWhatsapp || ehLumien ? TOOLS_SEM_CONTROLE_PC : tools,
     messages: history,
     _uso: { tenantId, modulo: 'lumia' },
   });
@@ -2475,11 +2725,18 @@ async function processarChat(session, sessionId, userMessage, attachments) {
 // processarChat tomou, a sessao sempre fica persistida no fim
 export async function chat(tenantId, sessionId, userMessage, attachments = []) {
   const session = await getSession(tenantId, sessionId);
+  acoesTelaDoTurno.delete(sessionId);
   try {
     const resultado = await processarChat(session, sessionId, userMessage, attachments);
     await salvarSessao(sessionId, session);
-    return resultado;
+    const acoesTela = acoesTelaDoTurno.get(sessionId);
+    return {
+      ...resultado,
+      acoesTela: acoesTela?.length ? acoesTela : undefined,
+      aguardandoConfirmacao: !!(session.pendingAction || session.pendingLocalAction) || undefined,
+    };
   } finally {
+    acoesTelaDoTurno.delete(sessionId);
     limparStatus(sessionId);
   }
 }

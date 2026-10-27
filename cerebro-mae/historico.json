@@ -620,5 +620,13 @@
     "tipo": "melhoria",
     "titulo": "Aba Resultados: indicadores do atendimento por período",
     "conteudo": "Nova aba Resultados (grupo Clientes, mesma permissão do CRM; rota GET /api/crm/resultados). Período Hoje/7/30/90 dias ou personalizado (até 1 ano, horário de Maceió) e filtro por número. Mostra novos contatos, conversas com movimento, mensagens recebidas, tempo mediano da 1ª resposta (com % em até 5 min), agendamentos e % respondido pela IA, cada um comparado ao período anterior de mesmo tamanho; gráfico de recebidas por dia (com tabela), horários de pico, quem respondeu (IA, Follow Up, equipe) e funil dos contatos que chegaram no período. Resumo escrito montado com os próprios números, sem IA (não gasta crédito nem inventa). Para isso passou a gravar o autor de cada mensagem enviada (coluna crm_mensagens.autor: ia/followup/humano) e o histórico de etapa (tabela crm_etapa_eventos, em moverEtapa, marcarAgendado e marcarPreAgendado); os dois só contam a partir de 27/10/2026 e a tela avisa quando o período começa antes disso. Pendente: evento de etapa nas mudanças automáticas do registrarMensagem e do alerta de retorno."
+  },
+  {
+    "chave": "plat:lumien",
+    "modulo": "plataforma",
+    "data": "2026-10-27",
+    "tipo": "melhoria",
+    "titulo": "Lumien: coruja assistente flutuante que executa ações no app",
+    "conteudo": "Botão de coruja no canto de todas as telas (menos no Início, que já é a conversa com a Lumia), com painel de chat. Usa o mesmo /api/chat da Lumia numa sessão própria (sessionId com ':lumien:'), sem as ferramentas de controle do PC e com uma instrução extra de respostas curtas. Cada mensagem leva o contexto da tela (aba e conversa/ficha aberta), então 'resuma esta conversa' funciona sem repetir o nome. Ferramentas novas no cloudAgent (também disponíveis pra Lumia no Início e no WhatsApp): crm_buscar_contatos, crm_ler_conversa, crm_conversas_aguardando, crm_mover_etapa (inicia/encerra o Follow Up como a tela), crm_pausar_ia, crm_cadastrar_contato, crm_editar_contato, crm_resultados e crm_enviar_mensagem, que fica pendente de confirmação (mensagem pra pessoa de verdade) e aparece com botões Sim/Não; app_abrir_tela abre telas e conversas no navegador (o chat devolve acoesTela). Todas respeitam a permissão da aba CRM do tenant. Sugestões rápidas mudam conforme a tela. Pendente: voz no Lumien e ações de agenda/Clinicorp pelo contexto da conversa aberta."
   }
 ]

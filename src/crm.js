@@ -814,3 +814,78 @@ export async function resultadosAtendimento(tenantId, { de, ate, instancia = nul
     registroDesde: { autor: desde.autor_desde, etapas: desde.etapas_desde },
   };
 }
+
+// ---------- consultas usadas pelo assistente Lumien (ferramentas crm_* do cloudAgent) ----------
+
+export async function obterContatoPorId(tenantId, id) {
+  if (!pool) return null;
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT id, numero, instancia, nome, etapa, email, etiquetas, observacoes, origem, auto_pausado, oculto,
+            ultima_mensagem, ultima_mensagem_em, criado_em
+     FROM crm_contatos WHERE id = $1 AND tenant_id = $2`,
+    [Number(id), tenantId],
+  );
+  return rows[0] || null;
+}
+
+// busca livre por nome/telefone/e-mail/etiqueta (sem acento nao importa pro ILIKE simples, mas
+// cobre o uso normal de "acha a Maria" / "contatos com etiqueta implante")
+export async function buscarContatos(tenantId, { termo, etapa, etiqueta, semConversa, limite = 20 } = {}) {
+  if (!pool) return [];
+  await tabelasProntas;
+  const cond = ['tenant_id = $1', 'oculto = false'];
+  const params = [tenantId];
+  if (termo) {
+    params.push(`%${String(termo).trim()}%`);
+    const iT = params.length;
+    let porNumero = '';
+    const digitos = String(termo).replace(/\D/g, '');
+    if (digitos.length >= 4) {
+      params.push(`%${digitos}%`);
+      porNumero = ` OR numero LIKE $${params.length}`;
+    }
+    cond.push(`(nome ILIKE $${iT} OR email ILIKE $${iT} OR array_to_string(etiquetas, ',') ILIKE $${iT}${porNumero})`);
+  }
+  if (etapa) { params.push(etapa); cond.push(`etapa = $${params.length}`); }
+  if (etiqueta) { params.push(String(etiqueta).toLowerCase()); cond.push(`EXISTS (SELECT 1 FROM unnest(etiquetas) e WHERE lower(e) = $${params.length})`); }
+  if (semConversa === true) cond.push('ultima_mensagem_em IS NULL');
+  if (semConversa === false) cond.push('ultima_mensagem_em IS NOT NULL');
+  params.push(Math.min(Math.max(Number(limite) || 20, 1), 100));
+  const { rows } = await pool.query(
+    `SELECT id, nome, numero, instancia, etapa, etiquetas, email, origem, auto_pausado, ultima_mensagem, ultima_mensagem_em,
+            count(*) OVER () AS total
+     FROM crm_contatos WHERE ${cond.join(' AND ')}
+     ORDER BY ultima_mensagem_em DESC NULLS LAST, criado_em DESC LIMIT $${params.length}`,
+    params,
+  );
+  return rows;
+}
+
+// conversas cuja ULTIMA mensagem foi do contato (ninguem respondeu ainda), da espera mais longa
+// pra mais curta
+export async function conversasAguardando(tenantId, { minutos = 0, limite = 30 } = {}) {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT id, nome, numero, instancia, etapa, auto_pausado, ultima_mensagem, ultima_entrada_em,
+            round(extract(epoch FROM now() - ultima_entrada_em) / 60)::int AS esperando_min
+     FROM crm_contatos
+     WHERE tenant_id = $1 AND oculto = false AND ultima_entrada_em IS NOT NULL AND ultima_entrada_em >= ultima_mensagem_em
+       AND ultima_entrada_em <= now() - make_interval(mins => $2::int)
+     ORDER BY ultima_entrada_em ASC LIMIT $3`,
+    [tenantId, Math.max(0, Number(minutos) || 0), Math.min(Number(limite) || 30, 100)],
+  );
+  return rows;
+}
+
+export async function ultimasMensagens(tenantId, numero, instancia, limite = 30) {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT direcao, autor, tipo, texto, criado_em FROM crm_mensagens
+     WHERE tenant_id = $1 AND numero = $2 AND instancia = $3 ORDER BY criado_em DESC LIMIT $4`,
+    [tenantId, numero, instancia, Math.min(Math.max(Number(limite) || 30, 1), 80)],
+  );
+  return rows.reverse();
+}

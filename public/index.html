@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261027d" />
+  <link rel="stylesheet" href="style.css?v=20261027e" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -205,6 +205,39 @@
           </div>
         </div>
       </div>
+
+    <!-- Lumien: assistente flutuante (coruja) presente em todas as telas, menos no Inicio -->
+    <button type="button" class="lumien-btn" id="lumienBtn" title="Falar com o Lumien" aria-label="Abrir o assistente Lumien" hidden>
+      <svg viewBox="0 0 64 64" width="46" height="46" aria-hidden="true">
+        <path d="M14 14 L22 20 Q32 15 42 20 L50 14 L49 28 Q54 36 50 46 Q44 57 32 57 Q20 57 14 46 Q10 36 15 28 Z" fill="#2a2c31" stroke="#d4af37" stroke-width="2.5" stroke-linejoin="round"/>
+        <circle cx="24" cy="32" r="7.5" fill="#f5f5f2"/><circle cx="40" cy="32" r="7.5" fill="#f5f5f2"/>
+        <circle cx="24.8" cy="32.6" r="3.6" fill="#1b1c1f" class="lumien-olho"/><circle cx="39.2" cy="32.6" r="3.6" fill="#1b1c1f" class="lumien-olho"/>
+        <path d="M29 40 L32 45 L35 40 Z" fill="#d4af37"/>
+        <path d="M22 49 Q32 53 42 49" fill="none" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round" opacity="0.6"/>
+      </svg>
+    </button>
+    <section class="lumien-painel" id="lumienPainel" hidden aria-label="Assistente Lumien">
+      <div class="lumien-topo">
+        <svg viewBox="0 0 64 64" width="30" height="30" aria-hidden="true">
+          <path d="M14 14 L22 20 Q32 15 42 20 L50 14 L49 28 Q54 36 50 46 Q44 57 32 57 Q20 57 14 46 Q10 36 15 28 Z" fill="#2a2c31" stroke="#d4af37" stroke-width="2.5" stroke-linejoin="round"/>
+          <circle cx="24" cy="32" r="7.5" fill="#f5f5f2"/><circle cx="40" cy="32" r="7.5" fill="#f5f5f2"/>
+          <circle cx="24.8" cy="32.6" r="3.6" fill="#1b1c1f"/><circle cx="39.2" cy="32.6" r="3.6" fill="#1b1c1f"/>
+          <path d="M29 40 L32 45 L35 40 Z" fill="#d4af37"/>
+        </svg>
+        <div class="lumien-titulo">
+          <strong>Lumien</strong>
+          <span id="lumienSub">Seu assistente aqui no app</span>
+        </div>
+        <button type="button" class="lumien-icone" id="lumienNova" title="Começar conversa nova">↺</button>
+        <button type="button" class="lumien-icone" id="lumienFechar" title="Fechar">✕</button>
+      </div>
+      <div class="lumien-log" id="lumienLog" aria-live="polite"></div>
+      <div class="lumien-sugestoes" id="lumienSugestoes"></div>
+      <form class="lumien-form" id="lumienForm" autocomplete="off">
+        <textarea id="lumienTexto" rows="1" placeholder="Peça algo: &quot;quem está esperando resposta?&quot;"></textarea>
+        <button type="submit" id="lumienEnviar" aria-label="Enviar">➤</button>
+      </form>
+    </section>
 
     <header class="page-header" id="pageHeader">
       <div class="page-header-etiqueta" id="pageHeaderEtiqueta">Início</div>
@@ -1211,6 +1244,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261027d"></script>
+  <script src="app.js?v=20261027e"></script>
 </body>
 </html>
