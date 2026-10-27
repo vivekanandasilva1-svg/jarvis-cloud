@@ -381,7 +381,7 @@ async function processarContato(tenantId, contato, etapas, config) {
     const historico = contato.historico || [];
     const mensagem = await gerarMensagemEtapa({ tenantId, config, etapa: proxima, contato, historico });
     await evolutionApi.enviarMensagemTextoPor(contato.instancia, contato.numero, mensagem);
-    await crm.registrarMensagem(tenantId, { numero: contato.numero, instancia: contato.instancia, direcao: 'saida', tipo: 'text', texto: mensagem });
+    await crm.registrarMensagem(tenantId, { numero: contato.numero, instancia: contato.instancia, direcao: 'saida', tipo: 'text', texto: mensagem, autor: 'followup' });
 
     const anexos = await obterArquivosComConteudo(tenantId, proxima.ordem);
     for (const anexo of anexos) {

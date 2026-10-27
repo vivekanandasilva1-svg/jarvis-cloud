@@ -1072,7 +1072,7 @@ function lembrarEnviada(resposta) {
 // depender do WhatsApp/Evolution ainda ter o arquivo disponivel na hora que o dono for abrir.
 // "melhor esforco": se o download falhar, ainda registra a mensagem (so sem midia, cai no
 // icone de sempre) em vez de perder a mensagem inteira do historico do CRM.
-async function registrarMensagemComMidia(tenantId, { numero, instancia, direcao, tipo, texto, nome, mensagemBruta, quando, waId, evitarEco }) {
+async function registrarMensagemComMidia(tenantId, { numero, instancia, direcao, tipo, texto, nome, mensagemBruta, quando, waId, evitarEco, autor }) {
   let midiaBase64 = null;
   let midiaMimetype = null;
   if (tipo === 'image' || tipo === 'audio') {
@@ -1084,7 +1084,7 @@ async function registrarMensagemComMidia(tenantId, { numero, instancia, direcao,
       console.error('Erro baixando midia pro CRM:', err.message);
     }
   }
-  await crm.registrarMensagem(tenantId, { numero, instancia, direcao, tipo, texto, nome, midiaBase64, midiaMimetype, quando, waId, evitarEco });
+  await crm.registrarMensagem(tenantId, { numero, instancia, direcao, tipo, texto, nome, midiaBase64, midiaMimetype, quando, waId, evitarEco, autor });
 }
 
 // serializa o processamento de mensagens do MESMO contato (chave "tenantId:numero") - sem isso,
@@ -1153,7 +1153,7 @@ async function atenderContato(tenantId, numero, instanciaDoWebhook, configAuto, 
     if (resultado.respondeComAudio) {
       try {
         await autoAtendimento.enviarRespostaEmAudio(instanciaDoWebhook, numero, resultado.texto);
-        crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'audio', texto: resultado.texto })
+        crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'audio', texto: resultado.texto, autor: 'ia' })
           .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
         return;
       } catch (err) {
@@ -1161,7 +1161,7 @@ async function atenderContato(tenantId, numero, instanciaDoWebhook, configAuto, 
       }
     }
     await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, resultado.texto);
-    crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'text', texto: resultado.texto })
+    crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'text', texto: resultado.texto, autor: 'ia' })
       .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
   } catch (err) {
     console.error('Erro no auto-atendimento via Evolution/WhatsApp:', err);
@@ -1221,7 +1221,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
     // passar pela Lumia nem pelo painel - registra no CRM como 'saida' pra a conversa la
     // ficar identica a conversa real (senao essas respostas manuais nunca apareciam no CRM).
     if (!ehNumeroAdmin) {
-      registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo, texto, mensagemBruta: data, quando, waId: id, evitarEco: true })
+      registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo, texto, mensagemBruta: data, quando, waId: id, evitarEco: true, autor: 'humano' })
         .catch((err) => console.error('Erro registrando mensagem manual (fromMe) no CRM:', err.message));
       return;
     }
@@ -1279,7 +1279,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
         ]);
         if (!resultado) return;
         await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, resultado.texto);
-        crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'text', texto: resultado.texto })
+        crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'text', texto: resultado.texto, autor: 'ia' })
           .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
       } catch (err) {
         console.error('Erro no follow up via Evolution/WhatsApp:', err);
@@ -1770,6 +1770,22 @@ app.get('/api/crm/contatos', async (req, res) => {
     res.json({ etapas: crm.ETAPAS, contatos: await crm.listarContatos(req.tenantId) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
+  }
+});
+
+// ---------- Resultados (indicadores do atendimento por periodo) ----------
+
+app.get('/api/crm/resultados', async (req, res) => {
+  const { de, ate, instancia } = req.query;
+  const dataValida = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
+  if (!dataValida(de) || !dataValida(ate)) return res.status(400).json({ erro: 'de e ate (AAAA-MM-DD) sao obrigatorios' });
+  try {
+    const instancias = await tenants.listarInstanciasDoTenant(req.tenantId);
+    if (instancia && !instancias.includes(instancia)) return res.status(400).json({ erro: 'Numero de WhatsApp invalido pra essa conta.' });
+    const dados = await crm.resultadosAtendimento(req.tenantId, { de, ate, instancia: instancia || null });
+    res.json({ ...dados, instancias, etapas: crm.ETAPAS });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
   }
 });
 

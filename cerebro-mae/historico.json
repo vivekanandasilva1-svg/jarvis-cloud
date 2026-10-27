@@ -612,5 +612,13 @@
     "tipo": "melhoria",
     "titulo": "Aba Contatos: base de leads com cadastro, importação e exportação de planilha",
     "conteudo": "Nova aba Contatos (grupo Clientes, mesma permissão do CRM) sobre a mesma tabela crm_contatos, com colunas novas email, etiquetas, observacoes e origem (whatsapp/importado/manual). Lista com busca, filtros por etapa, etiqueta e origem; no celular vira cartões. Cadastro e edição em modal com sinal de não salvo/salvo; 'Abrir conversa' leva pra aba Conversas. Importa .xlsx (SheetJS sob demanda) ou CSV (detecta ; , tab e Windows-1252), reconhece as colunas sozinho, mostra prévia e contagem (sem telefone, repetidos), etiqueta pra todos, escolhe o número de atendimento e o que fazer com duplicados; envia em lotes de 500, cada lote numa transação. Duplicado = mesmo telefone com ou sem o 9. Exporta Excel e CSV (; com BOM) do que está filtrado, no mesmo formato que a importação lê. Importados sem conversa ficam fora do funil e da aba Conversas até a primeira mensagem; quando a pessoa escreve ou recebe a primeira mensagem, o card assume o formato real do número no WhatsApp (com ou sem 9) em vez de duplicar. Etapa Follow Up não entra pela importação (dispararia a cadência automática). Sem disparo em massa, por decisão do dono."
+  },
+  {
+    "chave": "crm:aba-resultados",
+    "modulo": "crm",
+    "data": "2026-10-27",
+    "tipo": "melhoria",
+    "titulo": "Aba Resultados: indicadores do atendimento por período",
+    "conteudo": "Nova aba Resultados (grupo Clientes, mesma permissão do CRM; rota GET /api/crm/resultados). Período Hoje/7/30/90 dias ou personalizado (até 1 ano, horário de Maceió) e filtro por número. Mostra novos contatos, conversas com movimento, mensagens recebidas, tempo mediano da 1ª resposta (com % em até 5 min), agendamentos e % respondido pela IA, cada um comparado ao período anterior de mesmo tamanho; gráfico de recebidas por dia (com tabela), horários de pico, quem respondeu (IA, Follow Up, equipe) e funil dos contatos que chegaram no período. Resumo escrito montado com os próprios números, sem IA (não gasta crédito nem inventa). Para isso passou a gravar o autor de cada mensagem enviada (coluna crm_mensagens.autor: ia/followup/humano) e o histórico de etapa (tabela crm_etapa_eventos, em moverEtapa, marcarAgendado e marcarPreAgendado); os dois só contam a partir de 27/10/2026 e a tela avisa quando o período começa antes disso. Pendente: evento de etapa nas mudanças automáticas do registrarMensagem e do alerta de retorno."
   }
 ]

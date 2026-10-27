@@ -113,6 +113,24 @@ async function garantirTabelas() {
   // Evolution reenvia o webhook (ou o eco de algo que a gente mesmo mandou chega depois de um reinicio)
   await pool.query(`ALTER TABLE crm_mensagens ADD COLUMN IF NOT EXISTS wa_id TEXT;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS crm_mensagens_waid_idx ON crm_mensagens (tenant_id, instancia, wa_id) WHERE wa_id IS NOT NULL;`);
+  // quem mandou cada mensagem de saida ('ia' = auto-atendimento, 'followup' = cadencia automatica,
+  // 'humano' = equipe pelo painel ou pelo proprio WhatsApp) - base da aba Resultados. Mensagens
+  // antigas ficam sem autor (nao da pra saber depois)
+  await pool.query(`ALTER TABLE crm_mensagens ADD COLUMN IF NOT EXISTS autor TEXT;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS crm_mensagens_tenant_criado_idx ON crm_mensagens (tenant_id, criado_em);`);
+  // historico de mudanca de etapa (so daqui pra frente) - e o que permite contar "agendamentos no
+  // periodo", ja que crm_contatos so guarda a etapa atual
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS crm_etapa_eventos (
+      id SERIAL PRIMARY KEY,
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      contato_id INT NOT NULL,
+      instancia TEXT,
+      etapa TEXT NOT NULL,
+      em TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS crm_etapa_eventos_tenant_idx ON crm_etapa_eventos (tenant_id, em);`);
 
   await pool.query(`ALTER TABLE crm_contatos DROP CONSTRAINT IF EXISTS crm_contatos_numero_instancia_key;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS crm_contatos_tenant_numero_instancia_idx ON crm_contatos (tenant_id, numero, instancia);`);
@@ -130,6 +148,14 @@ const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas do CRM:', err.message);
 });
 
+// guarda que o contato entrou numa etapa agora (best-effort: falha aqui nunca derruba a acao principal)
+async function registrarEventoEtapa(tenantId, contatoId, instancia, etapa) {
+  await pool.query(
+    `INSERT INTO crm_etapa_eventos (tenant_id, contato_id, instancia, etapa) VALUES ($1, $2, $3, $4)`,
+    [tenantId, contatoId, instancia || null, etapa],
+  ).catch((err) => console.error('Erro registrando historico de etapa:', err.message));
+}
+
 // registra uma mensagem (entrada = contato mandou, saida = a gente/Lumia mandou) e garante que
 // o contato tem um card. Etapa inicial: "novo_lead" SO quando o proprio contato foi quem escreveu
 // primeiro; se a clinica/IA e quem puxou a conversa (saida), o card ja nasce em "em_atendimento".
@@ -143,7 +169,7 @@ const tabelasProntas = garantirTabelas().catch((err) => {
 // - waId: id da mensagem no WhatsApp - mensagem repetida (webhook reenviado) e ignorada
 // - evitarEco: usado no registro de mensagem "fromMe" - se a gente acabou de registrar o MESMO
 //   texto como saida (ex: resposta da IA), o eco que o WhatsApp devolve nao duplica
-export async function registrarMensagem(tenantId, { numero, instancia, direcao, tipo = 'text', texto = '', nome, midiaBase64, midiaMimetype, quando, waId, evitarEco = false }) {
+export async function registrarMensagem(tenantId, { numero, instancia, direcao, tipo = 'text', texto = '', nome, midiaBase64, midiaMimetype, quando, waId, evitarEco = false, autor = null }) {
   if (!pool) return;
   await tabelasProntas;
 
@@ -197,11 +223,11 @@ export async function registrarMensagem(tenantId, { numero, instancia, direcao, 
   );
 
   const { rows: msgRows } = await pool.query(
-    `INSERT INTO crm_mensagens (tenant_id, numero, instancia, direcao, tipo, texto, midia_base64, midia_mimetype, criado_em, wa_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO crm_mensagens (tenant_id, numero, instancia, direcao, tipo, texto, midia_base64, midia_mimetype, criado_em, wa_id, autor)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      ON CONFLICT (tenant_id, instancia, wa_id) WHERE wa_id IS NOT NULL DO NOTHING
      RETURNING id, direcao, tipo, texto, criado_em, (midia_base64 IS NOT NULL) AS tem_midia`,
-    [tenantId, numero, instancia, direcao, tipo, texto || '', midiaBase64 || null, midiaMimetype || null, ts, waId || null],
+    [tenantId, numero, instancia, direcao, tipo, texto || '', midiaBase64 || null, midiaMimetype || null, ts, waId || null, direcao === 'saida' ? autor : null],
   );
   if (!msgRows[0]) return rows[0]?.id; // outro webhook identico ganhou a corrida - nada a emitir
 
@@ -219,6 +245,7 @@ export async function marcarAgendado(tenantId, numero, instancia) {
     `UPDATE crm_contatos SET etapa = 'agendado', pre_agendamento = NULL WHERE tenant_id = $1 AND numero = $2 AND instancia = $3 RETURNING id`,
     [tenantId, numero, instancia],
   );
+  if (rows[0]) await registrarEventoEtapa(tenantId, rows[0].id, instancia, 'agendado');
   if (rows[0]) eventosCrm.emit('contato-atualizado', { tenantId, contatoId: rows[0].id });
 }
 
@@ -235,6 +262,7 @@ export async function marcarPreAgendado(tenantId, numero, instancia, detalhes = 
     `UPDATE crm_contatos SET etapa = 'pre_agendado', pre_agendamento = $4 WHERE tenant_id = $1 AND numero = $2 AND instancia = $3 RETURNING id`,
     [tenantId, numero, instancia, detalhes ? JSON.stringify({ ...detalhes, em: new Date().toISOString() }) : null],
   );
+  if (rows[0]) await registrarEventoEtapa(tenantId, rows[0].id, instancia, 'pre_agendado');
   if (rows[0]) eventosCrm.emit('contato-atualizado', { tenantId, contatoId: rows[0].id });
 }
 
@@ -611,7 +639,8 @@ export async function moverEtapa(tenantId, id, etapa) {
   if (!IDS_ETAPAS.has(etapa)) throw new Error(`Etapa invalida: "${etapa}"`);
   if (!pool) return;
   await tabelasProntas;
-  await pool.query(`UPDATE crm_contatos SET etapa = $1 WHERE id = $2 AND tenant_id = $3`, [etapa, id, tenantId]);
+  const { rows } = await pool.query(`UPDATE crm_contatos SET etapa = $1 WHERE id = $2 AND tenant_id = $3 AND etapa <> $1 RETURNING instancia`, [etapa, id, tenantId]);
+  if (rows[0]) await registrarEventoEtapa(tenantId, id, rows[0].instancia, etapa);
   eventosCrm.emit('contato-atualizado', { tenantId, contatoId: id });
 }
 
@@ -638,7 +667,7 @@ async function alinharNumeroPeloEnvio(tenantId, numero, instancia, resposta) {
 export async function enviarMensagem(tenantId, numero, instancia, texto) {
   const resposta = await evolutionApi.enviarMensagemTextoPor(instancia, numero, texto);
   const numeroReal = await alinharNumeroPeloEnvio(tenantId, numero, instancia, resposta);
-  await registrarMensagem(tenantId, { numero: numeroReal, instancia, direcao: 'saida', tipo: 'text', texto, waId: resposta?.key?.id || null });
+  await registrarMensagem(tenantId, { numero: numeroReal, instancia, direcao: 'saida', tipo: 'text', texto, waId: resposta?.key?.id || null, autor: 'humano' });
   return resposta;
 }
 
@@ -656,11 +685,132 @@ export async function enviarMidiaContato(tenantId, numero, instancia, { tipo, mi
   const guardarMidia = tipo === 'image' || tipo === 'audio';
   const numeroReal = await alinharNumeroPeloEnvio(tenantId, numero, instancia, resposta);
   await registrarMensagem(tenantId, {
-    numero: numeroReal, instancia, direcao: 'saida', tipo,
+    numero: numeroReal, instancia, direcao: 'saida', tipo, autor: 'humano',
     texto: legenda || (tipo === 'document' ? fileName || 'documento' : ''),
     midiaBase64: guardarMidia ? base64 : null,
     midiaMimetype: guardarMidia ? mimetype : null,
     waId: resposta?.key?.id || null,
   });
   return resposta;
+}
+
+// ---------- aba Resultados (indicadores do atendimento num periodo) ----------
+
+// numeros de um intervalo [inicio, fim) - usado pro periodo escolhido e pro periodo anterior de
+// mesmo tamanho (comparacao). instancia null = todos os numeros do tenant
+async function indicadoresDoIntervalo(tenantId, inicio, fim, instancia) {
+  const p = [tenantId, inicio, fim, instancia];
+  const filtroInst = '($4::text IS NULL OR instancia = $4)';
+  const [{ rows: [base] }, { rows: [resp] }] = await Promise.all([
+    pool.query(
+      `SELECT
+         (SELECT count(*) FROM crm_contatos WHERE tenant_id = $1 AND oculto = false AND origem = 'whatsapp'
+            AND criado_em >= $2 AND criado_em < $3 AND ${filtroInst})::int AS novos,
+         (SELECT count(DISTINCT (numero, instancia)) FROM crm_mensagens WHERE tenant_id = $1 AND criado_em >= $2 AND criado_em < $3 AND ${filtroInst})::int AS conversas,
+         (SELECT count(*) FROM crm_mensagens WHERE tenant_id = $1 AND direcao = 'entrada' AND criado_em >= $2 AND criado_em < $3 AND ${filtroInst})::int AS recebidas,
+         (SELECT count(*) FROM crm_mensagens WHERE tenant_id = $1 AND direcao = 'saida' AND criado_em >= $2 AND criado_em < $3 AND ${filtroInst})::int AS enviadas,
+         (SELECT count(*) FROM crm_mensagens WHERE tenant_id = $1 AND direcao = 'saida' AND autor = 'ia' AND criado_em >= $2 AND criado_em < $3 AND ${filtroInst})::int AS enviadas_ia,
+         (SELECT count(*) FROM crm_mensagens WHERE tenant_id = $1 AND direcao = 'saida' AND autor = 'followup' AND criado_em >= $2 AND criado_em < $3 AND ${filtroInst})::int AS enviadas_followup,
+         (SELECT count(*) FROM crm_mensagens WHERE tenant_id = $1 AND direcao = 'saida' AND autor = 'humano' AND criado_em >= $2 AND criado_em < $3 AND ${filtroInst})::int AS enviadas_humano,
+         (SELECT count(DISTINCT contato_id) FROM crm_etapa_eventos WHERE tenant_id = $1 AND etapa = 'agendado' AND em >= $2 AND em < $3 AND ${filtroInst})::int AS agendamentos,
+         (SELECT count(DISTINCT contato_id) FROM crm_etapa_eventos WHERE tenant_id = $1 AND etapa = 'pre_agendado' AND em >= $2 AND em < $3 AND ${filtroInst})::int AS pre_agendamentos`,
+      p,
+    ),
+    // tempo de 1a resposta: cada vez que o contato comeca a falar (mensagem de entrada que nao vem
+    // logo depois de outra entrada), quanto demorou ate a proxima mensagem nossa
+    pool.query(
+      `WITH m AS (
+         SELECT numero, instancia, direcao, criado_em,
+                lag(direcao) OVER (PARTITION BY numero, instancia ORDER BY criado_em) AS dir_anterior
+         FROM crm_mensagens
+         WHERE tenant_id = $1 AND criado_em >= $2::timestamptz - interval '2 days' AND criado_em < $3 AND ${filtroInst}
+       ), inicios AS (
+         SELECT numero, instancia, criado_em FROM m
+         WHERE direcao = 'entrada' AND dir_anterior IS DISTINCT FROM 'entrada' AND criado_em >= $2 AND criado_em < $3
+       ), r AS (
+         SELECT i.criado_em,
+                (SELECT min(s.criado_em) FROM crm_mensagens s
+                 WHERE s.tenant_id = $1 AND s.numero = i.numero AND s.instancia = i.instancia AND s.direcao = 'saida' AND s.criado_em >= i.criado_em) AS respondida_em
+         FROM inicios i
+       )
+       SELECT count(*)::int AS contatos_iniciados,
+              count(respondida_em)::int AS respondidos,
+              (count(*) FILTER (WHERE respondida_em - criado_em <= interval '5 minutes'))::int AS em_5min,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM respondida_em - criado_em))
+                FILTER (WHERE respondida_em IS NOT NULL) AS mediana_seg
+       FROM r`,
+      p,
+    ),
+  ]);
+  return { ...base, ...resp, mediana_seg: resp.mediana_seg == null ? null : Math.round(resp.mediana_seg) };
+}
+
+// de/ate: 'YYYY-MM-DD' no horario de Maceio (UTC-3 fixo, sem horario de verao)
+export async function resultadosAtendimento(tenantId, { de, ate, instancia = null }) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const inicio = new Date(`${de}T00:00:00-03:00`);
+  const fim = new Date(new Date(`${ate}T00:00:00-03:00`).getTime() + 86400000);
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime()) || fim <= inicio) throw new Error('Periodo invalido.');
+  if (fim - inicio > 400 * 86400000) throw new Error('Escolha um periodo de no maximo 1 ano.');
+  const anteriorInicio = new Date(inicio.getTime() - (fim - inicio));
+  const p = [tenantId, inicio, fim, instancia];
+  const filtroInst = '($4::text IS NULL OR instancia = $4)';
+
+  const [atual, anterior, { rows: dias }, { rows: novosDia }, { rows: horas }, { rows: funil }, { rows: [desde] }] = await Promise.all([
+    indicadoresDoIntervalo(tenantId, inicio, fim, instancia),
+    indicadoresDoIntervalo(tenantId, anteriorInicio, inicio, instancia),
+    pool.query(
+      `SELECT to_char((criado_em AT TIME ZONE 'America/Maceio')::date, 'YYYY-MM-DD') AS dia,
+              (count(*) FILTER (WHERE direcao = 'entrada'))::int AS recebidas,
+              (count(*) FILTER (WHERE direcao = 'saida'))::int AS enviadas
+       FROM crm_mensagens WHERE tenant_id = $1 AND criado_em >= $2 AND criado_em < $3 AND ${filtroInst} GROUP BY 1`,
+      p,
+    ),
+    pool.query(
+      `SELECT to_char((criado_em AT TIME ZONE 'America/Maceio')::date, 'YYYY-MM-DD') AS dia, count(*)::int AS novos
+       FROM crm_contatos WHERE tenant_id = $1 AND oculto = false AND origem = 'whatsapp' AND criado_em >= $2 AND criado_em < $3 AND ${filtroInst} GROUP BY 1`,
+      p,
+    ),
+    pool.query(
+      `SELECT extract(hour FROM criado_em AT TIME ZONE 'America/Maceio')::int AS hora, count(*)::int AS recebidas
+       FROM crm_mensagens WHERE tenant_id = $1 AND direcao = 'entrada' AND criado_em >= $2 AND criado_em < $3 AND ${filtroInst} GROUP BY 1`,
+      p,
+    ),
+    // funil: onde estao HOJE os contatos que chegaram no periodo
+    pool.query(
+      `SELECT etapa, count(*)::int AS total FROM crm_contatos
+       WHERE tenant_id = $1 AND oculto = false AND ultima_mensagem_em IS NOT NULL AND criado_em >= $2 AND criado_em < $3 AND ${filtroInst}
+       GROUP BY etapa`,
+      p,
+    ),
+    // desde quando existe o registro de autor/etapa - antes disso esses numeros ficam zerados e a
+    // tela avisa em vez de mostrar "0 agendamentos" como se fosse verdade
+    pool.query(
+      `SELECT (SELECT min(criado_em) FROM crm_mensagens WHERE tenant_id = $1 AND autor IS NOT NULL) AS autor_desde,
+              (SELECT min(em) FROM crm_etapa_eventos WHERE tenant_id = $1) AS etapas_desde`,
+      [tenantId],
+    ),
+  ]);
+
+  const porDiaMapa = new Map(dias.map((d) => [d.dia, d]));
+  const novosMapa = new Map(novosDia.map((d) => [d.dia, d.novos]));
+  const porDia = [];
+  for (let t = inicio.getTime(); t < fim.getTime(); t += 86400000) {
+    const dia = new Date(t - 3 * 3600000).toISOString().slice(0, 10);
+    const d = porDiaMapa.get(dia);
+    porDia.push({ dia, recebidas: d?.recebidas || 0, enviadas: d?.enviadas || 0, novos: novosMapa.get(dia) || 0 });
+  }
+  const horasMapa = new Map(horas.map((h) => [h.hora, h.recebidas]));
+  const funilMapa = new Map(funil.map((f) => [f.etapa, f.total]));
+
+  return {
+    periodo: { de, ate, inicio, fim, anteriorInicio },
+    atual,
+    anterior,
+    porDia,
+    porHora: Array.from({ length: 24 }, (_, h) => ({ hora: h, recebidas: horasMapa.get(h) || 0 })),
+    funil: ETAPAS.map((e) => ({ id: e.id, nome: e.nome, total: funilMapa.get(e.id) || 0 })),
+    registroDesde: { autor: desde.autor_desde, etapas: desde.etapas_desde },
+  };
 }

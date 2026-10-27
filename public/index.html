@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261027c" />
+  <link rel="stylesheet" href="style.css?v=20261027d" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -89,6 +89,10 @@
         <button type="button" class="nav-btn" id="tabBtnContatos" data-tab="contatos">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-7 1.7-7 4v3h14v-3c0-2.3-3.7-4-7-4zm8-2a3 3 0 1 0 0-6v6zm1 2.3c1.8.7 4 1.9 4 3.7v3h-4v-3c0-1.4-.5-2.6-1.3-3.6.4 0 .9-.1 1.3-.1z"/></svg>
           <span>Contatos</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnResultados" data-tab="resultados">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3h2v16h16v2H3V3zm4 10h3v4H7v-4zm5-5h3v9h-3V8zm5-3h3v12h-3V5z"/></svg>
+          <span>Resultados</span>
         </button>
         <div class="nav-grupo">Automação</div>
         <button type="button" class="nav-btn" id="tabBtnAuto" data-tab="auto">
@@ -499,6 +503,57 @@
           <p class="agenda-erro cv-erro" id="cvErro" hidden></p>
         </div>
       </section>
+    </div>
+
+    <div class="window-body tab-resultados" id="tabResultados" hidden>
+      <div class="rs-filtros">
+        <div class="rs-periodos" id="rsPeriodos" role="group" aria-label="Período">
+          <button type="button" data-dias="1">Hoje</button>
+          <button type="button" data-dias="7">7 dias</button>
+          <button type="button" data-dias="30" class="ativo">30 dias</button>
+          <button type="button" data-dias="90">90 dias</button>
+          <button type="button" data-dias="custom">Personalizado</button>
+        </div>
+        <div class="rs-custom" id="rsCustom" hidden>
+          <input type="date" id="rsDe" aria-label="De" />
+          <span>até</span>
+          <input type="date" id="rsAte" aria-label="Até" />
+          <button type="button" id="rsAplicar" class="crm-btn-secundario">Aplicar</button>
+        </div>
+        <select id="rsInstancia" hidden aria-label="Número de WhatsApp"></select>
+      </div>
+      <p class="crm-conversa-erro" id="rsErro" hidden></p>
+      <div class="rs-resumo" id="rsResumo">Carregando...</div>
+      <div class="rs-kpis" id="rsKpis"></div>
+      <section class="rs-card">
+        <div class="rs-card-topo">
+          <div>
+            <h3>Mensagens recebidas por dia</h3>
+            <p class="rs-sub">Passe o mouse em cada dia para ver enviadas e novos contatos</p>
+          </div>
+          <button type="button" id="rsTabelaBtn" class="ct-link">Ver em tabela</button>
+        </div>
+        <div class="rs-grafico" id="rsGraficoDias"></div>
+        <div class="ct-tabela-wrap ct-previa rs-tabela" id="rsTabelaDias" hidden></div>
+      </section>
+      <div class="rs-duas">
+        <section class="rs-card">
+          <h3>Horários de pico</h3>
+          <p class="rs-sub">Mensagens recebidas por hora do dia</p>
+          <div class="rs-grafico" id="rsGraficoHoras"></div>
+        </section>
+        <section class="rs-card">
+          <h3>Quem respondeu</h3>
+          <p class="rs-sub">Mensagens enviadas no período</p>
+          <div class="rs-barras" id="rsAutores"></div>
+        </section>
+      </div>
+      <section class="rs-card">
+        <h3>Funil dos contatos que chegaram no período</h3>
+        <p class="rs-sub">Etapa em que cada um está hoje</p>
+        <div class="rs-barras" id="rsFunil"></div>
+      </section>
+      <div class="rs-tooltip" id="rsTooltip" hidden></div>
     </div>
 
     <div class="window-body tab-contatos" id="tabContatos" hidden>
@@ -1156,6 +1211,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261027c"></script>
+  <script src="app.js?v=20261027d"></script>
 </body>
 </html>

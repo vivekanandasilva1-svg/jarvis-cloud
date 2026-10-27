@@ -84,6 +84,8 @@ const tabBtnConversas = document.getElementById('tabBtnConversas');
 const conversasBadge = document.getElementById('conversasBadge');
 const tabContatos = document.getElementById('tabContatos');
 const tabBtnContatos = document.getElementById('tabBtnContatos');
+const tabResultados = document.getElementById('tabResultados');
+const tabBtnResultados = document.getElementById('tabBtnResultados');
 const tabAuto = document.getElementById('tabAuto');
 const tabFollowUp = document.getElementById('tabFollowUp');
 const tabRelatorios = document.getElementById('tabRelatorios');
@@ -373,6 +375,7 @@ function mostrarApp() {
   tabBtnCrm.hidden = !abaLiberada('crm');
   tabBtnConversas.hidden = !abaLiberada('crm'); // mesmas conversas do CRM, mesma permissao
   tabBtnContatos.hidden = !abaLiberada('crm'); // a base e a mesma tabela de contatos do CRM
+  tabBtnResultados.hidden = !abaLiberada('crm'); // indicadores calculados sobre as conversas do CRM
   tabBtnAuto.hidden = !abaLiberada('auto');
   tabBtnFollowUp.hidden = !abaLiberada('followUp');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
@@ -385,7 +388,7 @@ function mostrarApp() {
   // vez de deixar a tela em branco
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
     const primeiraLiberada = [
-      ['conversas', tabBtnConversas], ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm], ['contatos', tabBtnContatos],
+      ['conversas', tabBtnConversas], ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm], ['contatos', tabBtnContatos], ['resultados', tabBtnResultados],
       ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
     ].find(([, btn]) => !btn.hidden);
     if (primeiraLiberada) mudarAba(primeiraLiberada[0]);
@@ -1924,6 +1927,7 @@ const CABECALHOS_ABA = {
   conversas: ['Atendimento', 'Conversas', 'Atenda o WhatsApp direto pela Lumia, em tempo real.'],
   crm: ['Clientes', 'CRM', 'Seus leads em cada etapa do funil, com a conversa do WhatsApp.'],
   contatos: ['Clientes', 'Contatos', 'Toda a sua base de leads: cadastre, importe e exporte planilhas.'],
+  resultados: ['Clientes', 'Resultados', 'Como está o atendimento: volume, velocidade de resposta e conversão do funil.'],
   auto: ['Automação', 'Auto Atendimento', 'Configure a IA que atende os contatos no WhatsApp.'],
   relatorios: ['Automação', 'Relatórios automáticos', 'Relatórios enviados sozinhos no WhatsApp, na frequência que você escolher.'],
   geradorRelatorios: ['Automação', 'Gerador de Relatórios', 'Relatórios de performance prontos pra mandar pro cliente.'],
@@ -1967,6 +1971,7 @@ function mudarAba(aba) {
   tabCrm.hidden = aba !== 'crm';
   tabConversas.hidden = aba !== 'conversas';
   tabContatos.hidden = aba !== 'contatos';
+  tabResultados.hidden = aba !== 'resultados';
   tabAuto.hidden = aba !== 'auto';
   tabFollowUp.hidden = aba !== 'followUp';
   tabRelatorios.hidden = aba !== 'relatorios';
@@ -1981,6 +1986,7 @@ function mudarAba(aba) {
   tabBtnCrm.classList.toggle('active', aba === 'crm');
   tabBtnConversas.classList.toggle('active', aba === 'conversas');
   tabBtnContatos.classList.toggle('active', aba === 'contatos');
+  tabBtnResultados.classList.toggle('active', aba === 'resultados');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   tabBtnFollowUp.classList.toggle('active', aba === 'followUp');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
@@ -2001,6 +2007,8 @@ function mudarAba(aba) {
     carregarConversas();
   } else if (aba === 'contatos') {
     carregarContatos();
+  } else if (aba === 'resultados') {
+    carregarResultados();
   } else if (aba === 'auto') {
     carregarConfigAutoAtendimento();
   } else if (aba === 'followUp') {
@@ -2069,6 +2077,7 @@ tabBtnWhatsapp.addEventListener('click', () => mudarAba('whatsapp'));
 tabBtnCrm.addEventListener('click', () => mudarAba('crm'));
 tabBtnConversas.addEventListener('click', () => mudarAba('conversas'));
 tabBtnContatos.addEventListener('click', () => mudarAba('contatos'));
+tabBtnResultados.addEventListener('click', () => mudarAba('resultados'));
 tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnGeradorRelatorios.addEventListener('click', () => mudarAba('geradorRelatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
@@ -3972,6 +3981,400 @@ ctImpConfirmar.addEventListener('click', async () => {
     ctAtualizarPreviaImp();
   }
 });
+
+// ---------- Resultados (indicadores do atendimento por periodo) ----------
+const rsPeriodos = document.getElementById('rsPeriodos');
+const rsCustom = document.getElementById('rsCustom');
+const rsDe = document.getElementById('rsDe');
+const rsAte = document.getElementById('rsAte');
+const rsInstancia = document.getElementById('rsInstancia');
+const rsErro = document.getElementById('rsErro');
+const rsResumo = document.getElementById('rsResumo');
+const rsKpis = document.getElementById('rsKpis');
+const rsGraficoDias = document.getElementById('rsGraficoDias');
+const rsGraficoHoras = document.getElementById('rsGraficoHoras');
+const rsTabelaDias = document.getElementById('rsTabelaDias');
+const rsTabelaBtn = document.getElementById('rsTabelaBtn');
+const rsAutores = document.getElementById('rsAutores');
+const rsFunil = document.getElementById('rsFunil');
+const rsTooltip = document.getElementById('rsTooltip');
+
+let rsDias = 30; // 'custom' = usa rsDe/rsAte
+let rsDados = null;
+let rsPedido = 0;
+
+const rsHojeMaceio = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Maceio' });
+function rsSomarDias(iso, n) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+const rsDataCurta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const rsNum = (n) => Number(n || 0).toLocaleString('pt-BR');
+
+function rsIntervalo() {
+  if (rsDias === 'custom') return { de: rsDe.value, ate: rsAte.value };
+  const ate = rsHojeMaceio();
+  return { de: rsSomarDias(ate, -(rsDias - 1)), ate };
+}
+
+function rsNomePeriodo() {
+  if (rsDias === 1) return 'Hoje';
+  if (rsDias === 'custom') {
+    const { de, ate } = rsIntervalo();
+    return de === ate ? `Em ${rsDataCurta(de)}` : `De ${rsDataCurta(de)} a ${rsDataCurta(ate)}`;
+  }
+  return `Nos últimos ${rsDias} dias`;
+}
+
+function rsFormatarTempo(seg) {
+  if (seg == null) return '—';
+  if (seg < 60) return `${seg}s`;
+  const min = Math.round(seg / 60);
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const resto = min % 60;
+  if (h < 24) return resto ? `${h}h ${resto}min` : `${h}h`;
+  return `${Math.round(h / 24)} dias`;
+}
+
+async function carregarResultados() {
+  const { de, ate } = rsIntervalo();
+  if (!de || !ate || de > ate) {
+    rsMostrarErro('Escolha uma data inicial antes da final.');
+    return;
+  }
+  rsMostrarErro('');
+  const pedido = ++rsPedido;
+  rsResumo.classList.add('carregando');
+  try {
+    const params = new URLSearchParams({ de, ate });
+    if (rsInstancia.value) params.set('instancia', rsInstancia.value);
+    const res = await fetch(`/api/crm/resultados?${params}`, { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    if (pedido !== rsPedido) return; // trocou o filtro enquanto carregava
+    rsDados = data;
+    const atual = rsInstancia.value;
+    rsInstancia.textContent = '';
+    rsInstancia.appendChild(new Option('Todos os números', ''));
+    for (const i of data.instancias || []) rsInstancia.appendChild(new Option(i, i));
+    rsInstancia.value = (data.instancias || []).includes(atual) ? atual : '';
+    rsInstancia.hidden = (data.instancias || []).length < 2;
+    renderizarResultados();
+  } catch (err) {
+    if (pedido === rsPedido) rsMostrarErro(`Não consegui carregar os resultados: ${err.message}`);
+  } finally {
+    if (pedido === rsPedido) rsResumo.classList.remove('carregando');
+  }
+}
+
+function rsMostrarErro(msg) {
+  rsErro.textContent = msg || '';
+  rsErro.hidden = !msg;
+}
+
+// variacao contra o periodo anterior de mesmo tamanho. menorMelhor = tempo de resposta
+function rsVariacao(atual, anterior, menorMelhor = false) {
+  if (atual == null || anterior == null) return null;
+  if (!anterior) return atual ? { texto: 'novo no período', classe: '' } : null;
+  const pct = Math.round(((atual - anterior) / anterior) * 100);
+  if (pct === 0) return { texto: '= igual ao período anterior', classe: '' };
+  const subiu = pct > 0;
+  const bom = menorMelhor ? !subiu : subiu;
+  return { texto: `${subiu ? '▲' : '▼'} ${Math.abs(pct)}% vs período anterior`, classe: bom ? 'bom' : 'ruim' };
+}
+
+function renderizarResultados() {
+  const d = rsDados;
+  if (!d) return;
+  const a = d.atual;
+  const b = d.anterior;
+  const inicioPeriodo = new Date(d.periodo.inicio);
+  const etapasDesde = d.registroDesde?.etapas ? new Date(d.registroDesde.etapas) : null;
+  const autorDesde = d.registroDesde?.autor ? new Date(d.registroDesde.autor) : null;
+  const dataBR = (dt) => dt.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit' });
+  const avisoEtapas = !etapasDesde ? 'contando a partir de agora' : etapasDesde > inicioPeriodo ? `contando desde ${dataBR(etapasDesde)}` : '';
+  const avisoAutor = !autorDesde ? 'registrando a partir de agora' : autorDesde > inicioPeriodo ? `registrado desde ${dataBR(autorDesde)}` : '';
+  const pctIa = a.enviadas ? Math.round((a.enviadas_ia / a.enviadas) * 100) : null;
+  const pct5 = a.contatos_iniciados ? Math.round((a.em_5min / a.contatos_iniciados) * 100) : null;
+  // a comparacao so vale quando o registro ja existia no periodo anterior inteiro
+  const comparaEtapas = etapasDesde && etapasDesde <= new Date(d.periodo.anteriorInicio);
+
+  const tiles = [
+    { rotulo: 'Novos contatos', valor: rsNum(a.novos), sub: 'chegaram pelo WhatsApp', variacao: rsVariacao(a.novos, b.novos) },
+    { rotulo: 'Conversas com movimento', valor: rsNum(a.conversas), sub: `${rsNum(a.recebidas)} recebidas · ${rsNum(a.enviadas)} enviadas`, variacao: rsVariacao(a.conversas, b.conversas) },
+    { rotulo: 'Mensagens recebidas', valor: rsNum(a.recebidas), sub: 'dos contatos', variacao: rsVariacao(a.recebidas, b.recebidas) },
+    {
+      rotulo: 'Tempo de 1ª resposta', valor: rsFormatarTempo(a.mediana_seg),
+      sub: pct5 == null ? 'sem conversas iniciadas' : `mediana · ${pct5}% respondidos em até 5 min`,
+      variacao: rsVariacao(a.mediana_seg, b.mediana_seg, true),
+    },
+    {
+      rotulo: 'Agendamentos', valor: rsNum(a.agendamentos),
+      sub: [a.pre_agendamentos ? `+ ${rsNum(a.pre_agendamentos)} pré-agendamentos` : '', avisoEtapas].filter(Boolean).join(' · ') || 'contatos que foram para Agendado',
+      variacao: comparaEtapas ? rsVariacao(a.agendamentos, b.agendamentos) : null,
+    },
+    {
+      rotulo: 'Respondido pela IA', valor: pctIa == null ? '—' : `${pctIa}%`,
+      sub: [a.enviadas ? `${rsNum(a.enviadas_ia)} de ${rsNum(a.enviadas)} enviadas` : 'nenhuma mensagem enviada', avisoAutor].filter(Boolean).join(' · '),
+      variacao: null,
+    },
+  ];
+  rsKpis.textContent = '';
+  for (const t of tiles) {
+    const el = document.createElement('div');
+    el.className = 'rs-kpi';
+    const rot = document.createElement('span');
+    rot.className = 'rs-kpi-rotulo';
+    rot.textContent = t.rotulo;
+    const val = document.createElement('strong');
+    val.className = 'rs-kpi-valor';
+    val.textContent = t.valor;
+    const sub = document.createElement('span');
+    sub.className = 'rs-kpi-sub';
+    sub.textContent = t.sub;
+    el.append(rot, val, sub);
+    if (t.variacao) {
+      const v = document.createElement('span');
+      v.className = `rs-kpi-var ${t.variacao.classe}`;
+      v.textContent = t.variacao.texto;
+      el.appendChild(v);
+    }
+    rsKpis.appendChild(el);
+  }
+
+  rsResumo.textContent = rsMontarResumo(d, pct5);
+  rsDesenharGraficos();
+  rsRenderizarBarras(rsAutores, [
+    { nome: 'IA (auto atendimento)', total: a.enviadas_ia },
+    { nome: 'Follow Up automático', total: a.enviadas_followup },
+    { nome: 'Equipe', total: a.enviadas_humano },
+    { nome: 'Sem registro de autor', total: Math.max(0, a.enviadas - a.enviadas_ia - a.enviadas_followup - a.enviadas_humano) },
+  ].filter((x) => x.total || x.nome !== 'Sem registro de autor'), a.enviadas, 'Nenhuma mensagem enviada no período.');
+  const totalFunil = d.funil.reduce((s, f) => s + f.total, 0);
+  rsRenderizarBarras(rsFunil, d.funil, totalFunil, 'Nenhum contato novo com conversa no período.');
+  rsRenderizarTabelaDias();
+}
+
+// resumo escrito com os proprios numeros (sem IA - nao gasta credito e nunca inventa)
+function rsMontarResumo(d, pct5) {
+  const a = d.atual;
+  if (!a.recebidas && !a.enviadas && !a.novos) return `${rsNomePeriodo()} não houve conversa no WhatsApp${rsInstancia.value ? ' nesse número' : ''}.`;
+  const frases = [];
+  const varNovos = rsVariacao(a.novos, d.anterior.novos);
+  const comparacao = varNovos && varNovos.classe ? ` (${varNovos.texto.replace(' vs período anterior', '').replace('▲', 'alta de').replace('▼', 'queda de')} em relação ao período anterior)` : '';
+  frases.push(`${rsNomePeriodo()}, chegaram ${rsNum(a.novos)} ${a.novos === 1 ? 'contato novo' : 'contatos novos'}${comparacao} e ${rsNum(a.conversas)} ${a.conversas === 1 ? 'conversa teve' : 'conversas tiveram'} movimento.`);
+  if (a.mediana_seg != null) {
+    frases.push(`A primeira resposta saiu em ${rsFormatarTempo(a.mediana_seg)} (mediana)${pct5 != null ? `, e ${pct5}% dos contatos foram respondidos em até 5 minutos` : ''}.`);
+  }
+  if (a.contatos_iniciados > a.respondidos) {
+    const sem = a.contatos_iniciados - a.respondidos;
+    frases.push(`${rsNum(sem)} ${sem === 1 ? 'contato ficou' : 'contatos ficaram'} sem resposta até agora.`);
+  }
+  const pico = d.porHora.reduce((m, h) => (h.recebidas > m.recebidas ? h : m), { hora: -1, recebidas: 0 });
+  if (pico.recebidas) frases.push(`O horário de mais movimento é das ${pico.hora}h às ${(pico.hora + 1) % 24}h.`);
+  if (d.porDia.length > 1) {
+    const diaTop = d.porDia.reduce((m, x) => (x.recebidas > m.recebidas ? x : m), d.porDia[0]);
+    if (diaTop.recebidas) frases.push(`O dia mais cheio foi ${rsDataCurta(diaTop.dia)}, com ${rsNum(diaTop.recebidas)} mensagens recebidas.`);
+  }
+  const totalFunil = d.funil.reduce((s, f) => s + f.total, 0);
+  const convertidos = d.funil.filter((f) => f.id === 'agendado' || f.id === 'compareceu').reduce((s, f) => s + f.total, 0);
+  if (totalFunil) frases.push(`Dos contatos que chegaram no período, ${rsNum(convertidos)} (${Math.round((convertidos / totalFunil) * 100)}%) já estão agendados ou compareceram.`);
+  return frases.join(' ');
+}
+
+function rsRenderizarBarras(container, itens, total, vazio) {
+  container.textContent = '';
+  if (!total) {
+    const p = document.createElement('p');
+    p.className = 'rs-vazio';
+    p.textContent = vazio;
+    container.appendChild(p);
+    return;
+  }
+  const maior = Math.max(...itens.map((i) => i.total), 1);
+  for (const item of itens) {
+    const linha = document.createElement('div');
+    linha.className = 'rs-barra-linha';
+    const nome = document.createElement('span');
+    nome.className = 'rs-barra-nome';
+    nome.textContent = item.nome;
+    const trilho = document.createElement('div');
+    trilho.className = 'rs-barra-trilho';
+    const barra = document.createElement('div');
+    barra.className = 'rs-barra';
+    barra.style.width = item.total ? `max(4px, ${(item.total / maior) * 100}%)` : '0';
+    trilho.appendChild(barra);
+    const valor = document.createElement('span');
+    valor.className = 'rs-barra-valor';
+    valor.textContent = `${rsNum(item.total)} · ${Math.round((item.total / total) * 100)}%`;
+    linha.append(nome, trilho, valor);
+    container.appendChild(linha);
+  }
+}
+
+// grafico de colunas em SVG (uma serie so, cor da marca), com dica ao passar o mouse/tocar
+function rsGraficoColunas(container, pontos, { rotuloX, dica, altura = 200 }) {
+  container.textContent = '';
+  const largura = Math.max(container.clientWidth, 260);
+  const margem = { topo: 12, dir: 8, base: 26, esq: 34 };
+  const w = largura - margem.esq - margem.dir;
+  const h = altura - margem.topo - margem.base;
+  const maior = Math.max(...pontos.map((p) => p.valor), 0);
+  // escala "redonda" pro eixo (1, 2, 5, 10, 20, 50...)
+  const passoBruto = Math.max(maior, 1) / 4;
+  const mag = 10 ** Math.floor(Math.log10(passoBruto));
+  const passo = Math.max(1, [1, 2, 5, 10].map((m) => m * mag).find((v) => v >= passoBruto));
+  const topoEixo = Math.max(passo, Math.ceil(maior / passo) * passo);
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', largura);
+  svg.setAttribute('height', altura);
+  svg.setAttribute('role', 'img');
+  svg.classList.add('rs-svg');
+  const el = (tag, attrs, pai = svg) => {
+    const n = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    pai.appendChild(n);
+    return n;
+  };
+
+  for (let v = 0; v <= topoEixo; v += passo) {
+    const y = margem.topo + h - (v / topoEixo) * h;
+    el('line', { x1: margem.esq, x2: margem.esq + w, y1: y, y2: y, class: v === 0 ? 'rs-eixo' : 'rs-grade' });
+    el('text', { x: margem.esq - 6, y: y + 4, 'text-anchor': 'end', class: 'rs-rotulo' }).textContent = rsNum(v);
+  }
+
+  const faixa = w / pontos.length;
+  const largBarra = Math.max(2, Math.min(28, faixa - 2));
+  const cadaQuantos = Math.ceil(pontos.length / Math.max(1, Math.floor(w / 46)));
+  pontos.forEach((p, i) => {
+    const x = margem.esq + i * faixa + (faixa - largBarra) / 2;
+    const alt = topoEixo ? (p.valor / topoEixo) * h : 0;
+    const yBase = margem.topo + h;
+    if (alt > 0) {
+      const r = Math.min(4, largBarra / 2, alt);
+      // topo arredondado, base reta no eixo
+      el('path', {
+        class: 'rs-coluna',
+        d: `M${x},${yBase} V${yBase - alt + r} Q${x},${yBase - alt} ${x + r},${yBase - alt} H${x + largBarra - r} Q${x + largBarra},${yBase - alt} ${x + largBarra},${yBase - alt + r} V${yBase} Z`,
+      });
+    }
+    if (i % cadaQuantos === 0) {
+      el('text', { x: x + largBarra / 2, y: altura - 8, 'text-anchor': 'middle', class: 'rs-rotulo' }).textContent = rotuloX(p);
+    }
+    // area de toque maior que a coluna (a faixa inteira)
+    const alvo = el('rect', { x: margem.esq + i * faixa, y: margem.topo, width: faixa, height: h, class: 'rs-alvo', tabindex: 0 });
+    const mostrar = () => {
+      for (const c of svg.querySelectorAll('.rs-alvo.ativo')) c.classList.remove('ativo');
+      alvo.classList.add('ativo');
+      rsTooltip.textContent = '';
+      for (const [j, linha] of dica(p).entries()) {
+        const div = document.createElement('div');
+        if (j === 0) div.className = 'rs-tooltip-titulo';
+        div.textContent = linha;
+        rsTooltip.appendChild(div);
+      }
+      rsTooltip.hidden = false;
+      const caixa = alvo.getBoundingClientRect();
+      const tw = rsTooltip.offsetWidth;
+      const left = Math.min(Math.max(8, caixa.left + caixa.width / 2 - tw / 2), window.innerWidth - tw - 8);
+      rsTooltip.style.left = `${left}px`;
+      rsTooltip.style.top = `${Math.max(8, caixa.top - rsTooltip.offsetHeight - 8 + (h - alt))}px`;
+    };
+    const esconder = () => { alvo.classList.remove('ativo'); rsTooltip.hidden = true; };
+    alvo.addEventListener('mouseenter', mostrar);
+    alvo.addEventListener('focus', mostrar);
+    alvo.addEventListener('click', mostrar);
+    alvo.addEventListener('mouseleave', esconder);
+    alvo.addEventListener('blur', esconder);
+  });
+  svg.setAttribute('aria-label', pontos.map((p) => `${rotuloX(p)}: ${p.valor}`).join(', '));
+  container.appendChild(svg);
+}
+
+const RS_DIAS_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+function rsDesenharGraficos() {
+  const d = rsDados;
+  if (!d || tabResultados.hidden) return;
+  rsGraficoColunas(rsGraficoDias, d.porDia.map((x) => ({ ...x, valor: x.recebidas })), {
+    rotuloX: (p) => rsDataCurta(p.dia),
+    dica: (p) => [
+      `${RS_DIAS_SEMANA[new Date(`${p.dia}T12:00:00Z`).getUTCDay()]}, ${rsDataCurta(p.dia)}`,
+      `${rsNum(p.recebidas)} recebidas`,
+      `${rsNum(p.enviadas)} enviadas`,
+      `${rsNum(p.novos)} ${p.novos === 1 ? 'contato novo' : 'contatos novos'}`,
+    ],
+  });
+  rsGraficoColunas(rsGraficoHoras, d.porHora.map((x) => ({ ...x, valor: x.recebidas })), {
+    rotuloX: (p) => `${p.hora}h`,
+    dica: (p) => [`Das ${p.hora}h às ${(p.hora + 1) % 24}h`, `${rsNum(p.recebidas)} mensagens recebidas`],
+    altura: 180,
+  });
+}
+
+function rsRenderizarTabelaDias() {
+  rsTabelaDias.textContent = '';
+  const tabela = document.createElement('table');
+  tabela.className = 'ct-tabela';
+  const cab = document.createElement('tr');
+  for (const t of ['Dia', 'Recebidas', 'Enviadas', 'Contatos novos']) {
+    const th = document.createElement('th');
+    th.textContent = t;
+    cab.appendChild(th);
+  }
+  const thead = document.createElement('thead');
+  thead.appendChild(cab);
+  const tbody = document.createElement('tbody');
+  for (const p of [...rsDados.porDia].reverse()) {
+    const tr = document.createElement('tr');
+    for (const v of [rsDataCurta(p.dia), rsNum(p.recebidas), rsNum(p.enviadas), rsNum(p.novos)]) {
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  tabela.append(thead, tbody);
+  rsTabelaDias.appendChild(tabela);
+}
+
+rsTabelaBtn.addEventListener('click', () => {
+  rsTabelaDias.hidden = !rsTabelaDias.hidden;
+  rsGraficoDias.hidden = !rsTabelaDias.hidden;
+  rsTabelaBtn.textContent = rsTabelaDias.hidden ? 'Ver em tabela' : 'Ver gráfico';
+  if (rsTabelaDias.hidden) rsDesenharGraficos();
+});
+
+rsPeriodos.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button[data-dias]');
+  if (!btn) return;
+  for (const b of rsPeriodos.querySelectorAll('button')) b.classList.toggle('ativo', b === btn);
+  if (btn.dataset.dias === 'custom') {
+    if (!rsDe.value) {
+      const { de, ate } = rsIntervalo();
+      rsDe.value = de;
+      rsAte.value = ate;
+    }
+    rsDias = 'custom';
+    rsCustom.hidden = false;
+    return;
+  }
+  rsCustom.hidden = true;
+  rsDias = Number(btn.dataset.dias);
+  carregarResultados();
+});
+document.getElementById('rsAplicar').addEventListener('click', carregarResultados);
+rsInstancia.addEventListener('change', carregarResultados);
+
+// redesenha os graficos quando a largura muda (gaveta, rotacao do celular, janela)
+let rsRedesenhoTimer = null;
+new ResizeObserver(() => {
+  clearTimeout(rsRedesenhoTimer);
+  rsRedesenhoTimer = setTimeout(rsDesenharGraficos, 120);
+}).observe(rsGraficoDias);
+document.addEventListener('scroll', () => { rsTooltip.hidden = true; }, true);
 
 // ---------- Alerta de retorno (conversa do CRM) ----------
 const crmConversaRetorno = document.getElementById('crmConversaRetorno');
