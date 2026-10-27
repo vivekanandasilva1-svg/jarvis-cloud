@@ -588,5 +588,13 @@
     "tipo": "melhoria",
     "titulo": "Gerador de Relatórios: IA aplica qualquer ajuste pedido e campo de pedido corrigido",
     "conteudo": "O campo \"Instruções pra IA\" ficava espremido em 6px (classe de contêiner no textarea) e as instruções só mudavam o texto da análise - o layout era fixo, então pedidos como tirar métricas, mudar título ou quantidade de sugestões eram ignorados. Agora a IA devolve análise + layout (título, subtítulo, métricas e ordem, destaque, nomes de seções, sugestões 0-8, seções extras, nota, cores, nome do cliente/período) e avisa o que não deu pra fazer; números continuam vindo da fonte. Dá pra pedir ajuste num relatório já gerado (reaproveita os mesmos números) e o pedido/ajustes aparecem na prévia e na lista. Relatórios gerados antes disso não têm os dados salvos e precisam ser gerados de novo pra aceitar ajuste."
+  },
+  {
+    "chave": "plat:visual-profissional",
+    "modulo": "plataforma",
+    "data": "2026-10-27",
+    "tipo": "melhoria",
+    "titulo": "Visual profissional: cinza médio sólido, menu em grupos e sinalização vermelho/verde",
+    "conteudo": "Seguindo o modelo do app Zonic aprovado pelo dono: tema trocou os vidros/gradientes pretos por superfícies sólidas em cinza médio mantendo dourado/preto/branco, janela em tela cheia, menu lateral agrupado (Atendimento, Clientes, Automação, Configurações, Administração - grupo some se nenhum item estiver liberado pra conta) e cabeçalho de página (etiqueta + título + descrição) em toda aba. Sinalização padrão: alteração não salva deixa o botão de salvar vermelho e põe um ponto vermelho na aba do menu (e avisa ao sair da página); salvar com sucesso pisca verde e mostra 'Salvo e atualizado'. Feito com rastrearAlteracoes/marcarSalvo no app.js, já ligado em Auto Atendimento, Follow Up, número do WhatsApp, marca/tema do Gerador, alerta de retorno do CRM e saldo da IA. A aba antiga 'Relatórios' virou 'Relatórios automáticos' pra liberar o nome pro futuro painel. Próximas fases: Conversas, Contatos (importar/exportar), painel de Relatórios, assistente Lumien (coruja) e integração com Instagram."
   }
 ]

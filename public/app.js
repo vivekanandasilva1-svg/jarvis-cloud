@@ -372,6 +372,8 @@ function mostrarApp() {
   tabBtnGeradorRelatorios.hidden = !abaLiberada('geradorRelatorios');
   tabBtnIntegracoes.hidden = !abaLiberada('integracoes');
   tabBtnCerebro.hidden = !meuCerebroLiberado;
+  atualizarGruposMenu();
+  atualizarCabecalhoAba(document.querySelector('.nav-btn.active')?.dataset.tab || 'painel');
   // se a aba visivel por padrao (Painel) foi restringida, pula pra primeira aba liberada em
   // vez de deixar a tela em branco
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
@@ -1848,8 +1850,108 @@ async function capturarFrameCamera() {
   return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
 }
 
+// ---------- Sinalizacao: alteracao nao salva (vermelho) / salvo (verde) ----------
+// qualquer botao de salvar pode ser "rastreado": quando o usuario mexe num dos campos dele, o
+// botao fica vermelho e a aba no menu ganha um ponto vermelho, ate salvar com sucesso - ai o
+// botao pisca verde e aparece o aviso "Salvo e atualizado" embaixo da tela
+function rastrearAlteracoes(botao, campos) {
+  const marcar = (ev) => { if (ev.isTrusted) marcarPendente(botao); };
+  for (const el of campos) {
+    if (!el) continue;
+    el.addEventListener('input', marcar);
+    el.addEventListener('change', marcar);
+  }
+}
+function marcarPendente(botao) {
+  botao.classList.remove('salvo');
+  botao.classList.add('pendente');
+  atualizarPendenciasMenu();
+}
+function limparPendente(botao) {
+  botao.classList.remove('pendente');
+  atualizarPendenciasMenu();
+}
+function marcarSalvo(botao, mensagem) {
+  if (botao) {
+    botao.classList.remove('pendente');
+    botao.classList.add('salvo');
+    setTimeout(() => botao.classList.remove('salvo'), 1800);
+    atualizarPendenciasMenu();
+  }
+  mostrarAviso(mensagem || 'Salvo e atualizado', 'ok');
+}
+function atualizarPendenciasMenu() {
+  for (const btn of document.querySelectorAll('.nav-btn[data-tab]')) {
+    const id = btn.dataset.tab;
+    const tab = document.getElementById(`tab${id[0].toUpperCase()}${id.slice(1)}`);
+    btn.classList.toggle('pendente', !!tab?.querySelector('.pendente'));
+  }
+}
+window.addEventListener('beforeunload', (ev) => {
+  if (document.querySelector('.window-body .pendente')) { ev.preventDefault(); ev.returnValue = ''; }
+});
+
+let avisoTimer = null;
+function mostrarAviso(texto, tipo = 'ok') {
+  let el = document.getElementById('avisoFlutuante');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'avisoFlutuante';
+    el.setAttribute('role', 'status');
+    document.body.appendChild(el);
+  }
+  el.className = `aviso-flutuante ${tipo}`;
+  el.textContent = `${tipo === 'ok' ? '✓' : '!'} ${texto}`;
+  el.classList.add('visivel');
+  clearTimeout(avisoTimer);
+  avisoTimer = setTimeout(() => el.classList.remove('visivel'), 3200);
+}
+
+// titulo grande no topo de cada aba (etiqueta + titulo + descricao), no lugar de cada aba
+// repetir o proprio cabecalho
+const CABECALHOS_ABA = {
+  painel: ['Início', 'Painel da Lumia', 'Converse com a Lumia e acompanhe o sistema em tempo real.'],
+  agenda: ['Atendimento', 'Agenda', 'Compromissos e agendamentos, integrados ao Google Agenda.'],
+  whatsapp: ['Atendimento', 'WhatsApp', 'Números conectados e status de cada instância.'],
+  followUp: ['Atendimento', 'Follow Up', 'Retome automaticamente os leads que pararam de responder.'],
+  crm: ['Clientes', 'CRM', 'Seus leads em cada etapa do funil, com a conversa do WhatsApp.'],
+  auto: ['Automação', 'Auto Atendimento', 'Configure a IA que atende os contatos no WhatsApp.'],
+  relatorios: ['Automação', 'Relatórios automáticos', 'Relatórios enviados sozinhos no WhatsApp, na frequência que você escolher.'],
+  geradorRelatorios: ['Automação', 'Gerador de Relatórios', 'Relatórios de performance prontos pra mandar pro cliente.'],
+  integracoes: ['Configurações', 'Integrações', 'Conecte as ferramentas e gerencie os colaboradores.'],
+  cerebro: ['Administração', 'Cérebro', 'A memória viva da Lumia.'],
+  clientes: ['Administração', 'Clientes', 'Contas que usam a Lumia.'],
+  propostasAdmin: ['Administração', 'Gerador de Propostas', 'Propostas comerciais e assinaturas.'],
+};
+function atualizarCabecalhoAba(aba) {
+  const cab = CABECALHOS_ABA[aba];
+  const el = document.getElementById('pageHeader');
+  if (!el) return;
+  el.hidden = !cab || aba === 'cerebro';
+  if (!cab) return;
+  document.getElementById('pageHeaderEtiqueta').textContent = cab[0];
+  document.getElementById('pageHeaderTitulo').textContent = cab[1];
+  document.getElementById('pageHeaderSub').textContent = cab[2];
+}
+
+// esconde o titulo de grupo do menu quando nenhum item dele esta visivel pra essa conta
+// (ex: grupo Administracao so aparece pro dono)
+function atualizarGruposMenu() {
+  for (const grupo of document.querySelectorAll('.nav-grupo')) {
+    let el = grupo.nextElementSibling;
+    let algumVisivel = false;
+    while (el && !el.classList.contains('nav-grupo')) {
+      if (el.classList.contains('nav-btn') && !el.hidden) algumVisivel = true;
+      el = el.nextElementSibling;
+    }
+    grupo.hidden = !algumVisivel;
+  }
+}
+
 // ---------- Abas: Painel / Agenda / WhatsApp ----------
 function mudarAba(aba) {
+  atualizarCabecalhoAba(aba);
+  atualizarGruposMenu();
   tabPainel.hidden = aba !== 'painel';
   tabAgenda.hidden = aba !== 'agenda';
   tabWhatsapp.hidden = aba !== 'whatsapp';
@@ -2257,6 +2359,7 @@ async function carregarStatusWhatsapp() {
   }
 }
 
+rastrearAlteracoes(waAdminSalvar, [waAdminInput]);
 waAdminSalvar.addEventListener('click', async () => {
   const numero = waAdminInput.value.replace(/\D/g, '');
   if (!numero) return;
@@ -2270,6 +2373,7 @@ waAdminSalvar.addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
     addBubble('Numero autorizado do WhatsApp atualizado.', 'system');
+    marcarSalvo(waAdminSalvar, 'Número autorizado atualizado');
   } catch (err) {
     addBubble(`Erro salvando numero: ${err.message}`, 'system');
   } finally {
@@ -2887,6 +2991,7 @@ crmRetornoSalvar.addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
     crmRetornoPainel.hidden = true;
+    marcarSalvo(crmRetornoSalvar, 'Alerta de retorno salvo');
     await carregarCrm();
     atualizarSino();
   } catch (err) {
@@ -3099,6 +3204,7 @@ saldoSalvar.addEventListener('click', async () => {
     saldoInput.value = '';
     renderSaldo(d);
     saldoMsg.textContent = 'Salvo.';
+    marcarSalvo(saldoSalvar, 'Saldo da IA atualizado');
     atualizarSino();
   } catch (err) {
     saldoMsg.textContent = err.message;
@@ -3411,9 +3517,7 @@ autoAgendamentoDireto.addEventListener('change', () => {
 // tem alteracao pendente) e volta pro dourado (com um "pulso" rapido) so depois de salvar de
 // verdade com sucesso - assim fica visivelmente claro quando ainda falta salvar
 function marcarAlteracoesNaoSalvas() {
-  autoSalvar.classList.add('nao-salvo');
-  autoSalvar.classList.remove('salvo-pulso');
-  autoSalvar.textContent = 'Salvar Configurações *';
+  marcarPendente(autoSalvar);
 }
 [autoAtivo, autoInstancia, autoPrompt, autoFrequenciaAudio, autoAudioSeReceberAudio, autoEsperaSegundos, autoHoraInicio, autoHoraFim, autoAgendarInterna, autoAgendarClinicorp, autoAgendamentoDireto, autoReiniciarValor, autoReiniciarUnidade]
   .forEach((el) => {
@@ -3476,8 +3580,7 @@ async function carregarConfigAutoAtendimento() {
     }
 
     // acabou de carregar do servidor - nao tem nada "nao salvo" ainda
-    autoSalvar.classList.remove('nao-salvo', 'salvo-pulso');
-    autoSalvar.textContent = 'Salvar Configurações';
+    limparPendente(autoSalvar);
   } catch (err) {
     autoErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
     autoErro.hidden = false;
@@ -3520,13 +3623,7 @@ autoSalvar.addEventListener('click', async () => {
 
     // salvou de verdade - tira o vermelho, volta pro dourado com um "pulso" rapido pra ficar
     // visivel que salvou agora mesmo (nao so que "nao ha mudanca pendente")
-    autoSalvar.classList.remove('nao-salvo');
-    autoSalvar.textContent = 'Salvo ✓';
-    autoSalvar.classList.add('salvo-pulso');
-    setTimeout(() => {
-      autoSalvar.classList.remove('salvo-pulso');
-      autoSalvar.textContent = 'Salvar Configurações';
-    }, 1200);
+    marcarSalvo(autoSalvar, 'Configurações do Auto Atendimento salvas e valendo');
 
     addBubble(`Configurações salvas e já valendo${ativo ? ` no numero "${instancia}"` : ' (desativado)'}.`, 'system');
   } catch (err) {
@@ -3698,6 +3795,7 @@ async function carregarFollowUp() {
     fuPromptGeral.value = config.promptGeral || '';
     fuHoraInicio.value = config.horaInicio || '08:00';
     fuHoraFim.value = config.horaFim || '20:00';
+    limparPendente(fuSalvar);
   } catch (err) {
     fuErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
     fuErro.hidden = false;
@@ -3705,6 +3803,7 @@ async function carregarFollowUp() {
   carregarEtapasFollowUp();
 }
 
+rastrearAlteracoes(fuSalvar, [fuAtivo, fuPromptGeral, fuHoraInicio, fuHoraFim]);
 fuSalvar.addEventListener('click', async () => {
   fuErro.hidden = true;
   const ativo = fuAtivo.checked;
@@ -3731,6 +3830,7 @@ fuSalvar.addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
     addBubble(`Configurações do Follow Up salvas${ativo ? '' : ' (desativado)'}.`, 'system');
+    marcarSalvo(fuSalvar, 'Configurações do Follow Up salvas');
   } catch (err) {
     fuErro.textContent = err.message;
     fuErro.hidden = false;
@@ -4354,9 +4454,11 @@ grMarcaLogoInput.addEventListener('change', async () => {
 
 grMarcaLogoRemover.addEventListener('click', () => {
   grLogoAtual = null;
+  marcarPendente(grMarcaSalvarBtn);
   grMarcaLogoPreview.hidden = true;
 });
 
+rastrearAlteracoes(grMarcaSalvarBtn, [grMarcaNome, grMarcaLogoInput]);
 grMarcaSalvarBtn.addEventListener('click', async () => {
   try {
     const r = await fetch('/api/gerador-relatorios/marca', {
@@ -4367,6 +4469,7 @@ grMarcaSalvarBtn.addEventListener('click', async () => {
     const d = await r.json();
     if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
     addBubble('Marca do relatorio salva.', 'system');
+    marcarSalvo(grMarcaSalvarBtn, 'Marca do relatório salva');
   } catch (err) {
     addBubble(`Erro salvando marca: ${err.message}`, 'system');
   }
@@ -4497,6 +4600,7 @@ grSalvarTemaBtn.addEventListener('click', async () => {
     grTemaPreviewWrap.hidden = true;
     await carregarTemasGerador();
     grTemaSelect.value = d.tema.id;
+    marcarSalvo(null, 'Tema salvo');
   } catch (err) {
     addBubble(`Erro salvando tema: ${err.message}`, 'system');
   }

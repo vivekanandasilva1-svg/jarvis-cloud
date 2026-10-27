@@ -2645,3 +2645,164 @@ html, body {
 .gr-pedido-item.aviso b { color: #f59e0b; }
 .gr-hist-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; font-size: 12.5px; }
 .gr-hist-pedido { font-size: 11px; color: var(--text-dim); overflow-wrap: anywhere; }
+
+/* =====================================================================================
+   TEMA PROFISSIONAL (cinza medio solido + dourado/preto/branco)
+   Camada por cima do tema antigo: redefine as variaveis e troca os vidros/gradientes por
+   superficies solidas. Sinalizacao padrao do app inteiro:
+   - vermelho = alerta / alteracao ainda nao salva (.pendente)
+   - verde    = salvo e atualizado (.salvo / .aviso-flutuante.ok)
+   ===================================================================================== */
+:root {
+  --bg-0: #2e3035;
+  --lateral: #26282c;
+  --superficie: #383a40;
+  --superficie-2: #41444a;
+  --campo: #2a2c31;
+  --borda: #4b4e55;
+  --panel: #383a40;
+  --panel-flat: #383a40;
+  --panel-sheen: none;
+  --border: #4b4e55;
+  --border-soft: #3f4247;
+  --gold: #d4af37;
+  --gold-bright: #f0cf6b;
+  --white: #f5f5f2;
+  --text: #ecebe7;
+  --text-dim: #a9abb0;
+  --vermelho: #e5484d;
+  --vermelho-fundo: rgba(229, 72, 77, 0.14);
+  --verde: #30a46c;
+  --verde-fundo: rgba(48, 164, 108, 0.14);
+  --user-bubble: rgba(212, 175, 55, 0.18);
+  --assistant-bubble: #41444a;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-card-hover: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+html, body {
+  background: var(--bg-0);
+  font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+.login-screen { background: var(--lateral); }
+.login-card { background: var(--superficie); backdrop-filter: none; border-color: var(--borda); }
+
+/* janela ocupa a tela toda (estilo software, sem a "caixa" flutuando no meio) */
+.app-window::before, .app-window::after { display: none; }
+@media (min-width: 760px) {
+  body { display: block; }
+  .app-window { width: 100vw; height: 100dvh; border-radius: 0; border: none; box-shadow: none; }
+}
+
+/* ---------- menu lateral ---------- */
+.app-sidebar { flex-basis: 236px; width: 236px; background: var(--lateral); border-right: 1px solid var(--border-soft); }
+.sidebar-brand { border-bottom: 1px solid var(--border-soft); padding: 18px; }
+.sidebar-logo { filter: none; }
+.sidebar-brand-text { text-shadow: none; color: var(--gold); }
+.sidebar-nav { gap: 2px; padding: 10px; }
+.nav-grupo {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #85878d;
+  font-weight: 700;
+  padding: 16px 10px 6px;
+}
+.nav-btn { border-left: none; padding: 9px 10px; font-size: 13px; color: #b9bbc0; }
+.nav-btn:hover { background: var(--superficie); color: var(--text); }
+.nav-btn.active {
+  background: rgba(212, 175, 55, 0.15);
+  color: var(--gold-bright);
+  box-shadow: none;
+  text-shadow: none;
+}
+.nav-btn.active svg { filter: none; }
+.nav-btn.pendente::after {
+  content: '';
+  margin-left: auto;
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vermelho);
+}
+.sidebar-footer { border-top: 1px solid var(--border-soft); }
+.sidebar-toggle { background: var(--lateral); border-color: var(--borda); }
+
+/* ---------- topo + cabecalho de pagina ---------- */
+.window-titlebar { background: var(--lateral); border-bottom: 1px solid var(--border-soft); box-shadow: none; }
+.online-pill .dot { background: var(--verde); box-shadow: none; animation: none; }
+.page-header { flex: 0 0 auto; padding: 22px 28px 14px; }
+.page-header-etiqueta { font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); font-weight: 700; }
+.page-header-titulo { margin: 4px 0 2px; font-size: 24px; letter-spacing: -0.3px; color: var(--white); font-weight: 700; }
+.page-header-sub { margin: 0; color: var(--text-dim); font-size: 13px; }
+@media (max-width: 760px) {
+  .page-header { padding: 14px 16px 8px; }
+  .page-header-titulo { font-size: 20px; }
+}
+
+/* ---------- superficies solidas ---------- */
+.panel { background: var(--superficie); border-color: var(--border-soft); box-shadow: var(--shadow-card); }
+.panel::before { display: none; }
+.panel:hover { border-color: var(--borda); transform: none; }
+.sidebar { background: transparent; border-right-color: var(--border-soft); }
+.sino-painel, .saldo-painel { background: var(--superficie); border-color: var(--borda); }
+select option { background-color: var(--superficie); color: var(--text); font-weight: 600; }
+select option:checked, select option:hover { background-color: var(--gold); color: #16171a; }
+
+/* campos com fundo um pouco mais escuro que o cartao, borda cinza e foco dourado */
+.app-window input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+.app-window textarea,
+.app-window select {
+  background-color: var(--campo);
+  border-color: var(--borda);
+  color: var(--text);
+}
+.app-window input:focus, .app-window textarea:focus, .app-window select:focus { border-color: var(--gold); outline: none; }
+
+/* ---------- sinalizacao: pendente (vermelho) / salvo (verde) ---------- */
+.app-window button.pendente:not(.nav-btn) {
+  position: relative;
+  border-color: var(--vermelho) !important;
+  background: var(--vermelho-fundo) !important;
+  color: #ff9a9d !important;
+  box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.12);
+}
+.app-window button.pendente:not(.nav-btn)::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--vermelho);
+  border: 2px solid var(--bg-0);
+}
+.app-window button.salvo:not(.nav-btn) {
+  border-color: var(--verde) !important;
+  background: var(--verde) !important;
+  color: #fff !important;
+  transition: background 0.2s ease;
+}
+.agenda-erro, .wa-erro { color: #ff8f92; }
+
+.aviso-flutuante {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  z-index: 200;
+  transform: translate(-50%, 20px);
+  opacity: 0;
+  pointer-events: none;
+  padding: 11px 18px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--verde);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.aviso-flutuante.erro { background: var(--vermelho); }
+.aviso-flutuante.visivel { opacity: 1; transform: translate(-50%, 0); }
