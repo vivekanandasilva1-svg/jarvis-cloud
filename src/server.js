@@ -1773,6 +1773,54 @@ app.get('/api/crm/contatos', async (req, res) => {
   }
 });
 
+// ---------- Base de contatos (aba Contatos) ----------
+
+app.get('/api/crm/base-contatos', async (req, res) => {
+  try {
+    const [contatos, instancias] = await Promise.all([
+      crm.listarBaseContatos(req.tenantId),
+      tenants.listarInstanciasDoTenant(req.tenantId),
+    ]);
+    res.json({ etapas: crm.ETAPAS, instancias, contatos });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/base-contatos', async (req, res) => {
+  try {
+    const body = req.body || {};
+    if (body.instancia && !(await tenants.listarInstanciasDoTenant(req.tenantId)).includes(body.instancia)) {
+      return res.status(400).json({ erro: 'Numero de WhatsApp invalido pra essa conta.' });
+    }
+    res.json({ ok: true, id: await crm.salvarContatoBase(req.tenantId, { ...body, id: null }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.put('/api/crm/base-contatos/:id', async (req, res) => {
+  try {
+    res.json({ ok: true, id: await crm.salvarContatoBase(req.tenantId, { ...(req.body || {}), id: Number(req.params.id) }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// a tela le a planilha no navegador e manda as linhas ja mapeadas em lotes de ate 1000
+app.post('/api/crm/base-contatos/importar', async (req, res) => {
+  const { instancia, linhas, modo } = req.body || {};
+  if (!Array.isArray(linhas) || !linhas.length) return res.status(400).json({ erro: 'Nenhuma linha pra importar.' });
+  try {
+    if (!(await tenants.listarInstanciasDoTenant(req.tenantId)).includes(instancia)) {
+      return res.status(400).json({ erro: 'Escolha um numero de WhatsApp dessa conta.' });
+    }
+    res.json({ ok: true, ...(await crm.importarContatos(req.tenantId, instancia, linhas, modo === 'atualizar' ? 'atualizar' : 'pular')) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.get('/api/crm/mensagens', async (req, res) => {
   const { numero, instancia } = req.query;
   if (!numero || !instancia) return res.status(400).json({ erro: 'numero e instancia sao obrigatorios' });
@@ -1787,7 +1835,7 @@ app.post('/api/crm/mensagens', async (req, res) => {
   const { numero, instancia, texto } = req.body || {};
   if (!numero || !instancia || !texto) return res.status(400).json({ erro: 'numero, instancia e texto sao obrigatorios' });
   try {
-    await crm.enviarMensagem(req.tenantId, numero, instancia, texto);
+    lembrarEnviada(await crm.enviarMensagem(req.tenantId, numero, instancia, texto));
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });

@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261027b" />
+  <link rel="stylesheet" href="style.css?v=20261027c" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -85,6 +85,10 @@
         <button type="button" class="nav-btn" id="tabBtnCrm" data-tab="crm">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3h6v18H3V3zm8 0h6v10h-6V3zm8 0h2v18h-2V3zm-8 12h6v6h-6v-6z"/></svg>
           <span>CRM</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnContatos" data-tab="contatos">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-7 1.7-7 4v3h14v-3c0-2.3-3.7-4-7-4zm8-2a3 3 0 1 0 0-6v6zm1 2.3c1.8.7 4 1.9 4 3.7v3h-4v-3c0-1.4-.5-2.6-1.3-3.6.4 0 .9-.1 1.3-.1z"/></svg>
+          <span>Contatos</span>
         </button>
         <div class="nav-grupo">Automação</div>
         <button type="button" class="nav-btn" id="tabBtnAuto" data-tab="auto">
@@ -495,6 +499,101 @@
           <p class="agenda-erro cv-erro" id="cvErro" hidden></p>
         </div>
       </section>
+    </div>
+
+    <div class="window-body tab-contatos" id="tabContatos" hidden>
+      <div class="ct-barra">
+        <input type="search" id="ctBusca" placeholder="Buscar por nome, telefone, e-mail ou etiqueta" autocomplete="off" />
+        <select id="ctEtapa"><option value="">Todas as etapas</option></select>
+        <select id="ctEtiqueta"><option value="">Todas as etiquetas</option></select>
+        <select id="ctOrigem">
+          <option value="">Todas as origens</option>
+          <option value="whatsapp">Veio do WhatsApp</option>
+          <option value="importado">Importado</option>
+          <option value="manual">Cadastrado</option>
+        </select>
+        <div class="ct-acoes">
+          <button type="button" id="ctNovoBtn" class="relatorio-config-enviar">+ Novo contato</button>
+          <button type="button" id="ctImportarBtn" class="crm-btn-secundario">Importar</button>
+          <button type="button" id="ctExportarXlsxBtn" class="crm-btn-secundario">Exportar Excel</button>
+          <button type="button" id="ctExportarCsvBtn" class="crm-btn-secundario">Exportar CSV</button>
+        </div>
+      </div>
+      <p class="ct-resumo" id="ctResumo">Carregando...</p>
+      <div class="ct-tabela-wrap">
+        <table class="ct-tabela">
+          <thead>
+            <tr><th>Nome</th><th>WhatsApp</th><th>E-mail</th><th>Etiquetas</th><th>Etapa</th><th>Última conversa</th><th>Origem</th></tr>
+          </thead>
+          <tbody id="ctCorpo"></tbody>
+        </table>
+      </div>
+      <button type="button" id="ctMaisBtn" class="crm-btn-secundario ct-mais" hidden>Mostrar mais</button>
+
+      <div class="ct-modal" id="ctModal" hidden>
+        <form class="ct-caixa" id="ctForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong id="ctModalTitulo">Novo contato</strong>
+            <button type="button" class="ct-fechar" data-fechar="ctModal">✕</button>
+          </div>
+          <label class="ct-campo">Nome<input type="text" id="ctNome" maxlength="120" /></label>
+          <div id="ctCampoNovo">
+            <label class="ct-campo">Telefone (WhatsApp)<input type="tel" id="ctNumero" placeholder="82 99999-9999" /></label>
+            <label class="ct-campo" id="ctInstanciaCadLabel">Atender pelo número<select id="ctInstanciaCad"></select></label>
+          </div>
+          <p class="ct-info" id="ctInfoNumero" hidden></p>
+          <label class="ct-campo">E-mail<input type="email" id="ctEmail" maxlength="160" /></label>
+          <label class="ct-campo">Etiquetas <small>(separe por vírgula)</small><input type="text" id="ctEtiquetas" placeholder="ex: implante, indicação" /></label>
+          <label class="ct-campo">Observações<textarea id="ctObs" rows="3" maxlength="2000"></textarea></label>
+          <p class="crm-conversa-erro" id="ctModalErro" hidden></p>
+          <div class="ct-rodape">
+            <button type="button" id="ctApagarBtn" class="crm-btn-perigo" hidden>Apagar</button>
+            <span class="ct-espaco"></span>
+            <button type="button" id="ctConversarBtn" class="crm-btn-secundario" hidden>Abrir conversa</button>
+            <button type="submit" id="ctSalvarBtn" class="relatorio-config-enviar">Salvar</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="ctImpModal" hidden>
+        <div class="ct-caixa ct-caixa-larga">
+          <div class="ct-caixa-topo">
+            <strong>Importar contatos</strong>
+            <button type="button" class="ct-fechar" data-fechar="ctImpModal">✕</button>
+          </div>
+          <div id="ctImpPasso1">
+            <p class="ct-info">Envie uma planilha Excel (.xlsx) ou CSV com uma coluna de telefone. Nome, e-mail, etiquetas, observações e etapa são opcionais. Contatos que já existem são reconhecidos pelo telefone, com ou sem o 9.</p>
+            <label class="ct-arquivo">
+              <input type="file" id="ctImpArquivo" accept=".csv,.xlsx,.xls,text/csv" />
+              <span>Escolher planilha</span>
+            </label>
+            <button type="button" id="ctModeloBtn" class="ct-link">Baixar planilha modelo</button>
+          </div>
+          <div id="ctImpPasso2" hidden>
+            <p class="ct-info" id="ctImpInfo"></p>
+            <div class="ct-mapa" id="ctImpMapa"></div>
+            <div class="ct-imp-opcoes">
+              <label class="ct-campo">Atender pelo número<select id="ctImpInstancia"></select></label>
+              <label class="ct-campo">Etiqueta para todos <small>(opcional)</small><input type="text" id="ctImpEtiquetaExtra" placeholder="ex: lista evento outubro" /></label>
+              <label class="ct-campo">Se o contato já existir
+                <select id="ctImpModo">
+                  <option value="pular">Manter como está</option>
+                  <option value="atualizar">Completar com os dados da planilha</option>
+                </select>
+              </label>
+            </div>
+            <p class="ct-imp-resumo" id="ctImpResumo"></p>
+            <div class="ct-tabela-wrap ct-previa"><table class="ct-tabela" id="ctImpPrevia"></table></div>
+          </div>
+          <p class="ct-imp-resultado" id="ctImpResultado" hidden></p>
+          <p class="crm-conversa-erro" id="ctImpErro" hidden></p>
+          <div class="ct-rodape">
+            <button type="button" id="ctImpVoltar" class="crm-btn-secundario" hidden>Trocar planilha</button>
+            <span class="ct-espaco"></span>
+            <button type="button" id="ctImpConfirmar" class="relatorio-config-enviar" hidden>Importar</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="window-body tab-crm" id="tabCrm" hidden>
@@ -1057,6 +1156,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261027b"></script>
+  <script src="app.js?v=20261027c"></script>
 </body>
 </html>

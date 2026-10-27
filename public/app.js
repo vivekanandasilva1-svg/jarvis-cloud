@@ -82,6 +82,8 @@ const tabCrm = document.getElementById('tabCrm');
 const tabConversas = document.getElementById('tabConversas');
 const tabBtnConversas = document.getElementById('tabBtnConversas');
 const conversasBadge = document.getElementById('conversasBadge');
+const tabContatos = document.getElementById('tabContatos');
+const tabBtnContatos = document.getElementById('tabBtnContatos');
 const tabAuto = document.getElementById('tabAuto');
 const tabFollowUp = document.getElementById('tabFollowUp');
 const tabRelatorios = document.getElementById('tabRelatorios');
@@ -370,6 +372,7 @@ function mostrarApp() {
   tabBtnWhatsapp.hidden = !abaLiberada('whatsapp');
   tabBtnCrm.hidden = !abaLiberada('crm');
   tabBtnConversas.hidden = !abaLiberada('crm'); // mesmas conversas do CRM, mesma permissao
+  tabBtnContatos.hidden = !abaLiberada('crm'); // a base e a mesma tabela de contatos do CRM
   tabBtnAuto.hidden = !abaLiberada('auto');
   tabBtnFollowUp.hidden = !abaLiberada('followUp');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
@@ -382,7 +385,7 @@ function mostrarApp() {
   // vez de deixar a tela em branco
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
     const primeiraLiberada = [
-      ['conversas', tabBtnConversas], ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm],
+      ['conversas', tabBtnConversas], ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm], ['contatos', tabBtnContatos],
       ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
     ].find(([, btn]) => !btn.hidden);
     if (primeiraLiberada) mudarAba(primeiraLiberada[0]);
@@ -1920,6 +1923,7 @@ const CABECALHOS_ABA = {
   followUp: ['Atendimento', 'Follow Up', 'Retome automaticamente os leads que pararam de responder.'],
   conversas: ['Atendimento', 'Conversas', 'Atenda o WhatsApp direto pela Lumia, em tempo real.'],
   crm: ['Clientes', 'CRM', 'Seus leads em cada etapa do funil, com a conversa do WhatsApp.'],
+  contatos: ['Clientes', 'Contatos', 'Toda a sua base de leads: cadastre, importe e exporte planilhas.'],
   auto: ['Automação', 'Auto Atendimento', 'Configure a IA que atende os contatos no WhatsApp.'],
   relatorios: ['Automação', 'Relatórios automáticos', 'Relatórios enviados sozinhos no WhatsApp, na frequência que você escolher.'],
   geradorRelatorios: ['Automação', 'Gerador de Relatórios', 'Relatórios de performance prontos pra mandar pro cliente.'],
@@ -1962,6 +1966,7 @@ function mudarAba(aba) {
   tabWhatsapp.hidden = aba !== 'whatsapp';
   tabCrm.hidden = aba !== 'crm';
   tabConversas.hidden = aba !== 'conversas';
+  tabContatos.hidden = aba !== 'contatos';
   tabAuto.hidden = aba !== 'auto';
   tabFollowUp.hidden = aba !== 'followUp';
   tabRelatorios.hidden = aba !== 'relatorios';
@@ -1975,6 +1980,7 @@ function mudarAba(aba) {
   tabBtnWhatsapp.classList.toggle('active', aba === 'whatsapp');
   tabBtnCrm.classList.toggle('active', aba === 'crm');
   tabBtnConversas.classList.toggle('active', aba === 'conversas');
+  tabBtnContatos.classList.toggle('active', aba === 'contatos');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   tabBtnFollowUp.classList.toggle('active', aba === 'followUp');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
@@ -1993,6 +1999,8 @@ function mudarAba(aba) {
     carregarCrm();
   } else if (aba === 'conversas') {
     carregarConversas();
+  } else if (aba === 'contatos') {
+    carregarContatos();
   } else if (aba === 'auto') {
     carregarConfigAutoAtendimento();
   } else if (aba === 'followUp') {
@@ -2060,6 +2068,7 @@ tabBtnAgenda.addEventListener('click', () => mudarAba('agenda'));
 tabBtnWhatsapp.addEventListener('click', () => mudarAba('whatsapp'));
 tabBtnCrm.addEventListener('click', () => mudarAba('crm'));
 tabBtnConversas.addEventListener('click', () => mudarAba('conversas'));
+tabBtnContatos.addEventListener('click', () => mudarAba('contatos'));
 tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnGeradorRelatorios.addEventListener('click', () => mudarAba('geradorRelatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
@@ -3382,6 +3391,586 @@ cvGravarBtn.addEventListener('click', async () => {
   cvGravarBtn.classList.add('gravando');
   cvGravarBtn.textContent = '⏹';
   cvGravarBtn.title = 'Parar e enviar o áudio';
+});
+
+// ---------- Contatos (base de leads: lista, cadastro, importar e exportar planilha) ----------
+// mesma tabela de contatos do CRM - aqui aparecem tambem os importados/cadastrados que ainda nao
+// conversaram (esses ficam fora do funil e da aba Conversas ate a primeira mensagem)
+const ctBusca = document.getElementById('ctBusca');
+const ctEtapa = document.getElementById('ctEtapa');
+const ctEtiqueta = document.getElementById('ctEtiqueta');
+const ctOrigem = document.getElementById('ctOrigem');
+const ctResumo = document.getElementById('ctResumo');
+const ctCorpo = document.getElementById('ctCorpo');
+const ctMaisBtn = document.getElementById('ctMaisBtn');
+const ctModal = document.getElementById('ctModal');
+const ctForm = document.getElementById('ctForm');
+const ctModalTitulo = document.getElementById('ctModalTitulo');
+const ctNome = document.getElementById('ctNome');
+const ctCampoNovo = document.getElementById('ctCampoNovo');
+const ctNumero = document.getElementById('ctNumero');
+const ctInstanciaCad = document.getElementById('ctInstanciaCad');
+const ctInstanciaCadLabel = document.getElementById('ctInstanciaCadLabel');
+const ctInfoNumero = document.getElementById('ctInfoNumero');
+const ctEmail = document.getElementById('ctEmail');
+const ctEtiquetas = document.getElementById('ctEtiquetas');
+const ctObs = document.getElementById('ctObs');
+const ctModalErro = document.getElementById('ctModalErro');
+const ctApagarBtn = document.getElementById('ctApagarBtn');
+const ctConversarBtn = document.getElementById('ctConversarBtn');
+const ctSalvarBtn = document.getElementById('ctSalvarBtn');
+const ctImpModal = document.getElementById('ctImpModal');
+const ctImpArquivo = document.getElementById('ctImpArquivo');
+const ctImpPasso1 = document.getElementById('ctImpPasso1');
+const ctImpPasso2 = document.getElementById('ctImpPasso2');
+const ctImpInfo = document.getElementById('ctImpInfo');
+const ctImpMapa = document.getElementById('ctImpMapa');
+const ctImpInstancia = document.getElementById('ctImpInstancia');
+const ctImpEtiquetaExtra = document.getElementById('ctImpEtiquetaExtra');
+const ctImpModo = document.getElementById('ctImpModo');
+const ctImpResumo = document.getElementById('ctImpResumo');
+const ctImpPrevia = document.getElementById('ctImpPrevia');
+const ctImpResultado = document.getElementById('ctImpResultado');
+const ctImpErro = document.getElementById('ctImpErro');
+const ctImpVoltar = document.getElementById('ctImpVoltar');
+const ctImpConfirmar = document.getElementById('ctImpConfirmar');
+
+const CT_POR_PAGINA = 200;
+const CT_ORIGENS = { whatsapp: 'WhatsApp', importado: 'Importado', manual: 'Cadastrado' };
+// campos que a importacao entende, com os nomes de coluna que costumam aparecer nas planilhas
+// (comparados sem acento/maiuscula) - o cabecalho da propria exportacao sempre bate
+const CT_CAMPOS_IMPORTACAO = [
+  { id: 'numero', nome: 'Telefone', obrigatorio: true, apelidos: ['telefone', 'celular', 'whatsapp', 'numero', 'fone', 'tel', 'phone', 'contato', 'telefone celular', 'numero do whatsapp'] },
+  { id: 'nome', nome: 'Nome', apelidos: ['nome', 'nome completo', 'cliente', 'paciente', 'lead', 'name'] },
+  { id: 'email', nome: 'E-mail', apelidos: ['email', 'e-mail', 'mail'] },
+  { id: 'etiquetas', nome: 'Etiquetas', apelidos: ['etiquetas', 'etiqueta', 'tags', 'tag', 'grupo', 'segmento'] },
+  { id: 'observacoes', nome: 'Observações', apelidos: ['observacoes', 'observacao', 'obs', 'notas', 'anotacoes', 'comentarios'] },
+  { id: 'etapa', nome: 'Etapa', apelidos: ['etapa', 'status', 'fase', 'estagio'] },
+];
+
+let ctContatos = [];
+let ctEtapas = [];
+let ctInstancias = [];
+let ctLimite = CT_POR_PAGINA;
+let ctEditando = null;
+let ctImpLinhas = []; // linhas da planilha (array de arrays, sem o cabecalho)
+let ctImpCabecalho = [];
+
+const ctSemAcento = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+function ctFormatarTelefone(numero) {
+  const n = String(numero || '');
+  let m = n.match(/^55(\d{2})(\d{5})(\d{4})$/);
+  if (m) return `+55 (${m[1]}) ${m[2]}-${m[3]}`;
+  m = n.match(/^55(\d{2})(\d{4})(\d{4})$/);
+  if (m) return `+55 (${m[1]}) ${m[2]}-${m[3]}`;
+  return n ? `+${n}` : '';
+}
+
+// mesma regra do servidor (crm.normalizarTelefone) - aqui so pra previa e contagem
+function ctNormalizarTelefone(bruto) {
+  let d = String(bruto ?? '').replace(/\D/g, '').replace(/^0+/, '');
+  if (d.length === 10 || d.length === 11) d = `55${d}`;
+  return d.length >= 10 && d.length <= 15 ? d : null;
+}
+
+async function carregarContatos() {
+  try {
+    const res = await fetch('/api/crm/base-contatos', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    ctContatos = data.contatos || [];
+    ctEtapas = data.etapas || [];
+    ctInstancias = data.instancias || [];
+
+    const etapaAtual = ctEtapa.value;
+    ctEtapa.textContent = '';
+    ctEtapa.appendChild(new Option('Todas as etapas', ''));
+    for (const e of ctEtapas) ctEtapa.appendChild(new Option(e.nome, e.id));
+    ctEtapa.value = etapaAtual;
+
+    const etiquetas = new Map();
+    for (const c of ctContatos) for (const t of c.etiquetas || []) if (!etiquetas.has(t.toLowerCase())) etiquetas.set(t.toLowerCase(), t);
+    const etiquetaAtual = ctEtiqueta.value;
+    ctEtiqueta.textContent = '';
+    ctEtiqueta.appendChild(new Option('Todas as etiquetas', ''));
+    for (const t of [...etiquetas.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'))) ctEtiqueta.appendChild(new Option(t, t));
+    ctEtiqueta.value = [...etiquetas.values()].includes(etiquetaAtual) ? etiquetaAtual : '';
+    ctEtiqueta.hidden = !etiquetas.size;
+
+    renderizarContatos();
+  } catch (err) {
+    ctCorpo.textContent = '';
+    ctResumo.textContent = `Não consegui carregar os contatos: ${err.message}`;
+  }
+}
+
+function ctFiltrados() {
+  const termo = ctSemAcento(ctBusca.value);
+  const digitos = termo.replace(/\D/g, '');
+  return ctContatos.filter((c) => {
+    if (ctEtapa.value && c.etapa !== ctEtapa.value) return false;
+    if (ctOrigem.value && c.origem !== ctOrigem.value) return false;
+    if (ctEtiqueta.value && !(c.etiquetas || []).includes(ctEtiqueta.value)) return false;
+    if (!termo) return true;
+    return ctSemAcento(c.nome).includes(termo)
+      || ctSemAcento(c.email).includes(termo)
+      || (c.etiquetas || []).some((t) => ctSemAcento(t).includes(termo))
+      || (digitos.length >= 3 && c.numero.includes(digitos));
+  });
+}
+
+function renderizarContatos() {
+  const lista = ctFiltrados();
+  const nomeEtapa = Object.fromEntries(ctEtapas.map((e) => [e.id, e.nome]));
+  const total = ctContatos.length;
+  ctResumo.textContent = !total
+    ? 'Nenhum contato ainda. Eles aparecem aqui sozinhos quando alguém conversa no WhatsApp, ou você pode cadastrar e importar uma planilha.'
+    : lista.length === total
+      ? `${total} ${total === 1 ? 'contato' : 'contatos'}`
+      : `${lista.length} de ${total} contatos com esse filtro`;
+
+  ctCorpo.textContent = '';
+  for (const c of lista.slice(0, ctLimite)) {
+    const tr = document.createElement('tr');
+    tr.tabIndex = 0;
+    tr.addEventListener('click', () => abrirModalContato(c));
+    tr.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') abrirModalContato(c); });
+
+    const celula = (texto, classe) => {
+      const td = document.createElement('td');
+      if (classe) td.className = classe;
+      td.textContent = texto;
+      tr.appendChild(td);
+      return td;
+    };
+    const tdNome = celula(c.nome || 'Sem nome', c.nome ? 'ct-nome' : 'ct-nome ct-vazio');
+    tdNome.dataset.rotulo = 'Nome';
+    celula(ctFormatarTelefone(c.numero), 'ct-tel').dataset.rotulo = 'WhatsApp';
+    celula(c.email || '', 'ct-email').dataset.rotulo = 'E-mail';
+    const tdTags = celula('', 'ct-tags');
+    tdTags.dataset.rotulo = 'Etiquetas';
+    for (const t of c.etiquetas || []) {
+      const chip = document.createElement('span');
+      chip.className = 'ct-chip';
+      chip.textContent = t;
+      tdTags.appendChild(chip);
+    }
+    celula(nomeEtapa[c.etapa] || c.etapa, 'ct-etapa').dataset.rotulo = 'Etapa';
+    celula(c.ultima_mensagem_em ? crmFormatarQuando(c.ultima_mensagem_em) : 'Sem conversa', c.ultima_mensagem_em ? '' : 'ct-vazio').dataset.rotulo = 'Última conversa';
+    celula(CT_ORIGENS[c.origem] || c.origem, 'ct-origem').dataset.rotulo = 'Origem';
+    ctCorpo.appendChild(tr);
+  }
+  ctMaisBtn.hidden = lista.length <= ctLimite;
+  if (!ctMaisBtn.hidden) ctMaisBtn.textContent = `Mostrar mais (${lista.length - ctLimite} restantes)`;
+}
+
+for (const el of [ctEtapa, ctEtiqueta, ctOrigem]) el.addEventListener('change', () => { ctLimite = CT_POR_PAGINA; renderizarContatos(); });
+ctBusca.addEventListener('input', () => { ctLimite = CT_POR_PAGINA; renderizarContatos(); });
+ctMaisBtn.addEventListener('click', () => { ctLimite += CT_POR_PAGINA; renderizarContatos(); });
+
+function ctPreencherInstancias(select) {
+  select.textContent = '';
+  for (const i of ctInstancias) select.appendChild(new Option(i, i));
+}
+
+function ctFecharModal(modal) {
+  modal.hidden = true;
+  if (modal === ctModal) limparPendente(ctSalvarBtn);
+}
+for (const btn of document.querySelectorAll('.ct-fechar')) {
+  btn.addEventListener('click', () => ctFecharModal(document.getElementById(btn.dataset.fechar)));
+}
+for (const modal of [ctModal, ctImpModal]) {
+  modal.addEventListener('click', (ev) => { if (ev.target === modal) ctFecharModal(modal); });
+}
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Escape') return;
+  if (!ctModal.hidden) ctFecharModal(ctModal);
+  else if (!ctImpModal.hidden) ctFecharModal(ctImpModal);
+});
+
+function ctMostrarErroModal(msg) {
+  ctModalErro.textContent = msg || '';
+  ctModalErro.hidden = !msg;
+}
+
+function abrirModalContato(contato) {
+  ctEditando = contato || null;
+  ctMostrarErroModal('');
+  limparPendente(ctSalvarBtn);
+  ctModalTitulo.textContent = contato ? (contato.nome || ctFormatarTelefone(contato.numero)) : 'Novo contato';
+  ctNome.value = contato?.nome || '';
+  ctEmail.value = contato?.email || '';
+  ctEtiquetas.value = (contato?.etiquetas || []).join(', ');
+  ctObs.value = contato?.observacoes || '';
+  ctCampoNovo.hidden = !!contato;
+  ctInfoNumero.hidden = !contato;
+  ctApagarBtn.hidden = !contato;
+  ctConversarBtn.hidden = !contato;
+  if (contato) {
+    ctInfoNumero.textContent = `WhatsApp ${ctFormatarTelefone(contato.numero)} · atendido pelo número ${contato.instancia}`;
+  } else {
+    ctNumero.value = '';
+    ctPreencherInstancias(ctInstanciaCad);
+    ctInstanciaCadLabel.hidden = ctInstancias.length < 2;
+    if (!ctInstancias.length) ctMostrarErroModal('Conecte um número na aba WhatsApp antes de cadastrar contatos.');
+  }
+  ctModal.hidden = false;
+  (contato ? ctNome : ctNumero).focus();
+}
+
+rastrearAlteracoes(ctSalvarBtn, [ctNome, ctNumero, ctInstanciaCad, ctEmail, ctEtiquetas, ctObs]);
+document.getElementById('ctNovoBtn').addEventListener('click', () => abrirModalContato(null));
+
+ctForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  ctMostrarErroModal('');
+  const dados = { nome: ctNome.value, email: ctEmail.value, etiquetas: ctEtiquetas.value, observacoes: ctObs.value };
+  if (!ctEditando) Object.assign(dados, { numero: ctNumero.value, instancia: ctInstanciaCad.value || ctInstancias[0] });
+  ctSalvarBtn.disabled = true;
+  try {
+    const res = await fetch(ctEditando ? `/api/crm/base-contatos/${ctEditando.id}` : '/api/crm/base-contatos', {
+      method: ctEditando ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify(dados),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    marcarSalvo(ctSalvarBtn, ctEditando ? 'Contato atualizado' : 'Contato cadastrado');
+    ctModal.hidden = true;
+    carregarContatos();
+  } catch (err) {
+    ctMostrarErroModal(err.message);
+  } finally {
+    ctSalvarBtn.disabled = false;
+  }
+});
+
+ctApagarBtn.addEventListener('click', async () => {
+  const c = ctEditando;
+  if (!c) return;
+  const quem = c.nome || ctFormatarTelefone(c.numero);
+  const aviso = c.ultima_mensagem_em
+    ? `Apagar ${quem}? Isso remove o contato, o card do CRM e todo o histórico de conversa - não dá pra desfazer.`
+    : `Apagar ${quem} da sua base de contatos?`;
+  if (!confirm(aviso)) return;
+  try {
+    const res = await fetch(`/api/crm/contatos/${c.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    ctFecharModal(ctModal);
+    mostrarAviso('Contato apagado');
+    carregarContatos();
+  } catch (err) {
+    ctMostrarErroModal(`Não consegui apagar: ${err.message}`);
+  }
+});
+
+// abre (ou comeca) a conversa desse contato na aba Conversas
+ctConversarBtn.addEventListener('click', () => {
+  const c = ctEditando;
+  if (!c) return;
+  ctFecharModal(ctModal);
+  mudarAba('conversas');
+  if (!cvEtapas.length) cvEtapas = ctEtapas;
+  abrirConversa({ ...c, nao_lida: false });
+});
+
+// ---------- exportar ----------
+
+function ctLinhasExportacao() {
+  const nomeEtapa = Object.fromEntries(ctEtapas.map((e) => [e.id, e.nome]));
+  const data = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Maceio' }) : '');
+  const cabecalho = ['Nome', 'Telefone', 'E-mail', 'Etiquetas', 'Etapa', 'Origem', 'Número de atendimento', 'Última conversa', 'Cadastrado em', 'Observações'];
+  const linhas = ctFiltrados().map((c) => [
+    c.nome || '', c.numero, c.email || '', (c.etiquetas || []).join(', '), nomeEtapa[c.etapa] || c.etapa,
+    CT_ORIGENS[c.origem] || c.origem, c.instancia, data(c.ultima_mensagem_em), data(c.criado_em), c.observacoes || '',
+  ]);
+  return [cabecalho, ...linhas];
+}
+
+function ctBaixar(blob, nome) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+const ctNomeArquivo = (ext) => `contatos-lumia-${new Date().toISOString().slice(0, 10)}.${ext}`;
+
+// CSV com ";" e BOM - e o formato que o Excel em portugues abre direto, com acento certo
+function ctGerarCsv(linhas) {
+  const campo = (v) => {
+    const t = String(v ?? '');
+    return /[";\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  return '﻿' + linhas.map((l) => l.map(campo).join(';')).join('\r\n');
+}
+
+async function ctGarantirSheetJs() {
+  if (!window.XLSX) await carregarScriptUmaVez('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  return window.XLSX;
+}
+
+document.getElementById('ctExportarCsvBtn').addEventListener('click', () => {
+  const linhas = ctLinhasExportacao();
+  if (linhas.length < 2) return mostrarAviso('Nenhum contato pra exportar com esse filtro', 'erro');
+  ctBaixar(new Blob([ctGerarCsv(linhas)], { type: 'text/csv;charset=utf-8' }), ctNomeArquivo('csv'));
+  mostrarAviso(`${linhas.length - 1} contatos exportados`);
+});
+
+document.getElementById('ctExportarXlsxBtn').addEventListener('click', async () => {
+  const linhas = ctLinhasExportacao();
+  if (linhas.length < 2) return mostrarAviso('Nenhum contato pra exportar com esse filtro', 'erro');
+  try {
+    const XLSX = await ctGarantirSheetJs();
+    const planilha = XLSX.utils.aoa_to_sheet(linhas);
+    planilha['!cols'] = [28, 16, 26, 22, 18, 12, 18, 18, 18, 40].map((wch) => ({ wch }));
+    const livro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(livro, planilha, 'Contatos');
+    XLSX.writeFile(livro, ctNomeArquivo('xlsx'));
+    mostrarAviso(`${linhas.length - 1} contatos exportados`);
+  } catch (err) {
+    mostrarAviso(`Não consegui gerar o Excel: ${err.message}`, 'erro');
+  }
+});
+
+// ---------- importar ----------
+
+function ctMostrarErroImp(msg) {
+  ctImpErro.textContent = msg || '';
+  ctImpErro.hidden = !msg;
+}
+
+function ctImpPasso(n) {
+  ctImpPasso1.hidden = n !== 1;
+  ctImpPasso2.hidden = n !== 2;
+  ctImpVoltar.hidden = n !== 2;
+  ctImpConfirmar.hidden = n !== 2;
+  ctImpConfirmar.disabled = false;
+  if (n === 1) ctImpArquivo.value = '';
+}
+
+document.getElementById('ctImportarBtn').addEventListener('click', () => {
+  ctMostrarErroImp('');
+  ctImpResultado.hidden = true;
+  ctImpPasso(1);
+  if (!ctInstancias.length) ctMostrarErroImp('Conecte um número na aba WhatsApp antes de importar contatos.');
+  ctImpModal.hidden = false;
+});
+ctImpVoltar.addEventListener('click', () => { ctImpVoltar.textContent = 'Trocar planilha'; ctImpResultado.hidden = true; ctMostrarErroImp(''); ctImpPasso(1); });
+
+document.getElementById('ctModeloBtn').addEventListener('click', () => {
+  const modelo = [
+    ['Nome', 'Telefone', 'E-mail', 'Etiquetas', 'Observações'],
+    ['Maria Souza', '82 99999-0000', 'maria@exemplo.com', 'implante, indicação', 'Prefere atendimento à tarde'],
+  ];
+  ctBaixar(new Blob([ctGerarCsv(modelo)], { type: 'text/csv;charset=utf-8' }), 'modelo-contatos-lumia.csv');
+});
+
+// CSV simples com aspas - detecta o separador (";" do Excel brasileiro, "," ou tab) pela 1a linha
+function ctLerCsv(texto) {
+  const primeira = texto.split(/\r?\n/, 1)[0] || '';
+  const sep = [';', ',', '\t'].map((s) => [s, primeira.split(s).length]).sort((a, b) => b[1] - a[1])[0][0];
+  const linhas = [];
+  let linha = [];
+  let campo = '';
+  let aspas = false;
+  for (let i = 0; i < texto.length; i++) {
+    const ch = texto[i];
+    if (aspas) {
+      if (ch === '"' && texto[i + 1] === '"') { campo += '"'; i++; }
+      else if (ch === '"') aspas = false;
+      else campo += ch;
+    } else if (ch === '"') aspas = true;
+    else if (ch === sep) { linha.push(campo); campo = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && texto[i + 1] === '\n') i++;
+      linha.push(campo); linhas.push(linha); linha = []; campo = '';
+    } else campo += ch;
+  }
+  if (campo || linha.length) { linha.push(campo); linhas.push(linha); }
+  return linhas;
+}
+
+// planilha salva pelo Excel antigo vem em Windows-1252 - se nao for UTF-8 valido, le nesse formato
+function ctDecodificarTexto(buffer) {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer).replace(/^﻿/, '');
+  } catch {
+    return new TextDecoder('windows-1252').decode(buffer);
+  }
+}
+
+ctImpArquivo.addEventListener('change', async () => {
+  const arquivo = ctImpArquivo.files?.[0];
+  if (!arquivo) return;
+  ctMostrarErroImp('');
+  ctImpResultado.hidden = true;
+  try {
+    const buffer = await arquivo.arrayBuffer();
+    let linhas;
+    if (/\.(xlsx|xls)$/i.test(arquivo.name)) {
+      const XLSX = await ctGarantirSheetJs();
+      const livro = XLSX.read(buffer, { type: 'array' });
+      const planilha = livro.Sheets[livro.SheetNames[0]];
+      linhas = XLSX.utils.sheet_to_json(planilha, { header: 1, raw: false, defval: '' });
+    } else {
+      linhas = ctLerCsv(ctDecodificarTexto(buffer));
+    }
+    linhas = linhas.map((l) => l.map((v) => String(v ?? '').trim())).filter((l) => l.some(Boolean));
+    if (linhas.length < 2) throw new Error('A planilha precisa ter uma linha de cabeçalho e pelo menos um contato.');
+    ctImpCabecalho = linhas[0];
+    ctImpLinhas = linhas.slice(1);
+    ctMontarMapa();
+    ctImpPasso(2);
+    ctImpInfo.textContent = `${arquivo.name}: ${ctImpLinhas.length} ${ctImpLinhas.length === 1 ? 'linha' : 'linhas'}. Confira qual coluna é cada informação:`;
+    ctPreencherInstancias(ctImpInstancia);
+    ctImpInstancia.closest('label').hidden = ctInstancias.length < 2;
+    ctImpEtiquetaExtra.value = '';
+    ctAtualizarPreviaImp();
+  } catch (err) {
+    ctMostrarErroImp(`Não consegui ler a planilha: ${err.message}`);
+    ctImpArquivo.value = '';
+  }
+});
+
+// um select por campo, ja escolhendo sozinho a coluna cujo nome bate com algum apelido
+function ctMontarMapa() {
+  ctImpMapa.textContent = '';
+  const usadas = new Set();
+  for (const campo of CT_CAMPOS_IMPORTACAO) {
+    const label = document.createElement('label');
+    label.className = 'ct-campo';
+    label.textContent = campo.nome + (campo.obrigatorio ? ' *' : '');
+    const sel = document.createElement('select');
+    sel.dataset.campo = campo.id;
+    sel.appendChild(new Option(campo.obrigatorio ? 'Escolha a coluna' : 'Não importar', ''));
+    ctImpCabecalho.forEach((titulo, i) => sel.appendChild(new Option(titulo || `Coluna ${i + 1}`, String(i))));
+    const achada = ctImpCabecalho.findIndex((t, i) => !usadas.has(i) && campo.apelidos.includes(ctSemAcento(t)));
+    if (achada >= 0) { sel.value = String(achada); usadas.add(achada); }
+    sel.addEventListener('change', ctAtualizarPreviaImp);
+    label.appendChild(sel);
+    ctImpMapa.appendChild(label);
+  }
+}
+
+function ctMapaAtual() {
+  const mapa = {};
+  for (const sel of ctImpMapa.querySelectorAll('select')) if (sel.value !== '') mapa[sel.dataset.campo] = Number(sel.value);
+  return mapa;
+}
+
+// etapa da planilha pode vir pelo nome ("Em atendimento") ou pelo id interno
+function ctEtapaDaPlanilha(valor) {
+  const v = ctSemAcento(valor);
+  if (!v) return '';
+  const achada = ctEtapas.find((e) => e.id === v || ctSemAcento(e.nome) === v);
+  return achada ? achada.id : '';
+}
+
+function ctMontarLinhasImp() {
+  const mapa = ctMapaAtual();
+  const extra = ctImpEtiquetaExtra.value.trim();
+  const pega = (linha, campo) => (mapa[campo] === undefined ? '' : linha[mapa[campo]] || '');
+  const vistos = new Set();
+  const validas = [];
+  let semTelefone = 0;
+  let repetidas = 0;
+  for (const linha of ctImpLinhas) {
+    const numero = ctNormalizarTelefone(pega(linha, 'numero'));
+    if (!numero) { semTelefone++; continue; }
+    if (vistos.has(numero)) { repetidas++; continue; }
+    vistos.add(numero);
+    const etiquetas = pega(linha, 'etiquetas');
+    validas.push({
+      numero,
+      nome: pega(linha, 'nome'),
+      email: pega(linha, 'email'),
+      etiquetas: [etiquetas, extra].filter(Boolean).join(','),
+      observacoes: pega(linha, 'observacoes'),
+      etapa: ctEtapaDaPlanilha(pega(linha, 'etapa')),
+    });
+  }
+  return { validas, semTelefone, repetidas, temTelefone: mapa.numero !== undefined };
+}
+
+function ctAtualizarPreviaImp() {
+  const { validas, semTelefone, repetidas, temTelefone } = ctMontarLinhasImp();
+  ctImpConfirmar.disabled = !temTelefone || !validas.length;
+  if (!temTelefone) {
+    ctImpResumo.textContent = 'Escolha qual coluna tem o telefone pra continuar.';
+  } else {
+    const partes = [`${validas.length} ${validas.length === 1 ? 'contato pronto' : 'contatos prontos'} pra importar`];
+    if (semTelefone) partes.push(`${semTelefone} sem telefone válido (ficam de fora)`);
+    if (repetidas) partes.push(`${repetidas} repetidos na planilha`);
+    ctImpResumo.textContent = partes.join(' · ');
+  }
+  ctImpConfirmar.textContent = validas.length ? `Importar ${validas.length}` : 'Importar';
+
+  ctImpPrevia.textContent = '';
+  const cab = document.createElement('tr');
+  for (const t of ['Nome', 'Telefone', 'E-mail', 'Etiquetas']) {
+    const th = document.createElement('th');
+    th.textContent = t;
+    cab.appendChild(th);
+  }
+  const thead = document.createElement('thead');
+  thead.appendChild(cab);
+  const tbody = document.createElement('tbody');
+  for (const l of validas.slice(0, 8)) {
+    const tr = document.createElement('tr');
+    for (const v of [l.nome || '—', ctFormatarTelefone(l.numero), l.email, l.etiquetas.split(',').filter(Boolean).join(', ')]) {
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  ctImpPrevia.append(thead, tbody);
+}
+ctImpEtiquetaExtra.addEventListener('input', ctAtualizarPreviaImp);
+
+ctImpConfirmar.addEventListener('click', async () => {
+  const { validas } = ctMontarLinhasImp();
+  if (!validas.length) return;
+  ctMostrarErroImp('');
+  ctImpConfirmar.disabled = true;
+  const total = { novos: 0, atualizados: 0, ignorados: 0, invalidos: 0 };
+  try {
+    for (let i = 0; i < validas.length; i += 500) {
+      ctImpConfirmar.textContent = `Importando ${Math.min(i + 500, validas.length)} de ${validas.length}...`;
+      const res = await fetch('/api/crm/base-contatos/importar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ instancia: ctImpInstancia.value || ctInstancias[0], modo: ctImpModo.value, linhas: validas.slice(i, i + 500) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+      for (const k of Object.keys(total)) total[k] += data[k] || 0;
+    }
+    const partes = [`${total.novos} ${total.novos === 1 ? 'contato novo' : 'contatos novos'}`];
+    if (total.atualizados) partes.push(`${total.atualizados} atualizados`);
+    if (total.ignorados) partes.push(`${total.ignorados} já existiam e ficaram como estavam`);
+    if (total.invalidos) partes.push(`${total.invalidos} com telefone inválido`);
+    ctImpResultado.textContent = `Importação concluída: ${partes.join(', ')}.`;
+    ctImpResultado.hidden = false;
+    ctImpPasso(0);
+    ctImpVoltar.hidden = false;
+    ctImpVoltar.textContent = 'Importar outra planilha';
+    mostrarAviso('Contatos importados');
+    carregarContatos();
+  } catch (err) {
+    // cada lote e uma transacao no servidor: o que ja foi confirmado fica, o lote que falhou nao entra
+    ctMostrarErroImp(`A importação parou: ${err.message}${total.novos + total.atualizados ? ` (${total.novos} novos e ${total.atualizados} atualizados já tinham entrado)` : ''}`);
+    ctImpConfirmar.disabled = false;
+    ctAtualizarPreviaImp();
+  }
 });
 
 // ---------- Alerta de retorno (conversa do CRM) ----------

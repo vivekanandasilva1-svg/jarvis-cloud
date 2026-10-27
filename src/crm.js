@@ -103,6 +103,12 @@ async function garantirTabelas() {
   // que o CONTATO mandou; lido_em = quando alguem abriu a conversa no app pela ultima vez
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS ultima_entrada_em TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS lido_em TIMESTAMPTZ;`);
+  // base de contatos (aba Contatos): dados extras de cada lead + de onde ele veio ('whatsapp' =
+  // nasceu de uma conversa, 'importado' = planilha, 'manual' = cadastrado na mao)
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS email TEXT;`);
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS etiquetas TEXT[] NOT NULL DEFAULT '{}';`);
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS observacoes TEXT;`);
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS origem TEXT NOT NULL DEFAULT 'whatsapp';`);
   // id da mensagem no WhatsApp (key.id) - evita registrar duas vezes a mesma mensagem quando o
   // Evolution reenvia o webhook (ou o eco de algo que a gente mesmo mandou chega depois de um reinicio)
   await pool.query(`ALTER TABLE crm_mensagens ADD COLUMN IF NOT EXISTS wa_id TEXT;`);
@@ -151,6 +157,17 @@ export async function registrarMensagem(tenantId, { numero, instancia, direcao, 
       [tenantId, numero, instancia, texto],
     );
     if (eco.length) return;
+  }
+
+  // contato importado/cadastrado com o numero "com 9" (ou sem) e o WhatsApp mandando no outro
+  // formato: assume o card que ainda nao tinha conversa, em vez de abrir um card duplicado
+  const variante = varianteNonoDigito(numero);
+  if (variante) {
+    await pool.query(
+      `UPDATE crm_contatos SET numero = $1 WHERE tenant_id = $2 AND instancia = $3 AND numero = $4 AND ultima_mensagem_em IS NULL
+         AND NOT EXISTS (SELECT 1 FROM crm_contatos WHERE tenant_id = $2 AND instancia = $3 AND numero = $1)`,
+      [numero, tenantId, instancia, variante],
+    );
   }
 
   const preview = (texto || '').slice(0, 200) || (tipo !== 'text' ? `[${tipo}]` : '');
@@ -222,6 +239,7 @@ export async function marcarPreAgendado(tenantId, numero, instancia, detalhes = 
 }
 
 // so os NAO ocultos - o padrao do board (ver listarContatosOcultos pra tela de gerenciar)
+// Contato importado/cadastrado que ainda nao conversou fica so na aba Contatos (nao lota o funil)
 export async function listarContatos(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
@@ -230,7 +248,7 @@ export async function listarContatos(tenantId) {
             retorno_em, retorno_nota, retorno_origem, retorno_disparado_em,
             (retorno_em IS NOT NULL AND (retorno_em AT TIME ZONE 'America/Maceio')::date <= (now() AT TIME ZONE 'America/Maceio')::date) AS retorno_hoje,
             (ultima_entrada_em IS NOT NULL AND (lido_em IS NULL OR ultima_entrada_em > lido_em)) AS nao_lida
-     FROM crm_contatos WHERE tenant_id = $1 AND oculto = false ORDER BY ultima_mensagem_em DESC NULLS LAST`,
+     FROM crm_contatos WHERE tenant_id = $1 AND oculto = false AND ultima_mensagem_em IS NOT NULL ORDER BY ultima_mensagem_em DESC NULLS LAST`,
     [tenantId],
   );
   return rows;
@@ -248,6 +266,143 @@ export async function listarContatosOcultos(tenantId) {
     [tenantId],
   );
   return rows;
+}
+
+// ---------- base de contatos (aba Contatos: lista, cadastro, importar/exportar) ----------
+
+// telefone de planilha -> so digitos no formato do WhatsApp (55 + DDD + numero). Numero
+// brasileiro sem o 55 (10/11 digitos) ganha o 55; fora isso aceita internacional de 10 a 15
+// digitos. Devolve null quando nao da pra ser um WhatsApp
+export function normalizarTelefone(bruto) {
+  let d = String(bruto ?? '').replace(/\D/g, '').replace(/^0+/, '');
+  if (d.length === 10 || d.length === 11) d = `55${d}`;
+  if (d.length < 10 || d.length > 15) return null;
+  return d;
+}
+
+// celular brasileiro aparece com e sem o 9 na frente (o WhatsApp de contas antigas usa sem) -
+// devolve o outro formato pra deduplicar/ligar os dois
+export function varianteNonoDigito(numero) {
+  const n = String(numero || '');
+  if (/^55\d{2}9\d{8}$/.test(n)) return n.slice(0, 4) + n.slice(5);
+  if (/^55\d{2}[6-9]\d{7}$/.test(n)) return `${n.slice(0, 4)}9${n.slice(4)}`;
+  return null;
+}
+
+function limparEtiquetas(lista) {
+  const vistas = new Map();
+  for (const bruta of Array.isArray(lista) ? lista : String(lista || '').split(/[,;|]/)) {
+    const t = String(bruta || '').trim().slice(0, 40);
+    if (t && !vistas.has(t.toLowerCase())) vistas.set(t.toLowerCase(), t);
+  }
+  return [...vistas.values()].slice(0, 20);
+}
+const textoOuNull = (v, max) => {
+  const t = v == null ? '' : String(v).trim().slice(0, max);
+  return t || null;
+};
+
+// todos os contatos nao ocultos do tenant, com ou sem conversa - a tela de Contatos
+export async function listarBaseContatos(tenantId) {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT id, numero, instancia, nome, etapa, email, etiquetas, observacoes, origem, criado_em, ultima_mensagem_em, auto_pausado
+     FROM crm_contatos WHERE tenant_id = $1 AND oculto = false
+     ORDER BY COALESCE(ultima_mensagem_em, criado_em) DESC`,
+    [tenantId],
+  );
+  return rows;
+}
+
+async function acharPorNumero(cliente, tenantId, numero) {
+  const variante = varianteNonoDigito(numero);
+  const { rows } = await cliente.query(
+    `SELECT id, etiquetas FROM crm_contatos WHERE tenant_id = $1 AND numero = ANY($2::text[]) ORDER BY ultima_mensagem_em DESC NULLS LAST LIMIT 1`,
+    [tenantId, variante ? [numero, variante] : [numero]],
+  );
+  return rows[0] || null;
+}
+
+// cadastro manual (sem id) ou edicao dos dados extras (com id). Numero/instancia so no cadastro -
+// trocar o numero de um contato com conversa desligaria o historico dele
+export async function salvarContatoBase(tenantId, dados) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const nome = textoOuNull(dados.nome, 120);
+  const email = textoOuNull(dados.email, 160);
+  const observacoes = textoOuNull(dados.observacoes, 2000);
+  const etiquetas = limparEtiquetas(dados.etiquetas);
+
+  if (dados.id) {
+    const { rows } = await pool.query(
+      `UPDATE crm_contatos SET nome = $1, email = $2, observacoes = $3, etiquetas = $4 WHERE id = $5 AND tenant_id = $6 RETURNING id`,
+      [nome, email, observacoes, etiquetas, Number(dados.id), tenantId],
+    );
+    if (!rows[0]) throw new Error('Contato nao encontrado.');
+    eventosCrm.emit('contato-atualizado', { tenantId, contatoId: rows[0].id });
+    return rows[0].id;
+  }
+
+  const numero = normalizarTelefone(dados.numero);
+  if (!numero) throw new Error('Telefone invalido - use DDD + numero (ex: 82 99999-9999).');
+  if (!dados.instancia) throw new Error('Escolha o numero de WhatsApp desse contato.');
+  if (await acharPorNumero(pool, tenantId, numero)) throw new Error('Ja existe um contato com esse telefone.');
+  const { rows } = await pool.query(
+    `INSERT INTO crm_contatos (tenant_id, numero, instancia, nome, email, observacoes, etiquetas, origem)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual') RETURNING id`,
+    [tenantId, numero, String(dados.instancia), nome, email, observacoes, etiquetas],
+  );
+  return rows[0].id;
+}
+
+// importacao de planilha (a tela manda em lotes). Duplicado = mesmo telefone (com/sem o 9) em
+// qualquer numero do tenant: modo 'atualizar' completa os dados (nome/email/obs so se vierem,
+// etiquetas somam), 'pular' deixa como esta. Tudo numa transacao - ou entra o lote todo ou nada.
+// Follow Up fica de fora: entrar nessa etapa dispara a cadencia de mensagens automaticas
+const ETAPAS_IMPORTAVEIS = new Set([...IDS_ETAPAS].filter((e) => e !== 'follow_up'));
+export async function importarContatos(tenantId, instancia, linhas, modo = 'pular') {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const resultado = { novos: 0, atualizados: 0, ignorados: 0, invalidos: 0 };
+  const cliente = await pool.connect();
+  try {
+    await cliente.query('BEGIN');
+    for (const linha of linhas.slice(0, 1000)) {
+      const numero = normalizarTelefone(linha?.numero);
+      if (!numero) { resultado.invalidos++; continue; }
+      const nome = textoOuNull(linha.nome, 120);
+      const email = textoOuNull(linha.email, 160);
+      const observacoes = textoOuNull(linha.observacoes, 2000);
+      const etiquetas = limparEtiquetas(linha.etiquetas);
+      const etapa = ETAPAS_IMPORTAVEIS.has(linha.etapa) ? linha.etapa : null;
+
+      const existente = await acharPorNumero(cliente, tenantId, numero);
+      if (existente) {
+        if (modo !== 'atualizar') { resultado.ignorados++; continue; }
+        await cliente.query(
+          `UPDATE crm_contatos SET nome = COALESCE($1, nome), email = COALESCE($2, email), observacoes = COALESCE($3, observacoes),
+             etiquetas = $4, etapa = COALESCE($5, etapa) WHERE id = $6`,
+          [nome, email, observacoes, limparEtiquetas([...(existente.etiquetas || []), ...etiquetas]), etapa, existente.id],
+        );
+        resultado.atualizados++;
+      } else {
+        await cliente.query(
+          `INSERT INTO crm_contatos (tenant_id, numero, instancia, nome, email, observacoes, etiquetas, etapa, origem)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'novo_lead'), 'importado')`,
+          [tenantId, numero, instancia, nome, email, observacoes, etiquetas, etapa],
+        );
+        resultado.novos++;
+      }
+    }
+    await cliente.query('COMMIT');
+  } catch (err) {
+    await cliente.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    cliente.release();
+  }
+  return resultado;
 }
 
 // ---------- senha extra pra ver a lista de conversas ocultas (por tenant) ----------
@@ -462,9 +617,29 @@ export async function moverEtapa(tenantId, id, etapa) {
 
 // manda uma mensagem de texto pro contato direto pelo CRM (usa a mesma instancia que o card
 // pertence) e registra como saida - assim a conversa aberta no app fica igual a conversa real
+// o WhatsApp devolve no envio o numero real da conta (remoteJid) - contato importado/cadastrado
+// com o 9 a mais (ou a menos) passa a usar esse formato, senao as respostas dele (que chegam no
+// formato real) abririam um card duplicado
+async function alinharNumeroPeloEnvio(tenantId, numero, instancia, resposta) {
+  const jid = resposta?.key?.remoteJid || '';
+  if (!jid.endsWith('@s.whatsapp.net')) return numero;
+  const real = jid.split('@')[0];
+  if (!real || real === numero || varianteNonoDigito(numero) !== real || !pool) return numero;
+  const { rowCount } = await pool.query(
+    `UPDATE crm_contatos SET numero = $1 WHERE tenant_id = $2 AND instancia = $3 AND numero = $4
+       AND NOT EXISTS (SELECT 1 FROM crm_contatos WHERE tenant_id = $2 AND instancia = $3 AND numero = $1)`,
+    [real, tenantId, instancia, numero],
+  );
+  if (!rowCount) return numero;
+  await pool.query(`UPDATE crm_mensagens SET numero = $1 WHERE tenant_id = $2 AND instancia = $3 AND numero = $4`, [real, tenantId, instancia, numero]);
+  return real;
+}
+
 export async function enviarMensagem(tenantId, numero, instancia, texto) {
-  await evolutionApi.enviarMensagemTextoPor(instancia, numero, texto);
-  await registrarMensagem(tenantId, { numero, instancia, direcao: 'saida', tipo: 'text', texto });
+  const resposta = await evolutionApi.enviarMensagemTextoPor(instancia, numero, texto);
+  const numeroReal = await alinharNumeroPeloEnvio(tenantId, numero, instancia, resposta);
+  await registrarMensagem(tenantId, { numero: numeroReal, instancia, direcao: 'saida', tipo: 'text', texto, waId: resposta?.key?.id || null });
+  return resposta;
 }
 
 // manda midia (foto, video, documento ou audio gravado) pela aba Conversas, na mesma instancia do
@@ -479,8 +654,9 @@ export async function enviarMidiaContato(tenantId, numero, instancia, { tipo, mi
     ? await evolutionApi.enviarAudio(instancia, numero, base64)
     : await evolutionApi.enviarMidia(instancia, numero, { mediatype: tipo, mimetype, media: base64, fileName, caption: legenda || undefined });
   const guardarMidia = tipo === 'image' || tipo === 'audio';
+  const numeroReal = await alinharNumeroPeloEnvio(tenantId, numero, instancia, resposta);
   await registrarMensagem(tenantId, {
-    numero, instancia, direcao: 'saida', tipo,
+    numero: numeroReal, instancia, direcao: 'saida', tipo,
     texto: legenda || (tipo === 'document' ? fileName || 'documento' : ''),
     midiaBase64: guardarMidia ? base64 : null,
     midiaMimetype: guardarMidia ? mimetype : null,

@@ -604,5 +604,13 @@
     "tipo": "melhoria",
     "titulo": "Aba Conversas: caixa de entrada estilo WhatsApp Web pra atender pelo app",
     "conteudo": "Nova aba Conversas (grupo Atendimento) usando a mesma base do CRM (crm_contatos/crm_mensagens + tempo real por SSE): lista com busca, filtros (Todas, Não lidas, IA atendendo, IA pausada), filtro por número quando há mais de uma instância, contador de não lidas no menu, etiquetas de etapa/IA pausada/retorno hoje; conversa com bolhas do WhatsApp, troca de etapa e botão pra pausar/retomar a IA só naquele contato; envio de texto (Enter envia, Shift+Enter quebra linha), foto/vídeo/documento com legenda e áudio gravado no navegador (rota nova POST /api/crm/mensagens/midia, guarda base64 só de imagem/áudio, id do WhatsApp evita duplicar com o eco do webhook). Segue a mesma permissão da aba CRM (não criou chave nova em TABS_VALIDAS). Sem disparador em massa, por decisão do dono. O sino de notificações agora abre a conversa direto nessa aba. Pendente: responder citando mensagem e atribuir atendente."
+  },
+  {
+    "chave": "crm:aba-contatos",
+    "modulo": "crm",
+    "data": "2026-10-27",
+    "tipo": "melhoria",
+    "titulo": "Aba Contatos: base de leads com cadastro, importação e exportação de planilha",
+    "conteudo": "Nova aba Contatos (grupo Clientes, mesma permissão do CRM) sobre a mesma tabela crm_contatos, com colunas novas email, etiquetas, observacoes e origem (whatsapp/importado/manual). Lista com busca, filtros por etapa, etiqueta e origem; no celular vira cartões. Cadastro e edição em modal com sinal de não salvo/salvo; 'Abrir conversa' leva pra aba Conversas. Importa .xlsx (SheetJS sob demanda) ou CSV (detecta ; , tab e Windows-1252), reconhece as colunas sozinho, mostra prévia e contagem (sem telefone, repetidos), etiqueta pra todos, escolhe o número de atendimento e o que fazer com duplicados; envia em lotes de 500, cada lote numa transação. Duplicado = mesmo telefone com ou sem o 9. Exporta Excel e CSV (; com BOM) do que está filtrado, no mesmo formato que a importação lê. Importados sem conversa ficam fora do funil e da aba Conversas até a primeira mensagem; quando a pessoa escreve ou recebe a primeira mensagem, o card assume o formato real do número no WhatsApp (com ou sem 9) em vez de duplicar. Etapa Follow Up não entra pela importação (dispararia a cadência automática). Sem disparo em massa, por decisão do dono."
   }
 ]
