@@ -6735,6 +6735,14 @@ function renderizarArquivosPendentesGerador() {
       grArquivosPendentes.splice(i, 1);
       renderizarArquivosPendentesGerador();
     });
+    // miniatura da imagem - da pra conferir que e o print certo antes de gastar a geracao
+    if (arq.mediaType.startsWith('image/')) {
+      const mini = document.createElement('img');
+      mini.className = 'gr-arquivo-mini';
+      mini.src = `data:${arq.mediaType};base64,${arq.base64}`;
+      mini.alt = '';
+      row.appendChild(mini);
+    }
     row.append(nome, remover);
     grArquivosLista.appendChild(row);
   });

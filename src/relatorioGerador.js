@@ -748,6 +748,13 @@ export async function gerarRelatorio(tenantId, { fonte, temaId, accountId, from,
   let gerado;
   if (fonte === 'manual') {
     const extraido = await extrairDadosEAnaliseDeArquivos({ tenantId, arquivos, instrucoes: pedido });
+    // nenhum numero de anuncio nos arquivos (ex: print errado anexado) - para aqui em vez de salvar
+    // um relatorio com todos os cartoes em "-"
+    const temNumero = CHAVES_METRICAS.some((k) => extraido.dados[k] != null) || extraido.dados.videoRows?.length;
+    if (!temNumero) {
+      const motivo = extraido.avisos[0] ? ` A IA viu: ${extraido.avisos[0]}` : '';
+      throw new Error(`Não encontrei números de anúncio nos arquivos anexados, então não gerei o relatório. Confira se anexou o print certo do Gerenciador de Anúncios da Meta.${motivo}`);
+    }
     dados = extraido.dados;
     gerado = extraido;
   } else {

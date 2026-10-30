@@ -652,5 +652,13 @@
     "tipo": "correcao",
     "titulo": "Queda do domínio por DNS trocado na Hostinger (29–30/10)",
     "conteudo": "Em 29/10 por volta de 12h a zona DNS de lumia-marketing.com na Hostinger passou a ter um ALIAS @ e um CNAME www apontando pra CDN da Hostinger (cdn.hstgr.net) em vez da VPS 69.62.96.13. O navegador mostrava 'certificado vencido' (era o certificado antigo da CDN; o da VPS estava válido até 18/12) e os webhooks do WhatsApp falhavam com 'certificate has expired', então as mensagens pararam de entrar no CRM. Correção no hPanel: apagado o ALIAS, criado A @ -> 69.62.96.13 e CNAME www -> lumia-marketing.com (TTL 300); MX/TXT do e-mail mantidos. As conversas perdidas foram recuperadas do banco do Evolution direto no CRM, com horário original e sem acionar a IA. Primeira checagem em caso de 'certificado vencido': o DNS público precisa responder 69.62.96.13. Não usar 'Redefinir registros DNS' no hPanel. Pendente: www sem domínio no Easypanel e investigar por que o Evolution não emitiu eventos em 28/10."
+  },
+  {
+    "chave": "relatorios:sem-numeros-nao-gera",
+    "modulo": "relatorios",
+    "data": "2026-10-30",
+    "tipo": "correcao",
+    "titulo": "Gerador de Relatórios: não gera relatório vazio quando o print não tem números",
+    "conteudo": "Caso real: foi anexado por engano um print de outra tela (DNS da Hostinger) no lugar do print do Gerenciador de Anúncios, e saiu um relatório com todos os cartões em '-'. Agora, se a IA não achar nenhuma métrica de anúncio nos arquivos, a geração para com um aviso claro (e o motivo que a IA viu), sem salvar relatório; os anexos continuam na lista pra trocar. A lista de anexos passou a mostrar a miniatura de cada imagem, pra conferir antes de gerar."
   }
 ]

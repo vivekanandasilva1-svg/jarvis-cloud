@@ -3449,3 +3449,6 @@ body.lumien-em-conversas .lumien-btn { bottom: 92px; }
 
 /* espaco no fim das abas que rolam, pra coruja do Lumien nunca ficar em cima do ultimo botao */
 .window-body.tab-instagram, .window-body.tab-contatos, .window-body.tab-resultados { padding-bottom: 96px; }
+
+/* miniatura do print anexado no Gerador de Relatorios */
+.gr-arquivo-mini { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--borda); flex: 0 0 auto; }
