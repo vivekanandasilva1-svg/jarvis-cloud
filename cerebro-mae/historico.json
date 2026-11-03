@@ -668,5 +668,13 @@
     "tipo": "funcao",
     "titulo": "Landing page pública de venda da Lumia (/conheca)",
     "conteudo": "Pedido do dono: página de venda no modelo da Adapta (hero com promessa \"tudo em um só lugar\", faixa de integrações, vitrine de módulos com selos, antes x depois, como funciona, segurança, planos com destaque, demonstração sem compromisso, FAQ e CTA final), na paleta dourado/cinza/preto da Lumia e só com funções reais. Arquivo public/conheca.html, rota curta /conheca, sem login. Não inventa números, depoimentos nem preço: planos aparecem como \"Sob consulta\" e a prova social usa fatos do produto. Todos os botões abrem o WhatsApp com mensagem pronta. Os botões chamam o WhatsApp comercial definido em WHATSAPP_VENDAS. Pendente: definir preços se quiser mostrar e trocar a conversa de exemplo por depoimentos reais quando houver."
+  },
+  {
+    "chave": "cerebro:2d-e-atualizacao-automatica",
+    "modulo": "cerebro",
+    "data": "2026-11-03",
+    "tipo": "correcao",
+    "titulo": "Cérebro: modo 2D quando não há 3D e atualização automática a cada 30s",
+    "conteudo": "Dois problemas relatados pelo dono: (1) a aba mostrava 'Este aparelho não suporta o cérebro 3D' e ficava vazia - acontece quando o navegador recusa WebGL (aceleração gráfica desligada ou bloqueada depois de travamento da placa de vídeo). Agora cai sozinho num grafo 2D (force-graph@1.51.4) com as mesmas cores, ligações e cliques, e mostra como religar o 3D. (2) O cérebro só buscava as memórias de novo ao sair e voltar pra aba; parado na tela ficava sempre igual. Agora busca a cada 30s enquanto a aba está visível (pausa com a aba escondida), atualiza contador e lista de recentes, e memória que acabou de chegar aparece maior e branca por 12s. cerebro.js passou pra v=11. Testado em Chrome headless com e sem WebGL."
   }
 ]

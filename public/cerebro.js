@@ -4,6 +4,11 @@
 // nunca abre a aba nao baixa nada disso.
 (() => {
   const LIB_GRAFO = 'https://cdn.jsdelivr.net/npm/3d-force-graph@1.77.0/dist/3d-force-graph.min.js';
+  // plano B quando o navegador nao libera WebGL (aceleracao grafica desligada/bloqueada): mesmo
+  // grafo, desenhado em 2D num canvas comum - o cerebro nunca some
+  const LIB_GRAFO_2D = 'https://cdn.jsdelivr.net/npm/force-graph@1.51.4/dist/force-graph.min.js';
+  const ATUALIZAR_CADA_MS = 30000;
+  const DESTAQUE_NOVO_MS = 12000;
 
   const ORIGENS = {
     claude: { nome: 'Claude', cor: '#e8834a' },
@@ -26,6 +31,10 @@
   let selecionado = null;
   let libCarregando = null;
   let enquadrado = false;
+  let modo2d = false;
+  let timerAtualizar = null;
+  let primeiraCarga = true;
+  const novos = new Map(); // id -> ate quando fica em destaque (memoria que acabou de chegar)
   const el = {};
 
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -74,6 +83,8 @@
       /* o 3D desenha num div PROPRIO: a biblioteca apaga tudo que estiver dentro do container dela,
          e levava junto a mensagem de "cerebro vazio" que fica por cima */
       .crb-grafo-tela { position: absolute; inset: 0; }
+      .crb-aviso-2d { position: absolute; left: 12px; bottom: 12px; right: 12px; z-index: 2; pointer-events: none; font-size: 12px;
+        color: var(--text-dim); background: rgba(20,20,28,0.75); border: 1px solid var(--border-soft); border-radius: 8px; padding: 6px 10px; }
       .crb-grafo-vazio { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
         padding: 24px; color: var(--text-dim); font-size: 13px; line-height: 1.6; pointer-events: none; }
       .crb-painel { flex: 0 0 340px; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
@@ -149,16 +160,18 @@
 
   function carregarLib() {
     if (window.ForceGraph3D) return Promise.resolve();
-    if (!libCarregando) {
-      libCarregando = new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = LIB_GRAFO;
-        s.onload = resolve;
-        s.onerror = () => { libCarregando = null; reject(new Error('não consegui baixar o visualizador 3D')); };
-        document.head.appendChild(s);
-      });
-    }
+    if (!libCarregando) libCarregando = baixarScript(LIB_GRAFO, 'não consegui baixar o visualizador 3D').catch((e) => { libCarregando = null; throw e; });
     return libCarregando;
+  }
+
+  function baixarScript(src, erro) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error(erro));
+      document.head.appendChild(s);
+    });
   }
 
   function webglOk() {
@@ -185,11 +198,14 @@
     if (!nos.length) el.vazio.textContent = dados.nos.length ? 'Nenhuma memória com esses filtros.' : 'O cérebro ainda está vazio. Conecte uma IA em "Conectar IAs" (ela vai salvando sozinha o que for importante) ou crie a primeira memória em "+ Memória".';
   }
 
+  const ehNovo = (n) => (novos.get(n.id) || 0) > Date.now();
+
   function corNo(n) {
     if (destaque && !destaque.has(n.id)) return 'rgba(120,120,140,0.18)';
-    if (selecionado === n.id) return '#ffffff';
+    if (selecionado === n.id || ehNovo(n)) return '#ffffff';
     return corOrigem(n.origem);
   }
+  const tamanhoNo = (n) => (1.5 + Math.min(n.grau || 0, 12) * 0.6) * (ehNovo(n) ? 2.4 : 1);
 
   function atualizarCores() {
     if (!grafo) return;
@@ -215,7 +231,11 @@
     for (const n of g.nos) {
       const a = antigos.get(n.id);
       if (a && a.x != null) Object.assign(n, { x: a.x, y: a.y, z: a.z });
+      // memoria que nao estava na tela da ultima vez = acabou de chegar: fica maior e branca uns
+      // segundos, pra dar pra ver o cerebro crescendo
+      if (!a && !primeiraCarga) novos.set(n.id, Date.now() + DESTAQUE_NOVO_MS);
     }
+    primeiraCarga = false;
     dados = g;
     el.nMem.textContent = g.total;
     el.nLig.textContent = g.links.length;
@@ -235,7 +255,7 @@
       .showNavInfo(false)
       .width(largura()).height(altura())
       .nodeId('id')
-      .nodeVal((n) => 1.5 + Math.min(n.grau || 0, 12) * 0.6)
+      .nodeVal(tamanhoNo)
       .nodeRelSize(4.5)
       .nodeResolution(10)
       .nodeOpacity(0.92)
@@ -266,10 +286,74 @@
     new ResizeObserver(() => { if (grafo && largura() && altura()) grafo.width(largura()).height(altura()); }).observe(el.grafo);
   }
 
+  function criarGrafo2D() {
+    modo2d = true;
+    const largura = () => el.grafo.clientWidth;
+    const altura = () => el.grafo.clientHeight;
+    grafo = window.ForceGraph()(el.grafo)
+      .backgroundColor('rgba(0,0,0,0)')
+      .width(largura()).height(altura())
+      .nodeId('id')
+      .nodeVal(tamanhoNo)
+      .nodeRelSize(4)
+      .nodeLabel((n) => `<div class="crb-tooltip"><b>${esc(n.titulo || TIPOS[n.tipo] || 'Memória')}</b><br>${esc(n.resumo)}</div>`)
+      .linkWidth(0.6)
+      .linkDirectionalParticles((l) => (l.peso >= 0.85 ? 1 : 0))
+      .linkDirectionalParticleWidth(1.6)
+      .linkDirectionalParticleSpeed(0.004)
+      .cooldownTicks(180)
+      .onNodeClick((n) => selecionar(n.id))
+      .onEngineStop(() => enquadrar())
+      .onBackgroundClick(() => { selecionado = null; atualizarCores(); if (!destaque) painelInicial(); });
+    atualizarCores();
+    grafo.d3Force('charge').strength(-40).distanceMax(140);
+    new ResizeObserver(() => { if (grafo && largura() && altura()) grafo.width(largura()).height(altura()); }).observe(el.grafo);
+    const aviso = document.createElement('div');
+    aviso.className = 'crb-aviso-2d';
+    aviso.textContent = 'Modo 2D: a aceleração gráfica do navegador está desligada. Ligue em Configurações → Sistema → "Usar aceleração gráfica" para ver em 3D.';
+    el.grafo.appendChild(aviso);
+  }
+
+  // 3D quando der; se o navegador recusar WebGL (ou a lib 3D falhar), cai pro 2D
+  async function montarGrafo() {
+    if (webglOk()) {
+      try {
+        await carregarLib();
+        criarGrafo();
+        return;
+      } catch (err) {
+        console.warn('Cerebro: 3D indisponivel, usando 2D:', err.message);
+        grafo = null;
+        el.grafo.querySelector('canvas')?.remove();
+      }
+    }
+    if (!window.ForceGraph) await baixarScript(LIB_GRAFO_2D, 'não consegui baixar o visualizador do cérebro');
+    criarGrafo2D();
+  }
+
+  // busca de novo o que as IAs salvaram (a aba aberta parada tambem acompanha)
+  function agendarAtualizacao() {
+    clearInterval(timerAtualizar);
+    timerAtualizar = setInterval(() => {
+      if (!raiz || !raiz.isConnected || raiz.offsetParent === null || document.hidden) return;
+      const estavaNoInicio = !selecionado && !destaque;
+      recarregar().then(() => { if (estavaNoInicio) painelInicial(); }).catch(() => {});
+    }, ATUALIZAR_CADA_MS);
+  }
+  // depois que o destaque das memorias novas vence, volta o tamanho/cor normal
+  setInterval(() => {
+    if (!grafo || !novos.size) return;
+    const agora = Date.now();
+    let mudou = false;
+    for (const [id, ate] of novos) if (ate <= agora) { novos.delete(id); mudou = true; }
+    if (mudou) { grafo.nodeVal(tamanhoNo); atualizarCores(); }
+  }, 2000);
+
   // o zoomToFit da biblioteca encaixa so o CENTRO das bolinhas (fica perto demais com poucas
   // memorias) - aqui a distancia sai do tamanho real do cerebro, com folga pras bolinhas
   function enquadrar() {
     if (!grafo || enquadrado || !grafo.graphData().nodes.length) return;
+    if (modo2d) { enquadrado = true; grafo.zoomToFit(700, 50); return; }
     // calcula na mao a partir das posicoes - o getGraphBbox() da biblioteca devolvia uma caixa
     // errada (minuscula) nessa versao
     const nos = grafo.graphData().nodes.filter((n) => Number.isFinite(n.x));
@@ -291,6 +375,7 @@
     if (!grafo) return;
     const n = grafo.graphData().nodes.find((x) => x.id === id);
     if (!n || n.x == null) return;
+    if (modo2d) { grafo.centerAt(n.x, n.y, 800); grafo.zoom(3.5, 800); return; }
     const dist = 90;
     const r = 1 + dist / Math.hypot(n.x || 1, n.y || 1, n.z || 1);
     const c = grafo.controls();
@@ -470,6 +555,7 @@
   async function recarregar() {
     await carregarDados();
     aplicarFiltros();
+    if (grafo) { grafo.nodeVal(tamanhoNo); atualizarCores(); }
   }
 
   // ---------- entrada (chamado pelo app.js) ----------
@@ -486,12 +572,8 @@
       try {
         await carregarDados();
         painelInicial();
-        if (!webglOk()) {
-          el.vazio.textContent = 'Este aparelho não suporta o cérebro 3D. A busca e a lista ao lado funcionam normalmente.';
-          return;
-        }
-        await carregarLib();
-        criarGrafo();
+        agendarAtualizacao();
+        await montarGrafo();
         aplicarFiltros();
         // garantia caso o layout demore a "assentar" (onEngineStop so dispara no fim)
         setTimeout(enquadrar, 5000);
@@ -503,7 +585,8 @@
     }
     // reabrindo a aba: retoma a animacao e atualiza com o que as IAs salvaram nesse meio tempo
     if (grafo) grafo.resumeAnimation();
-    recarregar().catch(() => {});
+    agendarAtualizacao();
+    recarregar().then(() => { if (!selecionado && !destaque) painelInicial(); }).catch(() => {});
   };
   window.cerebroPausar = () => { if (grafo) grafo.pauseAnimation(); };
 })();
