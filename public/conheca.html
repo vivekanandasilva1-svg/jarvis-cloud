@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lumia · Atendimento com IA, CRM e marketing para clínicas</title>
+  <meta name="description" content="A Lumia atende seus leads no WhatsApp e no Instagram 24h, agenda consultas, organiza tudo num CRM e mostra os resultados. Tudo em um só lugar." />
+  <meta property="og:title" content="Lumia · Atendimento com IA, CRM e marketing em um só lugar" />
+  <meta property="og:description" content="IA que atende no WhatsApp e no Instagram, agenda, faz follow-up e organiza seus leads num CRM." />
+  <meta property="og:image" content="/login-logo.png" />
+  <meta name="theme-color" content="#1c1d20" />
+  <link rel="icon" href="/icon.svg" />
+  <style>
+    :root {
+      --fundo: #1c1d20;
+      --fundo-2: #232428;
+      --lateral: #26282c;
+      --card: #2e3035;
+      --card-2: #383a40;
+      --borda: #44474e;
+      --borda-ouro: rgba(212, 175, 55, 0.35);
+      --ouro: #d4af37;
+      --ouro-claro: #f0cf6b;
+      --ouro-escuro: #a8851f;
+      --prata: #c9ccd1;
+      --texto: #ecebe7;
+      --dim: #a9abb0;
+      --verde: #30a46c;
+      --vermelho: #e5484d;
+      --raio: 16px;
+      --max: 1160px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--fundo);
+      color: var(--texto);
+      font: 16px/1.6 "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+    img { max-width: 100%; display: block; }
+    a { color: inherit; text-decoration: none; }
+    .wrap { max-width: var(--max); margin: 0 auto; padding: 0 16px; }
+    @media (min-width: 720px) { .wrap { padding: 0 28px; } }
+
+    .ouro-txt {
+      background: linear-gradient(100deg, var(--ouro-claro) 0%, var(--ouro) 45%, #fff2c4 70%, var(--ouro) 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+
+    /* ---------- botoes ---------- */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 14px 26px; border-radius: 999px; font-weight: 700; font-size: 16px;
+      border: 1px solid transparent; cursor: pointer; transition: transform .15s, box-shadow .2s, background .2s;
+      white-space: nowrap;
+    }
+    .btn-ouro {
+      background: linear-gradient(180deg, var(--ouro-claro), var(--ouro));
+      color: #241c05;
+      box-shadow: 0 8px 24px rgba(212, 175, 55, 0.25), inset 0 1px 0 rgba(255,255,255,.4);
+    }
+    .btn-ouro:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(212, 175, 55, 0.38), inset 0 1px 0 rgba(255,255,255,.4); }
+    .btn-linha { border-color: var(--borda); color: var(--texto); background: rgba(255,255,255,.02); }
+    .btn-linha:hover { border-color: var(--ouro); color: var(--ouro-claro); }
+    .btn-sm { padding: 9px 18px; font-size: 14px; }
+
+    /* ---------- topo ---------- */
+    header.topo {
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(28, 29, 32, 0.82);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255,255,255,.06);
+    }
+    .topo .wrap { display: flex; align-items: center; gap: 24px; height: 68px; }
+    .marca { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .14em; font-size: 18px; }
+    .marca img { width: 32px; height: 32px; }
+    .topo nav { display: none; gap: 26px; margin-left: 12px; font-size: 15px; color: var(--dim); }
+    .topo nav a:hover { color: var(--ouro-claro); }
+    .topo .acoes { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+    .topo .entrar { display: none; }
+    @media (min-width: 900px) { .topo nav { display: flex; } .topo .entrar { display: inline-flex; } }
+
+    /* ---------- hero ---------- */
+    .hero { position: relative; padding: 72px 0 56px; text-align: center; overflow: hidden; }
+    .hero::before {
+      content: ""; position: absolute; inset: -20% -10% auto; height: 760px; pointer-events: none;
+      background:
+        radial-gradient(600px 380px at 50% 18%, rgba(212,175,55,.20), transparent 70%),
+        radial-gradient(500px 300px at 85% 60%, rgba(201,204,209,.07), transparent 70%);
+    }
+    .hero .logo-giro {
+      width: 76px; height: 76px; margin: 0 auto 26px; position: relative;
+      animation: girar 26s linear infinite;
+      filter: drop-shadow(0 0 22px rgba(212,175,55,.35));
+    }
+    @keyframes girar { to { transform: rotate(360deg); } }
+    .selo {
+      display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px;
+      border: 1px solid var(--borda-ouro); background: rgba(212,175,55,.08);
+      color: var(--ouro-claro); font-size: 13px; font-weight: 600; letter-spacing: .02em;
+    }
+    .selo .ponto { width: 7px; height: 7px; border-radius: 50%; background: var(--verde); box-shadow: 0 0 0 4px rgba(48,164,108,.18); }
+    .hero h1 {
+      position: relative; margin: 20px auto 18px; max-width: 900px;
+      font-size: clamp(36px, 6.4vw, 68px); line-height: 1.05; letter-spacing: -0.02em; font-weight: 800;
+    }
+    .hero p.sub { position: relative; max-width: 680px; margin: 0 auto 32px; color: var(--dim); font-size: clamp(17px, 2vw, 20px); }
+    .hero .ctas { position: relative; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .hero .nota { position: relative; margin-top: 14px; color: var(--dim); font-size: 14px; }
+
+    /* mockup do app no hero */
+    .mock {
+      position: relative; margin: 56px auto 0; max-width: 1020px; text-align: left;
+      border-radius: 18px; border: 1px solid var(--borda); background: var(--lateral);
+      box-shadow: 0 40px 100px rgba(0,0,0,.55), 0 0 0 1px rgba(212,175,55,.08);
+      overflow: hidden;
+    }
+    .mock-barra { display: flex; gap: 7px; align-items: center; padding: 12px 16px; background: #1f2023; border-bottom: 1px solid var(--borda); }
+    .mock-barra i { width: 11px; height: 11px; border-radius: 50%; background: #45474d; }
+    .mock-barra span { margin-left: 12px; font-size: 12px; color: var(--dim); }
+    .mock-corpo { display: grid; grid-template-columns: 1fr; min-height: 340px; }
+    @media (min-width: 820px) { .mock-corpo { grid-template-columns: 190px 1fr 300px; } }
+    .mock-menu { display: none; background: #202124; border-right: 1px solid var(--borda); padding: 16px 12px; font-size: 13px; }
+    @media (min-width: 820px) { .mock-menu { display: block; } }
+    .mock-menu b { display: block; color: var(--dim); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; margin: 12px 8px 6px; font-weight: 600; }
+    .mock-menu div { padding: 7px 10px; border-radius: 8px; color: #d6d4cd; }
+    .mock-menu div.ativo { background: rgba(212,175,55,.14); color: var(--ouro-claro); box-shadow: inset 2px 0 0 var(--ouro); }
+    .kanban { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 10px; padding: 16px; overflow-x: auto; }
+    .col h5 { margin: 0 0 8px; font-size: 12px; color: var(--dim); font-weight: 600; display: flex; justify-content: space-between; }
+    .col h5 em { font-style: normal; color: var(--ouro-claro); }
+    .cartao { background: var(--card-2); border: 1px solid var(--borda); border-radius: 10px; padding: 9px 10px; margin-bottom: 8px; font-size: 12.5px; }
+    .cartao strong { display: block; font-size: 13px; }
+    .cartao small { color: var(--dim); }
+    .tag { display: inline-block; font-size: 10.5px; padding: 1px 7px; border-radius: 999px; margin-top: 5px; font-weight: 600; }
+    .tag.ia { background: rgba(212,175,55,.16); color: var(--ouro-claro); }
+    .tag.ok { background: rgba(48,164,108,.16); color: #5fd19b; }
+    .tag.ig { background: rgba(201,204,209,.12); color: var(--prata); }
+    .mock-chat { display: none; border-left: 1px solid var(--borda); background: #222326; padding: 14px; flex-direction: column; gap: 8px; }
+    @media (min-width: 820px) { .mock-chat { display: flex; } }
+    .mock-chat .quem { font-size: 13px; font-weight: 700; padding-bottom: 8px; border-bottom: 1px solid var(--borda); margin-bottom: 4px; }
+    .mock-chat .quem small { display: block; font-weight: 400; color: var(--verde); font-size: 11.5px; }
+    .bolha { max-width: 88%; padding: 7px 10px; border-radius: 10px; font-size: 12.5px; line-height: 1.45; }
+    .bolha.lead { background: #34363c; align-self: flex-start; border-top-left-radius: 3px; }
+    .bolha.lumia { background: rgba(212,175,55,.18); align-self: flex-end; border-top-right-radius: 3px; }
+    .bolha.sistema { align-self: center; background: rgba(48,164,108,.14); color: #5fd19b; font-size: 11.5px; border-radius: 999px; padding: 4px 12px; }
+
+    /* ---------- faixa de integracoes ---------- */
+    .faixa { padding: 40px 0 16px; text-align: center; }
+    .faixa p { color: var(--dim); font-size: 14px; letter-spacing: .04em; margin: 0 0 18px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+    .chip {
+      padding: 9px 16px; border-radius: 999px; border: 1px solid var(--borda); background: var(--fundo-2);
+      font-size: 14px; font-weight: 600; color: #dcdad3; display: inline-flex; align-items: center; gap: 8px;
+    }
+    .chip svg { width: 16px; height: 16px; color: var(--ouro); }
+
+    /* ---------- secoes ---------- */
+    section.bloco { padding: 88px 0; }
+    section.bloco.alt { background: linear-gradient(180deg, var(--fundo-2), var(--fundo)); border-top: 1px solid rgba(255,255,255,.04); }
+    .cab { text-align: center; max-width: 760px; margin: 0 auto 48px; }
+    .cab .sobre { color: var(--ouro); font-weight: 700; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; }
+    .cab h2 { font-size: clamp(28px, 4.2vw, 44px); line-height: 1.12; margin: 12px 0 14px; letter-spacing: -0.015em; }
+    .cab p { color: var(--dim); font-size: 18px; margin: 0; }
+
+    /* numeros / prova */
+    .provas { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 40px; }
+    @media (min-width: 820px) { .provas { grid-template-columns: repeat(4, 1fr); } }
+    .prova { background: var(--card); border: 1px solid var(--borda); border-radius: var(--raio); padding: 22px; text-align: center; }
+    .prova b { display: block; font-size: clamp(26px, 3.4vw, 36px); line-height: 1.1; margin-bottom: 6px; }
+    .prova span { color: var(--dim); font-size: 14px; }
+
+    /* grade de modulos */
+    .grade { display: grid; grid-template-columns: 1fr; gap: 16px; }
+    @media (min-width: 640px) { .grade { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 980px) { .grade { grid-template-columns: repeat(3, 1fr); } }
+    .mod {
+      position: relative; background: var(--card); border: 1px solid var(--borda); border-radius: var(--raio);
+      padding: 24px; transition: transform .2s, border-color .2s, box-shadow .2s;
+    }
+    .mod:hover { transform: translateY(-4px); border-color: var(--borda-ouro); box-shadow: 0 18px 40px rgba(0,0,0,.35); }
+    .mod .ico {
+      width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 16px;
+      background: rgba(212,175,55,.12); color: var(--ouro-claro); border: 1px solid var(--borda-ouro);
+    }
+    .mod .ico svg { width: 23px; height: 23px; }
+    .mod h3 { margin: 0 0 8px; font-size: 19px; }
+    .mod p { margin: 0; color: var(--dim); font-size: 15px; }
+    .mod .rotulo {
+      position: absolute; top: 20px; right: 20px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+      padding: 3px 9px; border-radius: 999px; background: rgba(212,175,55,.14); color: var(--ouro-claro);
+    }
+    .mod .rotulo.prata { background: rgba(201,204,209,.1); color: var(--prata); }
+    .mod.destaque { grid-column: 1 / -1; display: grid; gap: 24px; align-items: center; background: linear-gradient(135deg, rgba(212,175,55,.10), var(--card) 55%); border-color: var(--borda-ouro); }
+    @media (min-width: 900px) { .mod.destaque { grid-template-columns: 1.1fr 1fr; padding: 36px; } }
+    .mod.destaque h3 { font-size: 26px; }
+    .lista { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 9px; }
+    .lista li { display: flex; gap: 10px; color: #dcdad3; font-size: 15px; }
+    .lista li::before { content: ""; flex: none; width: 18px; height: 18px; margin-top: 3px; border-radius: 50%; background: rgba(212,175,55,.16) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f0cf6b' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5L20 7'/%3E%3C/svg%3E") center/11px no-repeat; }
+
+    /* conversa demonstrativa */
+    .demo { background: #222326; border: 1px solid var(--borda); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 9px; min-height: 340px; }
+    .demo .quem { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--borda); }
+    .demo .quem .av { width: 34px; height: 34px; border-radius: 50%; background: #3d3f45; display: grid; place-items: center; font-size: 13px; color: var(--prata); }
+    .demo .quem small { display: block; font-weight: 400; color: var(--verde); font-size: 12px; }
+    .demo .bolha { font-size: 14px; opacity: 0; transform: translateY(8px); transition: opacity .4s, transform .4s; }
+    .demo .bolha.on { opacity: 1; transform: none; }
+    .demo .aviso { margin-top: auto; font-size: 11.5px; color: var(--dim); text-align: center; }
+
+    /* comparacao */
+    .comparar { display: grid; gap: 16px; grid-template-columns: 1fr; }
+    @media (min-width: 820px) { .comparar { grid-template-columns: 1fr 1fr; } }
+    .lado { border-radius: var(--raio); padding: 28px; border: 1px solid var(--borda); background: var(--card); }
+    .lado h3 { margin: 0 0 18px; font-size: 21px; display: flex; align-items: center; gap: 10px; }
+    .lado ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+    .lado li { display: flex; gap: 12px; font-size: 15.5px; color: #d6d4cd; }
+    .lado li b { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; margin-top: 1px; }
+    .lado.sem { opacity: .92; }
+    .lado.sem li b { background: rgba(229,72,77,.14); color: #ff7b80; }
+    .lado.com { border-color: var(--borda-ouro); background: linear-gradient(160deg, rgba(212,175,55,.12), var(--card) 60%); box-shadow: 0 24px 60px rgba(0,0,0,.3); }
+    .lado.com li b { background: rgba(48,164,108,.16); color: #5fd19b; }
+
+    /* passos */
+    .passos { display: grid; gap: 16px; grid-template-columns: 1fr; counter-reset: passo; }
+    @media (min-width: 720px) { .passos { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 1040px) { .passos { grid-template-columns: repeat(4, 1fr); } }
+    .passo { background: var(--card); border: 1px solid var(--borda); border-radius: var(--raio); padding: 24px; position: relative; }
+    .passo::before {
+      counter-increment: passo; content: counter(passo, decimal-leading-zero);
+      display: block; font-size: 34px; font-weight: 800; line-height: 1; margin-bottom: 14px;
+      background: linear-gradient(180deg, var(--ouro-claro), var(--ouro-escuro)); -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .passo h3 { margin: 0 0 6px; font-size: 18px; }
+    .passo p { margin: 0; color: var(--dim); font-size: 15px; }
+
+    /* recursos pequenos */
+    .mini { display: grid; gap: 12px; grid-template-columns: 1fr; }
+    @media (min-width: 640px) { .mini { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 980px) { .mini { grid-template-columns: repeat(4, 1fr); } }
+    .mini div { background: var(--fundo-2); border: 1px solid var(--borda); border-radius: 12px; padding: 18px; }
+    .mini h4 { margin: 0 0 4px; font-size: 15.5px; color: var(--ouro-claro); }
+    .mini p { margin: 0; font-size: 14px; color: var(--dim); }
+
+    /* seguranca */
+    .seguro { display: grid; gap: 28px; align-items: center; grid-template-columns: 1fr; background: var(--card); border: 1px solid var(--borda); border-radius: 22px; padding: 32px; }
+    @media (min-width: 900px) { .seguro { grid-template-columns: 1fr 1.2fr; padding: 48px; } }
+    .seguro h2 { font-size: clamp(26px, 3.4vw, 36px); margin: 10px 0 12px; line-height: 1.15; }
+    .seguro p { color: var(--dim); margin: 0 0 20px; }
+    .cadeado { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; background: rgba(212,175,55,.12); border: 1px solid var(--borda-ouro); color: var(--ouro-claro); }
+    .cadeado svg { width: 30px; height: 30px; }
+
+    /* planos */
+    .planos { display: grid; gap: 18px; grid-template-columns: 1fr; max-width: 980px; margin: 0 auto; }
+    @media (min-width: 820px) { .planos { grid-template-columns: 1fr 1fr; } }
+    .plano { position: relative; background: var(--card); border: 1px solid var(--borda); border-radius: 20px; padding: 32px; display: flex; flex-direction: column; }
+    .plano.top { border-color: var(--ouro); background: linear-gradient(170deg, rgba(212,175,55,.14), var(--card) 50%); box-shadow: 0 30px 70px rgba(0,0,0,.4), 0 0 0 1px rgba(212,175,55,.25); }
+    .plano .fita { position: absolute; top: -13px; left: 32px; background: linear-gradient(180deg, var(--ouro-claro), var(--ouro)); color: #241c05; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 5px 12px; border-radius: 999px; }
+    .plano h3 { margin: 0; font-size: 24px; }
+    .plano .para { color: var(--dim); margin: 6px 0 20px; font-size: 15px; }
+    .plano .preco { font-size: 30px; font-weight: 800; margin-bottom: 4px; }
+    .plano .preco small { font-size: 15px; font-weight: 500; color: var(--dim); }
+    .plano .lista { margin: 18px 0 28px; flex: 1; }
+    .plano .btn { width: 100%; }
+    .obs-planos { text-align: center; color: var(--dim); font-size: 14.5px; margin: 26px auto 0; max-width: 680px; }
+
+    /* garantia */
+    .garantia { text-align: center; border: 1px solid var(--borda-ouro); border-radius: 22px; padding: 44px 24px; background: radial-gradient(600px 240px at 50% 0%, rgba(212,175,55,.16), transparent 70%), var(--fundo-2); }
+    .garantia h2 { font-size: clamp(26px, 3.6vw, 38px); margin: 14px 0 10px; }
+    .garantia p { color: var(--dim); max-width: 620px; margin: 0 auto 26px; font-size: 17px; }
+
+    /* faq */
+    .faq { max-width: 820px; margin: 0 auto; display: grid; gap: 10px; }
+    .faq details { background: var(--card); border: 1px solid var(--borda); border-radius: 14px; padding: 0 22px; transition: border-color .2s; }
+    .faq details[open] { border-color: var(--borda-ouro); }
+    .faq summary { cursor: pointer; list-style: none; padding: 18px 0; font-weight: 700; font-size: 16.5px; display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary::after { content: "+"; flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: rgba(212,175,55,.12); color: var(--ouro-claro); font-size: 20px; font-weight: 500; transition: transform .2s; }
+    .faq details[open] summary::after { transform: rotate(45deg); }
+    .faq details p { margin: 0 0 18px; color: var(--dim); }
+
+    /* cta final + rodape */
+    .final { text-align: center; padding: 96px 0; position: relative; overflow: hidden; }
+    .final::before { content: ""; position: absolute; inset: 0; background: radial-gradient(700px 360px at 50% 100%, rgba(212,175,55,.18), transparent 70%); pointer-events: none; }
+    .final h2 { position: relative; font-size: clamp(30px, 5vw, 52px); line-height: 1.1; margin: 0 auto 16px; max-width: 820px; }
+    .final p { position: relative; color: var(--dim); font-size: 18px; margin: 0 auto 30px; max-width: 600px; }
+    footer { border-top: 1px solid rgba(255,255,255,.06); padding: 36px 0; color: var(--dim); font-size: 14px; }
+    footer .wrap { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; justify-content: space-between; }
+    footer nav { display: flex; gap: 22px; flex-wrap: wrap; }
+    footer a:hover { color: var(--ouro-claro); }
+
+    /* whatsapp flutuante */
+    .zap {
+      position: fixed; right: 18px; bottom: 18px; z-index: 60; width: 56px; height: 56px; border-radius: 50%;
+      display: grid; place-items: center; background: #25d366; color: #fff; box-shadow: 0 10px 28px rgba(0,0,0,.45);
+      transition: transform .2s;
+    }
+    .zap:hover { transform: scale(1.07); }
+    .zap svg { width: 28px; height: 28px; }
+
+    /* revelar ao rolar */
+    .rev { opacity: 0; transform: translateY(22px); transition: opacity .7s ease, transform .7s ease; }
+    .rev.on { opacity: 1; transform: none; }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .rev, .demo .bolha { opacity: 1; transform: none; transition: none; }
+      .hero .logo-giro { animation: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- icones reaproveitados -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9 17h6"/></symbol>
+    <symbol id="i-kanban" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 7v7M12 7v4M16 7v9"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+    <symbol id="i-insta" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/></symbol>
+    <symbol id="i-mega" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1zM16 8a5 5 0 0 1 0 8M19 5a9 9 0 0 1 0 14"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 17v-3M12 17v-6M16 17v-4"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></symbol>
+    <symbol id="i-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="17" r="2.5"/><circle cx="19" cy="17" r="2"/><path d="M8.2 7.2l7.6-.2M7.2 8.2l3.7 6.6M16.8 9.2l-3.6 5.8M14.5 17h2.5"/></symbol>
+    <symbol id="i-owl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l3 3h8l3-3v9a7 7 0 0 1-14 0z"/><circle cx="9" cy="11" r="2"/><circle cx="15" cy="11" r="2"/><path d="M11 15l1 1 1-1"/></symbol>
+    <symbol id="i-tooth" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3c-2.5 0-4 2-4 4.5 0 3 1.5 4.5 2 7S6 21 8 21s2-5 4-5 2 5 4 5 2.5-4 3-6.5 2-4 2-7C21 5 19.5 3 17 3c-2 0-3 1-5 1S9 3 7 3z"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3z"/></symbol>
+  </defs>
+</svg>
+
+<header class="topo">
+  <div class="wrap">
+    <a href="#inicio" class="marca"><img src="/login-logo.png" alt="" />LUMIA</a>
+    <nav aria-label="Seções">
+      <a href="#funcoes">Funções</a>
+      <a href="#como">Como funciona</a>
+      <a href="#planos">Planos</a>
+      <a href="#faq">Dúvidas</a>
+    </nav>
+    <div class="acoes">
+      <a href="/" class="btn btn-linha btn-sm entrar">Entrar</a>
+      <a href="#" class="btn btn-ouro btn-sm js-zap" data-msg="Olá! Quero conhecer a Lumia.">Quero a Lumia</a>
+    </div>
+  </div>
+</header>
+
+<main id="inicio">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap">
+      <img class="logo-giro" src="/login-logo.png" alt="" />
+      <span class="selo"><span class="ponto"></span>Atendendo agora, 24 horas por dia</span>
+      <h1>Atendimento, CRM e marketing da sua clínica, <span class="ouro-txt">em um só lugar.</span></h1>
+      <p class="sub">A Lumia é a recepcionista com inteligência artificial que responde seus leads no WhatsApp e no Instagram, agenda consultas, faz follow-up de quem sumiu e organiza tudo num CRM, com os resultados na palma da mão.</p>
+      <div class="ctas">
+        <a href="#" class="btn btn-ouro js-zap" data-msg="Olá! Quero uma demonstração da Lumia.">Quero uma demonstração</a>
+        <a href="#funcoes" class="btn btn-linha">Ver o que ela faz</a>
+      </div>
+      <p class="nota">Demonstração com o seu caso, sem compromisso.</p>
+
+      <div class="mock rev" aria-hidden="true">
+        <div class="mock-barra"><i></i><i></i><i></i><span>lumia-marketing.com · CRM</span></div>
+        <div class="mock-corpo">
+          <div class="mock-menu">
+            <b>Atendimento</b>
+            <div>Conversas</div>
+            <div>Auto Atendimento</div>
+            <div>Follow Up</div>
+            <b>Clientes</b>
+            <div class="ativo">CRM</div>
+            <div>Contatos</div>
+            <div>Resultados</div>
+            <b>Redes sociais</b>
+            <div>Instagram</div>
+          </div>
+          <div class="kanban">
+            <div class="col">
+              <h5>Novo lead <em>3</em></h5>
+              <div class="cartao"><strong>Mariana S.</strong><small>Quanto custa o clareamento?</small><br><span class="tag ia">IA respondendo</span></div>
+              <div class="cartao"><strong>@carol.fit</strong><small>Vi o post de vocês…</small><br><span class="tag ig">Instagram</span></div>
+              <div class="cartao"><strong>Roberto L.</strong><small>Áudio · 0:18</small><br><span class="tag ia">Transcrito</span></div>
+            </div>
+            <div class="col">
+              <h5>Em atendimento <em>2</em></h5>
+              <div class="cartao"><strong>Juliana P.</strong><small>Tem horário sábado?</small><br><span class="tag ia">Vendo agenda</span></div>
+              <div class="cartao"><strong>Fernanda R.</strong><small>Retorno marcado p/ amanhã 10h</small></div>
+            </div>
+            <div class="col">
+              <h5>Agendado <em>4</em></h5>
+              <div class="cartao"><strong>Paulo M.</strong><small>Qui · 14:30 · Dra. Ana</small><br><span class="tag ok">Confirmado</span></div>
+              <div class="cartao"><strong>Lívia C.</strong><small>Sex · 09:00 · Dr. Caio</small><br><span class="tag ok">Confirmado</span></div>
+            </div>
+          </div>
+          <div class="mock-chat">
+            <div class="quem">Juliana P.<small>online</small></div>
+            <div class="bolha lead">Oi! Tem horário pra avaliação no sábado?</div>
+            <div class="bolha lumia">Oi, Juliana! Tenho sábado às 9h ou às 10h30 com a Dra. Ana. Qual fica melhor pra você?</div>
+            <div class="bolha lead">10h30 😊</div>
+            <div class="bolha sistema">✓ Consulta agendada · Sáb 10:30</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INTEGRACOES -->
+  <div class="faixa">
+    <div class="wrap">
+      <p>CONECTADA ÀS FERRAMENTAS QUE VOCÊ JÁ USA</p>
+      <div class="chips">
+        <span class="chip"><svg><use href="#i-chat"/></svg>WhatsApp</span>
+        <span class="chip"><svg><use href="#i-insta"/></svg>Instagram</span>
+        <span class="chip"><svg><use href="#i-tooth"/></svg>Clinicorp</span>
+        <span class="chip"><svg><use href="#i-mega"/></svg>Meta Ads</span>
+        <span class="chip"><svg><use href="#i-cal"/></svg>Google Agenda</span>
+        <span class="chip"><svg><use href="#i-doc"/></svg>Google Sheets</span>
+        <span class="chip"><svg><use href="#i-kanban"/></svg>Trello</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROVA / O QUE MUDA -->
+  <section class="bloco" style="padding-top:64px">
+    <div class="wrap">
+      <div class="cab rev">
+        <span class="sobre">Por que a Lumia</span>
+        <h2>Nenhum lead fica sem resposta. <span class="ouro-txt">Nenhum agendamento se perde.</span></h2>
+        <p>Quem chama a sua clínica quer resposta agora. A Lumia responde na hora, de dia, de noite e no fim de semana, e passa pra sua equipe só o que precisa de gente.</p>
+      </div>
+      <div class="provas">
+        <div class="prova rev"><b class="ouro-txt">24/7</b><span>Atendimento no WhatsApp e no Instagram</span></div>
+        <div class="prova rev"><b class="ouro-txt">Segundos</b><span>pra responder, com tempo de "digitando" configurável</span></div>
+        <div class="prova rev"><b class="ouro-txt">Agenda real</b><span>Consulta horários e marca direto no Clinicorp</span></div>
+        <div class="prova rev"><b class="ouro-txt">1 painel</b><span>Conversas, CRM, contatos, anúncios e resultados</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FUNCOES -->
+  <section class="bloco alt" id="funcoes">
+    <div class="wrap">
+      <div class="cab rev">
+        <span class="sobre">Tudo o que a Lumia faz</span>
+        <h2>Uma plataforma. <span class="ouro-txt">Todo o seu atendimento.</span></h2>
+        <p>Cada módulo funciona sozinho e conversa com os outros. Você liga só o que faz sentido pra sua clínica.</p>
+      </div>
+
+      <div class="grade">
+        <article class="mod destaque rev">
+          <div>
+            <div class="ico"><svg><use href="#i-bot"/></svg></div>
+            <span class="rotulo">Carro-chefe</span>
+            <h3>Auto Atendimento com IA</h3>
+            <p>Uma recepcionista virtual com o jeito da sua clínica. Você escreve as instruções, ela conversa com cada lead como uma pessoa da equipe.</p>
+            <ul class="lista">
+              <li>Entende texto, imagem e áudio, e responde por texto ou por áudio</li>
+              <li>Consulta horários por profissional e agenda direto no Clinicorp, ou só pré-agenda pra sua equipe confirmar</li>
+              <li>Envia os arquivos que você cadastrar: tabela, cardápio de serviços, localização</li>
+              <li>Respeita seu horário de funcionamento e responde quem chamou fora dele assim que abrir</li>
+              <li>Sabe se o paciente faltou ou compareceu na última consulta e conversa de acordo</li>
+            </ul>
+          </div>
+          <div class="demo" id="demo" aria-label="Exemplo de conversa">
+            <div class="quem"><span class="av">CS</span><div>Camila S.<small>online</small></div></div>
+            <div class="bolha lead">Boa noite! Vocês fazem implante? Quanto fica?</div>
+            <div class="bolha lumia">Boa noite, Camila! Fazemos sim 😊 O valor depende da avaliação, porque cada caso é um caso. A avaliação é com o Dr. Caio. Posso ver um horário pra você?</div>
+            <div class="bolha lead">Pode ser quinta de manhã</div>
+            <div class="bolha lumia">Quinta tenho 8h30 ou 11h. Qual prefere?</div>
+            <div class="bolha lead">8h30</div>
+            <div class="bolha sistema">✓ Agendado no Clinicorp · Qui 08:30 · Dr. Caio</div>
+            <div class="aviso">Conversa de exemplo</div>
+          </div>
+        </article>
+
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-kanban"/></svg></div>
+          <h3>CRM Kanban</h3>
+          <p>Cada conversa vira um card que anda sozinho pelas etapas: novo lead, em atendimento, em negociação, pré-agendamento e agendado. Tudo em tempo real.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-chat"/></svg></div>
+          <h3>Conversas</h3>
+          <p>Caixa de entrada no estilo WhatsApp Web pra sua equipe atender pelo computador: texto, mídia e áudio, filtros e pausa da IA por conversa.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-repeat"/></svg></div>
+          <h3>Follow Up automático</h3>
+          <p>O lead parou de responder? A Lumia volta a falar com ele nos dias que você definir, com a mensagem e os arquivos de cada tentativa.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-insta"/></svg></div>
+          <span class="rotulo prata">Novo</span>
+          <h3>Instagram</h3>
+          <p>O direct entra no CRM com resposta por IA, comentários ganham resposta automática e você agenda feed, carrossel, reels e stories.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-users"/></svg></div>
+          <h3>Contatos</h3>
+          <p>Sua base de leads organizada: cadastro, etiquetas, observações, importação de planilha Excel ou CSV sem duplicar e exportação.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-chart"/></svg></div>
+          <h3>Resultados</h3>
+          <p>Indicadores do atendimento por período: leads novos, agendamentos, funil por etapa e comparação com o período anterior.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-mega"/></svg></div>
+          <h3>Meta Ads no WhatsApp</h3>
+          <p>Relatórios das suas campanhas e o saldo das contas de anúncio chegando no WhatsApp, no horário e na frequência que você escolher.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-doc"/></svg></div>
+          <h3>Gerador de Relatórios</h3>
+          <p>A IA monta um relatório visual a partir do Meta Ads ou de um print, com a sua marca e as suas cores, pronto em PDF ou imagem.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-cal"/></svg></div>
+          <h3>Agenda</h3>
+          <p>Agenda interna com visão do dia, sincronizada com o Google Agenda, além de integração com Google Sheets e Trello.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-mic"/></svg></div>
+          <span class="rotulo">IA</span>
+          <h3>Assistente Lumia</h3>
+          <p>Converse com a Lumia por texto, voz ou pelo seu WhatsApp. Ela lê PDF, Word, Excel e imagens, gera arquivos e consulta todas as suas integrações.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-owl"/></svg></div>
+          <span class="rotulo">IA</span>
+          <h3>Lumien</h3>
+          <p>A corujinha assistente em todas as telas: busca um lead, resume a conversa, muda a etapa, pausa a IA ou abre a tela que você precisa, só pedindo.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-brain"/></svg></div>
+          <span class="rotulo">IA</span>
+          <h3>Cérebro de IA</h3>
+          <p>Uma memória única para todas as IAs que você usa (Lumia, ChatGPT, Claude e outras): o que uma aprende, as outras sabem.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMPARACAO -->
+  <section class="bloco">
+    <div class="wrap">
+      <div class="cab rev">
+        <span class="sobre">Antes e depois</span>
+        <h2>O dia a dia da recepção, <span class="ouro-txt">sem e com a Lumia.</span></h2>
+      </div>
+      <div class="comparar">
+        <div class="lado sem rev">
+          <h3>Sem a Lumia</h3>
+          <ul>
+            <li><b>✕</b>Mensagens da noite e do fim de semana esperando até segunda</li>
+            <li><b>✕</b>Leads de anúncio esfriando enquanto a recepção atende o telefone</li>
+            <li><b>✕</b>Quem disse "vou pensar" nunca mais recebe notícia</li>
+            <li><b>✕</b>Conversas espalhadas em celulares, sem saber em que pé está cada uma</li>
+            <li><b>✕</b>Relatório de anúncio montado na mão, quando dá tempo</li>
+          </ul>
+        </div>
+        <div class="lado com rev">
+          <h3><span class="ouro-txt">Com a Lumia</span></h3>
+          <ul>
+            <li><b>✓</b>Resposta em segundos, 24 horas, com o tom da sua clínica</li>
+            <li><b>✓</b>Horário consultado e consulta agendada ainda na conversa</li>
+            <li><b>✓</b>Follow-up e alertas de retorno automáticos no dia combinado</li>
+            <li><b>✓</b>Todo lead num CRM só, com a etapa atualizada sozinha</li>
+            <li><b>✓</b>Resultados e saldo dos anúncios chegando no seu WhatsApp</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMO FUNCIONA -->
+  <section class="bloco alt" id="como">
+    <div class="wrap">
+      <div class="cab rev">
+        <span class="sobre">Como funciona</span>
+        <h2>Do primeiro contato à <span class="ouro-txt">cadeira do consultório.</span></h2>
+        <p>A gente configura com você. Em pouco tempo sua clínica já está atendendo com a Lumia.</p>
+      </div>
+      <div class="passos">
+        <div class="passo rev"><h3>Conecte seu WhatsApp</h3><p>Leia um QR code e pronto: o número da clínica passa a ser atendido pela Lumia. O Instagram conecta com o login dele.</p></div>
+        <div class="passo rev"><h3>Ensine a Lumia</h3><p>Escreva como ela deve falar, o que oferecer, os valores e regras, e anexe os arquivos que ela pode enviar.</p></div>
+        <div class="passo rev"><h3>Ela atende e agenda</h3><p>A Lumia conversa, tira dúvidas, consulta a agenda e marca. Quando precisa de gente, ela avisa e pausa.</p></div>
+        <div class="passo rev"><h3>Você acompanha</h3><p>Veja tudo no CRM, entre em qualquer conversa e acompanhe os resultados por período.</p></div>
+      </div>
+
+      <div class="cab rev" style="margin-top:72px;margin-bottom:28px">
+        <h2 style="font-size:clamp(22px,3vw,30px)">Detalhes que fazem a diferença</h2>
+      </div>
+      <div class="mini">
+        <div class="rev"><h4>Parece gente</h4><p>Espera configurável com "digitando…" antes de responder, sem respostas instantâneas de robô.</p></div>
+        <div class="rev"><h4>Áudio de verdade</h4><p>Ouve áudios recebidos e pode responder em áudio, com horários falados por extenso.</p></div>
+        <div class="rev"><h4>Alerta de retorno</h4><p>O lead pediu um tempo? A Lumia combina dia e hora e volta a falar com ele sozinha.</p></div>
+        <div class="rev"><h4>Pré-agendamento</h4><p>Prefere confirmar por telefone? A IA reserva dia, hora e profissional e sua equipe confirma.</p></div>
+        <div class="rev"><h4>Pausa por conversa</h4><p>Assuma qualquer conversa a hora que quiser. A IA para naquele contato e o resto segue normal.</p></div>
+        <div class="rev"><h4>Horário de funcionamento</h4><p>Defina quando a IA atende. Quem chamar fora do horário é respondido assim que abrir.</p></div>
+        <div class="rev"><h4>Equipe com login próprio</h4><p>Colaboradores com acesso individual dentro da conta da clínica.</p></div>
+        <div class="rev"><h4>Ignora o que não é lead</h4><p>Grupos e status do WhatsApp ficam de fora, e a IA não responde no lugar errado.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SEGURANCA -->
+  <section class="bloco">
+    <div class="wrap">
+      <div class="seguro rev">
+        <div>
+          <div class="cadeado"><svg><use href="#i-lock"/></svg></div>
+          <span class="sobre" style="display:block;margin-top:18px;color:var(--ouro);font-weight:700;font-size:13px;letter-spacing:.16em">PRIVACIDADE E SEGURANÇA</span>
+          <h2>Os dados dos seus pacientes <span class="ouro-txt">são só seus.</span></h2>
+        </div>
+        <div>
+          <p>Cada clínica tem uma conta isolada: os dados de uma nunca aparecem pra outra. Senhas e acessos às suas integrações ficam guardados criptografados, e nada do que passa pela Lumia é vendido ou usado pra publicidade de terceiros.</p>
+          <ul class="lista">
+            <li>Conta separada por clínica, com logins individuais da equipe</li>
+            <li>Credenciais do Clinicorp, Meta e Instagram criptografadas</li>
+            <li>Você conecta e desconecta suas contas quando quiser</li>
+          </ul>
+          <p style="margin:20px 0 0"><a href="/privacidade.html" style="color:var(--ouro-claro);font-weight:600">Ler a Política de Privacidade →</a></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PLANOS -->
+  <section class="bloco alt" id="planos">
+    <div class="wrap">
+      <div class="cab rev">
+        <span class="sobre">Planos</span>
+        <h2>Escolha como a Lumia <span class="ouro-txt">entra na sua clínica.</span></h2>
+        <p>O valor é montado de acordo com os módulos e o tamanho da sua operação.</p>
+      </div>
+      <div class="planos">
+        <div class="plano rev">
+          <h3>Lumia Atendimento</h3>
+          <p class="para">Para quem quer parar de perder lead no WhatsApp e no Instagram.</p>
+          <div class="preco">Sob consulta</div>
+          <ul class="lista">
+            <li>Auto Atendimento com IA no WhatsApp</li>
+            <li>CRM Kanban e caixa de Conversas</li>
+            <li>Contatos com importação de planilha</li>
+            <li>Follow Up automático</li>
+            <li>Resultados do atendimento</li>
+            <li>Lumien, a assistente nas telas</li>
+          </ul>
+          <a href="#" class="btn btn-linha js-zap" data-msg="Olá! Quero saber mais sobre o plano Lumia Atendimento.">Falar sobre este plano</a>
+        </div>
+        <div class="plano top rev">
+          <span class="fita">Mais completo</span>
+          <h3>Lumia Completa</h3>
+          <p class="para">Atendimento, marketing e gestão da clínica numa plataforma só.</p>
+          <div class="preco">Sob consulta</div>
+          <ul class="lista">
+            <li><strong>Tudo do Lumia Atendimento</strong></li>
+            <li>Agendamento direto no Clinicorp</li>
+            <li>Instagram: direct, comentários e publicações agendadas</li>
+            <li>Relatórios e saldo do Meta Ads no WhatsApp</li>
+            <li>Gerador de Relatórios com a sua marca</li>
+            <li>Assistente Lumia com voz, Agenda e Cérebro de IA</li>
+          </ul>
+          <a href="#" class="btn btn-ouro js-zap" data-msg="Olá! Quero saber mais sobre o plano Lumia Completa.">Quero a Lumia Completa</a>
+        </div>
+      </div>
+      <p class="obs-planos">Contratos de 1 a 12 meses. O consumo de IA do atendimento já é calculado no valor que a gente te passar.</p>
+    </div>
+  </section>
+
+  <!-- GARANTIA / DEMO -->
+  <section class="bloco">
+    <div class="wrap">
+      <div class="garantia rev">
+        <span class="selo"><span class="ponto"></span>Sem compromisso</span>
+        <h2>Veja a Lumia atendendo <span class="ouro-txt">o seu caso.</span></h2>
+        <p>Na demonstração a gente mostra a Lumia conversando com perguntas reais da sua clínica, o CRM em funcionamento e como fica a configuração. Você decide depois.</p>
+        <a href="#" class="btn btn-ouro js-zap" data-msg="Olá! Quero agendar uma demonstração da Lumia.">Agendar demonstração</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="bloco alt" id="faq">
+    <div class="wrap">
+      <div class="cab rev">
+        <span class="sobre">Dúvidas frequentes</span>
+        <h2>Perguntas que <span class="ouro-txt">sempre aparecem.</span></h2>
+      </div>
+      <div class="faq">
+        <details class="rev">
+          <summary>Preciso trocar meu número de WhatsApp?</summary>
+          <p>Não. Você conecta o número que já usa lendo um QR code, como no WhatsApp Web. Se preferir, pode usar um número dedicado só pro atendimento.</p>
+        </details>
+        <details class="rev">
+          <summary>A IA vai responder qualquer coisa pros meus pacientes?</summary>
+          <p>Ela segue as instruções que você escreve: o que pode falar, o que oferecer, valores e regras. Você pode pausar a IA em qualquer conversa e assumir na hora, e ela não responde em grupos nem em status.</p>
+        </details>
+        <details class="rev">
+          <summary>Ela agenda de verdade ou só anota?</summary>
+          <p>Você escolhe. Com o Clinicorp conectado, ela consulta os horários por profissional e marca direto na sua agenda. Se preferir, ela só pré-agenda e sua equipe confirma. Sem Clinicorp, usa a agenda interna da Lumia.</p>
+        </details>
+        <details class="rev">
+          <summary>E se o paciente mandar áudio ou foto?</summary>
+          <p>A Lumia ouve o áudio, vê a imagem e responde com base no conteúdo. Ela também pode responder em áudio, se você quiser.</p>
+        </details>
+        <details class="rev">
+          <summary>Funciona fora do horário comercial?</summary>
+          <p>Funciona 24 horas por padrão. Se preferir, defina um horário de funcionamento: quem chamar fora dele recebe resposta assim que a clínica abrir.</p>
+        </details>
+        <details class="rev">
+          <summary>Minha equipe consegue usar junto?</summary>
+          <p>Sim. Cada pessoa pode ter o próprio login, atender pela aba Conversas, mover leads no CRM e assumir conversas da IA quando precisar.</p>
+        </details>
+        <details class="rev">
+          <summary>Serve só pra clínica odontológica?</summary>
+          <p>A Lumia nasceu dentro de uma clínica e tem integração pronta com o Clinicorp, mas o atendimento, o CRM, o Instagram e os relatórios servem pra qualquer negócio que atende cliente pelo WhatsApp.</p>
+        </details>
+        <details class="rev">
+          <summary>Como faço pra contratar?</summary>
+          <p>Fale com a gente pelo WhatsApp. A gente faz a demonstração, monta o plano com os módulos que fazem sentido e configura a sua conta com você.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA FINAL -->
+  <section class="final">
+    <div class="wrap">
+      <h2>Sua clínica atendendo bem, <span class="ouro-txt">mesmo quando todo mundo foi pra casa.</span></h2>
+      <p>Fale com a gente e veja a Lumia funcionando com o seu atendimento.</p>
+      <a href="#" class="btn btn-ouro js-zap" data-msg="Olá! Quero conhecer a Lumia.">Quero a Lumia na minha clínica</a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a href="#inicio" class="marca" style="font-size:15px"><img src="/login-logo.png" alt="" style="width:24px;height:24px" />LUMIA</a>
+    <nav aria-label="Rodapé">
+      <a href="#funcoes">Funções</a>
+      <a href="#planos">Planos</a>
+      <a href="#faq">Dúvidas</a>
+      <a href="/privacidade.html">Privacidade</a>
+      <a href="/">Entrar</a>
+    </nav>
+    <span>© <span id="ano">2026</span> Lumia · lumia-marketing.com</span>
+  </div>
+</footer>
+
+<a href="#" class="zap js-zap" data-msg="Olá! Quero conhecer a Lumia." aria-label="Falar no WhatsApp"><svg><use href="#i-zap"/></svg></a>
+
+<script>
+  // Numero de WhatsApp comercial (so digitos, com DDI e DDD, ex.: 5582999999999).
+  // Vazio = abre o WhatsApp pra pessoa escolher o contato.
+  const WHATSAPP_VENDAS = '';
+
+  document.querySelectorAll('.js-zap').forEach((a) => {
+    const texto = encodeURIComponent(a.dataset.msg || 'Olá! Quero conhecer a Lumia.');
+    a.href = WHATSAPP_VENDAS ? `https://wa.me/${WHATSAPP_VENDAS}?text=${texto}` : `https://wa.me/?text=${texto}`;
+    a.target = '_blank';
+    a.rel = 'noopener';
+  });
+
+  document.getElementById('ano').textContent = new Date().getFullYear();
+
+  const reduz = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // revela os blocos ao rolar
+  const revs = document.querySelectorAll('.rev');
+  if (reduz || !('IntersectionObserver' in window)) {
+    revs.forEach((el) => el.classList.add('on'));
+  } else {
+    const obs = new IntersectionObserver((entradas) => {
+      entradas.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('on'); obs.unobserve(e.target); } });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+    revs.forEach((el) => obs.observe(el));
+  }
+
+  // conversa de exemplo aparece mensagem por mensagem quando entra na tela
+  const demo = document.getElementById('demo');
+  const bolhas = demo.querySelectorAll('.bolha');
+  if (reduz || !('IntersectionObserver' in window)) {
+    bolhas.forEach((b) => b.classList.add('on'));
+  } else {
+    const obsDemo = new IntersectionObserver((entradas) => {
+      if (!entradas[0].isIntersecting) return;
+      obsDemo.disconnect();
+      bolhas.forEach((b, i) => setTimeout(() => b.classList.add('on'), 300 + i * 900));
+    }, { threshold: 0.35 });
+    obsDemo.observe(demo);
+  }
+</script>
+</body>
+</html>

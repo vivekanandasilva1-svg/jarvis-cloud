@@ -660,5 +660,13 @@
     "tipo": "correcao",
     "titulo": "Gerador de Relatórios: não gera relatório vazio quando o print não tem números",
     "conteudo": "Caso real: foi anexado por engano um print de outra tela (DNS da Hostinger) no lugar do print do Gerenciador de Anúncios, e saiu um relatório com todos os cartões em '-'. Agora, se a IA não achar nenhuma métrica de anúncio nos arquivos, a geração para com um aviso claro (e o motivo que a IA viu), sem salvar relatório; os anexos continuam na lista pra trocar. A lista de anexos passou a mostrar a miniatura de cada imagem, pra conferir antes de gerar."
+  },
+  {
+    "chave": "plataforma:landing-page-venda",
+    "modulo": "plataforma",
+    "data": "2026-11-03",
+    "tipo": "funcao",
+    "titulo": "Landing page pública de venda da Lumia (/conheca)",
+    "conteudo": "Pedido do dono: página de venda no modelo da Adapta (hero com promessa \"tudo em um só lugar\", faixa de integrações, vitrine de módulos com selos, antes x depois, como funciona, segurança, planos com destaque, demonstração sem compromisso, FAQ e CTA final), na paleta dourado/cinza/preto da Lumia e só com funções reais. Arquivo public/conheca.html, rota curta /conheca, sem login. Não inventa números, depoimentos nem preço: planos aparecem como \"Sob consulta\" e a prova social usa fatos do produto. Todos os botões abrem o WhatsApp com mensagem pronta. Pendente: preencher WHATSAPP_VENDAS no script da página (hoje vazio, abre o WhatsApp pra escolher o contato), definir preços se quiser mostrar e trocar a conversa de exemplo por depoimentos reais quando houver."
   }
 ]

@@ -253,6 +253,9 @@ app.delete('/api/colaboradores/:id', async (req, res) => {
 
 app.use(express.static(PUBLIC_DIR));
 
+// landing page publica de venda (public/conheca.html) com endereco curto
+app.get('/conheca', (req, res) => res.sendFile('conheca.html', { root: PUBLIC_DIR }));
+
 // ---------- Proposta comercial (public/proposta.html) - link curto por id em vez de query string ----------
 app.post('/api/propostas', async (req, res) => {
   try {
