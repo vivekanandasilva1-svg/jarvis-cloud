@@ -357,7 +357,7 @@ export async function definirAcessoProposta(tenantId, meses) {
      ON CONFLICT (tenant_id) DO UPDATE SET proposta_acesso_expira_em = $2, atualizado_em = now()`,
     [tenantId, expiraEm],
   );
-  await definirAtivo(tenantId, true);
+  await definirAtivo(tenantId, true, { manual: true });
 }
 
 // sweep periodico (chamado no boot + de tempos em tempos pelo server.js) - bloqueia quem
@@ -371,6 +371,7 @@ export async function bloquearAssinantesExpirados() {
     WHERE tc.proposta_acesso_expira_em IS NOT NULL
       AND tc.proposta_acesso_expira_em < now()
       AND t.ativo = true
+      AND (t.ativo_alterado_em IS NULL OR t.ativo_alterado_em < tc.proposta_acesso_expira_em)
   `);
   for (const r of rows) {
     await definirAtivo(r.tenant_id, false);

@@ -330,7 +330,7 @@ app.post('/api/admin/tenants', exigirSuperAdmin, async (req, res) => {
 app.post('/api/admin/tenants/:id/ativo', exigirSuperAdmin, async (req, res) => {
   const { ativo } = req.body || {};
   try {
-    await tenants.definirAtivo(Number(req.params.id), !!ativo);
+    await tenants.definirAtivo(Number(req.params.id), !!ativo, { manual: true });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });

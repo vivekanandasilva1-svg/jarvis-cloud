@@ -708,5 +708,13 @@
     "tipo": "funcao",
     "titulo": "Aba Follow Up Inteligente (cards por etapa do funil)",
     "conteudo": "Pedido do dono, no modelo de outro app que ele gravou: clicar em Criar, escolher quais etapas do funil o follow-up atende, quantas mensagens, duração em dias e em que DIA sai cada mensagem (contado da entrada do lead na etapa; a distribuição automática por quantidade/duração é editável dia a dia), instruções da IA com botão Gerar Sugestão e opção de parar se o lead responder. Motor novo em src/followUpInteligente.js (tabelas fui_config, fui_cards, fui_execucoes; scheduler a cada 10min; rotas /api/fu-inteligente, aba followUpInteligente em TABS_VALIDAS). Diferente do Follow Up antigo (coluna follow_up, IA assume a conversa): aqui o lead fica na etapa e o Auto Atendimento segue respondendo se ele escrever. Regras: uma etapa só em um follow-up ativo; nunca atende contatos_pessoais nem follow_up; ignora IA pausada, oculto, sem conversa e Instagram; respeita horário de envio; espaçamento mínimo de 6h entre mensagens; mensagem automática não tira o card de Novo Lead (manterEtapa). Anexos: cada mensagem (dia) aceita até 5 arquivos (áudio, imagem, PDF ou vídeo curto, máx 12 MB cada, tabela fui_arquivos) que saem logo depois do texto; só dá pra anexar depois de salvar o card, e diminuir a quantidade de mensagens apaga os anexos das que sumiram. Novo card já vem com 5 mensagens em 5 dias. Pendente: relativo à data do agendamento (hoje conta da entrada na etapa)."
+  },
+  {
+    "chave": "plataforma:ativar-desativar-nao-reverte",
+    "modulo": "plataforma",
+    "data": "2026-11-04",
+    "tipo": "correcao",
+    "titulo": "Cliente reativado voltava a ficar desativado após cada atualização",
+    "conteudo": "Causa: o sweep de vencimento (bloquearClientesExpirados, roda no boot e a cada 30min) desativa quem tem acesso_expira_em no passado e ativo=true. Reativar na aba Clientes não mexe no vencimento, então o próximo deploy desativava de novo (caso real: Vitaly odontologia, vencimento 30/10). Correção: coluna tenants.ativo_alterado_em marca decisão manual (botão ativar/desativar, novo período, restaurar, marcar exclusão); o sweep só desativa se a decisão manual for ANTERIOR ao vencimento. Mesma regra no vencimento do Gerador de Propostas. Regra geral: rotina automática nunca desfaz escolha manual mais nova - se criar outro sweep/seed, respeitar isso."
   }
 ]

@@ -28,6 +28,11 @@ async function garantirTabelas() {
   // periodo de contratacao do cliente (acesso geral a Lumia) - NULL = vitalicio. Mesmo modelo
   // do proposta_acesso_expira_em do Gerador de Propostas, so que pro produto principal.
   await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS acesso_expira_em TIMESTAMPTZ;`);
+  // quando o DONO ativou/desativou a conta na mao (aba Clientes) - o sweep de vencimento nunca
+  // pode desfazer uma decisao manual mais nova que a data de vencimento (foi o que reverteu uma
+  // reativacao a cada deploy: o vencimento antigo continuava no passado e o sweep do boot
+  // desativava de novo)
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS ativo_alterado_em TIMESTAMPTZ;`);
   // exclusao suave - "apagar" na UI so MARCA o tenant (desativa + agenda a exclusao real pra
   // daqui DIAS_ANTES_DE_APAGAR_DE_VERDADE dias), nunca apaga dado nenhum na hora. So o sweep
   // purgarTenantsMarcados() (chamado 1x por dia no boot do server.js) apaga de verdade, e so
@@ -219,10 +224,13 @@ export async function criarTenant({ slug, nome, username, senha }) {
   return rows[0].id;
 }
 
-export async function definirAtivo(tenantId, ativo) {
+// manual = true quando e uma decisao do dono (botao ativar/desativar, novo periodo, restaurar):
+// grava o momento, e o sweep de vencimento passa a respeitar essa decisao. O proprio sweep chama
+// sem manual.
+export async function definirAtivo(tenantId, ativo, { manual = false } = {}) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
-  await pool.query('UPDATE tenants SET ativo = $1 WHERE id = $2', [!!ativo, tenantId]);
+  await pool.query(`UPDATE tenants SET ativo = $1${manual ? ', ativo_alterado_em = now()' : ''} WHERE id = $2`, [!!ativo, tenantId]);
   avisarMudancaDeAtivo(tenantId, !!ativo);
 }
 
@@ -286,7 +294,7 @@ export async function definirAcessoCliente(tenantId, meses) {
   }
 
   await pool.query('UPDATE tenants SET acesso_expira_em = $1 WHERE id = $2', [expiraEm, tenantId]);
-  await definirAtivo(tenantId, true);
+  await definirAtivo(tenantId, true, { manual: true });
 }
 
 // sweep periodico (chamado pelo server.js) - bloqueia cliente cujo periodo contratado venceu.
@@ -296,6 +304,7 @@ export async function bloquearClientesExpirados() {
   await tabelasProntas;
   const { rows } = await pool.query(`
     SELECT id FROM tenants WHERE acesso_expira_em IS NOT NULL AND acesso_expira_em < now() AND ativo = true
+      AND (ativo_alterado_em IS NULL OR ativo_alterado_em < acesso_expira_em)
   `);
   for (const r of rows) {
     await definirAtivo(r.id, false);
@@ -322,7 +331,7 @@ export async function marcarParaExclusao(tenantId) {
   if (tenant.super_admin) throw new Error('nao e possivel apagar um super_admin');
 
   const apagarEm = new Date(Date.now() + DIAS_ANTES_DE_APAGAR_DE_VERDADE * 24 * 60 * 60 * 1000);
-  await pool.query('UPDATE tenants SET apagar_em = $1, ativo = false WHERE id = $2', [apagarEm, tenantId]);
+  await pool.query('UPDATE tenants SET apagar_em = $1, ativo = false, ativo_alterado_em = now() WHERE id = $2', [apagarEm, tenantId]);
   avisarMudancaDeAtivo(tenantId, false);
   return apagarEm;
 }
@@ -332,7 +341,7 @@ export async function marcarParaExclusao(tenantId) {
 export async function restaurarTenant(tenantId) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
-  await pool.query('UPDATE tenants SET apagar_em = NULL, ativo = true WHERE id = $1', [tenantId]);
+  await pool.query('UPDATE tenants SET apagar_em = NULL, ativo = true, ativo_alterado_em = now() WHERE id = $1', [tenantId]);
   avisarMudancaDeAtivo(tenantId, true);
 }
 
