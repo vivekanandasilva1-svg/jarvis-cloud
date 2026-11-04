@@ -69,6 +69,7 @@ const tabBtnWhatsapp = document.getElementById('tabBtnWhatsapp');
 const tabBtnCrm = document.getElementById('tabBtnCrm');
 const tabBtnAuto = document.getElementById('tabBtnAuto');
 const tabBtnFollowUp = document.getElementById('tabBtnFollowUp');
+const tabBtnFollowUpInteligente = document.getElementById('tabBtnFollowUpInteligente');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
 const tabBtnGeradorRelatorios = document.getElementById('tabBtnGeradorRelatorios');
 const tabBtnIntegracoes = document.getElementById('tabBtnIntegracoes');
@@ -90,6 +91,7 @@ const tabInstagram = document.getElementById('tabInstagram');
 const tabBtnInstagram = document.getElementById('tabBtnInstagram');
 const tabAuto = document.getElementById('tabAuto');
 const tabFollowUp = document.getElementById('tabFollowUp');
+const tabFollowUpInteligente = document.getElementById('tabFollowUpInteligente');
 const tabRelatorios = document.getElementById('tabRelatorios');
 const tabGeradorRelatorios = document.getElementById('tabGeradorRelatorios');
 const tabIntegracoes = document.getElementById('tabIntegracoes');
@@ -381,6 +383,7 @@ function mostrarApp() {
   tabBtnInstagram.hidden = !abaLiberada('instagram');
   tabBtnAuto.hidden = !abaLiberada('auto');
   tabBtnFollowUp.hidden = !abaLiberada('followUp');
+  tabBtnFollowUpInteligente.hidden = !abaLiberada('followUpInteligente');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
   tabBtnGeradorRelatorios.hidden = !abaLiberada('geradorRelatorios');
   tabBtnIntegracoes.hidden = !abaLiberada('integracoes');
@@ -393,7 +396,7 @@ function mostrarApp() {
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
     const primeiraLiberada = [
       ['conversas', tabBtnConversas], ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm], ['contatos', tabBtnContatos], ['resultados', tabBtnResultados], ['instagram', tabBtnInstagram],
-      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
+      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['followUpInteligente', tabBtnFollowUpInteligente], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
     ].find(([, btn]) => !btn.hidden);
     if (primeiraLiberada) mudarAba(primeiraLiberada[0]);
   }
@@ -1928,6 +1931,7 @@ const CABECALHOS_ABA = {
   agenda: ['Atendimento', 'Agenda', 'Compromissos e agendamentos, integrados ao Google Agenda.'],
   whatsapp: ['Atendimento', 'WhatsApp', 'Números conectados e status de cada instância.'],
   followUp: ['Atendimento', 'Follow Up', 'Retome automaticamente os leads que pararam de responder.'],
+  followUpInteligente: ['Atendimento', 'Follow Up Inteligente', 'Mensagens automáticas por etapa do funil, nos dias que você escolher.'],
   conversas: ['Atendimento', 'Conversas', 'Atenda o WhatsApp direto pela Lumia, em tempo real.'],
   crm: ['Clientes', 'CRM', 'Seus leads em cada etapa do funil, com a conversa do WhatsApp.'],
   contatos: ['Clientes', 'Contatos', 'Toda a sua base de leads: cadastre, importe e exporte planilhas.'],
@@ -1981,6 +1985,7 @@ function mudarAba(aba) {
   tabInstagram.hidden = aba !== 'instagram';
   tabAuto.hidden = aba !== 'auto';
   tabFollowUp.hidden = aba !== 'followUp';
+  tabFollowUpInteligente.hidden = aba !== 'followUpInteligente';
   tabRelatorios.hidden = aba !== 'relatorios';
   tabGeradorRelatorios.hidden = aba !== 'geradorRelatorios';
   tabIntegracoes.hidden = aba !== 'integracoes';
@@ -1997,6 +2002,7 @@ function mudarAba(aba) {
   tabBtnInstagram.classList.toggle('active', aba === 'instagram');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   tabBtnFollowUp.classList.toggle('active', aba === 'followUp');
+  tabBtnFollowUpInteligente.classList.toggle('active', aba === 'followUpInteligente');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
   tabBtnGeradorRelatorios.classList.toggle('active', aba === 'geradorRelatorios');
   tabBtnIntegracoes.classList.toggle('active', aba === 'integracoes');
@@ -2023,6 +2029,8 @@ function mudarAba(aba) {
     carregarConfigAutoAtendimento();
   } else if (aba === 'followUp') {
     carregarFollowUp();
+  } else if (aba === 'followUpInteligente') {
+    carregarFollowUpInteligente();
   } else if (aba === 'relatorios') {
     carregarDestinatariosRelatorios();
     carregarConfigsRelatorios();
@@ -2093,6 +2101,7 @@ tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnGeradorRelatorios.addEventListener('click', () => mudarAba('geradorRelatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
 tabBtnFollowUp.addEventListener('click', () => mudarAba('followUp'));
+tabBtnFollowUpInteligente.addEventListener('click', () => mudarAba('followUpInteligente'));
 tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
 tabBtnCerebro.addEventListener('click', () => mudarAba('cerebro'));
 tabBtnClientes.addEventListener('click', () => mudarAba('clientes'));
@@ -8196,7 +8205,7 @@ async function selecionarCliente(id, nome, username) {
   tabsAviso.textContent = 'Nenhuma marcada = tudo liberado (padrão). Marque só pra restringir.';
   clienteIntegracoesPainel.appendChild(tabsAviso);
 
-  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
+  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', followUpInteligente: 'Follow Up Inteligente', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
   const tabsForm = document.createElement('div');
   tabsForm.className = 'cliente-form';
   const tabsCheckboxes = {};
@@ -8366,4 +8375,344 @@ async function selecionarCliente(id, nome, username) {
     clienteIntegracoesPainel.appendChild(msg);
     carregarClientes();
   }));
+}
+
+// ---------- Follow Up Inteligente (cards de follow-up por etapa do funil) ----------
+
+const fuiAtivo = document.getElementById('fuiAtivo');
+const fuiAtivoLabel = document.getElementById('fuiAtivoLabel');
+const fuiHoraInicio = document.getElementById('fuiHoraInicio');
+const fuiHoraFim = document.getElementById('fuiHoraFim');
+const fuiPromptGeral = document.getElementById('fuiPromptGeral');
+const fuiSalvar = document.getElementById('fuiSalvar');
+const fuiErro = document.getElementById('fuiErro');
+const fuiLista = document.getElementById('fuiLista');
+const fuiCriar = document.getElementById('fuiCriar');
+let fuiEtapas = []; // etapas do funil que aceitam follow-up (vem da API)
+
+fuiAtivo.addEventListener('change', () => { fuiAtivoLabel.textContent = fuiAtivo.checked ? 'Ativado' : 'Desativado'; });
+
+async function carregarFollowUpInteligente() {
+  fuiErro.hidden = true;
+  try {
+    const res = await fetch('/api/fu-inteligente/config', { headers: { 'x-app-password': appPassword } });
+    const c = await res.json();
+    if (!res.ok) throw new Error(c.erro || 'erro desconhecido');
+    fuiAtivo.checked = !!c.ativo;
+    fuiAtivoLabel.textContent = c.ativo ? 'Ativado' : 'Desativado';
+    fuiHoraInicio.value = c.horaInicio || '08:00';
+    fuiHoraFim.value = c.horaFim || '20:00';
+    fuiPromptGeral.value = c.promptGeral || '';
+    limparPendente(fuiSalvar);
+  } catch (err) {
+    fuiErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
+    fuiErro.hidden = false;
+  }
+  carregarCardsFollowUpInteligente();
+}
+
+rastrearAlteracoes(fuiSalvar, [fuiAtivo, fuiHoraInicio, fuiHoraFim, fuiPromptGeral]);
+fuiSalvar.addEventListener('click', async () => {
+  fuiErro.hidden = true;
+  fuiSalvar.disabled = true;
+  try {
+    const res = await fetch('/api/fu-inteligente/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ ativo: fuiAtivo.checked, horaInicio: fuiHoraInicio.value, horaFim: fuiHoraFim.value, promptGeral: fuiPromptGeral.value.trim() }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    marcarSalvo(fuiSalvar, 'Configurações do Follow Up Inteligente salvas');
+  } catch (err) {
+    fuiErro.textContent = err.message;
+    fuiErro.hidden = false;
+  } finally {
+    fuiSalvar.disabled = false;
+  }
+});
+
+// reparte N mensagens ao longo de D dias (ex: 5 msgs em 5 dias = dias 1,2,3,4,5)
+function fuiDistribuirDias(qtd, duracao) {
+  const dias = [];
+  for (let k = 1; k <= qtd; k++) dias.push(Math.max(0, Math.round((k * duracao) / qtd)));
+  return dias;
+}
+
+async function carregarCardsFollowUpInteligente() {
+  fuiLista.textContent = '';
+  try {
+    const res = await fetch('/api/fu-inteligente/cards', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    fuiEtapas = data.etapas || [];
+    if (!data.cards.length) {
+      const vazio = document.createElement('p');
+      vazio.className = 'agenda-vazia';
+      vazio.id = 'fuiVazio';
+      vazio.textContent = 'Nenhum follow-up criado ainda. Clique em "+ Criar" pra começar.';
+      fuiLista.appendChild(vazio);
+    }
+    for (const card of data.cards) fuiLista.appendChild(criarCardFollowUpInteligente(card));
+  } catch (err) {
+    const erro = document.createElement('p');
+    erro.className = 'agenda-vazia';
+    erro.textContent = `Nao consegui carregar os follow-ups: ${err.message}`;
+    fuiLista.appendChild(erro);
+  }
+}
+
+fuiCriar.addEventListener('click', () => {
+  document.getElementById('fuiVazio')?.remove();
+  const novo = { id: null, etapas: [], diasEnvio: fuiDistribuirDias(3, 7), duracaoDias: 7, instrucoes: '', pararSeResponder: true, ativo: true, emAndamento: 0, enviadas: 0 };
+  const card = criarCardFollowUpInteligente(novo);
+  fuiLista.prepend(card);
+  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+function criarCardFollowUpInteligente(dados) {
+  const estado = {
+    id: dados.id, etapas: [...dados.etapas], diasEnvio: [...dados.diasEnvio], duracaoDias: dados.duracaoDias,
+    instrucoes: dados.instrucoes || '', pararSeResponder: dados.pararSeResponder, ativo: dados.ativo,
+  };
+  const nomeEtapa = (id) => fuiEtapas.find((e) => e.id === id)?.nome || id;
+
+  const card = document.createElement('div');
+  card.className = 'auto-aviso relatorio-config-card fui-card';
+
+  // ----- cabecalho: titulo (etapas escolhidas + resumo), liga/desliga e apagar -----
+  const cab = document.createElement('div');
+  cab.className = 'fui-cab';
+  const tituloWrap = document.createElement('div');
+  const titulo = document.createElement('div');
+  titulo.className = 'relatorio-config-titulo';
+  const resumo = document.createElement('div');
+  resumo.className = 'fui-resumo';
+  tituloWrap.appendChild(titulo);
+  tituloWrap.appendChild(resumo);
+  cab.appendChild(tituloWrap);
+
+  const acoes = document.createElement('div');
+  acoes.className = 'fui-acoes';
+  const switchLabel = document.createElement('label');
+  switchLabel.className = 'auto-switch';
+  const ativoCb = document.createElement('input');
+  ativoCb.type = 'checkbox';
+  ativoCb.checked = estado.ativo;
+  const track = document.createElement('span');
+  track.className = 'auto-switch-track';
+  const thumb = document.createElement('span');
+  thumb.className = 'auto-switch-thumb';
+  track.appendChild(thumb);
+  switchLabel.appendChild(ativoCb);
+  switchLabel.appendChild(track);
+  acoes.appendChild(switchLabel);
+  const lixo = document.createElement('button');
+  lixo.type = 'button';
+  lixo.className = 'fui-lixo';
+  lixo.title = 'Apagar follow-up';
+  lixo.textContent = '🗑';
+  acoes.appendChild(lixo);
+  cab.appendChild(acoes);
+  card.appendChild(cab);
+
+  const atualizarCabecalho = () => {
+    titulo.textContent = estado.etapas.length ? estado.etapas.map(nomeEtapa).join(', ') : 'Novo follow-up';
+    const partes = [`${estado.diasEnvio.length} msgs / ${estado.duracaoDias} dias`];
+    if (dados.id) partes.push(`${dados.emAndamento} lead(s) em andamento`, `${dados.enviadas} enviada(s)`);
+    resumo.textContent = partes.join(' · ');
+  };
+
+  // ----- etapas do funil alvo -----
+  const rotEtapas = document.createElement('label');
+  rotEtapas.className = 'auto-label';
+  rotEtapas.textContent = 'Etapas do funil alvo';
+  card.appendChild(rotEtapas);
+  const grade = document.createElement('div');
+  grade.className = 'fui-etapas';
+  for (const etapa of fuiEtapas) {
+    const item = document.createElement('label');
+    item.className = 'fui-etapa-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = estado.etapas.includes(etapa.id);
+    cb.addEventListener('change', () => {
+      estado.etapas = cb.checked ? [...estado.etapas, etapa.id] : estado.etapas.filter((e) => e !== etapa.id);
+      atualizarCabecalho();
+    });
+    item.appendChild(cb);
+    item.appendChild(document.createTextNode(etapa.nome));
+    grade.appendChild(item);
+  }
+  card.appendChild(grade);
+
+  // ----- quantidade de mensagens + duracao -----
+  const linha = document.createElement('div');
+  linha.className = 'auto-upload-row fui-numeros';
+  const colQtd = document.createElement('div');
+  const rotQtd = document.createElement('label');
+  rotQtd.className = 'auto-label';
+  rotQtd.textContent = 'Quantidade de mensagens';
+  const qtdInput = document.createElement('input');
+  qtdInput.type = 'number';
+  qtdInput.min = '1';
+  qtdInput.max = '30';
+  qtdInput.className = 'relatorio-config-select';
+  qtdInput.value = estado.diasEnvio.length;
+  colQtd.appendChild(rotQtd);
+  colQtd.appendChild(qtdInput);
+  const colDur = document.createElement('div');
+  const rotDur = document.createElement('label');
+  rotDur.className = 'auto-label';
+  rotDur.textContent = 'Duração (dias)';
+  const durInput = document.createElement('input');
+  durInput.type = 'number';
+  durInput.min = '1';
+  durInput.max = '365';
+  durInput.className = 'relatorio-config-select';
+  durInput.value = estado.duracaoDias;
+  colDur.appendChild(rotDur);
+  colDur.appendChild(durInput);
+  linha.appendChild(colQtd);
+  linha.appendChild(colDur);
+  card.appendChild(linha);
+
+  // ----- em que dia cada mensagem sai (editavel) -----
+  const rotDias = document.createElement('label');
+  rotDias.className = 'auto-label';
+  rotDias.textContent = 'Dia de envio de cada mensagem (contado a partir da entrada do lead na etapa)';
+  card.appendChild(rotDias);
+  const diasWrap = document.createElement('div');
+  diasWrap.className = 'fui-dias';
+  card.appendChild(diasWrap);
+  const desenharDias = () => {
+    diasWrap.textContent = '';
+    estado.diasEnvio.forEach((dia, i) => {
+      const chip = document.createElement('label');
+      chip.className = 'fui-dia';
+      chip.appendChild(document.createTextNode(`${i + 1}ª · dia `));
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.min = '0';
+      inp.max = '365';
+      inp.value = dia;
+      inp.addEventListener('input', () => { estado.diasEnvio[i] = Number(inp.value); });
+      chip.appendChild(inp);
+      diasWrap.appendChild(chip);
+    });
+  };
+  const redistribuir = () => {
+    const qtd = Math.min(30, Math.max(1, Math.round(Number(qtdInput.value) || 1)));
+    const dur = Math.min(365, Math.max(1, Math.round(Number(durInput.value) || 1)));
+    estado.duracaoDias = dur;
+    estado.diasEnvio = fuiDistribuirDias(qtd, dur);
+    desenharDias();
+    atualizarCabecalho();
+  };
+  qtdInput.addEventListener('change', redistribuir);
+  durInput.addEventListener('change', redistribuir);
+
+  // ----- instrucoes (+ gerar sugestao) -----
+  const instrCab = document.createElement('div');
+  instrCab.className = 'fui-topo';
+  const rotInstr = document.createElement('label');
+  rotInstr.className = 'auto-label';
+  rotInstr.textContent = 'Instruções de follow-up';
+  const sugBtn = document.createElement('button');
+  sugBtn.type = 'button';
+  sugBtn.textContent = '✨ Gerar Sugestão';
+  instrCab.appendChild(rotInstr);
+  instrCab.appendChild(sugBtn);
+  card.appendChild(instrCab);
+  const instr = document.createElement('textarea');
+  instr.style.minHeight = '120px';
+  instr.placeholder = 'Ex: 1 mensagem curta e natural (1-3 frases). Reforce a data agendada e o endereço. Nunca use o nome do paciente.';
+  instr.value = estado.instrucoes;
+  instr.addEventListener('input', () => { estado.instrucoes = instr.value; });
+  card.appendChild(instr);
+
+  const pararLabel = document.createElement('label');
+  pararLabel.className = 'fui-etapa-item';
+  const pararCb = document.createElement('input');
+  pararCb.type = 'checkbox';
+  pararCb.checked = estado.pararSeResponder;
+  pararCb.addEventListener('change', () => { estado.pararSeResponder = pararCb.checked; });
+  pararLabel.appendChild(pararCb);
+  pararLabel.appendChild(document.createTextNode('Parar os envios se o lead responder'));
+  card.appendChild(pararLabel);
+
+  const erro = document.createElement('p');
+  erro.className = 'agenda-erro';
+  erro.hidden = true;
+  card.appendChild(erro);
+  const salvar = document.createElement('button');
+  salvar.type = 'button';
+  salvar.textContent = dados.id ? 'Salvar follow-up' : 'Criar follow-up';
+  card.appendChild(salvar);
+
+  const mostrarErro = (msg) => { erro.textContent = msg; erro.hidden = false; };
+
+  ativoCb.addEventListener('change', () => { estado.ativo = ativoCb.checked; });
+
+  sugBtn.addEventListener('click', async () => {
+    erro.hidden = true;
+    if (!estado.etapas.length) return mostrarErro('Escolha pelo menos uma etapa antes de gerar a sugestão.');
+    sugBtn.disabled = true;
+    sugBtn.textContent = 'Gerando...';
+    try {
+      const res = await fetch('/api/fu-inteligente/sugestao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ etapas: estado.etapas, diasEnvio: estado.diasEnvio, duracaoDias: estado.duracaoDias }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      instr.value = d.texto;
+      estado.instrucoes = d.texto;
+    } catch (err) {
+      mostrarErro(`Não consegui gerar a sugestão: ${err.message}`);
+    } finally {
+      sugBtn.disabled = false;
+      sugBtn.textContent = '✨ Gerar Sugestão';
+    }
+  });
+
+  salvar.addEventListener('click', async () => {
+    erro.hidden = true;
+    salvar.disabled = true;
+    try {
+      const res = await fetch('/api/fu-inteligente/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({
+          id: estado.id, etapas: estado.etapas, diasEnvio: estado.diasEnvio, duracaoDias: estado.duracaoDias,
+          instrucoes: estado.instrucoes, pararSeResponder: estado.pararSeResponder, ativo: estado.ativo,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      mostrarAviso(dados.id ? 'Follow-up salvo' : 'Follow-up criado', 'ok');
+      carregarCardsFollowUpInteligente();
+    } catch (err) {
+      mostrarErro(err.message);
+      salvar.disabled = false;
+    }
+  });
+
+  lixo.addEventListener('click', async () => {
+    if (!estado.id) { card.remove(); return; }
+    if (!confirm('Apagar esse follow-up? As mensagens que ainda não saíram não serão mais enviadas.')) return;
+    try {
+      const res = await fetch(`/api/fu-inteligente/cards/${estado.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      carregarCardsFollowUpInteligente();
+    } catch (err) {
+      mostrarErro(err.message);
+    }
+  });
+
+  atualizarCabecalho();
+  desenharDias();
+  return card;
 }

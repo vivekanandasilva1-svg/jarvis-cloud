@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261030a" />
+  <link rel="stylesheet" href="style.css?v=20261104a" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -80,6 +80,10 @@
         <button type="button" class="nav-btn" id="tabBtnFollowUp" data-tab="followUp">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-8z"/></svg>
           <span>Follow Up</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnFollowUpInteligente" data-tab="followUpInteligente">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2zm7 11l.9 2.6L22.5 16.5l-2.6.9L19 20l-.9-2.6-2.6-.9 2.6-.9L19 13zM6 15l.9 2.6 2.6.9-2.6.9L6 22l-.9-2.6L2.5 18.5l2.6-.9L6 15z"/></svg>
+          <span>Follow Up Inteligente</span>
         </button>
         <div class="nav-grupo">Clientes</div>
         <button type="button" class="nav-btn" id="tabBtnCrm" data-tab="crm">
@@ -1049,6 +1053,55 @@
       </div>
     </div>
 
+    <div class="window-body tab-auto" id="tabFollowUpInteligente" hidden>
+      <div class="auto-coluna-esq">
+        <div class="auto-aviso">
+          Crie follow-ups por etapa do funil: escolha em quais etapas do CRM ele vale, quantas
+          mensagens serao mandadas, em quais dias (contados a partir de quando o lead entrou na
+          etapa) e como a IA deve escrever. Se o lead responder, o envio para na hora e quem
+          conversa com ele e o Auto Atendimento normal. Leads em "Contatos pessoais" e "Follow Up"
+          nunca recebem esses envios.
+        </div>
+
+        <div class="auto-toggle-row">
+          <label class="auto-switch">
+            <input type="checkbox" id="fuiAtivo" />
+            <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+          </label>
+          <span id="fuiAtivoLabel">Desativado</span>
+        </div>
+
+        <label class="auto-label">Horario de envio</label>
+        <p class="agenda-vazia" style="margin: 0 0 4px;">Fora desse horario nenhuma mensagem e enviada - ela sai assim que o horario abrir.</p>
+        <div class="auto-upload-row">
+          <div>
+            <label class="auto-label">Comeca as</label>
+            <input type="time" id="fuiHoraInicio" />
+          </div>
+          <div>
+            <label class="auto-label">Termina as</label>
+            <input type="time" id="fuiHoraFim" />
+          </div>
+        </div>
+
+        <label class="auto-label">Script geral (vale pra todos os follow-ups, opcional)</label>
+        <textarea id="fuiPromptGeral" placeholder="Ex: Voce e a recepcionista virtual da Clinica X. Seja cordial e nada insistente."></textarea>
+
+        <button type="button" id="fuiSalvar">Salvar Configurações</button>
+        <p class="agenda-erro" id="fuiErro" hidden></p>
+      </div>
+
+      <div class="auto-coluna-dir">
+        <div class="fui-topo">
+          <label class="auto-label">Seus follow-ups</label>
+          <button type="button" id="fuiCriar">+ Criar</button>
+        </div>
+        <div id="fuiLista">
+          <p class="agenda-vazia">Carregando...</p>
+        </div>
+      </div>
+    </div>
+
     <div class="window-body tab-auto" id="tabRelatorios" hidden>
       <div class="auto-coluna-esq">
         <div class="auto-aviso">
@@ -1334,6 +1387,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261030a"></script>
+  <script src="app.js?v=20261104a"></script>
 </body>
 </html>

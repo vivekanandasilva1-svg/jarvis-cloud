@@ -700,5 +700,13 @@
     "tipo": "funcao",
     "titulo": "CRM: coluna \"Contatos pessoais\" (a IA não atende)",
     "conteudo": "Pedido do dono: coluna pra fornecedores, profissionais parceiros e colaboradores. Card nessa etapa conta como IA pausada: estaPausado/obterContato (e o Instagram) tratam etapa contatos_pessoais como auto_pausado, então nem o auto-atendimento nem o retorno automático respondem; a mensagem continua sendo registrada no CRM. Movimentação manual. Pendente: contato que já estava em Follow Up só para de receber a cadência depois de ser movido."
+  },
+  {
+    "chave": "followup:aba-follow-up-inteligente",
+    "modulo": "followup",
+    "data": "2026-11-04",
+    "tipo": "funcao",
+    "titulo": "Aba Follow Up Inteligente (cards por etapa do funil)",
+    "conteudo": "Pedido do dono, no modelo de outro app que ele gravou: clicar em Criar, escolher quais etapas do funil o follow-up atende, quantas mensagens, duração em dias e em que DIA sai cada mensagem (contado da entrada do lead na etapa; a distribuição automática por quantidade/duração é editável dia a dia), instruções da IA com botão Gerar Sugestão e opção de parar se o lead responder. Motor novo em src/followUpInteligente.js (tabelas fui_config, fui_cards, fui_execucoes; scheduler a cada 10min; rotas /api/fu-inteligente, aba followUpInteligente em TABS_VALIDAS). Diferente do Follow Up antigo (coluna follow_up, IA assume a conversa): aqui o lead fica na etapa e o Auto Atendimento segue respondendo se ele escrever. Regras: uma etapa só em um follow-up ativo; nunca atende contatos_pessoais nem follow_up; ignora IA pausada, oculto, sem conversa e Instagram; respeita horário de envio; espaçamento mínimo de 6h entre mensagens; mensagem automática não tira o card de Novo Lead (manterEtapa). Pendente: anexos por mensagem e relativo à data do agendamento (hoje conta da entrada na etapa)."
   }
 ]

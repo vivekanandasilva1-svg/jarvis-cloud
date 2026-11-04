@@ -170,9 +170,11 @@ async function registrarEventoEtapa(tenantId, contatoId, instancia, etapa) {
 // - quando: horario real da mensagem no WhatsApp (messageTimestamp), pra ordem da conversa bater
 //   com o WhatsApp mesmo se o webhook atrasar; sem isso usa o horario de agora
 // - waId: id da mensagem no WhatsApp - mensagem repetida (webhook reenviado) e ignorada
+// - manterEtapa: mensagem automatica (Follow Up Inteligente) nao pode empurrar o card de
+//   "novo_lead" pra "em_atendimento" sozinha - a etapa continua a que o dono escolheu
 // - evitarEco: usado no registro de mensagem "fromMe" - se a gente acabou de registrar o MESMO
 //   texto como saida (ex: resposta da IA), o eco que o WhatsApp devolve nao duplica
-export async function registrarMensagem(tenantId, { numero, instancia, direcao, tipo = 'text', texto = '', nome, midiaBase64, midiaMimetype, quando, waId, evitarEco = false, autor = null }) {
+export async function registrarMensagem(tenantId, { numero, instancia, direcao, tipo = 'text', texto = '', nome, midiaBase64, midiaMimetype, quando, waId, evitarEco = false, autor = null, manterEtapa = false }) {
   if (!pool) return;
   await tabelasProntas;
 
@@ -218,11 +220,11 @@ export async function registrarMensagem(tenantId, { numero, instancia, direcao, 
        retorno_origem = CASE WHEN $6::text = 'entrada' AND crm_contatos.retorno_disparado_em IS NOT NULL THEN NULL ELSE crm_contatos.retorno_origem END,
        retorno_disparado_em = CASE WHEN $6::text = 'entrada' AND crm_contatos.retorno_disparado_em IS NOT NULL THEN NULL ELSE crm_contatos.retorno_disparado_em END,
        etapa = CASE
-         WHEN crm_contatos.etapa = 'novo_lead' AND $6::text = 'saida' THEN 'em_atendimento'
+         WHEN crm_contatos.etapa = 'novo_lead' AND $6::text = 'saida' AND NOT $8::boolean THEN 'em_atendimento'
          WHEN crm_contatos.etapa = 'perdido' AND $6::text = 'entrada' THEN 'em_atendimento'
          ELSE crm_contatos.etapa END
      RETURNING id`,
-    [tenantId, numero, instancia, nomeFinal, preview, direcao, ts],
+    [tenantId, numero, instancia, nomeFinal, preview, direcao, ts, !!manterEtapa],
   );
 
   const { rows: msgRows } = await pool.query(

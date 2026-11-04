@@ -29,6 +29,7 @@ import * as metaAds from './metaads.js';
 import * as propostas from './propostas.js';
 import * as relatorioGerador from './relatorioGerador.js';
 import * as followUp from './followUp.js';
+import * as followUpInteligente from './followUpInteligente.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
 import { iniciarCerebroMae } from './cerebroMae.js';
 import { ehErroDeCredito, creditoEsgotado, registrarFalhaCredito } from './alertaCreditos.js';
@@ -81,6 +82,7 @@ const TAB_ROTA_PREFIXO = {
   crm: '/api/crm',
   auto: '/api/auto-atendimento',
   followUp: '/api/follow-up',
+  followUpInteligente: '/api/fu-inteligente',
   relatorios: '/api/relatorios',
   geradorRelatorios: '/api/gerador-relatorios',
   integracoes: '/api/integracoes',
@@ -1503,6 +1505,59 @@ app.delete('/api/auto-atendimento/arquivos/:id', async (req, res) => {
   }
 });
 
+// ---------- Follow Up Inteligente (cards de follow-up por etapa do funil, cadencia em dias) ----------
+
+app.get('/api/fu-inteligente/config', async (req, res) => {
+  try {
+    res.json(await followUpInteligente.obterConfig(req.tenantId));
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/fu-inteligente/config', async (req, res) => {
+  try {
+    await followUpInteligente.salvarConfig(req.tenantId, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/fu-inteligente/cards', async (req, res) => {
+  try {
+    res.json({ etapas: followUpInteligente.etapasSelecionaveis(), cards: await followUpInteligente.listarCards(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/fu-inteligente/cards', async (req, res) => {
+  try {
+    const id = await followUpInteligente.salvarCard(req.tenantId, req.body || {});
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/fu-inteligente/cards/:id', async (req, res) => {
+  try {
+    await followUpInteligente.apagarCard(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/fu-inteligente/sugestao', async (req, res) => {
+  try {
+    res.json({ texto: await followUpInteligente.gerarSugestao(req.tenantId, req.body || {}) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 // ---------- Follow Up (reengajamento automatico de leads parados, na coluna "follow_up" do CRM) ----------
 
 app.get('/api/follow-up/config', async (req, res) => {
@@ -2338,6 +2393,8 @@ relatoriosProgramados.iniciarSchedulerRelatoriosProgramados();
 // pra cada contato na coluna "follow_up" do CRM; por padrao vem desativado por tenant
 // (follow_up_config.ativo), entao reativar esse scheduler geral e seguro.
 followUp.iniciarSchedulerFollowUp();
+// Scheduler do Follow Up Inteligente (cards por etapa do funil) - desativado por tenant por padrao.
+followUpInteligente.iniciarSchedulerFollowUpInteligente();
 
 // bloqueia assinantes do Gerador de Propostas E clientes da Lumia cujo periodo contratado
 // (1-12 meses) venceu - roda no boot e depois a cada 30min; vitalicio (sem data de expiracao)

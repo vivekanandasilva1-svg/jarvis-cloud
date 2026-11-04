@@ -3452,3 +3452,18 @@ body.lumien-em-conversas .lumien-btn { bottom: 92px; }
 
 /* miniatura do print anexado no Gerador de Relatorios */
 .gr-arquivo-mini { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--borda); flex: 0 0 auto; }
+
+/* ---------- Follow Up Inteligente ---------- */
+.fui-topo { flex-wrap: wrap; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 0; }
+.fui-topo .auto-label { margin: 0; }
+.fui-card { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.fui-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.fui-resumo { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
+.fui-acoes { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.fui-lixo { border: none; background: none; cursor: pointer; font-size: 15px; color: #e8836b; padding: 2px 4px; }
+.fui-etapas { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 10px; }
+.fui-etapa-item { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text); cursor: pointer; }
+.fui-numeros > div { flex: 1 1 0; min-width: 0; }
+.fui-dias { display: flex; flex-wrap: wrap; gap: 6px; }
+.fui-dia { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-dim); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; }
+.fui-dia input { width: 52px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 3px 6px; font-size: 12px; }
