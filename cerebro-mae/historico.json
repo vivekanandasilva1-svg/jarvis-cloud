@@ -692,5 +692,13 @@
     "tipo": "funcao",
     "titulo": "CRM: nova coluna \"Não compareceu\" no funil",
     "conteudo": "Pedido do dono: etapa pra leads que faltaram ao agendamento, logo depois de Compareceu. Movimentação manual (arrastar o card), sem automação. Também aceita pela IA (Lumia) e pela importação de contatos. Pendente: ligar ao status Faltou do Clinicorp se quiser mover sozinho."
+  },
+  {
+    "chave": "crm:coluna-contatos-pessoais",
+    "modulo": "crm",
+    "data": "2026-11-04",
+    "tipo": "funcao",
+    "titulo": "CRM: coluna \"Contatos pessoais\" (a IA não atende)",
+    "conteudo": "Pedido do dono: coluna pra fornecedores, profissionais parceiros e colaboradores. Card nessa etapa conta como IA pausada: estaPausado/obterContato (e o Instagram) tratam etapa contatos_pessoais como auto_pausado, então nem o auto-atendimento nem o retorno automático respondem; a mensagem continua sendo registrada no CRM. Movimentação manual. Pendente: contato que já estava em Follow Up só para de receber a cadência depois de ser movido."
   }
 ]

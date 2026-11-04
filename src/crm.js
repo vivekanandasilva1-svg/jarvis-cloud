@@ -28,6 +28,7 @@ export const ETAPAS = [
   { id: 'comprou', nome: 'Comprou' },
   { id: 'follow_up', nome: 'Follow Up' },
   { id: 'perdido', nome: 'Perdido / Não respondeu' },
+  { id: 'contatos_pessoais', nome: 'Contatos pessoais' },
 ];
 const IDS_ETAPAS = new Set(ETAPAS.map((e) => e.id));
 
@@ -575,7 +576,7 @@ export async function obterContato(tenantId, numero, instancia) {
   if (!pool) return null;
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT id, etapa, auto_pausado FROM crm_contatos WHERE tenant_id = $1 AND numero = $2 AND instancia = $3`,
+    `SELECT id, etapa, (auto_pausado OR etapa = 'contatos_pessoais') AS auto_pausado FROM crm_contatos WHERE tenant_id = $1 AND numero = $2 AND instancia = $3`,
     [tenantId, numero, instancia],
   );
   return rows[0] || null;
@@ -587,7 +588,7 @@ export async function estaPausado(tenantId, numero, instancia) {
   if (!pool) return false;
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT auto_pausado FROM crm_contatos WHERE tenant_id = $1 AND numero = $2 AND instancia = $3`,
+    `SELECT (auto_pausado OR etapa = 'contatos_pessoais') AS auto_pausado FROM crm_contatos WHERE tenant_id = $1 AND numero = $2 AND instancia = $3`,
     [tenantId, numero, instancia],
   );
   return rows[0]?.auto_pausado || false;

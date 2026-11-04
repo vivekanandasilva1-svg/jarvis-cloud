@@ -323,7 +323,7 @@ async function tratarMensagem(conta, evento) {
   await enfileirar(`${conta.tenant_id}:${igsid}`, async () => {
     const config = await autoAtendimento.obterConfig(conta.tenant_id);
     if (!config.ativo || !config.prompt || !autoAtendimento.dentroDoHorario(config)) return;
-    const { rows: [contato] } = await pool.query('SELECT auto_pausado FROM crm_contatos WHERE tenant_id = $1 AND numero = $2 AND instancia = $3', [conta.tenant_id, igsid, instancia]);
+    const { rows: [contato] } = await pool.query("SELECT (auto_pausado OR etapa = 'contatos_pessoais') AS auto_pausado FROM crm_contatos WHERE tenant_id = $1 AND numero = $2 AND instancia = $3", [conta.tenant_id, igsid, instancia]);
     if (contato?.auto_pausado) return;
     // IGSID (16+ digitos) nunca colide com telefone de WhatsApp na sessao da IA, e e o mesmo
     // "numero" do card no CRM - as ferramentas da IA (marcar agendado etc.) acham o card certo
