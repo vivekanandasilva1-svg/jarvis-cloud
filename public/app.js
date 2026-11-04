@@ -8464,7 +8464,7 @@ async function carregarCardsFollowUpInteligente() {
 
 fuiCriar.addEventListener('click', () => {
   document.getElementById('fuiVazio')?.remove();
-  const novo = { id: null, etapas: [], diasEnvio: fuiDistribuirDias(3, 7), duracaoDias: 7, instrucoes: '', pararSeResponder: true, ativo: true, emAndamento: 0, enviadas: 0 };
+  const novo = { id: null, etapas: [], diasEnvio: fuiDistribuirDias(5, 5), duracaoDias: 5, instrucoes: '', pararSeResponder: true, ativo: true, emAndamento: 0, enviadas: 0 };
   const card = criarCardFollowUpInteligente(novo);
   fuiLista.prepend(card);
   card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
