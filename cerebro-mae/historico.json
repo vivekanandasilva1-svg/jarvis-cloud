@@ -684,5 +684,13 @@
     "tipo": "funcao",
     "titulo": "CRM: nova coluna \"Comprou\" no funil",
     "conteudo": "Pedido do dono: coluna pra leads que finalizaram e viraram clientes, depois de Compareceu. Movimentação é manual (arrastar o card); nada move pra ela automaticamente. Entrou também na lista de etapas aceitas pela IA (Lumia) e na taxa de conversão da aba Resultados (agendado + compareceu + comprou). Pendente: se quiser, ligar o fechamento automático (ex: pagamento no Clinicorp) a essa etapa."
+  },
+  {
+    "chave": "crm:coluna-nao-compareceu",
+    "modulo": "crm",
+    "data": "2026-11-04",
+    "tipo": "funcao",
+    "titulo": "CRM: nova coluna \"Não compareceu\" no funil",
+    "conteudo": "Pedido do dono: etapa pra leads que faltaram ao agendamento, logo depois de Compareceu. Movimentação manual (arrastar o card), sem automação. Também aceita pela IA (Lumia) e pela importação de contatos. Pendente: ligar ao status Faltou do Clinicorp se quiser mover sozinho."
   }
 ]

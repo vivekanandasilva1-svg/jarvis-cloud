@@ -24,6 +24,7 @@ export const ETAPAS = [
   { id: 'pre_agendado', nome: 'Pré-agendamento' },
   { id: 'agendado', nome: 'Agendado' },
   { id: 'compareceu', nome: 'Compareceu' },
+  { id: 'nao_compareceu', nome: 'Não compareceu' },
   { id: 'comprou', nome: 'Comprou' },
   { id: 'follow_up', nome: 'Follow Up' },
   { id: 'perdido', nome: 'Perdido / Não respondeu' },
