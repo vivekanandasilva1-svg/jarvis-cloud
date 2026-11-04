@@ -4198,8 +4198,8 @@ function rsMontarResumo(d, pct5) {
     if (diaTop.recebidas) frases.push(`O dia mais cheio foi ${rsDataCurta(diaTop.dia)}, com ${rsNum(diaTop.recebidas)} mensagens recebidas.`);
   }
   const totalFunil = d.funil.reduce((s, f) => s + f.total, 0);
-  const convertidos = d.funil.filter((f) => f.id === 'agendado' || f.id === 'compareceu').reduce((s, f) => s + f.total, 0);
-  if (totalFunil) frases.push(`Dos contatos que chegaram no período, ${rsNum(convertidos)} (${Math.round((convertidos / totalFunil) * 100)}%) já estão agendados ou compareceram.`);
+  const convertidos = d.funil.filter((f) => f.id === 'agendado' || f.id === 'compareceu' || f.id === 'comprou').reduce((s, f) => s + f.total, 0);
+  if (totalFunil) frases.push(`Dos contatos que chegaram no período, ${rsNum(convertidos)} (${Math.round((convertidos / totalFunil) * 100)}%) já estão agendados, compareceram ou compraram.`);
   return frases.join(' ');
 }
 

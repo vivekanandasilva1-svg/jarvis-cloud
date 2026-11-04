@@ -676,5 +676,13 @@
     "tipo": "correcao",
     "titulo": "Cérebro: modo 2D quando não há 3D e atualização automática a cada 30s",
     "conteudo": "Dois problemas relatados pelo dono: (1) a aba mostrava 'Este aparelho não suporta o cérebro 3D' e ficava vazia - acontece quando o navegador recusa WebGL (aceleração gráfica desligada ou bloqueada depois de travamento da placa de vídeo). Agora cai sozinho num grafo 2D (force-graph@1.51.4) com as mesmas cores, ligações e cliques, e mostra como religar o 3D. (2) O cérebro só buscava as memórias de novo ao sair e voltar pra aba; parado na tela ficava sempre igual. Agora busca a cada 30s enquanto a aba está visível (pausa com a aba escondida), atualiza contador e lista de recentes, e memória que acabou de chegar aparece maior e branca por 12s. cerebro.js passou pra v=11. Testado em Chrome headless com e sem WebGL."
+  },
+  {
+    "chave": "crm:coluna-comprou",
+    "modulo": "crm",
+    "data": "2026-11-04",
+    "tipo": "funcao",
+    "titulo": "CRM: nova coluna \"Comprou\" no funil",
+    "conteudo": "Pedido do dono: coluna pra leads que finalizaram e viraram clientes, depois de Compareceu. Movimentação é manual (arrastar o card); nada move pra ela automaticamente. Entrou também na lista de etapas aceitas pela IA (Lumia) e na taxa de conversão da aba Resultados (agendado + compareceu + comprou). Pendente: se quiser, ligar o fechamento automático (ex: pagamento no Clinicorp) a essa etapa."
   }
 ]

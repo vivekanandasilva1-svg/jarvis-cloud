@@ -397,7 +397,7 @@ const tools = [
       type: 'object',
       properties: {
         termo: { type: 'string', description: 'Parte do nome, telefone (so digitos), e-mail ou etiqueta' },
-        etapa: { type: 'string', enum: ['novo_lead', 'em_atendimento', 'em_negociacao', 'pre_agendado', 'agendado', 'compareceu', 'follow_up', 'perdido'] },
+        etapa: { type: 'string', enum: ['novo_lead', 'em_atendimento', 'em_negociacao', 'pre_agendado', 'agendado', 'compareceu', 'comprou', 'follow_up', 'perdido'] },
         etiqueta: { type: 'string', description: 'Etiqueta exata (ex: implante)' },
         semConversa: { type: 'boolean', description: 'true = so contatos importados/cadastrados que ainda nao conversaram; false = so os que ja conversaram' },
         limite: { type: 'number', description: 'Maximo de contatos (padrao 20, max 100)' },
@@ -429,7 +429,7 @@ const tools = [
     description: 'Move um contato pra outra etapa do funil do CRM. Entrar em follow_up comeca a cadencia automatica de retomada; sair dela para a cadencia.',
     input_schema: {
       type: 'object',
-      properties: { contatoId: { type: 'number' }, etapa: { type: 'string', enum: ['novo_lead', 'em_atendimento', 'em_negociacao', 'pre_agendado', 'agendado', 'compareceu', 'follow_up', 'perdido'] } },
+      properties: { contatoId: { type: 'number' }, etapa: { type: 'string', enum: ['novo_lead', 'em_atendimento', 'em_negociacao', 'pre_agendado', 'agendado', 'compareceu', 'comprou', 'follow_up', 'perdido'] } },
       required: ['contatoId', 'etapa'],
     },
   },
