@@ -1550,6 +1550,25 @@ app.delete('/api/fu-inteligente/cards/:id', async (req, res) => {
   }
 });
 
+app.post('/api/fu-inteligente/cards/:id/arquivos', async (req, res) => {
+  const { ordem, nomeArquivo, mediaType, base64 } = req.body || {};
+  if (!nomeArquivo || !mediaType || !base64) return res.status(400).json({ erro: 'nomeArquivo, mediaType e base64 sao obrigatorios' });
+  try {
+    res.json({ ok: true, arquivo: await followUpInteligente.salvarArquivo(req.tenantId, req.params.id, ordem, nomeArquivo, Buffer.from(base64, 'base64'), mediaType) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/fu-inteligente/arquivos/:id', async (req, res) => {
+  try {
+    await followUpInteligente.apagarArquivo(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.post('/api/fu-inteligente/sugestao', async (req, res) => {
   try {
     res.json({ texto: await followUpInteligente.gerarSugestao(req.tenantId, req.body || {}) });

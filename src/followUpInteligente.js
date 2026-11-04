@@ -55,6 +55,21 @@ async function garantirTabelas() {
   await pool.query(`CREATE INDEX IF NOT EXISTS fui_cards_tenant_idx ON fui_cards (tenant_id);`);
   // 1 linha por (card, contato): quando o lead entrou na etapa, quantas mensagens ja foram e se
   // o ciclo acabou (concluido / lead respondeu / saiu da etapa e voltou = recomeca)
+  // anexos (audio, imagem, PDF, video curto) de UMA mensagem especifica do card: ordem = posicao da
+  // mensagem na cadencia (0 = primeira)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS fui_arquivos (
+      id SERIAL PRIMARY KEY,
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      card_id INT NOT NULL REFERENCES fui_cards(id) ON DELETE CASCADE,
+      ordem INT NOT NULL,
+      nome_arquivo TEXT NOT NULL,
+      media_type TEXT NOT NULL,
+      conteudo BYTEA NOT NULL,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS fui_arquivos_card_idx ON fui_arquivos (card_id, ordem);`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS fui_execucoes (
       card_id INT NOT NULL REFERENCES fui_cards(id) ON DELETE CASCADE,
@@ -121,9 +136,14 @@ export async function listarCards(tenantId) {
      FROM fui_cards c WHERE c.tenant_id = $1 ORDER BY c.id ASC`,
     [tenantId],
   );
+  const { rows: arqs } = await pool.query(
+    `SELECT id, card_id, ordem, nome_arquivo, media_type, octet_length(conteudo) AS tamanho FROM fui_arquivos WHERE tenant_id = $1 ORDER BY id ASC`,
+    [tenantId],
+  );
   return rows.map((r) => ({
     id: r.id, etapas: r.etapas, diasEnvio: r.dias_envio, duracaoDias: r.duracao_dias, instrucoes: r.instrucoes || '',
     pararSeResponder: r.parar_se_responder, ativo: r.ativo, emAndamento: r.em_andamento, enviadas: r.enviadas,
+    arquivos: arqs.filter((a) => a.card_id === r.id).map((a) => ({ id: a.id, ordem: a.ordem, nome: a.nome_arquivo, tipo: a.media_type, tamanho: Number(a.tamanho) })),
   }));
 }
 
@@ -176,6 +196,8 @@ export async function salvarCard(tenantId, dados) {
       [v.etapas, v.diasEnvio, v.duracaoDias, v.instrucoes, pararSeResponder, ativo, Number(dados.id), tenantId],
     );
     if (!rows[0]) throw new Error('Follow-up nao encontrado.');
+    // diminuiu a quantidade de mensagens: os anexos das que sumiram nao tem mais pra onde ir
+    await pool.query(`DELETE FROM fui_arquivos WHERE card_id = $1 AND ordem >= $2`, [rows[0].id, v.diasEnvio.length]);
     return rows[0].id;
   }
   const { rows } = await pool.query(
@@ -190,6 +212,47 @@ export async function apagarCard(tenantId, id) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
   await pool.query(`DELETE FROM fui_cards WHERE id = $1 AND tenant_id = $2`, [Number(id), tenantId]);
+}
+
+// ---------- anexos por mensagem ----------
+
+const MAX_ARQUIVO_BYTES = 12 * 1024 * 1024; // video curto cabe; o limite do corpo da requisicao e 20MB (base64 incha ~33%)
+const MAX_ARQUIVOS_POR_MENSAGEM = 5;
+const TIPOS_ARQUIVO = [/^image\//, /^audio\//, /^video\//, /^application\/pdf$/];
+
+export async function salvarArquivo(tenantId, cardId, ordem, nomeArquivo, buffer, mediaType) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  if (!TIPOS_ARQUIVO.some((re) => re.test(String(mediaType)))) throw new Error('Tipo de arquivo nao aceito - use audio, imagem, PDF ou video curto.');
+  if (!buffer?.length) throw new Error('Arquivo vazio.');
+  if (buffer.length > MAX_ARQUIVO_BYTES) throw new Error('Arquivo grande demais - o maximo e 12 MB (video curto).');
+  const { rows: [card] } = await pool.query(`SELECT dias_envio FROM fui_cards WHERE id = $1 AND tenant_id = $2`, [Number(cardId), tenantId]);
+  if (!card) throw new Error('Follow-up nao encontrado - salve o follow-up antes de anexar.');
+  const ordemNum = Number(ordem);
+  if (!Number.isInteger(ordemNum) || ordemNum < 0 || ordemNum >= card.dias_envio.length) throw new Error('Essa mensagem nao existe nesse follow-up (salve a quantidade de mensagens antes).');
+  const { rows: [{ n }] } = await pool.query(`SELECT count(*)::int AS n FROM fui_arquivos WHERE card_id = $1 AND ordem = $2`, [Number(cardId), ordemNum]);
+  if (n >= MAX_ARQUIVOS_POR_MENSAGEM) throw new Error(`No maximo ${MAX_ARQUIVOS_POR_MENSAGEM} anexos por mensagem.`);
+  const { rows } = await pool.query(
+    `INSERT INTO fui_arquivos (tenant_id, card_id, ordem, nome_arquivo, media_type, conteudo) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [tenantId, Number(cardId), ordemNum, String(nomeArquivo).slice(0, 200), mediaType, buffer],
+  );
+  return { id: rows[0].id, ordem: ordemNum, nome: String(nomeArquivo).slice(0, 200), tipo: mediaType, tamanho: buffer.length };
+}
+
+export async function apagarArquivo(tenantId, id) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  await pool.query(`DELETE FROM fui_arquivos WHERE id = $1 AND tenant_id = $2`, [Number(id), tenantId]);
+}
+
+async function enviarArquivoParaContato(instancia, numero, arq) {
+  const base64 = arq.conteudo.toString('base64');
+  if (arq.media_type.startsWith('audio/')) {
+    await evolutionApi.enviarAudio(instancia, numero, base64);
+    return;
+  }
+  const mediatype = arq.media_type.startsWith('image/') ? 'image' : arq.media_type.startsWith('video/') ? 'video' : 'document';
+  await evolutionApi.enviarMidia(instancia, numero, { mediatype, mimetype: arq.media_type, media: base64, fileName: arq.nome_arquivo });
 }
 
 // "Gerar sugestao": a IA escreve as instrucoes do follow-up conforme as etapas e a cadencia escolhidas
@@ -305,7 +368,19 @@ export async function processarCard(tenantId, card, config) {
         numero: c.numero, instancia: c.instancia, direcao: 'saida', tipo: 'text', texto: mensagem,
         autor: 'followup', waId: resposta?.key?.id || null, manterEtapa: true,
       });
+      // anexos programados pra ESSA mensagem (mesma posicao na cadencia), logo depois do texto
+      const { rows: anexos } = await pool.query(
+        `SELECT nome_arquivo, media_type, conteudo FROM fui_arquivos WHERE card_id = $1 AND ordem = $2 ORDER BY id ASC`,
+        [card.id, estado.enviados],
+      );
       await pool.query(`UPDATE fui_execucoes SET enviados = enviados + 1, ultima_em = now() WHERE card_id = $1 AND contato_id = $2`, [card.id, c.id]);
+      for (const anexo of anexos) {
+        try {
+          await enviarArquivoParaContato(c.instancia, c.numero, anexo);
+        } catch (err) {
+          console.error(`Erro mandando anexo do follow-up inteligente (card ${card.id}):`, err.message);
+        }
+      }
       if (estado.enviados + 1 >= card.dias_envio.length) await finalizar('concluido');
     } catch (err) {
       console.error(`Erro no follow-up inteligente (card ${card.id}, contato ${c.id}, tenant ${tenantId}):`, err.message);

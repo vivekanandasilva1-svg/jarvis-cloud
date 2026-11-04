@@ -8474,6 +8474,7 @@ function criarCardFollowUpInteligente(dados) {
   const estado = {
     id: dados.id, etapas: [...dados.etapas], diasEnvio: [...dados.diasEnvio], duracaoDias: dados.duracaoDias,
     instrucoes: dados.instrucoes || '', pararSeResponder: dados.pararSeResponder, ativo: dados.ativo,
+    arquivos: [...(dados.arquivos || [])],
   };
   const nomeEtapa = (id) => fuiEtapas.find((e) => e.id === id)?.nome || id;
 
@@ -8580,7 +8581,7 @@ function criarCardFollowUpInteligente(dados) {
   // ----- em que dia cada mensagem sai (editavel) -----
   const rotDias = document.createElement('label');
   rotDias.className = 'auto-label';
-  rotDias.textContent = 'Dia de envio de cada mensagem (contado a partir da entrada do lead na etapa)';
+  rotDias.textContent = 'Dia de envio de cada mensagem (contado a partir da entrada do lead na etapa) e anexos de cada uma';
   card.appendChild(rotDias);
   const diasWrap = document.createElement('div');
   diasWrap.className = 'fui-dias';
@@ -8588,6 +8589,9 @@ function criarCardFollowUpInteligente(dados) {
   const desenharDias = () => {
     diasWrap.textContent = '';
     estado.diasEnvio.forEach((dia, i) => {
+      const linhaMsg = document.createElement('div');
+      linhaMsg.className = 'fui-msg';
+
       const chip = document.createElement('label');
       chip.className = 'fui-dia';
       chip.appendChild(document.createTextNode(`${i + 1}ª · dia `));
@@ -8598,7 +8602,73 @@ function criarCardFollowUpInteligente(dados) {
       inp.value = dia;
       inp.addEventListener('input', () => { estado.diasEnvio[i] = Number(inp.value); });
       chip.appendChild(inp);
-      diasWrap.appendChild(chip);
+      linhaMsg.appendChild(chip);
+
+      // anexos dessa mensagem (audio, imagem, PDF ou video curto) - saem logo depois do texto
+      const anexos = document.createElement('div');
+      anexos.className = 'fui-anexos';
+      for (const arq of estado.arquivos.filter((a) => a.ordem === i)) {
+        const item = document.createElement('span');
+        item.className = 'fui-anexo';
+        const icone = arq.tipo.startsWith('audio/') ? '🎧' : arq.tipo.startsWith('image/') ? '🖼' : arq.tipo.startsWith('video/') ? '🎬' : '📄';
+        item.textContent = `${icone} ${arq.nome} (${formatarTamanho(arq.tamanho)}) `;
+        const x = document.createElement('button');
+        x.type = 'button';
+        x.textContent = '✕';
+        x.title = 'Remover anexo';
+        x.addEventListener('click', async () => {
+          try {
+            const res = await fetch(`/api/fu-inteligente/arquivos/${arq.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+            if (!res.ok) throw new Error((await res.json()).erro || 'erro desconhecido');
+            estado.arquivos = estado.arquivos.filter((a) => a.id !== arq.id);
+            desenharDias();
+          } catch (err) {
+            mostrarAviso(`Não consegui remover o anexo: ${err.message}`, 'erro');
+          }
+        });
+        item.appendChild(x);
+        anexos.appendChild(item);
+      }
+      const arquivoInput = document.createElement('input');
+      arquivoInput.type = 'file';
+      arquivoInput.accept = 'audio/*,image/*,video/*,application/pdf';
+      arquivoInput.hidden = true;
+      const anexarBtn = document.createElement('button');
+      anexarBtn.type = 'button';
+      anexarBtn.className = 'fui-anexar';
+      anexarBtn.textContent = '📎 Anexar';
+      anexarBtn.addEventListener('click', () => {
+        if (!estado.id) return mostrarAviso('Salve o follow-up primeiro pra anexar arquivos nas mensagens.', 'erro');
+        arquivoInput.click();
+      });
+      arquivoInput.addEventListener('change', async () => {
+        const file = arquivoInput.files[0];
+        arquivoInput.value = '';
+        if (!file) return;
+        if (file.size > 12 * 1024 * 1024) return mostrarAviso('Arquivo grande demais - o máximo é 12 MB.', 'erro');
+        anexarBtn.disabled = true;
+        anexarBtn.textContent = 'Enviando...';
+        try {
+          const base64 = await arquivoParaBase64(file);
+          const res = await fetch(`/api/fu-inteligente/cards/${estado.id}/arquivos`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+            body: JSON.stringify({ ordem: i, nomeArquivo: file.name, mediaType: file.type || 'application/octet-stream', base64 }),
+          });
+          const d = await res.json();
+          if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+          estado.arquivos.push(d.arquivo);
+          desenharDias();
+        } catch (err) {
+          mostrarAviso(`Não consegui anexar: ${err.message}`, 'erro');
+          anexarBtn.disabled = false;
+          anexarBtn.textContent = '📎 Anexar';
+        }
+      });
+      anexos.appendChild(arquivoInput);
+      anexos.appendChild(anexarBtn);
+      linhaMsg.appendChild(anexos);
+      diasWrap.appendChild(linhaMsg);
     });
   };
   const redistribuir = () => {
