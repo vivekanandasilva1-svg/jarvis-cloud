@@ -732,5 +732,13 @@
     "tipo": "funcao",
     "titulo": "CRM: operadores, origem dos leads (Meta Ads) e monitoramento de ligações",
     "conteudo": "Pedido do dono em 3 partes. (1) OPERADORES: o token de login agora carrega quem entrou (colaboradorId; 0 = dono; token antigo continua valendo como dono). crm_contatos.atendente_id/nome mostra em cada card quem atende; filtro Todos/Meus/Sem operador/por pessoa; seletor + Assumir na conversa; quem responde um lead livre vira o operador; Distribuição automática de lead NOVO (rodízio atômico entre os escolhidos + regra campanha->operador, tabela crm_distribuicao). Operadores = dono + colaboradores ativos da conta. (2) ORIGEM: webhook lê contextInfo.externalAdReply (id do anúncio, título, ctwaClid) da 1ª mensagem de anúncio clique-pro-WhatsApp e busca o nome da campanha na Graph API (metaads.getAdOrigem, timeout 2,5s, cai no título); regras por texto da 1ª mensagem (crm_origem_regras, sem acento/maiúscula) têm prioridade; aba Origem dos leads com relatório por campanha (leads/agendaram/compraram/perdidos). Só leads novos, origem não muda depois. (3) LIGAÇÕES: o WhatsApp NÃO tem API pra fazer ligação - só dá pra monitorar. Evento CALL do Evolution (ligado só no webhook com habilitarEventoChamada, nunca /settings) vira registro em crm_chamadas (horário, atendida/perdida/recusada, duração accept->terminate) + registro manual; aba Ligações com resumo, volume por hora e lista. CALL já ligado na instância Vivekananda (conexão seguiu open). Pendente: confirmar com uma ligação real que o Evolution manda o evento (testado só com eventos simulados); ligar CALL em instâncias novas é automático (criarInstancia)."
+  },
+  {
+    "chave": "crm:mover-etapa-na-conversa",
+    "modulo": "crm",
+    "data": "2026-11-05",
+    "tipo": "funcao",
+    "titulo": "CRM: mover o lead de etapa de dentro da conversa (sem arrastar)",
+    "conteudo": "Pedido do dono: segunda opção além de arrastar o card. A conversa aberta na aba CRM ganhou o seletor Etapa no cabeçalho (a aba Conversas já tinha o seu). Usa a mesma rota POST /api/crm/contatos/:id/etapa do arrastar, então os efeitos colaterais (Follow Up começa/encerra, histórico de etapa pro relatório) são idênticos; o card muda de coluna na hora."
   }
 ]

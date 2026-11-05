@@ -2718,6 +2718,7 @@ async function carregarCrm() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
     crmUltimosDados = data;
+    preencherSeletorEtapaConversa(data.etapas || []);
     await carregarOperadoresCrm();
     renderizarCrmBoard(data.etapas || [], crmFiltrarPorOperador(data.contatos || []));
     if (crmContatoAberto) {
@@ -2727,6 +2728,7 @@ async function carregarCrm() {
         crmAtualizarRetorno();
         crmAtualizarBotaoPausar();
         crmAtualizarOperadorConversa();
+        crmAtualizarEtapaConversa();
       }
     }
   } catch (err) {
@@ -2992,6 +2994,7 @@ function abrirConversaCrm(contato) {
   crmAtualizarBotaoOcultar();
   crmAtualizarRetorno();
   crmAtualizarOperadorConversa();
+  crmAtualizarEtapaConversa();
   crmRetornoPainel.hidden = true;
   crmMarcarLido(contato.id);
   carregarMensagensCrm();
@@ -9281,5 +9284,45 @@ document.getElementById('chamadaSalvar').addEventListener('click', async () => {
   } catch (err) {
     chamadaErro.textContent = err.message;
     chamadaErro.hidden = false;
+  }
+});
+
+
+// ---------- Mover o lead de etapa de dentro da conversa (alternativa a arrastar o card) ----------
+
+const crmConversaEtapa = document.getElementById('crmConversaEtapa');
+
+function preencherSeletorEtapaConversa(etapas) {
+  const atual = crmConversaEtapa.value;
+  crmConversaEtapa.textContent = '';
+  for (const e of etapas) crmConversaEtapa.add(new Option(`Etapa: ${e.nome}`, e.id));
+  crmConversaEtapa.value = atual;
+  crmAtualizarEtapaConversa();
+}
+
+function crmAtualizarEtapaConversa() {
+  if (crmContatoAberto?.etapa) crmConversaEtapa.value = crmContatoAberto.etapa;
+}
+
+crmConversaEtapa.addEventListener('change', async () => {
+  if (!crmContatoAberto) return;
+  const etapa = crmConversaEtapa.value;
+  if (etapa === crmContatoAberto.etapa) return;
+  crmConversaErro.hidden = true;
+  try {
+    const res = await fetch(`/api/crm/contatos/${crmContatoAberto.id}/etapa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ etapa }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    crmContatoAberto.etapa = etapa;
+    mostrarAviso(`Movido para "${crmConversaEtapa.selectedOptions[0]?.textContent.replace('Etapa: ', '') || etapa}"`, 'ok');
+    carregarCrm();
+  } catch (err) {
+    crmConversaEtapa.value = crmContatoAberto.etapa;
+    crmConversaErro.textContent = err.message;
+    crmConversaErro.hidden = false;
   }
 });
