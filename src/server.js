@@ -105,6 +105,8 @@ app.use(async (req, res, next) => {
     // login do Instagram (protegida pelo state assinado)
     req.path === '/api/instagram/webhook' ||
     req.path === '/api/instagram/callback' ||
+    // servico externo reportando gasto de IA (protegido pelo proprio token x-uso-token, conferido no handler)
+    req.path === '/api/saldo-ia/uso-externo' ||
     // EventSource nativo do browser nao manda headers customizados - a senha vai por query
     // string aqui, e o proprio handler da rota confere ela antes de abrir o stream
     req.path === '/api/crm/eventos' ||
@@ -1734,6 +1736,18 @@ app.post('/api/saldo-ia', exigirSuperAdmin, async (req, res) => {
     res.status(500).json({ erro: err.message });
   }
 });
+
+app.post('/api/saldo-ia/uso-externo', async (req, res) => {
+  if (!saldoIA.tokenUsoExternoValido(req.header('x-uso-token'))) return res.status(401).json({ erro: 'token invalido' });
+  try {
+    res.json(await saldoIA.registrarUsoExterno(req.body || {}));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// mostra pro dono o token que um servico externo precisa mandar em x-uso-token
+app.get('/api/saldo-ia/token-uso', exigirSuperAdmin, (req, res) => res.json({ token: saldoIA.tokenUsoExterno() }));
 
 app.post('/api/saldo-ia/gasto-externo', exigirSuperAdmin, async (req, res) => {
   try {

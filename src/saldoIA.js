@@ -5,6 +5,7 @@
 // tabela de precos abaixo. Quando o saldo estimado cai abaixo do limite escolhido, avisa o dono no
 // WhatsApp (sem usar IA) ANTES de zerar. A chave da Anthropic e unica da plataforma (serve todos os
 // clientes), entao o saldo e da plataforma e so o super_admin ve/edita - nao e por tenant.
+import crypto from 'node:crypto';
 import { pool } from './db.js';
 import * as whatsappInstances from './whatsappInstances.js';
 import { enviarMensagemTexto } from './evolutionApi.js';
@@ -243,4 +244,26 @@ export async function registrarRecarga({ valorUsd }) {
   await pool.query(`INSERT INTO ia_saldo_ajustes (tipo, valor_usd, descricao) VALUES ('recarga', $1, 'Recarga de creditos')`, [valor]);
   ultimoAvisoRam = 0;
   return obterSituacao();
+}
+
+// ---------- servicos separados (ex.: um editor de video rodando fora do app) ----------
+// Quem usa a MESMA chave da Anthropic em outro processo nao passa pelo anthropicClient, entao o gasto
+// dele some do saldo. Esse servico manda o `usage` de cada resposta pra POST /api/saldo-ia/uso-externo
+// com o cabecalho x-uso-token (derivado do SESSION_SECRET - sem env nova) e o app desconta igual a
+// uma chamada normal, atribuindo ao modulo informado.
+export function tokenUsoExterno() {
+  return crypto.createHmac('sha256', process.env.SESSION_SECRET || 'dev').update('saldo-ia-uso-externo').digest('hex');
+}
+
+export function tokenUsoExternoValido(recebido) {
+  const a = Buffer.from(String(recebido || ''));
+  const b = Buffer.from(tokenUsoExterno());
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+export async function registrarUsoExterno({ modelo, usage, modulo }) {
+  if (!usage || typeof usage !== 'object') throw new Error('usage obrigatorio (o objeto "usage" da resposta da Anthropic).');
+  const nome = String(modulo || 'externo').trim().slice(0, 40) || 'externo';
+  await registrarUso(String(modelo || 'desconhecido').slice(0, 60), usage, { tenantId: 0, modulo: nome });
+  return { ok: true, custoUsd: custoDaChamada(modelo, usage) };
 }
