@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261104c" />
+  <link rel="stylesheet" href="style.css?v=20261105a" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -199,6 +199,17 @@
             <label class="saldo-label" for="saldoLimite">Avisar no WhatsApp quando ficar abaixo de (US$)</label>
             <input type="text" id="saldoLimite" inputmode="decimal" placeholder="ex.: 5" autocomplete="off">
             <button type="button" class="saldo-salvar" id="saldoSalvar">Salvar saldo</button>
+            <div class="saldo-extra">
+              <strong>Registrar movimento fora do app</strong>
+              <p class="saldo-aviso" style="margin:2px 0 6px">Recarga, ou gasto da mesma chave em outro lugar (testes, outro app). Entra no saldo e no histórico, sem contar como diferença.</p>
+              <input type="text" id="saldoMovValor" inputmode="decimal" placeholder="valor US$ (ex.: 3,50)" autocomplete="off">
+              <input type="text" id="saldoMovDesc" placeholder="descrição do gasto (ex.: testes locais)" autocomplete="off">
+              <div class="saldo-mov-botoes">
+                <button type="button" class="saldo-salvar" id="saldoRecarga">+ Recarga</button>
+                <button type="button" class="saldo-salvar" id="saldoGastoExterno">− Gasto externo</button>
+              </div>
+              <div class="saldo-uso" id="saldoHistorico"></div>
+            </div>
             <p class="saldo-aviso">É uma estimativa: o app desconta o custo de cada resposta da IA do valor que você informa. A Anthropic não permite consultar o saldo exato — depois de recarregar, informe o novo valor aqui.</p>
             <p class="saldo-msg" id="saldoMsg"></p>
           </div>
@@ -1387,6 +1398,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261104c"></script>
+  <script src="app.js?v=20261105a"></script>
 </body>
 </html>

@@ -1735,6 +1735,22 @@ app.post('/api/saldo-ia', exigirSuperAdmin, async (req, res) => {
   }
 });
 
+app.post('/api/saldo-ia/gasto-externo', exigirSuperAdmin, async (req, res) => {
+  try {
+    res.json(await saldoIA.registrarGastoExterno({ valorUsd: String(req.body?.valorUsd ?? '').replace(',', '.'), descricao: req.body?.descricao }));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/saldo-ia/recarga', exigirSuperAdmin, async (req, res) => {
+  try {
+    res.json(await saldoIA.registrarRecarga({ valorUsd: String(req.body?.valorUsd ?? '').replace(',', '.') }));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
 app.get('/api/gerador-relatorios/contas', async (req, res) => {
   try {
     res.json({ contas: await metaAds.listAdAccounts(req.tenantId, { apenasAtivas: true }) });

@@ -5365,6 +5365,11 @@ const saldoLimite = document.getElementById('saldoLimite');
 const saldoSalvar = document.getElementById('saldoSalvar');
 const saldoMsg = document.getElementById('saldoMsg');
 const saldoUso = document.getElementById('saldoUso');
+const saldoMovValor = document.getElementById('saldoMovValor');
+const saldoMovDesc = document.getElementById('saldoMovDesc');
+const saldoRecarga = document.getElementById('saldoRecarga');
+const saldoGastoExterno = document.getElementById('saldoGastoExterno');
+const saldoHistorico = document.getElementById('saldoHistorico');
 let saldoIniciado = false;
 
 const usd = (v) => `US$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -5398,8 +5403,26 @@ function renderSaldo(d) {
     saldoUso.appendChild(l);
   };
   if (d.cachePct !== null && d.cachePct !== undefined) linha('Entrada vinda do cache (7 dias)', `${d.cachePct}%`);
-  const NOMES_MODULO = { 'auto-atendimento': 'Auto Atendimento', lumia: 'Lumia', 'follow-up': 'Follow Up', 'gerador-relatorios': 'Gerador de Relatórios' };
+  // diferenca entre o que o app achava e o que o Console mostrava na ultima conferencia
+  if (d.ultimaConferencia) {
+    const c = d.ultimaConferencia;
+    linha(`Última conferência (${new Date(c.em).toLocaleDateString('pt-BR')}): app achava ${usd(c.estimadoUsd)}, real ${usd(c.realUsd)}`, c.diferencaUsd > 0 ? `−${usd(c.diferencaUsd)} fora do app` : 'sem diferença');
+  }
+  if (d.foraDoApp30diasUsd > 0) linha('Gasto fora do app (30 dias)', usd(d.foraDoApp30diasUsd));
+  const NOMES_MODULO = { 'auto-atendimento': 'Auto Atendimento', lumia: 'Lumia', 'follow-up': 'Follow Up', 'follow-up-inteligente': 'Follow Up Inteligente', externo: 'Gasto externo', 'gerador-relatorios': 'Gerador de Relatórios' };
   for (const r of d.porCliente || []) linha(`${r.nome} · ${NOMES_MODULO[r.modulo] || r.modulo || 'outros'}`, usd(r.custoUsd));
+  saldoHistorico.textContent = '';
+  const ROTULO_AJUSTE = { conferencia: 'Conferência', recarga: 'Recarga', gasto_externo: 'Gasto externo' };
+  for (const a of d.ajustes || []) {
+    const l = document.createElement('div');
+    l.className = 'linha';
+    const x = document.createElement('span');
+    x.textContent = `${new Date(a.em).toLocaleDateString('pt-BR')} · ${ROTULO_AJUSTE[a.tipo] || a.tipo}${a.descricao && a.tipo === 'gasto_externo' ? ` (${a.descricao})` : ''}`;
+    const y = document.createElement('strong');
+    y.textContent = a.tipo === 'recarga' ? `+${usd(a.valorUsd)}` : a.tipo === 'gasto_externo' ? `−${usd(a.valorUsd)}` : (a.valorUsd > 0 ? `−${usd(a.valorUsd)}` : `+${usd(-a.valorUsd)}`);
+    l.append(x, y);
+    saldoHistorico.appendChild(l);
+  }
   if (document.activeElement !== saldoLimite) saldoLimite.value = String(d.limiteAlertaUsd).replace('.', ',');
 }
 
@@ -5439,6 +5462,32 @@ saldoSalvar.addEventListener('click', async () => {
     saldoMsg.textContent = err.message;
   }
 });
+
+async function registrarMovimentoSaldo(rota, corpo, botao, aviso) {
+  saldoMsg.textContent = 'Salvando...';
+  botao.disabled = true;
+  try {
+    const res = await fetch(`/api/saldo-ia/${rota}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify(corpo),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro ao salvar');
+    saldoMovValor.value = '';
+    saldoMovDesc.value = '';
+    renderSaldo(d);
+    saldoMsg.textContent = 'Salvo.';
+    marcarSalvo(botao, aviso);
+    atualizarSino();
+  } catch (err) {
+    saldoMsg.textContent = err.message;
+  } finally {
+    botao.disabled = false;
+  }
+}
+saldoRecarga.addEventListener('click', () => registrarMovimentoSaldo('recarga', { valorUsd: saldoMovValor.value.trim() }, saldoRecarga, 'Recarga registrada'));
+saldoGastoExterno.addEventListener('click', () => registrarMovimentoSaldo('gasto-externo', { valorUsd: saldoMovValor.value.trim(), descricao: saldoMovDesc.value.trim() }, saldoGastoExterno, 'Gasto externo registrado'));
 
 function iniciarSino() {
   atualizarSino();

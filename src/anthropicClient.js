@@ -30,3 +30,29 @@ anthropic.messages.create = async (params, ...resto) => {
     throw err;
   }
 };
+
+// ---------- outros caminhos de chamada (cobertura total do gasto) ----------
+// Hoje o app so usa messages.create, mas qualquer chamada nova que alguem escreva depois (streaming
+// ou a API beta) tambem precisa ser contabilizada - senao o saldo estimado deriva sem ninguem
+// perceber. Mesmo contrato do create: aceita `_uso: { tenantId, modulo }` e nunca atrasa a resposta.
+function contabilizarMensagemFinal(modelo, mensagem, uso) {
+  if (mensagem?.usage) registrarUso(mensagem.model || modelo, mensagem.usage, uso);
+}
+
+const streamOriginal = anthropic.messages.stream.bind(anthropic.messages);
+anthropic.messages.stream = (params, ...resto) => {
+  const { _uso, ...corpo } = params || {};
+  const stream = streamOriginal(corpo, ...resto);
+  stream.finalMessage().then((m) => contabilizarMensagemFinal(corpo.model, m, _uso)).catch(() => {});
+  return stream;
+};
+
+if (anthropic.beta?.messages?.create) {
+  const betaCriarOriginal = anthropic.beta.messages.create.bind(anthropic.beta.messages);
+  anthropic.beta.messages.create = async (params, ...resto) => {
+    const { _uso, ...corpo } = params || {};
+    const resposta = await betaCriarOriginal(corpo, ...resto);
+    if (!corpo.stream) contabilizarMensagemFinal(corpo.model, resposta, _uso);
+    return resposta;
+  };
+}

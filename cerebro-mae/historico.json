@@ -716,5 +716,13 @@
     "tipo": "correcao",
     "titulo": "Cliente reativado voltava a ficar desativado após cada atualização",
     "conteudo": "Causa: o sweep de vencimento (bloquearClientesExpirados, roda no boot e a cada 30min) desativa quem tem acesso_expira_em no passado e ativo=true. Reativar na aba Clientes não mexe no vencimento, então o próximo deploy desativava de novo (caso real: Vitaly odontologia, vencimento 30/10). Correção: coluna tenants.ativo_alterado_em marca decisão manual (botão ativar/desativar, novo período, restaurar, marcar exclusão); o sweep só desativa se a decisão manual for ANTERIOR ao vencimento. Mesma regra no vencimento do Gerador de Propostas. Regra geral: rotina automática nunca desfaz escolha manual mais nova - se criar outro sweep/seed, respeitar isso."
+  },
+  {
+    "chave": "plataforma:saldo-ia-fora-do-app",
+    "modulo": "plataforma",
+    "data": "2026-11-05",
+    "tipo": "funcao",
+    "titulo": "Saldo da IA: registra gasto fora do app, recarga e a diferença de cada conferência",
+    "conteudo": "Problema: o saldo estimado (saldoIA.js) só desconta chamadas que passam pelo anthropicClient; a mesma chave usada em testes locais/outras ferramentas gasta sem o app ver, e o saldo deriva (caso real: app mostrava mais que os US$ 5,31 do Console). Agora: (1) cada vez que o dono informa o saldo real o app guarda quanto achava x quanto era (tabela ia_saldo_ajustes) e mostra a diferença e o total fora do app em 30 dias; (2) botões Recarga (soma sem virar diferença) e Gasto externo (entra no gasto de hoje/7 dias como módulo externo e desconta); (3) anthropicClient também contabiliza messages.stream e beta.messages.create, e avisa no log se aparecer modelo sem preço cadastrado. Limite: a Anthropic não expõe saldo por API; só uma chave Admin (conta de organização) daria o custo real automático - não configurado. Pendente: gasto de testes rodando o servidor local com a chave de produção não é rastreado (sem banco) - registrar como gasto externo ou usar chave separada."
   }
 ]
