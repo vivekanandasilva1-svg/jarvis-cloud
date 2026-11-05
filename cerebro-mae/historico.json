@@ -740,5 +740,13 @@
     "tipo": "funcao",
     "titulo": "CRM: mover o lead de etapa de dentro da conversa (sem arrastar)",
     "conteudo": "Pedido do dono: segunda opção além de arrastar o card. A conversa aberta na aba CRM ganhou o seletor Etapa no cabeçalho (a aba Conversas já tinha o seu). Usa a mesma rota POST /api/crm/contatos/:id/etapa do arrastar, então os efeitos colaterais (Follow Up começa/encerra, histórico de etapa pro relatório) são idênticos; o card muda de coluna na hora."
+  },
+  {
+    "chave": "plataforma:remocao-n8n-vps",
+    "modulo": "plataforma",
+    "data": "2026-11-05",
+    "tipo": "decisao",
+    "titulo": "VPS: n8n removido (sem uso desde 2025) pra liberar recurso",
+    "conteudo": "Pedido do dono pra abrir espaço na VPS (plano de subir um OT 8.6 depois). Antes de remover: nenhum código da Lumia nem webhook da Evolution apontava pro n8n, e a última execução dele foi em 15/06/2025. Backup (pg_dump + workflows em JSON + env) baixado pro PC em backups-lumia/n8n-2026-11-05, fora do git. Removidos os 5 serviços (n8n start/webhook/worker, postgres, redis) e a imagem. Lumia e Evolution seguiram no ar. Pendente: apagar o projeto n8n vazio no painel do Easypanel. Achado no caminho: a instância 'Nando TIM' (desconectada desde 03/2026) tem webhook pra um endereço externo em webhook.office.com, a revisar com o dono."
   }
 ]
