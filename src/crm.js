@@ -6,7 +6,7 @@
 import { EventEmitter } from 'node:events';
 import { pool } from './db.js';
 import * as evolutionApi from './evolutionApi.js';
-import { tabelasProntas as tenantsProntos } from './tenants.js';
+import { tabelasProntas as tenantsProntos, listarOperadores } from './tenants.js';
 
 // avisa quem estiver ouvindo (endpoint SSE em server.js) sempre que uma mensagem nova entra ou
 // sai de alguma conversa - e o que da o "tempo real" da aba CRM, sem precisar de polling
@@ -135,6 +135,29 @@ async function garantirTabelas() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS crm_etapa_eventos_tenant_idx ON crm_etapa_eventos (tenant_id, em);`);
 
+  // de onde o lead veio (anuncio do Meta Ads / regra por texto da 1a mensagem) - ver origemLeads
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS origem_fonte TEXT;`);
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS origem_campanha TEXT;`);
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS origem_anuncio_id TEXT;`);
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS origem_titulo TEXT;`);
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS origem_ctwa TEXT;`);
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS origem_em TIMESTAMPTZ;`);
+  // operador (quem esta atendendo o lead): atendente_id 0 = o dono da conta, >0 = colaborador, NULL =
+  // ninguem assumiu. O nome fica copiado pra continuar aparecendo mesmo se o colaborador for apagado.
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS atendente_id INT;`);
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS atendente_nome TEXT;`);
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS atendente_em TIMESTAMPTZ;`);
+  // distribuicao automatica de leads NOVOS entre operadores: rodizio entre os escolhidos, com regras
+  // opcionais "campanha X vai sempre pro operador Y" (regras = [{ campanha, operadorId }])
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS crm_distribuicao (
+      tenant_id INT PRIMARY KEY REFERENCES tenants(id),
+      ativo BOOLEAN NOT NULL DEFAULT false,
+      operadores INT[] NOT NULL DEFAULT '{}',
+      proximo INT NOT NULL DEFAULT 0,
+      regras JSONB NOT NULL DEFAULT '[]'::jsonb
+    );
+  `);
   await pool.query(`ALTER TABLE crm_contatos DROP CONSTRAINT IF EXISTS crm_contatos_numero_instancia_key;`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS crm_contatos_tenant_numero_instancia_idx ON crm_contatos (tenant_id, numero, instancia);`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS crm_seguranca_tenant_idx ON crm_seguranca (tenant_id);`);
@@ -223,7 +246,7 @@ export async function registrarMensagem(tenantId, { numero, instancia, direcao, 
          WHEN crm_contatos.etapa = 'novo_lead' AND $6::text = 'saida' AND NOT $8::boolean THEN 'em_atendimento'
          WHEN crm_contatos.etapa = 'perdido' AND $6::text = 'entrada' THEN 'em_atendimento'
          ELSE crm_contatos.etapa END
-     RETURNING id`,
+     RETURNING id, (xmax = 0) AS novo`,
     [tenantId, numero, instancia, nomeFinal, preview, direcao, ts, !!manterEtapa],
   );
 
@@ -235,6 +258,9 @@ export async function registrarMensagem(tenantId, { numero, instancia, direcao, 
     [tenantId, numero, instancia, direcao, tipo, texto || '', midiaBase64 || null, midiaMimetype || null, ts, waId || null, direcao === 'saida' ? autor : null],
   );
   if (!msgRows[0]) return rows[0]?.id; // outro webhook identico ganhou a corrida - nada a emitir
+
+  // lead novo que acabou de chegar: distribui pra um operador (se a distribuicao automatica estiver ligada)
+  if (rows[0]?.novo && direcao === 'entrada') await distribuirLeadNovo(tenantId, rows[0].id).catch((err) => console.error('Erro distribuindo lead novo:', err.message));
 
   eventosCrm.emit('mensagem', { tenantId, contatoId: rows[0]?.id, numero, instancia, mensagem: msgRows[0] });
 
@@ -277,7 +303,7 @@ export async function listarContatos(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento,
+    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento, atendente_id, atendente_nome,
             retorno_em, retorno_nota, retorno_origem, retorno_disparado_em,
             (retorno_em IS NOT NULL AND (retorno_em AT TIME ZONE 'America/Maceio')::date <= (now() AT TIME ZONE 'America/Maceio')::date) AS retorno_hoje,
             (ultima_entrada_em IS NOT NULL AND (lido_em IS NULL OR ultima_entrada_em > lido_em)) AS nao_lida
@@ -291,7 +317,7 @@ export async function listarContatosOcultos(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento,
+    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento, atendente_id, atendente_nome,
             retorno_em, retorno_nota, retorno_origem, retorno_disparado_em,
             (retorno_em IS NOT NULL AND (retorno_em AT TIME ZONE 'America/Maceio')::date <= (now() AT TIME ZONE 'America/Maceio')::date) AS retorno_hoje,
             (ultima_entrada_em IS NOT NULL AND (lido_em IS NULL OR ultima_entrada_em > lido_em)) AS nao_lida
@@ -340,7 +366,7 @@ export async function listarBaseContatos(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT id, numero, instancia, nome, etapa, email, etiquetas, observacoes, origem, criado_em, ultima_mensagem_em, auto_pausado
+    `SELECT id, numero, instancia, nome, etapa, email, etiquetas, observacoes, origem, criado_em, ultima_mensagem_em, auto_pausado, atendente_id, atendente_nome
      FROM crm_contatos WHERE tenant_id = $1 AND oculto = false
      ORDER BY COALESCE(ultima_mensagem_em, criado_em) DESC`,
     [tenantId],
@@ -901,4 +927,79 @@ export async function ultimasMensagens(tenantId, numero, instancia, limite = 30)
     [tenantId, numero, instancia, Math.min(Math.max(Number(limite) || 30, 1), 80)],
   );
   return rows.reverse();
+}
+
+
+// ---------- operadores: quem esta atendendo cada lead ----------
+
+export { listarOperadores };
+
+// atribui o lead a um operador (id 0 = dono, >0 = colaborador) ou tira (operadorId null)
+export async function definirAtendente(tenantId, contatoId, operadorId) {
+  if (!pool) return;
+  await tabelasProntas;
+  if (operadorId === null || operadorId === undefined) {
+    await pool.query(`UPDATE crm_contatos SET atendente_id = NULL, atendente_nome = NULL, atendente_em = NULL WHERE id = $1 AND tenant_id = $2`, [contatoId, tenantId]);
+  } else {
+    const op = (await listarOperadores(tenantId)).find((o) => o.id === Number(operadorId));
+    if (!op) throw new Error('Operador nao encontrado (ou desativado).');
+    await pool.query(`UPDATE crm_contatos SET atendente_id = $3, atendente_nome = $4, atendente_em = now() WHERE id = $1 AND tenant_id = $2`, [contatoId, tenantId, op.id, op.nome]);
+  }
+  eventosCrm.emit('contato-atualizado', { tenantId, contatoId });
+}
+
+// quem responde um lead que ninguem assumiu ainda passa a ser o operador dele
+export async function assumirSeLivre(tenantId, numero, instancia, operadorId) {
+  if (!pool) return;
+  await tabelasProntas;
+  const { rows } = await pool.query(`SELECT id FROM crm_contatos WHERE tenant_id = $1 AND numero = $2 AND instancia = $3 AND atendente_id IS NULL`, [tenantId, numero, instancia]);
+  if (rows[0]) await definirAtendente(tenantId, rows[0].id, operadorId);
+}
+
+export async function obterDistribuicao(tenantId) {
+  if (!pool) return { ativo: false, operadores: [], regras: [] };
+  await tabelasProntas;
+  const { rows } = await pool.query(`SELECT ativo, operadores, regras FROM crm_distribuicao WHERE tenant_id = $1`, [tenantId]);
+  return rows[0] ? { ativo: rows[0].ativo, operadores: rows[0].operadores, regras: rows[0].regras } : { ativo: false, operadores: [], regras: [] };
+}
+
+export async function salvarDistribuicao(tenantId, { ativo, operadores, regras }) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const validos = new Set((await listarOperadores(tenantId)).map((o) => o.id));
+  const ops = [...new Set((Array.isArray(operadores) ? operadores : []).map(Number))].filter((id) => validos.has(id));
+  if (ativo && !ops.length) throw new Error('Escolha pelo menos um operador pra distribuir os leads.');
+  const regrasLimpas = (Array.isArray(regras) ? regras : [])
+    .map((r) => ({ campanha: String(r?.campanha || '').trim().slice(0, 120), operadorId: Number(r?.operadorId) }))
+    .filter((r) => r.campanha && validos.has(r.operadorId))
+    .slice(0, 50);
+  await pool.query(
+    `INSERT INTO crm_distribuicao (tenant_id, ativo, operadores, regras) VALUES ($1, $2, $3, $4::jsonb)
+     ON CONFLICT (tenant_id) DO UPDATE SET ativo = $2, operadores = $3, regras = $4::jsonb`,
+    [tenantId, !!ativo, ops, JSON.stringify(regrasLimpas)],
+  );
+}
+
+// chamado quando um lead NOVO chega: regra de campanha primeiro (se o lead ja tiver campanha
+// identificada), senao rodizio entre os operadores escolhidos
+export async function distribuirLeadNovo(tenantId, contatoId) {
+  const cfg = await obterDistribuicao(tenantId);
+  if (!cfg.ativo || !cfg.operadores.length) return;
+  let operadorId = null;
+  const { rows: [c] } = await pool.query(`SELECT origem_campanha FROM crm_contatos WHERE id = $1 AND tenant_id = $2 AND atendente_id IS NULL`, [contatoId, tenantId]).catch(() => ({ rows: [] }));
+  if (c?.origem_campanha) {
+    const regra = cfg.regras.find((r) => c.origem_campanha.toLowerCase().includes(String(r.campanha).toLowerCase()));
+    if (regra && cfg.operadores.includes(regra.operadorId)) operadorId = regra.operadorId;
+  }
+  if (operadorId === null) {
+    // rodizio atomico: pega o indice atual e ja avanca, pra dois leads simultaneos nao irem pro mesmo
+    const { rows: [r] } = await pool.query(
+      `UPDATE crm_distribuicao SET proximo = (proximo + 1) % GREATEST(cardinality(operadores), 1) WHERE tenant_id = $1 RETURNING proximo, operadores`,
+      [tenantId],
+    );
+    const idx = (r.proximo - 1 + r.operadores.length) % r.operadores.length;
+    operadorId = r.operadores[idx];
+  }
+  const { rows: livre } = await pool.query(`SELECT 1 FROM crm_contatos WHERE id = $1 AND tenant_id = $2 AND atendente_id IS NULL`, [contatoId, tenantId]);
+  if (livre.length) await definirAtendente(tenantId, contatoId, operadorId);
 }

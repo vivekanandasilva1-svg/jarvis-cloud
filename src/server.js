@@ -125,9 +125,11 @@ app.use(async (req, res, next) => {
     ? req.query.token
     : req.header('x-app-password');
 
-  const tenantId = tenants.verificarToken(provided);
+  const infoToken = tenants.verificarTokenInfo(provided);
+  const tenantId = infoToken?.tenantId || null;
   if (tenantId) {
     req.tenantId = tenantId;
+    req.operadorId = infoToken.colaboradorId; // 0 = o proprio dono da conta
     // conta desativada pelo admin: derruba a sessao NA HORA (o token continua "valido" por 30 dias, entao
     // so a assinatura nao basta) - o navegador do cliente entende `contaInativa` e desloga sozinho
     if (!(await tenants.estaAtivo(tenantId))) {
@@ -174,9 +176,9 @@ app.post('/api/login', async (req, res) => {
   const { username, password } = req.body || {};
   if (!process.env.SESSION_SECRET) return res.json({ ok: true });
   try {
-    const tenantId = await tenants.autenticar(username, password);
-    if (!tenantId) return res.json({ ok: false, contaInativa: await tenants.contaDesativadaComCredenciaisValidas(username, password).catch(() => false) });
-    res.json({ ok: true, token: tenants.firmarToken(tenantId) });
+    const quem = await tenants.autenticarOperador(username, password);
+    if (!quem) return res.json({ ok: false, contaInativa: await tenants.contaDesativadaComCredenciaisValidas(username, password).catch(() => false) });
+    res.json({ ok: true, token: tenants.firmarToken(quem.tenantId, quem.colaboradorId) });
   } catch (err) {
     res.status(500).json({ ok: false, erro: err.message });
   }
@@ -191,7 +193,8 @@ app.get('/api/me', async (req, res) => {
     if (!tenant || !tenant.ativo) return res.status(401).json({ erro: 'tenant nao encontrado' });
     const tabsHabilitadas = await tenantConfig.obterTabsHabilitadas(tenant.id);
     const cerebroLiberado = !!tenant.super_admin || await cerebro.estaLiberado(tenant.id).catch(() => false);
-    res.json({ tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas, permiteColaboradores: !!tenant.permite_colaboradores, cerebroLiberado });
+    const operador = (await crm.listarOperadores(tenant.id).catch(() => [])).find((o) => o.id === (req.operadorId || 0)) || { id: 0, nome: tenant.nome };
+    res.json({ operador, tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas, permiteColaboradores: !!tenant.permite_colaboradores, cerebroLiberado });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -2040,6 +2043,7 @@ app.post('/api/crm/mensagens', async (req, res) => {
   if (!numero || !instancia || !texto) return res.status(400).json({ erro: 'numero, instancia e texto sao obrigatorios' });
   try {
     lembrarEnviada(await crm.enviarMensagem(req.tenantId, numero, instancia, texto));
+    crm.assumirSeLivre(req.tenantId, numero, instancia, req.operadorId || 0).catch(() => {}); // quem responde primeiro vira o operador
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -2056,9 +2060,48 @@ app.post('/api/crm/mensagens/midia', async (req, res) => {
       tipo, mimetype, base64, fileName, legenda: typeof legenda === 'string' ? legenda.trim().slice(0, 1000) : '',
     });
     lembrarEnviada(resposta);
+    crm.assumirSeLivre(req.tenantId, String(numero), String(instancia), req.operadorId || 0).catch(() => {});
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
+  }
+});
+
+// ---------- operadores (quem atende cada lead) ----------
+
+app.get('/api/crm/operadores', async (req, res) => {
+  try {
+    const operadores = await crm.listarOperadores(req.tenantId);
+    res.json({ operadores, euId: req.operadorId || 0 });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/contatos/:id/atendente', async (req, res) => {
+  const { operadorId } = req.body || {};
+  try {
+    await crm.definirAtendente(req.tenantId, Number(req.params.id), operadorId === null || operadorId === undefined || operadorId === '' ? null : Number(operadorId));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/crm/distribuicao', async (req, res) => {
+  try {
+    res.json(await crm.obterDistribuicao(req.tenantId));
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/distribuicao', async (req, res) => {
+  try {
+    await crm.salvarDistribuicao(req.tenantId, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
   }
 });
 

@@ -2631,6 +2631,12 @@ function crmCriarCard(contato) {
   numero.textContent = `${contato.numero} · ${contato.instancia}`;
   card.appendChild(numero);
 
+  // quem esta atendendo esse lead (visivel pra toda a equipe)
+  const operadorTag = document.createElement('div');
+  operadorTag.className = `crm-card-operador${contato.atendente_nome ? '' : ' livre'}`;
+  operadorTag.textContent = contato.atendente_nome ? `👤 ${contato.atendente_nome}` : 'Sem operador';
+  card.appendChild(operadorTag);
+
   if (contato.retorno_hoje) card.classList.add('crm-card-retorno-hoje');
   if (contato.nao_lida) {
     const ponto = document.createElement('span');
@@ -2686,13 +2692,16 @@ async function carregarCrm() {
     const res = await fetch('/api/crm/contatos', { headers: { 'x-app-password': appPassword } });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
-    renderizarCrmBoard(data.etapas || [], data.contatos || []);
+    crmUltimosDados = data;
+    await carregarOperadoresCrm();
+    renderizarCrmBoard(data.etapas || [], crmFiltrarPorOperador(data.contatos || []));
     if (crmContatoAberto) {
       const atualizado = (data.contatos || []).find((c) => c.id === crmContatoAberto.id);
       if (atualizado) {
         crmContatoAberto = { ...crmContatoAberto, ...atualizado };
         crmAtualizarRetorno();
         crmAtualizarBotaoPausar();
+        crmAtualizarOperadorConversa();
       }
     }
   } catch (err) {
@@ -2957,6 +2966,7 @@ function abrirConversaCrm(contato) {
   crmAtualizarBotaoPausar();
   crmAtualizarBotaoOcultar();
   crmAtualizarRetorno();
+  crmAtualizarOperadorConversa();
   crmRetornoPainel.hidden = true;
   crmMarcarLido(contato.id);
   carregarMensagensCrm();
@@ -8835,3 +8845,153 @@ function criarCardFollowUpInteligente(dados) {
   desenharDias();
   return card;
 }
+
+// ---------- Operadores no CRM: quem atende cada lead + distribuicao ----------
+
+const crmFiltroOperador = document.getElementById('crmFiltroOperador');
+const crmConversaOperador = document.getElementById('crmConversaOperador');
+const crmConversaAssumir = document.getElementById('crmConversaAssumir');
+const crmDistribuicaoBtn = document.getElementById('crmDistribuicaoBtn');
+const crmDistribuicaoModal = document.getElementById('crmDistribuicaoModal');
+let crmUltimosDados = null;
+let crmOperadores = { lista: [], euId: 0 };
+
+async function carregarOperadoresCrm() {
+  try {
+    const res = await fetch('/api/crm/operadores', { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok) return;
+    const mudou = JSON.stringify(d.operadores) !== JSON.stringify(crmOperadores.lista);
+    crmOperadores = { lista: d.operadores, euId: d.euId };
+    if (mudou || crmFiltroOperador.options.length <= 1) preencherSeletoresOperador();
+  } catch { /* segue sem a lista */ }
+}
+
+function preencherSeletoresOperador() {
+  const filtroAtual = crmFiltroOperador.value;
+  crmFiltroOperador.textContent = '';
+  const opcoes = [['', 'Todos os operadores'], ['eu', 'Meus leads'], ['livre', 'Sem operador'], ...crmOperadores.lista.map((o) => [`op:${o.id}`, o.nome])];
+  for (const [valor, texto] of opcoes) crmFiltroOperador.add(new Option(texto, valor));
+  crmFiltroOperador.value = filtroAtual;
+  const atual = crmConversaOperador.value;
+  crmConversaOperador.textContent = '';
+  crmConversaOperador.add(new Option('Sem operador', ''));
+  for (const o of crmOperadores.lista) crmConversaOperador.add(new Option(o.nome, String(o.id)));
+  crmConversaOperador.value = atual;
+}
+
+function crmFiltrarPorOperador(contatos) {
+  const f = crmFiltroOperador.value;
+  if (!f) return contatos;
+  if (f === 'livre') return contatos.filter((c) => c.atendente_id === null || c.atendente_id === undefined);
+  const id = f === 'eu' ? crmOperadores.euId : Number(f.slice(3));
+  return contatos.filter((c) => c.atendente_id === id);
+}
+crmFiltroOperador.addEventListener('change', () => {
+  if (crmUltimosDados) renderizarCrmBoard(crmUltimosDados.etapas || [], crmFiltrarPorOperador(crmUltimosDados.contatos || []));
+});
+
+function crmAtualizarOperadorConversa() {
+  if (!crmContatoAberto) return;
+  const id = crmContatoAberto.atendente_id;
+  crmConversaOperador.value = id === null || id === undefined ? '' : String(id);
+  crmConversaAssumir.hidden = id === crmOperadores.euId && id !== null && id !== undefined;
+}
+
+async function crmDefinirOperador(operadorId) {
+  if (!crmContatoAberto) return;
+  try {
+    const res = await fetch(`/api/crm/contatos/${crmContatoAberto.id}/atendente`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ operadorId }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    const op = crmOperadores.lista.find((o) => o.id === operadorId);
+    crmContatoAberto.atendente_id = operadorId;
+    crmContatoAberto.atendente_nome = op ? op.nome : null;
+    crmAtualizarOperadorConversa();
+    carregarCrm();
+  } catch (err) {
+    crmConversaErro.textContent = err.message;
+    crmConversaErro.hidden = false;
+  }
+}
+crmConversaOperador.addEventListener('change', () => crmDefinirOperador(crmConversaOperador.value === '' ? null : Number(crmConversaOperador.value)));
+crmConversaAssumir.addEventListener('click', () => crmDefinirOperador(crmOperadores.euId));
+
+// ----- painel de distribuicao automatica -----
+const crmDistAtivo = document.getElementById('crmDistAtivo');
+const crmDistAtivoLabel = document.getElementById('crmDistAtivoLabel');
+const crmDistOperadores = document.getElementById('crmDistOperadores');
+const crmDistRegras = document.getElementById('crmDistRegras');
+const crmDistErro = document.getElementById('crmDistErro');
+crmDistAtivo.addEventListener('change', () => { crmDistAtivoLabel.textContent = crmDistAtivo.checked ? 'Ativada' : 'Desativada'; });
+
+function crmDistLinhaRegra(regra) {
+  const linha = document.createElement('div');
+  linha.className = 'crm-dist-regra';
+  const campanha = document.createElement('input');
+  campanha.type = 'text';
+  campanha.placeholder = 'Nome (ou parte) da campanha';
+  campanha.value = regra?.campanha || '';
+  const operador = document.createElement('select');
+  for (const o of crmOperadores.lista) operador.add(new Option(o.nome, String(o.id)));
+  if (regra) operador.value = String(regra.operadorId);
+  const x = document.createElement('button');
+  x.type = 'button';
+  x.textContent = '✕';
+  x.addEventListener('click', () => linha.remove());
+  linha.append(campanha, operador, x);
+  return linha;
+}
+
+crmDistribuicaoBtn.addEventListener('click', async () => {
+  crmDistErro.hidden = true;
+  await carregarOperadoresCrm();
+  try {
+    const res = await fetch('/api/crm/distribuicao', { headers: { 'x-app-password': appPassword } });
+    const cfg = await res.json();
+    if (!res.ok) throw new Error(cfg.erro || 'erro desconhecido');
+    crmDistAtivo.checked = !!cfg.ativo;
+    crmDistAtivoLabel.textContent = cfg.ativo ? 'Ativada' : 'Desativada';
+    crmDistOperadores.textContent = '';
+    for (const o of crmOperadores.lista) {
+      const item = document.createElement('label');
+      item.className = 'fui-etapa-item';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = String(o.id);
+      cb.checked = cfg.operadores.includes(o.id);
+      item.append(cb, document.createTextNode(o.nome));
+      crmDistOperadores.appendChild(item);
+    }
+    crmDistRegras.textContent = '';
+    for (const r of cfg.regras) crmDistRegras.appendChild(crmDistLinhaRegra(r));
+    crmDistribuicaoModal.hidden = false;
+  } catch (err) {
+    mostrarAviso(`Não consegui abrir a distribuição: ${err.message}`, 'erro');
+  }
+});
+document.getElementById('crmDistAddRegra').addEventListener('click', () => crmDistRegras.appendChild(crmDistLinhaRegra(null)));
+document.getElementById('crmDistribuicaoFechar').addEventListener('click', () => { crmDistribuicaoModal.hidden = true; });
+document.getElementById('crmDistSalvar').addEventListener('click', async () => {
+  crmDistErro.hidden = true;
+  const operadores = [...crmDistOperadores.querySelectorAll('input:checked')].map((i) => Number(i.value));
+  const regras = [...crmDistRegras.querySelectorAll('.crm-dist-regra')].map((l) => ({ campanha: l.querySelector('input').value.trim(), operadorId: Number(l.querySelector('select').value) })).filter((r) => r.campanha);
+  try {
+    const res = await fetch('/api/crm/distribuicao', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ ativo: crmDistAtivo.checked, operadores, regras }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    crmDistribuicaoModal.hidden = true;
+    mostrarAviso('Distribuição salva', 'ok');
+  } catch (err) {
+    crmDistErro.textContent = err.message;
+    crmDistErro.hidden = false;
+  }
+});

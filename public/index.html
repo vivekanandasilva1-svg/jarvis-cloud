@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261105a" />
+  <link rel="stylesheet" href="style.css?v=20261105b" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -796,6 +796,8 @@
           <div class="crm-board-nav">
             <button type="button" id="crmScrollEsq" title="Rolar pra esquerda">‹</button>
             <button type="button" id="crmScrollDir" title="Rolar pra direita">›</button>
+            <select id="crmFiltroOperador" title="Filtrar por operador"><option value="">Todos os operadores</option></select>
+            <button type="button" id="crmDistribuicaoBtn">Distribuição</button>
             <button type="button" id="crmVerOcultas">Ocultas</button>
             <button type="button" id="crmRefresh">Atualizar</button>
           </div>
@@ -814,6 +816,8 @@
             <p class="crm-conversa-sub" id="crmConversaNumero">--</p>
           </div>
           <div class="crm-conversa-acoes">
+            <select id="crmConversaOperador" class="crm-btn-secundario" title="Quem está atendendo este lead"><option value="">Sem operador</option></select>
+            <button type="button" id="crmConversaAssumir" class="crm-btn-secundario">Assumir</button>
             <button type="button" id="crmConversaRetorno" class="crm-btn-secundario">Alerta de retorno</button>
             <button type="button" id="crmConversaPausar" class="crm-btn-secundario">Pausar auto-atendimento</button>
             <button type="button" id="crmConversaOcultar" class="crm-btn-secundario">Ocultar conversa</button>
@@ -840,6 +844,30 @@
           <button type="submit">Enviar</button>
         </form>
         <p class="crm-conversa-erro" id="crmConversaErro" hidden></p>
+      </div>
+
+      <div class="crm-ocultas-modal" id="crmDistribuicaoModal" hidden>
+        <div class="crm-ocultas-caixa">
+          <div class="crm-ocultas-header">
+            <strong>Distribuição de leads entre operadores</strong>
+            <button type="button" id="crmDistribuicaoFechar">✕</button>
+          </div>
+          <p class="wa-hint">Quando um lead NOVO chega, ele é entregue sozinho a um operador, em rodízio entre os escolhidos. Você também pode mandar leads de uma campanha sempre pro mesmo operador. Todo mundo vê quem está atendendo cada lead.</p>
+          <div class="auto-toggle-row">
+            <label class="auto-switch">
+              <input type="checkbox" id="crmDistAtivo" />
+              <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+            </label>
+            <span id="crmDistAtivoLabel">Desativada</span>
+          </div>
+          <label class="auto-label">Operadores que recebem leads (rodízio)</label>
+          <div id="crmDistOperadores" class="fui-etapas"></div>
+          <label class="auto-label">Regras por campanha (opcional)</label>
+          <div id="crmDistRegras"></div>
+          <button type="button" id="crmDistAddRegra" class="crm-btn-secundario">+ Regra de campanha</button>
+          <p class="agenda-erro" id="crmDistErro" hidden></p>
+          <button type="button" id="crmDistSalvar" class="relatorio-config-enviar">Salvar distribuição</button>
+        </div>
       </div>
 
       <div class="crm-ocultas-modal" id="crmOcultasModal" hidden>
@@ -1398,6 +1426,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261105a"></script>
+  <script src="app.js?v=20261105b"></script>
 </body>
 </html>

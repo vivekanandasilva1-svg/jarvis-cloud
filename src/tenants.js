@@ -117,8 +117,11 @@ function segredoSessao() {
   return s;
 }
 
-export function firmarToken(tenantId) {
-  const payload = JSON.stringify({ tenantId, exp: Date.now() + TOKEN_VALIDADE_MS });
+// colaboradorId (opcional): quando quem entrou foi um colaborador, o token carrega quem e - e o que
+// permite o CRM mostrar "quem esta atendendo" cada lead. Token antigo (sem isso) segue valendo e
+// conta como o proprio dono da conta.
+export function firmarToken(tenantId, colaboradorId = null) {
+  const payload = JSON.stringify({ tenantId, ...(colaboradorId ? { colaboradorId } : {}), exp: Date.now() + TOKEN_VALIDADE_MS });
   const payloadB64 = Buffer.from(payload, 'utf8').toString('base64url');
   const assinatura = crypto.createHmac('sha256', segredoSessao()).update(payloadB64).digest('base64url');
   return `${payloadB64}.${assinatura}`;
@@ -126,6 +129,11 @@ export function firmarToken(tenantId) {
 
 // devolve o tenantId se o token for valido e nao tiver expirado, ou null
 export function verificarToken(token) {
+  return verificarTokenInfo(token)?.tenantId || null;
+}
+
+// igual, mas devolve tambem quem esta logado: { tenantId, colaboradorId } (colaboradorId 0 = o dono)
+export function verificarTokenInfo(token) {
   if (!token || typeof token !== 'string' || !token.includes('.')) return null;
   const [payloadB64, assinatura] = token.split('.');
   const esperada = crypto.createHmac('sha256', segredoSessao()).update(payloadB64).digest('base64url');
@@ -133,15 +141,41 @@ export function verificarToken(token) {
   const bufEsperada = Buffer.from(esperada);
   if (bufAssinatura.length !== bufEsperada.length || !crypto.timingSafeEqual(bufAssinatura, bufEsperada)) return null;
   try {
-    const { tenantId, exp } = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+    const { tenantId, colaboradorId, exp } = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
     if (!tenantId || !exp || Date.now() > exp) return null;
-    return tenantId;
+    return { tenantId, colaboradorId: Number(colaboradorId) || 0 };
   } catch {
     return null;
   }
 }
 
 // ---------- CRUD de tenant ----------
+
+// versao do login que diz QUEM entrou (dono ou colaborador) - o login chama essa
+export async function autenticarOperador(username, senha) {
+  if (!pool) return null;
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT id, password_hash, ativo FROM tenants WHERE username = $1', [username]);
+  const tenant = rows[0];
+  if (tenant && tenant.ativo && senhaConfere(senha, tenant.password_hash)) return { tenantId: tenant.id, colaboradorId: 0 };
+  const { rows: colabRows } = await pool.query(
+    `SELECT c.id, c.password_hash, c.ativo AS colaborador_ativo, c.tenant_id, t.ativo AS tenant_ativo
+     FROM tenant_colaboradores c JOIN tenants t ON t.id = c.tenant_id WHERE c.username = $1`,
+    [username],
+  );
+  const c = colabRows[0];
+  if (c && c.colaborador_ativo && c.tenant_ativo && senhaConfere(senha, c.password_hash)) return { tenantId: c.tenant_id, colaboradorId: c.id };
+  return null;
+}
+
+// quem pode atender leads nessa conta: o dono (id 0) + colaboradores ativos
+export async function listarOperadores(tenantId) {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows: [t] } = await pool.query('SELECT nome FROM tenants WHERE id = $1', [tenantId]);
+  const { rows } = await pool.query('SELECT id, nome FROM tenant_colaboradores WHERE tenant_id = $1 AND ativo = true ORDER BY nome ASC', [tenantId]);
+  return [{ id: 0, nome: t?.nome || 'Dono' }, ...rows.map((r) => ({ id: r.id, nome: r.nome }))];
+}
 
 export async function autenticar(username, senha) {
   if (!pool) return null;
