@@ -69,6 +69,7 @@ const tabBtnWhatsapp = document.getElementById('tabBtnWhatsapp');
 const tabBtnCrm = document.getElementById('tabBtnCrm');
 const tabBtnAuto = document.getElementById('tabBtnAuto');
 const tabBtnFollowUp = document.getElementById('tabBtnFollowUp');
+const tabBtnDisparos = document.getElementById('tabBtnDisparos');
 const tabBtnChamadas = document.getElementById('tabBtnChamadas');
 const tabBtnOrigem = document.getElementById('tabBtnOrigem');
 const tabBtnFollowUpInteligente = document.getElementById('tabBtnFollowUpInteligente');
@@ -93,6 +94,7 @@ const tabInstagram = document.getElementById('tabInstagram');
 const tabBtnInstagram = document.getElementById('tabBtnInstagram');
 const tabAuto = document.getElementById('tabAuto');
 const tabFollowUp = document.getElementById('tabFollowUp');
+const tabDisparos = document.getElementById('tabDisparos');
 const tabChamadas = document.getElementById('tabChamadas');
 const tabOrigem = document.getElementById('tabOrigem');
 const tabFollowUpInteligente = document.getElementById('tabFollowUpInteligente');
@@ -387,6 +389,7 @@ function mostrarApp() {
   tabBtnInstagram.hidden = !abaLiberada('instagram');
   tabBtnAuto.hidden = !abaLiberada('auto');
   tabBtnFollowUp.hidden = !abaLiberada('followUp');
+  tabBtnDisparos.hidden = !abaLiberada('disparos');
   tabBtnChamadas.hidden = !abaLiberada('whatsapp'); // ligacoes do numero conectado, mesma permissao do WhatsApp
   tabBtnOrigem.hidden = !abaLiberada('crm'); // origem dos leads usa a base do CRM, mesma permissao
   tabBtnFollowUpInteligente.hidden = !abaLiberada('followUpInteligente');
@@ -1938,6 +1941,7 @@ const CABECALHOS_ABA = {
   whatsapp: ['Atendimento', 'WhatsApp', 'Números conectados e status de cada instância.'],
   origem: ['Clientes', 'Origem dos leads', 'De qual campanha cada lead veio, e quanto cada uma rende.'],
   chamadas: ['Atendimento', 'Ligações', 'Ligações do WhatsApp: quantas, que horas, quanto duraram e quantas foram perdidas.'],
+  disparos: ['Automação', 'Disparos', 'Campanhas de mensagens no WhatsApp: listas, programação, anexos, relatório e IA.'],
   followUp: ['Atendimento', 'Follow Up', 'Retome automaticamente os leads que pararam de responder.'],
   followUpInteligente: ['Atendimento', 'Follow Up Inteligente', 'Mensagens automáticas por etapa do funil, nos dias que você escolher.'],
   conversas: ['Atendimento', 'Conversas', 'Atenda o WhatsApp direto pela Lumia, em tempo real.'],
@@ -1993,6 +1997,7 @@ function mudarAba(aba) {
   tabInstagram.hidden = aba !== 'instagram';
   tabAuto.hidden = aba !== 'auto';
   tabFollowUp.hidden = aba !== 'followUp';
+  tabDisparos.hidden = aba !== 'disparos';
   tabChamadas.hidden = aba !== 'chamadas';
   tabOrigem.hidden = aba !== 'origem';
   tabFollowUpInteligente.hidden = aba !== 'followUpInteligente';
@@ -2012,6 +2017,7 @@ function mudarAba(aba) {
   tabBtnInstagram.classList.toggle('active', aba === 'instagram');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   tabBtnFollowUp.classList.toggle('active', aba === 'followUp');
+  tabBtnDisparos.classList.toggle('active', aba === 'disparos');
   tabBtnChamadas.classList.toggle('active', aba === 'chamadas');
   tabBtnOrigem.classList.toggle('active', aba === 'origem');
   tabBtnFollowUpInteligente.classList.toggle('active', aba === 'followUpInteligente');
@@ -2043,6 +2049,8 @@ function mudarAba(aba) {
     carregarOrigem();
   } else if (aba === 'chamadas') {
     carregarChamadas();
+  } else if (aba === 'disparos') {
+    carregarDisparos();
   } else if (aba === 'followUp') {
     carregarFollowUp();
   } else if (aba === 'followUpInteligente') {
@@ -2117,6 +2125,7 @@ tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnGeradorRelatorios.addEventListener('click', () => mudarAba('geradorRelatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
 tabBtnFollowUp.addEventListener('click', () => mudarAba('followUp'));
+tabBtnDisparos.addEventListener('click', () => mudarAba('disparos'));
 tabBtnChamadas.addEventListener('click', () => mudarAba('chamadas'));
 tabBtnOrigem.addEventListener('click', () => mudarAba('origem'));
 tabBtnFollowUpInteligente.addEventListener('click', () => mudarAba('followUpInteligente'));
@@ -8292,7 +8301,7 @@ async function selecionarCliente(id, nome, username) {
   tabsAviso.textContent = 'Nenhuma marcada = tudo liberado (padrão). Marque só pra restringir.';
   clienteIntegracoesPainel.appendChild(tabsAviso);
 
-  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', followUpInteligente: 'Follow Up Inteligente', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
+  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', followUpInteligente: 'Follow Up Inteligente', disparos: 'Disparos', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
   const tabsForm = document.createElement('div');
   tabsForm.className = 'cliente-form';
   const tabsCheckboxes = {};
@@ -9326,3 +9335,369 @@ crmConversaEtapa.addEventListener('change', async () => {
     crmConversaErro.hidden = false;
   }
 });
+
+// ---------- Disparos (campanhas de mensagens em massa) ----------
+
+const dispLista = document.getElementById('dispLista');
+const dispDetalhe = document.getElementById('dispDetalhe');
+const dispNova = document.getElementById('dispNova');
+let dispInstancias = [];
+let dispAbertoId = null;
+let dispPolling = null;
+const DISP_STATUS = { rascunho: 'Rascunho', agendada: 'Agendada', enviando: 'Enviando', pausada: 'Pausada', concluida: 'Concluída', cancelada: 'Cancelada' };
+const DEST_STATUS = { pendente: 'Na fila', enviando: 'Enviando', enviado: 'Enviado', falha: 'Falhou', ignorado: 'Ignorado', optout: 'Pediu pra sair' };
+
+function dispEl(tag, props = {}, ...filhos) {
+  const e = document.createElement(tag);
+  Object.assign(e, props);
+  for (const f of filhos) e.append(f);
+  return e;
+}
+
+async function carregarDisparos() {
+  try {
+    const res = await fetch('/api/disparos', { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    dispInstancias = d.instancias || [];
+    dispLista.textContent = '';
+    if (!d.campanhas.length) dispLista.appendChild(dispEl('p', { className: 'agenda-vazia', textContent: 'Nenhuma campanha ainda. Clique em "+ Nova campanha".' }));
+    for (const c of d.campanhas) {
+      const card = dispEl('div', { className: `disp-card${c.id === dispAbertoId ? ' ativo' : ''}` });
+      card.append(
+        dispEl('div', { className: 'disp-card-topo' }, dispEl('strong', { textContent: c.nome }), dispEl('span', { className: `disp-status ${c.status}`, textContent: DISP_STATUS[c.status] || c.status })),
+        dispEl('div', { className: 'disp-card-sub', textContent: `${c.enviados}/${c.total} enviadas · ${c.respostas} respostas · ${c.falhas} falhas` }),
+      );
+      const barra = dispEl('div', { className: 'disp-barra' }, dispEl('div', { style: `width:${c.total ? Math.round((c.enviados / c.total) * 100) : 0}%` }));
+      card.appendChild(barra);
+      card.addEventListener('click', () => abrirCampanhaDisparo(c.id));
+      dispLista.appendChild(card);
+    }
+  } catch (err) {
+    dispLista.textContent = `Não consegui carregar as campanhas: ${err.message}`;
+  }
+}
+
+dispNova.addEventListener('click', () => { dispAbertoId = null; renderizarEditorDisparo(null); carregarDisparos(); });
+
+async function abrirCampanhaDisparo(id) {
+  dispAbertoId = id;
+  try {
+    const res = await fetch(`/api/disparos/${id}`, { headers: { 'x-app-password': appPassword } });
+    const c = await res.json();
+    if (!res.ok) throw new Error(c.erro || 'erro desconhecido');
+    renderizarEditorDisparo(c);
+    carregarDisparos();
+  } catch (err) {
+    mostrarAviso(`Não consegui abrir a campanha: ${err.message}`, 'erro');
+  }
+}
+
+function dispCampo(rotulo, input) {
+  const l = dispEl('label', { className: 'auto-label', textContent: rotulo });
+  const w = dispEl('div', { className: 'disp-campo' }, l, input);
+  return w;
+}
+const dispData = (iso) => { if (!iso) return ''; const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+
+function renderizarEditorDisparo(c) {
+  clearInterval(dispPolling);
+  dispDetalhe.textContent = '';
+  const editavel = !c || ['rascunho', 'pausada', 'agendada'].includes(c.status);
+  const erro = dispEl('p', { className: 'agenda-erro', hidden: true });
+  const mostrarErro = (m) => { erro.textContent = m; erro.hidden = false; };
+
+  // ---------- dados da campanha ----------
+  const nome = dispEl('input', { type: 'text', value: c?.nome || '', placeholder: 'Ex: Promoção de novembro', disabled: !editavel });
+  const instancia = dispEl('select', { disabled: !editavel });
+  for (const i of dispInstancias) instancia.add(new Option(i, i));
+  if (c?.instancia) instancia.value = c.instancia;
+  const mensagem = dispEl('textarea', { rows: 6, value: c?.mensagem || '', disabled: !editavel, placeholder: '{Oi|Olá|E aí} {nome}, tudo bem? Passando pra avisar que...' });
+  mensagem.style.minHeight = '130px';
+  const dica = dispEl('p', { className: 'agenda-vazia', textContent: 'Variáveis: {nome} (primeiro nome), {nome_completo} e qualquer coluna da sua planilha, ex {cidade}. Variações: {oi|olá|e aí} sorteia uma opção por mensagem. Mensagens diferentes entre si reduzem o risco de bloqueio.' });
+  const usarIa = dispEl('input', { type: 'checkbox', checked: !!c?.usarIa, disabled: !editavel });
+  const iaInstr = dispEl('textarea', { rows: 2, value: c?.iaInstrucoes || '', disabled: !editavel, placeholder: 'Instruções pra IA (opcional): ex. tom mais descontraído, não usar emoji...' });
+  const optout = dispEl('input', { type: 'checkbox', checked: c ? c.optoutRodape : true, disabled: !editavel });
+  const agendar = dispEl('input', { type: 'datetime-local', value: dispData(c?.agendarEm), disabled: !editavel });
+  const hi = dispEl('input', { type: 'time', value: c?.horaInicio || '08:00', disabled: !editavel });
+  const hf = dispEl('input', { type: 'time', value: c?.horaFim || '20:00', disabled: !editavel });
+  const imin = dispEl('input', { type: 'number', min: 10, value: c?.intervaloMin ?? 20, disabled: !editavel });
+  const imax = dispEl('input', { type: 'number', min: 10, value: c?.intervaloMax ?? 60, disabled: !editavel });
+  const limite = dispEl('input', { type: 'number', min: 1, max: 1000, value: c?.limiteDiario ?? 150, disabled: !editavel });
+
+  dispDetalhe.append(
+    dispEl('div', { className: 'disp-titulo', textContent: c ? `Campanha: ${c.nome}` : 'Nova campanha' }),
+    dispCampo('Nome da campanha', nome),
+    dispCampo('Enviar pelo número', instancia),
+    dispCampo('Mensagem', mensagem), dica,
+    dispEl('label', { className: 'fui-etapa-item' }, usarIa, document.createTextNode('IA reescreve a mensagem pra cada contato (texto diferente em cada envio)')),
+    iaInstr,
+    dispEl('label', { className: 'fui-etapa-item' }, optout, document.createTextNode('Incluir "responda SAIR para não receber mais" no fim (recomendado)')),
+    dispCampo('Começar em (vazio = ao clicar em Iniciar)', agendar),
+    dispEl('div', { className: 'auto-upload-row' }, dispCampo('Envia a partir de', hi), dispCampo('Até', hf)),
+    dispEl('div', { className: 'auto-upload-row' }, dispCampo('Intervalo mín. (seg)', imin), dispCampo('Intervalo máx. (seg)', imax), dispCampo('Limite por dia', limite)),
+    dispEl('p', { className: 'agenda-vazia', textContent: 'Ritmo humano: a Lumia espera um tempo aleatório entre o mínimo e o máximo entre uma mensagem e outra, só envia dentro do horário e para no limite do dia. Quanto mais devagar, mais seguro pro seu número.' }),
+  );
+
+  if (c?.motivoPausa && c.status === 'pausada') dispDetalhe.appendChild(dispEl('p', { className: 'agenda-erro', textContent: c.motivoPausa }));
+
+  const botoes = dispEl('div', { className: 'disp-botoes' });
+  if (editavel) {
+    const salvar = dispEl('button', { type: 'button', textContent: c ? 'Salvar alterações' : 'Criar campanha' });
+    salvar.addEventListener('click', async () => {
+      erro.hidden = true;
+      salvar.disabled = true;
+      try {
+        const res = await fetch('/api/disparos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+          body: JSON.stringify({
+            id: c?.id, nome: nome.value, instancia: instancia.value, mensagem: mensagem.value, usarIa: usarIa.checked, iaInstrucoes: iaInstr.value,
+            optoutRodape: optout.checked, agendarEm: agendar.value ? new Date(agendar.value).toISOString() : null,
+            horaInicio: hi.value, horaFim: hf.value, intervaloMin: imin.value, intervaloMax: imax.value, limiteDiario: limite.value,
+          }),
+        });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+        mostrarAviso(c ? 'Campanha salva' : 'Campanha criada - agora adicione os destinatários', 'ok');
+        abrirCampanhaDisparo(d.id);
+      } catch (err) {
+        mostrarErro(err.message);
+        salvar.disabled = false;
+      }
+    });
+    botoes.appendChild(salvar);
+    const previa = dispEl('button', { type: 'button', className: 'crm-btn-secundario', textContent: 'Pré-visualizar' });
+    previa.addEventListener('click', async () => {
+      const res = await fetch('/api/disparos/previa', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ mensagem: mensagem.value, nome: 'Maria Souza' }) });
+      const d = await res.json();
+      alert(`Como chega pra "Maria Souza":\n\n${d.texto}${optout.checked ? '\n\nPara não receber mais mensagens, responda SAIR.' : ''}${usarIa.checked ? '\n\n(com a IA ligada o texto muda um pouco em cada envio)' : ''}`);
+    });
+    botoes.appendChild(previa);
+  }
+  dispDetalhe.append(botoes, erro);
+  if (!c) return;
+
+  // ---------- destinatarios ----------
+  dispDetalhe.appendChild(dispEl('div', { className: 'disp-secao', textContent: `Destinatários (${c.resumo.total})` }));
+  if (editavel) montarDestinatariosDisparo(c);
+
+  // ---------- anexos ----------
+  dispDetalhe.appendChild(dispEl('div', { className: 'disp-secao', textContent: 'Anexos (saem junto de cada mensagem)' }));
+  montarAnexosDisparo(c, editavel);
+
+  // ---------- acoes ----------
+  const acoes = dispEl('div', { className: 'disp-botoes' });
+  const acao = (rotulo, nomeAcao, classe = '', confirmar = null) => {
+    const b = dispEl('button', { type: 'button', textContent: rotulo, className: classe });
+    b.addEventListener('click', async () => {
+      if (confirmar && !confirm(confirmar)) return;
+      try {
+        const res = await fetch(`/api/disparos/${c.id}/acao`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ acao: nomeAcao }) });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+        abrirCampanhaDisparo(nomeAcao === 'duplicar' ? d.id : c.id);
+      } catch (err) {
+        mostrarAviso(err.message, 'erro');
+      }
+    });
+    acoes.appendChild(b);
+  };
+  if (['rascunho', 'pausada'].includes(c.status)) acao(c.status === 'pausada' ? 'Retomar envio' : 'Iniciar campanha', c.status === 'pausada' ? 'retomar' : 'iniciar', '', 'Iniciar o envio? As mensagens vão sair no ritmo e no horário configurados.');
+  if (['enviando', 'agendada'].includes(c.status)) acao('Pausar', 'pausar', 'crm-btn-secundario');
+  if (!['concluida', 'cancelada'].includes(c.status)) acao('Cancelar campanha', 'cancelar', 'crm-btn-perigo', 'Cancelar a campanha? O que ainda não foi enviado não será mais enviado.');
+  acao('Duplicar', 'duplicar', 'crm-btn-secundario');
+  if (c.status !== 'enviando') {
+    const apagar = dispEl('button', { type: 'button', className: 'crm-btn-perigo', textContent: 'Apagar' });
+    apagar.addEventListener('click', async () => {
+      if (!confirm('Apagar essa campanha e o histórico dela?')) return;
+      const res = await fetch(`/api/disparos/${c.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+      if (!res.ok) return mostrarAviso((await res.json()).erro, 'erro');
+      dispAbertoId = null;
+      dispDetalhe.textContent = '';
+      carregarDisparos();
+    });
+    acoes.appendChild(apagar);
+  }
+  dispDetalhe.append(dispEl('div', { className: 'disp-secao', textContent: 'Ações' }), acoes);
+
+  // ---------- relatorio ----------
+  dispDetalhe.appendChild(dispEl('div', { className: 'disp-secao', textContent: 'Relatório' }));
+  const r = c.resumo;
+  const cartoes = dispEl('div', { className: 'chamadas-resumo' });
+  for (const [v, t] of [[r.total, 'na lista'], [r.enviados, 'enviadas'], [r.pendentes, 'na fila'], [r.respostas, 'responderam'], [r.falhas, 'falhas'], [r.optouts, 'pediram pra sair'], [r.ignorados, 'ignoradas']]) {
+    cartoes.appendChild(dispEl('div', { className: 'cartao' }, dispEl('strong', { textContent: v }), dispEl('span', { textContent: t })));
+  }
+  dispDetalhe.appendChild(cartoes);
+  if (r.enviados) dispDetalhe.appendChild(dispEl('p', { className: 'agenda-vazia', textContent: `Taxa de resposta: ${Math.round((r.respostas / r.enviados) * 100)}%` }));
+  if (c.porHora?.length) {
+    const max = Math.max(...c.porHora.map((h) => h.total));
+    const grafico = dispEl('div', { className: 'chamadas-horas' });
+    for (const h of c.porHora) {
+      const b = dispEl('div', { className: 'barra', title: `${h.hora}: ${h.total} enviadas` });
+      b.style.height = `${Math.max(4, (h.total / max) * 100)}%`;
+      grafico.appendChild(b);
+    }
+    dispDetalhe.append(dispEl('p', { className: 'agenda-vazia', textContent: 'Envios por hora' }), grafico);
+  }
+  const filtro = dispEl('select');
+  for (const [v, t] of [['', 'Todos'], ['enviado', 'Enviados'], ['respondeu', 'Responderam'], ['pendente', 'Na fila'], ['falha', 'Falhas'], ['optout', 'Pediram pra sair'], ['ignorado', 'Ignorados']]) filtro.add(new Option(t, v));
+  const tabela = dispEl('div', { className: 'disp-dest-tabela' });
+  const carregarTabela = async () => {
+    const res = await fetch(`/api/disparos/${c.id}/destinatarios?status=${filtro.value}`, { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    tabela.textContent = '';
+    if (!d.destinatarios?.length) tabela.textContent = 'Nada por aqui.';
+    for (const x of d.destinatarios || []) {
+      const quando = x.enviado_em ? new Date(x.enviado_em).toLocaleString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+      const linha = dispEl('div', { className: 'chamada-linha' });
+      const quem = dispEl('div', { className: 'quem' }, dispEl('div', { textContent: `${x.nome || ''} ${x.numero}`.trim() }), dispEl('div', { className: 'sub', textContent: x.erro || x.texto_enviado || '' }));
+      linha.append(quem, dispEl('div', { className: x.status === 'falha' ? 'perdida' : '', textContent: `${x.respondeu_em ? '💬 respondeu · ' : ''}${DEST_STATUS[x.status] || x.status}${quando ? ` · ${quando}` : ''}` }));
+      tabela.appendChild(linha);
+    }
+  };
+  filtro.addEventListener('change', carregarTabela);
+  dispDetalhe.append(dispEl('div', { className: 'auto-upload-row' }, dispEl('span', { textContent: 'Mostrar:' }), filtro), tabela);
+  carregarTabela();
+  if (['enviando', 'agendada'].includes(c.status)) dispPolling = setInterval(() => { if (dispAbertoId === c.id && !tabDisparos.hidden) abrirCampanhaDisparo(c.id); else clearInterval(dispPolling); }, 10000);
+}
+
+function montarDestinatariosDisparo(c) {
+  const msg = dispEl('p', { className: 'agenda-vazia' });
+  const enviarLista = async (lista, origem) => {
+    msg.textContent = 'Adicionando...';
+    try {
+      const res = await fetch(`/api/disparos/${c.id}/destinatarios`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ lista }) });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      mostrarResultadoDest(d, origem);
+    } catch (err) { msg.textContent = err.message; }
+  };
+  const mostrarResultadoDest = (d, origem) => {
+    msg.textContent = `${origem}: ${d.adicionados} adicionados · ${d.duplicados} repetidos · ${d.invalidos} telefones inválidos · ${d.optout} pediram pra sair${d.limite ? ' · limite da campanha atingido' : ''}.`;
+    abrirCampanhaDisparo(c.id);
+  };
+
+  // planilha
+  const arq = dispEl('input', { type: 'file', accept: '.csv,.xlsx,.xls,.txt', hidden: true });
+  const escolher = dispEl('button', { type: 'button', className: 'crm-btn-secundario', textContent: '📄 Subir planilha (CSV/Excel)' });
+  escolher.addEventListener('click', () => arq.click());
+  arq.addEventListener('change', async () => {
+    const f = arq.files[0];
+    arq.value = '';
+    if (!f) return;
+    try {
+      const buffer = await f.arrayBuffer();
+      let linhas;
+      if (/\.(xlsx|xls)$/i.test(f.name)) {
+        const XLSX = await ctGarantirSheetJs();
+        const livro = XLSX.read(buffer, { type: 'array' });
+        linhas = XLSX.utils.sheet_to_json(livro.Sheets[livro.SheetNames[0]], { header: 1, raw: false, defval: '' });
+      } else {
+        linhas = ctLerCsv(ctDecodificarTexto(buffer));
+      }
+      linhas = linhas.map((l) => l.map((v) => String(v ?? '').trim())).filter((l) => l.some(Boolean));
+      enviarLista(dispLinhasParaLista(linhas), f.name);
+    } catch (err) { msg.textContent = `Não consegui ler a planilha: ${err.message}`; }
+  });
+
+  // colar
+  const colar = dispEl('textarea', { rows: 3, placeholder: 'Ou cole aqui, um por linha: telefone;nome   (ex: 82 99999-0000;Maria)' });
+  const addColar = dispEl('button', { type: 'button', className: 'crm-btn-secundario', textContent: 'Adicionar os colados' });
+  addColar.addEventListener('click', () => {
+    const linhas = colar.value.split('\n').map((l) => l.split(/[;\t,]/).map((v) => v.trim())).filter((l) => l.some(Boolean));
+    colar.value = '';
+    enviarLista(dispLinhasParaLista(linhas), 'Lista colada');
+  });
+
+  // CRM
+  const etapaSel = dispEl('select');
+  etapaSel.add(new Option('Etapa do CRM...', ''));
+  fetch('/api/crm/etapas', { headers: { 'x-app-password': appPassword } }).then((r) => r.json()).then((d) => { for (const e of d.etapas || []) if (e.id !== 'contatos_pessoais') etapaSel.add(new Option(e.nome, e.id)); }).catch(() => {});
+  const etiqueta = dispEl('input', { type: 'text', placeholder: 'ou etiqueta (ex: implante)' });
+  const addCrm = dispEl('button', { type: 'button', className: 'crm-btn-secundario', textContent: 'Adicionar do CRM' });
+  addCrm.addEventListener('click', async () => {
+    msg.textContent = 'Adicionando...';
+    try {
+      const res = await fetch(`/api/disparos/${c.id}/destinatarios/crm`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ etapa: etapaSel.value || null, etiqueta: etiqueta.value.trim() || null }) });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      mostrarResultadoDest(d, 'CRM');
+    } catch (err) { msg.textContent = err.message; }
+  });
+
+  const limpar = dispEl('button', { type: 'button', className: 'crm-btn-perigo', textContent: 'Limpar a fila' });
+  limpar.addEventListener('click', async () => {
+    if (!confirm('Remover todos que ainda estão na fila (não enviados)?')) return;
+    await fetch(`/api/disparos/${c.id}/destinatarios`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+    abrirCampanhaDisparo(c.id);
+  });
+  dispDetalhe.append(
+    dispEl('div', { className: 'disp-botoes' }, arq, escolher, limpar),
+    colar, addColar,
+    dispEl('div', { className: 'auto-upload-row' }, etapaSel, etiqueta, addCrm),
+    msg,
+  );
+}
+
+// planilha -> [{numero, nome, vars}] - acha sozinho a coluna do telefone e a do nome; as outras viram variaveis
+function dispLinhasParaLista(linhas) {
+  if (!linhas.length) return [];
+  const sa = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  const cab = linhas[0].map(sa);
+  const temCabecalho = cab.some((h) => /^(telefone|celular|whatsapp|fone|numero|phone|tel)$/.test(h) || /^(nome|name|cliente|paciente)$/.test(h));
+  const iTel = temCabecalho ? Math.max(0, cab.findIndex((h) => /telefone|celular|whatsapp|fone|numero|phone|^tel$/.test(h))) : 0;
+  let iNome = temCabecalho ? cab.findIndex((h) => /^(nome|name|cliente|paciente)/.test(h)) : 1;
+  if (iNome === iTel) iNome = -1;
+  const dados = temCabecalho ? linhas.slice(1) : linhas;
+  return dados.map((l) => {
+    const vars = {};
+    if (temCabecalho) cab.forEach((h, i) => { if (i !== iTel && i !== iNome && h && l[i]) vars[h] = l[i]; });
+    return { numero: l[iTel], nome: iNome >= 0 ? l[iNome] : '', vars };
+  });
+}
+
+function montarAnexosDisparo(c, editavel) {
+  const lista = dispEl('div', { className: 'disp-anexos' });
+  const pintar = () => {
+    lista.textContent = '';
+    for (const a of c.arquivos) {
+      const icone = a.tipo.startsWith('audio/') ? '🎧' : a.tipo.startsWith('image/') ? '🖼' : a.tipo.startsWith('video/') ? '🎬' : '📄';
+      const item = dispEl('span', { className: 'fui-anexo', textContent: `${icone} ${a.nome} (${formatarTamanho(a.tamanho)}) ` });
+      if (editavel) {
+        const x = dispEl('button', { type: 'button', textContent: '✕', title: 'Remover' });
+        x.addEventListener('click', async () => {
+          await fetch(`/api/disparos/arquivos/${a.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+          c.arquivos = c.arquivos.filter((y) => y.id !== a.id);
+          pintar();
+        });
+        item.appendChild(x);
+      }
+      lista.appendChild(item);
+    }
+    if (!c.arquivos.length) lista.textContent = 'Nenhum anexo.';
+  };
+  pintar();
+  dispDetalhe.appendChild(lista);
+  if (!editavel) return;
+  const input = dispEl('input', { type: 'file', accept: 'audio/*,image/*,video/*,application/pdf', hidden: true });
+  const botao = dispEl('button', { type: 'button', className: 'fui-anexar', textContent: '📎 Anexar arquivo' });
+  botao.addEventListener('click', () => input.click());
+  input.addEventListener('change', async () => {
+    const f = input.files[0];
+    input.value = '';
+    if (!f) return;
+    if (f.size > 12 * 1024 * 1024) return mostrarAviso('Arquivo grande demais - o máximo é 12 MB.', 'erro');
+    botao.disabled = true;
+    try {
+      const base64 = await arquivoParaBase64(f);
+      const res = await fetch(`/api/disparos/${c.id}/arquivos`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ nomeArquivo: f.name, mediaType: f.type || 'application/octet-stream', base64 }) });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      c.arquivos.push(d.arquivo);
+      pintar();
+    } catch (err) { mostrarAviso(`Não consegui anexar: ${err.message}`, 'erro'); }
+    botao.disabled = false;
+  });
+  dispDetalhe.append(input, botao);
+}

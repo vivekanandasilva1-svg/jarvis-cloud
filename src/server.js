@@ -22,6 +22,7 @@ import * as autoAtendimento from './autoAtendimento.js';
 import * as autoArquivos from './autoAtendimentoArquivos.js';
 import * as crm from './crm.js';
 import * as chamadas from './chamadas.js';
+import * as disparos from './disparos.js';
 import * as clinicorp from './clinicorp.js';
 import * as relatoriosProgramados from './relatoriosProgramados.js';
 import * as tenants from './tenants.js';
@@ -84,6 +85,7 @@ const TAB_ROTA_PREFIXO = {
   auto: '/api/auto-atendimento',
   followUp: '/api/follow-up',
   followUpInteligente: '/api/fu-inteligente',
+  disparos: '/api/disparos',
   relatorios: '/api/relatorios',
   geradorRelatorios: '/api/gerador-relatorios',
   integracoes: '/api/integracoes',
@@ -1267,6 +1269,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   if (!ehNumeroAdmin) {
     registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'entrada', tipo, texto, nome: data?.pushName, mensagemBruta: data, quando, waId: id, origemAnuncio: extrairAnuncioDaMensagem(data) })
       .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
+    disparos.registrarResposta(tenantId, numero, texto).catch(() => {}); // lead respondeu um disparo? (ou pediu pra sair)
   }
 
   // documento, figurinha, localizacao etc: ja foi espelhado no CRM acima, mas nao e algo que a IA
@@ -2095,6 +2098,127 @@ app.post('/api/crm/mensagens/midia', async (req, res) => {
 
 // ---------- operadores (quem atende cada lead) ----------
 
+// ---------- Disparos (campanhas de mensagens em massa; ver disparos.js) ----------
+
+app.get('/api/disparos', async (req, res) => {
+  try {
+    const [campanhas, instancias] = await Promise.all([disparos.listarCampanhas(req.tenantId), tenants.listarInstanciasDoTenant(req.tenantId)]);
+    res.json({ campanhas, instancias });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/disparos', async (req, res) => {
+  try {
+    res.json({ ok: true, id: await disparos.salvarCampanha(req.tenantId, req.body || {}) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/disparos/optout', async (req, res) => {
+  try {
+    res.json({ optout: await disparos.listarOptout(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/disparos/optout/:numero', async (req, res) => {
+  try {
+    await disparos.removerOptout(req.tenantId, req.params.numero);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/disparos/previa', (req, res) => {
+  const { mensagem, nome } = req.body || {};
+  res.json({ texto: disparos.renderizarMensagem(String(mensagem || ''), { nome, vars: {} }) });
+});
+
+app.delete('/api/disparos/arquivos/:arqId', async (req, res) => {
+  try {
+    await disparos.apagarArquivo(req.tenantId, req.params.arqId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/disparos/:id', async (req, res) => {
+  try {
+    const c = await disparos.obterCampanha(req.tenantId, req.params.id);
+    if (!c) return res.status(404).json({ erro: 'Campanha não encontrada.' });
+    res.json(c);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/disparos/:id', async (req, res) => {
+  try {
+    await disparos.apagarCampanha(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/disparos/:id/destinatarios', async (req, res) => {
+  try {
+    res.json({ destinatarios: await disparos.listarDestinatarios(req.tenantId, req.params.id, { status: req.query.status, pagina: req.query.pagina }) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/disparos/:id/destinatarios', async (req, res) => {
+  try {
+    res.json(await disparos.adicionarDestinatarios(req.tenantId, req.params.id, req.body?.lista));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/disparos/:id/destinatarios/crm', async (req, res) => {
+  try {
+    res.json(await disparos.adicionarDoCrm(req.tenantId, req.params.id, req.body || {}));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/disparos/:id/destinatarios', async (req, res) => {
+  try {
+    await disparos.limparPendentes(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/disparos/:id/acao', async (req, res) => {
+  try {
+    const r = await disparos.acaoCampanha(req.tenantId, req.params.id, req.body?.acao);
+    res.json({ ok: true, id: r || null });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/disparos/:id/arquivos', async (req, res) => {
+  const { nomeArquivo, mediaType, base64 } = req.body || {};
+  if (!nomeArquivo || !mediaType || !base64) return res.status(400).json({ erro: 'nomeArquivo, mediaType e base64 sao obrigatorios' });
+  try {
+    res.json({ ok: true, arquivo: await disparos.salvarArquivo(req.tenantId, req.params.id, nomeArquivo, Buffer.from(base64, 'base64'), mediaType) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
 // ---------- ligacoes (monitoramento; ver chamadas.js) ----------
 
 app.get('/api/chamadas', async (req, res) => {
@@ -2175,6 +2299,8 @@ app.get('/api/crm/origem/relatorio', async (req, res) => {
     res.status(400).json({ erro: err.message });
   }
 });
+
+app.get('/api/crm/etapas', (req, res) => res.json({ etapas: crm.ETAPAS }));
 
 app.get('/api/crm/operadores', async (req, res) => {
   try {
@@ -2594,6 +2720,8 @@ relatoriosProgramados.iniciarSchedulerRelatoriosProgramados();
 followUp.iniciarSchedulerFollowUp();
 // Scheduler do Follow Up Inteligente (cards por etapa do funil) - desativado por tenant por padrao.
 followUpInteligente.iniciarSchedulerFollowUpInteligente();
+// Disparos (campanhas de mensagens em massa) - so envia campanhas que o dono iniciou/agendou na aba Disparos
+disparos.iniciarSchedulerDisparos();
 
 // bloqueia assinantes do Gerador de Propostas E clientes da Lumia cujo periodo contratado
 // (1-12 meses) venceu - roda no boot e depois a cada 30min; vitalicio (sem data de expiracao)
