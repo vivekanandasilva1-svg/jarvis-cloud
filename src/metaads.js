@@ -381,3 +381,12 @@ export async function analyzeCampaignAds(tenantId, { campaignId, since, until, d
     anuncios: analisados.sort((a, b) => b.gasto - a.gasto),
   };
 }
+
+// de qual campanha e esse anuncio? (usado pra identificar a origem de um lead que veio de um anuncio
+// de clique-pro-WhatsApp) - devolve { anuncio, campanha, conjunto } ou lanca erro se a conta nao enxerga
+export async function getAdOrigem(tenantId, adId) {
+  const data = await requestForId(tenantId, adTokenCache, adId, 'GET', `/${adId}`, {
+    query: { fields: 'name,campaign{id,name},adset{name}' },
+  });
+  return { anuncio: data.name || null, campanha: data.campaign?.name || null, conjunto: data.adset?.name || null };
+}

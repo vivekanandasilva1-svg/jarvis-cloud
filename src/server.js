@@ -1040,6 +1040,21 @@ function extrairMensagemEvolution(data) {
   return { ...base, texto, tipo: 'text' };
 }
 
+// lead que clicou num anuncio de "clique pro WhatsApp" (Meta Ads): a primeira mensagem chega com o
+// bloco externalAdReply (id do anuncio, titulo, link) dentro do contextInfo - o caminho muda conforme o
+// tipo da mensagem, entao olha todos os lugares conhecidos
+function extrairAnuncioDaMensagem(data) {
+  const msg = desembrulharMensagem(data?.message);
+  const contextos = [data?.contextInfo, msg.extendedTextMessage?.contextInfo, msg.imageMessage?.contextInfo, msg.videoMessage?.contextInfo, msg.audioMessage?.contextInfo, msg.documentMessage?.contextInfo, msg.buttonsResponseMessage?.contextInfo];
+  for (const c of contextos) {
+    const ad = c?.externalAdReply;
+    if (ad) {
+      return { sourceId: ad.sourceId ? String(ad.sourceId) : null, title: ad.title || null, body: ad.body || null, sourceUrl: ad.sourceUrl || null, ctwaClid: ad.ctwaClid || c.ctwaClid || null };
+    }
+  }
+  return null;
+}
+
 // compara dois numeros de telefone ignorando formatacao (DDI "55" presente ou nao, o "9" extra
 // de celular presente ou nao) - comparar string exata quebrava silenciosamente quando o numero
 // admin era salvo sem o "55" na frente (formato facil de digitar errado na tela de config)
@@ -1088,7 +1103,7 @@ function lembrarEnviada(resposta) {
 // depender do WhatsApp/Evolution ainda ter o arquivo disponivel na hora que o dono for abrir.
 // "melhor esforco": se o download falhar, ainda registra a mensagem (so sem midia, cai no
 // icone de sempre) em vez de perder a mensagem inteira do historico do CRM.
-async function registrarMensagemComMidia(tenantId, { numero, instancia, direcao, tipo, texto, nome, mensagemBruta, quando, waId, evitarEco, autor }) {
+async function registrarMensagemComMidia(tenantId, { numero, instancia, direcao, tipo, texto, nome, mensagemBruta, quando, waId, evitarEco, autor, origemAnuncio }) {
   let midiaBase64 = null;
   let midiaMimetype = null;
   if (tipo === 'image' || tipo === 'audio') {
@@ -1100,7 +1115,7 @@ async function registrarMensagemComMidia(tenantId, { numero, instancia, direcao,
       console.error('Erro baixando midia pro CRM:', err.message);
     }
   }
-  await crm.registrarMensagem(tenantId, { numero, instancia, direcao, tipo, texto, nome, midiaBase64, midiaMimetype, quando, waId, evitarEco, autor });
+  await crm.registrarMensagem(tenantId, { numero, instancia, direcao, tipo, texto, nome, midiaBase64, midiaMimetype, quando, waId, evitarEco, autor, origemAnuncio });
 }
 
 // serializa o processamento de mensagens do MESMO contato (chave "tenantId:numero") - sem isso,
@@ -1249,7 +1264,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   // dono, em qualquer instancia conectada - "best-effort", nunca trava o fluxo principal (a
   // resposta da Lumia) se o CRM der erro
   if (!ehNumeroAdmin) {
-    registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'entrada', tipo, texto, nome: data?.pushName, mensagemBruta: data, quando, waId: id })
+    registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'entrada', tipo, texto, nome: data?.pushName, mensagemBruta: data, quando, waId: id, origemAnuncio: extrairAnuncioDaMensagem(data) })
       .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
   }
 
@@ -2068,6 +2083,36 @@ app.post('/api/crm/mensagens/midia', async (req, res) => {
 });
 
 // ---------- operadores (quem atende cada lead) ----------
+
+// ---------- origem dos leads (campanhas do Meta Ads) ----------
+
+app.get('/api/crm/origem/regras', async (req, res) => {
+  try {
+    res.json({ regras: await crm.listarRegrasOrigem(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/origem/regras', async (req, res) => {
+  try {
+    await crm.salvarRegrasOrigem(req.tenantId, req.body?.regras);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/crm/origem/relatorio', async (req, res) => {
+  const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  const de = String(req.query.de || new Date(Date.now() - 3 * 3600000 - 29 * 86400000).toISOString().slice(0, 10));
+  const ate = String(req.query.ate || hoje);
+  try {
+    res.json({ de, ate, linhas: await crm.relatorioOrigem(req.tenantId, { de, ate }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
 
 app.get('/api/crm/operadores', async (req, res) => {
   try {

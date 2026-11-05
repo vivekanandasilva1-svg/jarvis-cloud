@@ -69,6 +69,7 @@ const tabBtnWhatsapp = document.getElementById('tabBtnWhatsapp');
 const tabBtnCrm = document.getElementById('tabBtnCrm');
 const tabBtnAuto = document.getElementById('tabBtnAuto');
 const tabBtnFollowUp = document.getElementById('tabBtnFollowUp');
+const tabBtnOrigem = document.getElementById('tabBtnOrigem');
 const tabBtnFollowUpInteligente = document.getElementById('tabBtnFollowUpInteligente');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
 const tabBtnGeradorRelatorios = document.getElementById('tabBtnGeradorRelatorios');
@@ -91,6 +92,7 @@ const tabInstagram = document.getElementById('tabInstagram');
 const tabBtnInstagram = document.getElementById('tabBtnInstagram');
 const tabAuto = document.getElementById('tabAuto');
 const tabFollowUp = document.getElementById('tabFollowUp');
+const tabOrigem = document.getElementById('tabOrigem');
 const tabFollowUpInteligente = document.getElementById('tabFollowUpInteligente');
 const tabRelatorios = document.getElementById('tabRelatorios');
 const tabGeradorRelatorios = document.getElementById('tabGeradorRelatorios');
@@ -383,6 +385,7 @@ function mostrarApp() {
   tabBtnInstagram.hidden = !abaLiberada('instagram');
   tabBtnAuto.hidden = !abaLiberada('auto');
   tabBtnFollowUp.hidden = !abaLiberada('followUp');
+  tabBtnOrigem.hidden = !abaLiberada('crm'); // origem dos leads usa a base do CRM, mesma permissao
   tabBtnFollowUpInteligente.hidden = !abaLiberada('followUpInteligente');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
   tabBtnGeradorRelatorios.hidden = !abaLiberada('geradorRelatorios');
@@ -1930,6 +1933,7 @@ const CABECALHOS_ABA = {
   painel: ['Início', 'Painel da Lumia', 'Converse com a Lumia e acompanhe o sistema em tempo real.'],
   agenda: ['Atendimento', 'Agenda', 'Compromissos e agendamentos, integrados ao Google Agenda.'],
   whatsapp: ['Atendimento', 'WhatsApp', 'Números conectados e status de cada instância.'],
+  origem: ['Clientes', 'Origem dos leads', 'De qual campanha cada lead veio, e quanto cada uma rende.'],
   followUp: ['Atendimento', 'Follow Up', 'Retome automaticamente os leads que pararam de responder.'],
   followUpInteligente: ['Atendimento', 'Follow Up Inteligente', 'Mensagens automáticas por etapa do funil, nos dias que você escolher.'],
   conversas: ['Atendimento', 'Conversas', 'Atenda o WhatsApp direto pela Lumia, em tempo real.'],
@@ -1985,6 +1989,7 @@ function mudarAba(aba) {
   tabInstagram.hidden = aba !== 'instagram';
   tabAuto.hidden = aba !== 'auto';
   tabFollowUp.hidden = aba !== 'followUp';
+  tabOrigem.hidden = aba !== 'origem';
   tabFollowUpInteligente.hidden = aba !== 'followUpInteligente';
   tabRelatorios.hidden = aba !== 'relatorios';
   tabGeradorRelatorios.hidden = aba !== 'geradorRelatorios';
@@ -2002,6 +2007,7 @@ function mudarAba(aba) {
   tabBtnInstagram.classList.toggle('active', aba === 'instagram');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   tabBtnFollowUp.classList.toggle('active', aba === 'followUp');
+  tabBtnOrigem.classList.toggle('active', aba === 'origem');
   tabBtnFollowUpInteligente.classList.toggle('active', aba === 'followUpInteligente');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
   tabBtnGeradorRelatorios.classList.toggle('active', aba === 'geradorRelatorios');
@@ -2027,6 +2033,8 @@ function mudarAba(aba) {
     carregarInstagram();
   } else if (aba === 'auto') {
     carregarConfigAutoAtendimento();
+  } else if (aba === 'origem') {
+    carregarOrigem();
   } else if (aba === 'followUp') {
     carregarFollowUp();
   } else if (aba === 'followUpInteligente') {
@@ -2101,6 +2109,7 @@ tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnGeradorRelatorios.addEventListener('click', () => mudarAba('geradorRelatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
 tabBtnFollowUp.addEventListener('click', () => mudarAba('followUp'));
+tabBtnOrigem.addEventListener('click', () => mudarAba('origem'));
 tabBtnFollowUpInteligente.addEventListener('click', () => mudarAba('followUpInteligente'));
 tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
 tabBtnCerebro.addEventListener('click', () => mudarAba('cerebro'));
@@ -2636,6 +2645,13 @@ function crmCriarCard(contato) {
   operadorTag.className = `crm-card-operador${contato.atendente_nome ? '' : ' livre'}`;
   operadorTag.textContent = contato.atendente_nome ? `👤 ${contato.atendente_nome}` : 'Sem operador';
   card.appendChild(operadorTag);
+  if (contato.origem_campanha) {
+    const origemTag = document.createElement('div');
+    origemTag.className = 'crm-card-origem';
+    origemTag.textContent = `📣 ${contato.origem_campanha}`;
+    origemTag.title = contato.origem_titulo ? `Anúncio: ${contato.origem_titulo}` : 'Origem do lead';
+    card.appendChild(origemTag);
+  }
 
   if (contato.retorno_hoje) card.classList.add('crm-card-retorno-hoje');
   if (contato.nao_lida) {
@@ -8993,5 +9009,123 @@ document.getElementById('crmDistSalvar').addEventListener('click', async () => {
   } catch (err) {
     crmDistErro.textContent = err.message;
     crmDistErro.hidden = false;
+  }
+});
+
+// ---------- Origem dos leads (campanhas do Meta Ads) ----------
+
+const origemRegras = document.getElementById('origemRegras');
+const origemAddRegra = document.getElementById('origemAddRegra');
+const origemSalvar = document.getElementById('origemSalvar');
+const origemErro = document.getElementById('origemErro');
+const origemDe = document.getElementById('origemDe');
+const origemAte = document.getElementById('origemAte');
+const origemAtualizar = document.getElementById('origemAtualizar');
+const origemTabela = document.getElementById('origemTabela');
+const ROTULO_FONTE = { meta_ads: 'Anúncio (Meta Ads)', regra: 'Texto da mensagem', organico: 'Orgânico / direto', sem_origem: 'Sem origem' };
+
+function origemLinhaRegra(r) {
+  const linha = document.createElement('div');
+  linha.className = 'crm-dist-regra';
+  const texto = document.createElement('input');
+  texto.type = 'text';
+  texto.placeholder = 'Texto da 1ª mensagem (ex: Vim pelo anúncio do implante)';
+  texto.value = r?.texto || '';
+  const campanha = document.createElement('input');
+  campanha.type = 'text';
+  campanha.placeholder = 'Nome da campanha';
+  campanha.value = r?.campanha || '';
+  const x = document.createElement('button');
+  x.type = 'button';
+  x.textContent = '✕';
+  x.addEventListener('click', () => { linha.remove(); marcarPendente(origemSalvar); });
+  texto.addEventListener('input', () => marcarPendente(origemSalvar));
+  campanha.addEventListener('input', () => marcarPendente(origemSalvar));
+  linha.append(texto, campanha, x);
+  return linha;
+}
+
+async function carregarOrigem() {
+  origemErro.hidden = true;
+  if (!origemDe.value || !origemAte.value) {
+    const hoje = new Date(Date.now() - 3 * 3600000);
+    origemAte.value = hoje.toISOString().slice(0, 10);
+    origemDe.value = new Date(hoje.getTime() - 29 * 86400000).toISOString().slice(0, 10);
+  }
+  try {
+    const res = await fetch('/api/crm/origem/regras', { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    origemRegras.textContent = '';
+    for (const r of d.regras) origemRegras.appendChild(origemLinhaRegra(r));
+    limparPendente(origemSalvar);
+  } catch (err) {
+    origemErro.textContent = `Não consegui carregar as regras: ${err.message}`;
+    origemErro.hidden = false;
+  }
+  carregarRelatorioOrigem();
+}
+
+async function carregarRelatorioOrigem() {
+  origemTabela.textContent = 'Carregando...';
+  try {
+    const res = await fetch(`/api/crm/origem/relatorio?de=${origemDe.value}&ate=${origemAte.value}`, { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    origemTabela.textContent = '';
+    if (!d.linhas.length) {
+      origemTabela.textContent = 'Nenhum lead novo nesse período.';
+      return;
+    }
+    const tabela = document.createElement('table');
+    tabela.className = 'origem-tabela';
+    const cab = tabela.createTHead().insertRow();
+    for (const t of ['Campanha', 'Fonte', 'Leads', 'Agendaram', 'Compraram', 'Perdidos']) cab.insertCell().textContent = t;
+    const corpo = tabela.createTBody();
+    const soma = { leads: 0, agendados: 0, compraram: 0, perdidos: 0 };
+    for (const l of d.linhas) {
+      const tr = corpo.insertRow();
+      tr.insertCell().textContent = l.campanha;
+      tr.insertCell().textContent = ROTULO_FONTE[l.fonte] || l.fonte;
+      tr.insertCell().textContent = l.leads;
+      tr.insertCell().textContent = `${l.agendados} (${Math.round((l.agendados / l.leads) * 100)}%)`;
+      tr.insertCell().textContent = l.compraram;
+      tr.insertCell().textContent = l.perdidos;
+      for (const k of Object.keys(soma)) soma[k] += l[k];
+    }
+    const tr = corpo.insertRow();
+    tr.className = 'origem-total';
+    tr.insertCell().textContent = 'Total';
+    tr.insertCell().textContent = '';
+    tr.insertCell().textContent = soma.leads;
+    tr.insertCell().textContent = soma.agendados;
+    tr.insertCell().textContent = soma.compraram;
+    tr.insertCell().textContent = soma.perdidos;
+    origemTabela.appendChild(tabela);
+  } catch (err) {
+    origemTabela.textContent = `Não consegui carregar o relatório: ${err.message}`;
+  }
+}
+
+origemAddRegra.addEventListener('click', () => { origemRegras.appendChild(origemLinhaRegra(null)); marcarPendente(origemSalvar); });
+origemAtualizar.addEventListener('click', carregarRelatorioOrigem);
+origemSalvar.addEventListener('click', async () => {
+  origemErro.hidden = true;
+  const regras = [...origemRegras.querySelectorAll('.crm-dist-regra')].map((l) => { const [t, c] = l.querySelectorAll('input'); return { texto: t.value.trim(), campanha: c.value.trim() }; }).filter((r) => r.texto && r.campanha);
+  origemSalvar.disabled = true;
+  try {
+    const res = await fetch('/api/crm/origem/regras', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ regras }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    marcarSalvo(origemSalvar, 'Regras de origem salvas');
+  } catch (err) {
+    origemErro.textContent = err.message;
+    origemErro.hidden = false;
+  } finally {
+    origemSalvar.disabled = false;
   }
 });

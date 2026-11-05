@@ -142,6 +142,18 @@ async function garantirTabelas() {
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS origem_titulo TEXT;`);
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS origem_ctwa TEXT;`);
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS origem_em TIMESTAMPTZ;`);
+  // regras "se a 1a mensagem do lead contem X, a campanha e Y" - o dono configura o texto
+  // pre-preenchido de cada anuncio de clique-pro-WhatsApp e cadastra aqui
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS crm_origem_regras (
+      id SERIAL PRIMARY KEY,
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      texto TEXT NOT NULL,
+      campanha TEXT NOT NULL,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS crm_origem_regras_tenant_idx ON crm_origem_regras (tenant_id);`);
   // operador (quem esta atendendo o lead): atendente_id 0 = o dono da conta, >0 = colaborador, NULL =
   // ninguem assumiu. O nome fica copiado pra continuar aparecendo mesmo se o colaborador for apagado.
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS atendente_id INT;`);
@@ -197,7 +209,7 @@ async function registrarEventoEtapa(tenantId, contatoId, instancia, etapa) {
 //   "novo_lead" pra "em_atendimento" sozinha - a etapa continua a que o dono escolheu
 // - evitarEco: usado no registro de mensagem "fromMe" - se a gente acabou de registrar o MESMO
 //   texto como saida (ex: resposta da IA), o eco que o WhatsApp devolve nao duplica
-export async function registrarMensagem(tenantId, { numero, instancia, direcao, tipo = 'text', texto = '', nome, midiaBase64, midiaMimetype, quando, waId, evitarEco = false, autor = null, manterEtapa = false }) {
+export async function registrarMensagem(tenantId, { numero, instancia, direcao, tipo = 'text', texto = '', nome, midiaBase64, midiaMimetype, quando, waId, evitarEco = false, autor = null, manterEtapa = false, origemAnuncio = null }) {
   if (!pool) return;
   await tabelasProntas;
 
@@ -260,6 +272,8 @@ export async function registrarMensagem(tenantId, { numero, instancia, direcao, 
   if (!msgRows[0]) return rows[0]?.id; // outro webhook identico ganhou a corrida - nada a emitir
 
   // lead novo que acabou de chegar: distribui pra um operador (se a distribuicao automatica estiver ligada)
+  // lead novo: descobre de onde veio (anuncio / regra de texto) ANTES de distribuir, pra regra por campanha funcionar
+  if (rows[0]?.novo && direcao === 'entrada') await registrarOrigemLead(tenantId, rows[0].id, { texto, anuncio: origemAnuncio }).catch((err) => console.error('Erro registrando origem do lead:', err.message));
   if (rows[0]?.novo && direcao === 'entrada') await distribuirLeadNovo(tenantId, rows[0].id).catch((err) => console.error('Erro distribuindo lead novo:', err.message));
 
   eventosCrm.emit('mensagem', { tenantId, contatoId: rows[0]?.id, numero, instancia, mensagem: msgRows[0] });
@@ -303,7 +317,7 @@ export async function listarContatos(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento, atendente_id, atendente_nome,
+    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento, atendente_id, atendente_nome, origem_fonte, origem_campanha, origem_titulo,
             retorno_em, retorno_nota, retorno_origem, retorno_disparado_em,
             (retorno_em IS NOT NULL AND (retorno_em AT TIME ZONE 'America/Maceio')::date <= (now() AT TIME ZONE 'America/Maceio')::date) AS retorno_hoje,
             (ultima_entrada_em IS NOT NULL AND (lido_em IS NULL OR ultima_entrada_em > lido_em)) AS nao_lida
@@ -317,7 +331,7 @@ export async function listarContatosOcultos(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento, atendente_id, atendente_nome,
+    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento, atendente_id, atendente_nome, origem_fonte, origem_campanha, origem_titulo,
             retorno_em, retorno_nota, retorno_origem, retorno_disparado_em,
             (retorno_em IS NOT NULL AND (retorno_em AT TIME ZONE 'America/Maceio')::date <= (now() AT TIME ZONE 'America/Maceio')::date) AS retorno_hoje,
             (ultima_entrada_em IS NOT NULL AND (lido_em IS NULL OR ultima_entrada_em > lido_em)) AS nao_lida
@@ -1002,4 +1016,89 @@ export async function distribuirLeadNovo(tenantId, contatoId) {
   }
   const { rows: livre } = await pool.query(`SELECT 1 FROM crm_contatos WHERE id = $1 AND tenant_id = $2 AND atendente_id IS NULL`, [contatoId, tenantId]);
   if (livre.length) await definirAtendente(tenantId, contatoId, operadorId);
+}
+
+
+// ---------- origem dos leads (anuncios do Meta Ads / regras por texto) ----------
+
+const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+export async function listarRegrasOrigem(tenantId) {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT id, texto, campanha FROM crm_origem_regras WHERE tenant_id = $1 ORDER BY id ASC', [tenantId]);
+  return rows;
+}
+
+export async function salvarRegrasOrigem(tenantId, regras) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const limpas = (Array.isArray(regras) ? regras : [])
+    .map((r) => ({ texto: String(r?.texto || '').trim().slice(0, 200), campanha: String(r?.campanha || '').trim().slice(0, 120) }))
+    .filter((r) => r.texto && r.campanha)
+    .slice(0, 100);
+  const cliente = await pool.connect();
+  try {
+    await cliente.query('BEGIN');
+    await cliente.query('DELETE FROM crm_origem_regras WHERE tenant_id = $1', [tenantId]);
+    for (const r of limpas) await cliente.query('INSERT INTO crm_origem_regras (tenant_id, texto, campanha) VALUES ($1, $2, $3)', [tenantId, r.texto, r.campanha]);
+    await cliente.query('COMMIT');
+  } catch (err) {
+    await cliente.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    cliente.release();
+  }
+}
+
+// chamado so na PRIMEIRA mensagem de um lead novo. Prioridade da campanha: regra de texto (o dono
+// escolheu o nome) > nome real da campanha no Meta (via id do anuncio) > titulo do anuncio.
+async function registrarOrigemLead(tenantId, contatoId, { texto, anuncio }) {
+  const t = semAcento(texto);
+  const regras = await listarRegrasOrigem(tenantId);
+  const regra = t ? regras.find((r) => t.includes(semAcento(r.texto))) : null;
+  let campanha = regra?.campanha || null;
+  let fonte = regra ? 'regra' : 'organico';
+  let titulo = null;
+  if (anuncio && (anuncio.sourceId || anuncio.title || anuncio.sourceUrl)) {
+    fonte = 'meta_ads';
+    titulo = anuncio.title || null;
+    if (!campanha && anuncio.sourceId) {
+      try {
+        const metaads = await import('./metaads.js');
+        const info = await Promise.race([
+          metaads.getAdOrigem(tenantId, anuncio.sourceId),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2500)),
+        ]);
+        campanha = info?.campanha || null;
+        titulo = info?.anuncio || titulo;
+      } catch { /* conta do anuncio nao conectada, ou demorou: cai no titulo */ }
+    }
+    if (!campanha) campanha = titulo || 'Anuncio sem nome';
+  }
+  await pool.query(
+    `UPDATE crm_contatos SET origem_fonte = $3, origem_campanha = $4, origem_anuncio_id = $5, origem_titulo = $6, origem_ctwa = $7, origem_em = now()
+     WHERE id = $1 AND tenant_id = $2 AND origem_fonte IS NULL`,
+    [contatoId, tenantId, fonte, campanha, anuncio?.sourceId || null, titulo, anuncio?.ctwaClid || null],
+  );
+}
+
+// leads por campanha no periodo, com quantos agendaram / compraram / se perderam - de/ate = 'YYYY-MM-DD'
+export async function relatorioOrigem(tenantId, { de, ate }) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const inicio = new Date(`${de}T00:00:00-03:00`);
+  const fim = new Date(new Date(`${ate}T00:00:00-03:00`).getTime() + 86400000);
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime()) || fim <= inicio) throw new Error('Periodo invalido.');
+  const { rows } = await pool.query(
+    `SELECT COALESCE(origem_fonte, 'sem_origem') AS fonte, COALESCE(origem_campanha, 'Sem origem registrada') AS campanha,
+            count(*)::int AS leads,
+            (count(*) FILTER (WHERE etapa IN ('agendado','compareceu','comprou')))::int AS agendados,
+            (count(*) FILTER (WHERE etapa = 'comprou'))::int AS compraram,
+            (count(*) FILTER (WHERE etapa IN ('perdido')))::int AS perdidos
+     FROM crm_contatos WHERE tenant_id = $1 AND oculto = false AND ultima_mensagem_em IS NOT NULL AND criado_em >= $2 AND criado_em < $3
+     GROUP BY 1, 2 ORDER BY leads DESC`,
+    [tenantId, inicio, fim],
+  );
+  return rows;
 }

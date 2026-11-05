@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261105b" />
+  <link rel="stylesheet" href="style.css?v=20261105c" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -97,6 +97,10 @@
         <button type="button" class="nav-btn" id="tabBtnResultados" data-tab="resultados">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3h2v16h16v2H3V3zm4 10h3v4H7v-4zm5-5h3v9h-3V8zm5-3h3v12h-3V5z"/></svg>
           <span>Resultados</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnOrigem" data-tab="origem">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/></svg>
+          <span>Origem dos leads</span>
         </button>
         <div class="nav-grupo">Redes sociais</div>
         <button type="button" class="nav-btn" id="tabBtnInstagram" data-tab="instagram">
@@ -1141,6 +1145,35 @@
       </div>
     </div>
 
+    <div class="window-body tab-auto" id="tabOrigem" hidden>
+      <div class="auto-coluna-esq">
+        <div class="auto-aviso">
+          Descubra de qual campanha cada lead veio. Dois jeitos, que funcionam juntos:
+          (1) <strong>Automático</strong>: se o lead clicou num anúncio de "clique pro WhatsApp" do Meta Ads,
+          a Lumia reconhece o anúncio e busca o nome da campanha sozinha (precisa da conta de anúncios conectada em Integrações).
+          (2) <strong>Texto da mensagem</strong>: no anúncio, configure a "mensagem pré-preenchida" (ex: "Vim pelo anúncio do implante")
+          e cadastre abaixo o texto e o nome da campanha - quando o lead mandar uma mensagem que contenha esse texto, ele é marcado com essa campanha.
+          Só vale pra leads <strong>novos</strong> a partir de agora.
+        </div>
+        <label class="auto-label">Regras por texto da 1ª mensagem</label>
+        <div id="origemRegras"></div>
+        <button type="button" id="origemAddRegra" class="crm-btn-secundario">+ Adicionar regra</button>
+        <p class="agenda-erro" id="origemErro" hidden></p>
+        <button type="button" id="origemSalvar">Salvar regras</button>
+      </div>
+      <div class="auto-coluna-dir">
+        <div class="fui-topo">
+          <label class="auto-label">Leads por campanha</label>
+          <div class="auto-upload-row">
+            <input type="date" id="origemDe" />
+            <input type="date" id="origemAte" />
+            <button type="button" id="origemAtualizar">Atualizar</button>
+          </div>
+        </div>
+        <div id="origemTabela"></div>
+      </div>
+    </div>
+
     <div class="window-body tab-auto" id="tabRelatorios" hidden>
       <div class="auto-coluna-esq">
         <div class="auto-aviso">
@@ -1426,6 +1459,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261105b"></script>
+  <script src="app.js?v=20261105c"></script>
 </body>
 </html>

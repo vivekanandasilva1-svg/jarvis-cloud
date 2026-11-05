@@ -3485,3 +3485,9 @@ body.lumien-em-conversas .lumien-btn { bottom: 92px; }
 .crm-dist-regra { display: flex; gap: 6px; margin-bottom: 6px; }
 .crm-dist-regra input { flex: 1; min-width: 0; }
 .crm-dist-regra button { border: none; background: none; color: #e8836b; cursor: pointer; }
+
+.crm-card-origem { font-size: 10.5px; color: var(--silver); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.origem-tabela { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.origem-tabela th, .origem-tabela td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.origem-tabela th { color: var(--text-dim); font-weight: 600; font-size: 11.5px; }
+.origem-total td { font-weight: 700; color: var(--gold-bright); }
