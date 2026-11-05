@@ -21,6 +21,7 @@ import * as whatsappInstances from './whatsappInstances.js';
 import * as autoAtendimento from './autoAtendimento.js';
 import * as autoArquivos from './autoAtendimentoArquivos.js';
 import * as crm from './crm.js';
+import * as chamadas from './chamadas.js';
 import * as clinicorp from './clinicorp.js';
 import * as relatoriosProgramados from './relatoriosProgramados.js';
 import * as tenants from './tenants.js';
@@ -1345,8 +1346,18 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
 app.post('/api/whatsapp-evolution/webhook', (req, res) => {
   res.sendStatus(200);
   const evento = req.body?.event;
-  if (evento !== 'messages.upsert') return;
   const data = req.body?.data;
+  // ligacao do WhatsApp (tocou/atendida/recusada/perdida/encerrada) - so registra, nunca responde
+  if (evento === 'call') {
+    tenants.resolverTenantPorInstancia(req.body?.instance)
+      .then(async (tenantId) => {
+        if (!tenantId || !(await tenants.estaAtivo(tenantId))) return;
+        for (const ev of Array.isArray(data) ? data : [data]) await chamadas.registrarEventoChamada(tenantId, req.body.instance, ev);
+      })
+      .catch((err) => console.error('Erro registrando chamada:', err.message));
+    return;
+  }
+  if (evento !== 'messages.upsert') return;
   if (!data) return;
   processarMensagemEvolution(req.body?.instance, data).catch((err) => console.error('Erro ao processar mensagem do Evolution:', err));
 });
@@ -2083,6 +2094,57 @@ app.post('/api/crm/mensagens/midia', async (req, res) => {
 });
 
 // ---------- operadores (quem atende cada lead) ----------
+
+// ---------- ligacoes (monitoramento; ver chamadas.js) ----------
+
+app.get('/api/chamadas', async (req, res) => {
+  const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  const de = String(req.query.de || new Date(Date.now() - 3 * 3600000 - 6 * 86400000).toISOString().slice(0, 10));
+  const ate = String(req.query.ate || hoje);
+  try {
+    res.json({ de, ate, ...(await chamadas.relatorioChamadas(req.tenantId, { de, ate })) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/chamadas/ativar', async (req, res) => {
+  try {
+    const permitidas = await tenants.listarInstanciasDoTenant(req.tenantId);
+    const todas = await evolutionApi.listarInstancias();
+    const resultado = [];
+    for (const i of todas.filter((x) => permitidas.includes(x.nome) && x.status === 'open')) {
+      try {
+        const r = await evolutionApi.habilitarEventoChamada(i.nome);
+        resultado.push({ instancia: i.nome, ok: true, jaTinha: r.jaTinha });
+      } catch (err) {
+        resultado.push({ instancia: i.nome, ok: false, erro: err.message });
+      }
+    }
+    res.json({ resultado });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/chamadas/manual', async (req, res) => {
+  try {
+    const operador = (await crm.listarOperadores(req.tenantId).catch(() => [])).find((o) => o.id === (req.operadorId || 0));
+    const id = await chamadas.registrarChamadaManual(req.tenantId, { ...(req.body || {}), operadorNome: operador?.nome });
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/chamadas/:id', async (req, res) => {
+  try {
+    await chamadas.apagarChamada(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
 
 // ---------- origem dos leads (campanhas do Meta Ads) ----------
 

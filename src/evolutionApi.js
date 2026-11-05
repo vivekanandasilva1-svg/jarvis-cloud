@@ -87,7 +87,7 @@ export async function criarInstancia(nome) {
     instanceName: nome,
     integration: 'WHATSAPP-BAILEYS',
     qrcode: true,
-    webhook: { url: WEBHOOK_URL, byEvents: false, base64: false, events: ['MESSAGES_UPSERT'] },
+    webhook: { url: WEBHOOK_URL, byEvents: false, base64: false, events: ['MESSAGES_UPSERT', 'CALL'] },
   });
 }
 
@@ -164,4 +164,16 @@ export async function enviarPresenca(instancia, numero, presence, delayMs = 6000
 export async function enviarMensagemTexto(tenantId, numero, texto) {
   const { instanciaAtiva } = await obterConfig(tenantId);
   return enviarMensagemTextoPor(instanciaAtiva, numero, texto);
+}
+
+// liga o evento CALL (ligacoes) no webhook de uma instancia JA existente, mantendo a url e os outros
+// eventos - so mexe no webhook (NUNCA em /settings: isso ja derrubou uma sessao de WhatsApp)
+export async function habilitarEventoChamada(instancia) {
+  const atual = await chamar('GET', `/webhook/find/${instancia}`);
+  const eventos = Array.isArray(atual?.events) ? atual.events : ['MESSAGES_UPSERT'];
+  if (eventos.includes('CALL')) return { jaTinha: true };
+  await chamar('POST', `/webhook/set/${instancia}`, {
+    webhook: { enabled: true, url: atual?.url || WEBHOOK_URL, webhookByEvents: false, webhookBase64: false, events: [...eventos, 'CALL'] },
+  });
+  return { jaTinha: false };
 }

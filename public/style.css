@@ -3491,3 +3491,16 @@ body.lumien-em-conversas .lumien-btn { bottom: 92px; }
 .origem-tabela th, .origem-tabela td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .origem-tabela th { color: var(--text-dim); font-weight: 600; font-size: 11.5px; }
 .origem-total td { font-weight: 700; color: var(--gold-bright); }
+
+.chamadas-resumo { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin: 8px 0; }
+.chamadas-resumo .cartao { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; background: var(--panel); }
+.chamadas-resumo .cartao strong { display: block; font-size: 17px; color: var(--gold-bright); }
+.chamadas-resumo .cartao span { font-size: 11px; color: var(--text-dim); }
+.chamadas-horas { display: flex; align-items: flex-end; gap: 3px; height: 70px; margin: 6px 0 12px; }
+.chamadas-horas .barra { flex: 1; background: rgba(212,175,55,0.45); border-radius: 3px 3px 0 0; min-height: 2px; position: relative; }
+.chamadas-horas .barra span { position: absolute; bottom: -14px; left: 0; right: 0; text-align: center; font-size: 9px; color: var(--text-dim); }
+.chamada-linha { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--border); padding: 7px 2px; font-size: 12.5px; }
+.chamada-linha .quem { min-width: 0; }
+.chamada-linha .sub { font-size: 11px; color: var(--text-dim); }
+.chamada-linha .perdida { color: #e8836b; }
+.chamada-linha button { border: none; background: none; color: #e8836b; cursor: pointer; }

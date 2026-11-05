@@ -69,6 +69,7 @@ const tabBtnWhatsapp = document.getElementById('tabBtnWhatsapp');
 const tabBtnCrm = document.getElementById('tabBtnCrm');
 const tabBtnAuto = document.getElementById('tabBtnAuto');
 const tabBtnFollowUp = document.getElementById('tabBtnFollowUp');
+const tabBtnChamadas = document.getElementById('tabBtnChamadas');
 const tabBtnOrigem = document.getElementById('tabBtnOrigem');
 const tabBtnFollowUpInteligente = document.getElementById('tabBtnFollowUpInteligente');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
@@ -92,6 +93,7 @@ const tabInstagram = document.getElementById('tabInstagram');
 const tabBtnInstagram = document.getElementById('tabBtnInstagram');
 const tabAuto = document.getElementById('tabAuto');
 const tabFollowUp = document.getElementById('tabFollowUp');
+const tabChamadas = document.getElementById('tabChamadas');
 const tabOrigem = document.getElementById('tabOrigem');
 const tabFollowUpInteligente = document.getElementById('tabFollowUpInteligente');
 const tabRelatorios = document.getElementById('tabRelatorios');
@@ -385,6 +387,7 @@ function mostrarApp() {
   tabBtnInstagram.hidden = !abaLiberada('instagram');
   tabBtnAuto.hidden = !abaLiberada('auto');
   tabBtnFollowUp.hidden = !abaLiberada('followUp');
+  tabBtnChamadas.hidden = !abaLiberada('whatsapp'); // ligacoes do numero conectado, mesma permissao do WhatsApp
   tabBtnOrigem.hidden = !abaLiberada('crm'); // origem dos leads usa a base do CRM, mesma permissao
   tabBtnFollowUpInteligente.hidden = !abaLiberada('followUpInteligente');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
@@ -1934,6 +1937,7 @@ const CABECALHOS_ABA = {
   agenda: ['Atendimento', 'Agenda', 'Compromissos e agendamentos, integrados ao Google Agenda.'],
   whatsapp: ['Atendimento', 'WhatsApp', 'Números conectados e status de cada instância.'],
   origem: ['Clientes', 'Origem dos leads', 'De qual campanha cada lead veio, e quanto cada uma rende.'],
+  chamadas: ['Atendimento', 'Ligações', 'Ligações do WhatsApp: quantas, que horas, quanto duraram e quantas foram perdidas.'],
   followUp: ['Atendimento', 'Follow Up', 'Retome automaticamente os leads que pararam de responder.'],
   followUpInteligente: ['Atendimento', 'Follow Up Inteligente', 'Mensagens automáticas por etapa do funil, nos dias que você escolher.'],
   conversas: ['Atendimento', 'Conversas', 'Atenda o WhatsApp direto pela Lumia, em tempo real.'],
@@ -1989,6 +1993,7 @@ function mudarAba(aba) {
   tabInstagram.hidden = aba !== 'instagram';
   tabAuto.hidden = aba !== 'auto';
   tabFollowUp.hidden = aba !== 'followUp';
+  tabChamadas.hidden = aba !== 'chamadas';
   tabOrigem.hidden = aba !== 'origem';
   tabFollowUpInteligente.hidden = aba !== 'followUpInteligente';
   tabRelatorios.hidden = aba !== 'relatorios';
@@ -2007,6 +2012,7 @@ function mudarAba(aba) {
   tabBtnInstagram.classList.toggle('active', aba === 'instagram');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   tabBtnFollowUp.classList.toggle('active', aba === 'followUp');
+  tabBtnChamadas.classList.toggle('active', aba === 'chamadas');
   tabBtnOrigem.classList.toggle('active', aba === 'origem');
   tabBtnFollowUpInteligente.classList.toggle('active', aba === 'followUpInteligente');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
@@ -2035,6 +2041,8 @@ function mudarAba(aba) {
     carregarConfigAutoAtendimento();
   } else if (aba === 'origem') {
     carregarOrigem();
+  } else if (aba === 'chamadas') {
+    carregarChamadas();
   } else if (aba === 'followUp') {
     carregarFollowUp();
   } else if (aba === 'followUpInteligente') {
@@ -2109,6 +2117,7 @@ tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnGeradorRelatorios.addEventListener('click', () => mudarAba('geradorRelatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
 tabBtnFollowUp.addEventListener('click', () => mudarAba('followUp'));
+tabBtnChamadas.addEventListener('click', () => mudarAba('chamadas'));
 tabBtnOrigem.addEventListener('click', () => mudarAba('origem'));
 tabBtnFollowUpInteligente.addEventListener('click', () => mudarAba('followUpInteligente'));
 tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
@@ -9127,5 +9136,150 @@ origemSalvar.addEventListener('click', async () => {
     origemErro.hidden = false;
   } finally {
     origemSalvar.disabled = false;
+  }
+});
+
+// ---------- Ligações (monitoramento das chamadas do WhatsApp + registro manual) ----------
+
+const chamadasDe = document.getElementById('chamadasDe');
+const chamadasAte = document.getElementById('chamadasAte');
+const chamadasResumo = document.getElementById('chamadasResumo');
+const chamadasHoras = document.getElementById('chamadasHoras');
+const chamadasLista = document.getElementById('chamadasLista');
+const chamadasAtivarMsg = document.getElementById('chamadasAtivarMsg');
+const chamadaErro = document.getElementById('chamadaErro');
+
+function formatarDuracao(seg) {
+  if (!seg) return '0s';
+  const m = Math.floor(seg / 60);
+  const s = seg % 60;
+  return m ? `${m}min ${String(s).padStart(2, '0')}s` : `${s}s`;
+}
+
+async function carregarChamadas() {
+  if (!chamadasDe.value || !chamadasAte.value) {
+    const hoje = new Date(Date.now() - 3 * 3600000);
+    chamadasAte.value = hoje.toISOString().slice(0, 10);
+    chamadasDe.value = new Date(hoje.getTime() - 6 * 86400000).toISOString().slice(0, 10);
+  }
+  chamadasLista.textContent = 'Carregando...';
+  try {
+    const res = await fetch(`/api/chamadas?de=${chamadasDe.value}&ate=${chamadasAte.value}`, { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+
+    chamadasResumo.textContent = '';
+    const r = d.resumo;
+    for (const [valor, rotulo] of [
+      [r.total, 'ligações'], [r.recebidas, 'recebidas'], [r.feitas, 'feitas'], [r.atendidas, 'atendidas'],
+      [r.perdidas, 'perdidas (recebidas)'], [formatarDuracao(r.segundos_total), 'tempo total'], [formatarDuracao(r.segundos_medio), 'duração média'],
+    ]) {
+      const c = document.createElement('div');
+      c.className = 'cartao';
+      const forte = document.createElement('strong');
+      forte.textContent = valor;
+      const peq = document.createElement('span');
+      peq.textContent = rotulo;
+      c.append(forte, peq);
+      chamadasResumo.appendChild(c);
+    }
+
+    chamadasHoras.textContent = '';
+    const porHora = new Map(d.porHora.map((h) => [h.hora, h.total]));
+    const max = Math.max(1, ...d.porHora.map((h) => h.total));
+    for (let h = 6; h <= 22; h++) {
+      const b = document.createElement('div');
+      b.className = 'barra';
+      b.style.height = `${Math.max(3, ((porHora.get(h) || 0) / max) * 100)}%`;
+      b.title = `${h}h: ${porHora.get(h) || 0} ligação(ões)`;
+      const rot = document.createElement('span');
+      rot.textContent = h;
+      b.appendChild(rot);
+      chamadasHoras.appendChild(b);
+    }
+
+    chamadasLista.textContent = '';
+    if (!d.chamadas.length) {
+      chamadasLista.textContent = 'Nenhuma ligação nesse período. Se o número está conectado, clique em "Ativar monitoramento" ao lado.';
+      return;
+    }
+    const ROT_STATUS = { atendida: 'atendida', perdida: 'perdida', recusada: 'recusada', tocando: 'tocando' };
+    for (const c of d.chamadas) {
+      const linha = document.createElement('div');
+      linha.className = 'chamada-linha';
+      const quem = document.createElement('div');
+      quem.className = 'quem';
+      const nome = document.createElement('div');
+      nome.textContent = `${c.direcao === 'feita' ? '↗' : '↙'} ${c.nome || c.numero}${c.video ? ' 🎥' : ''}`;
+      const sub = document.createElement('div');
+      sub.className = 'sub';
+      const quando = new Date(c.inicio).toLocaleString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      sub.textContent = `${quando} · ${c.origem === 'manual' ? 'registro manual' : 'WhatsApp'}${c.operador_nome ? ` · ${c.operador_nome}` : ''}${c.obs ? ` · ${c.obs}` : ''}`;
+      quem.append(nome, sub);
+      const direita = document.createElement('div');
+      direita.textContent = c.status === 'atendida' ? `${ROT_STATUS.atendida} · ${formatarDuracao(c.duracao_seg)}` : ROT_STATUS[c.status] || c.status;
+      if (c.status === 'perdida' || c.status === 'recusada') direita.className = 'perdida';
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.textContent = '✕';
+      x.title = 'Apagar registro';
+      x.addEventListener('click', async () => {
+        if (!confirm('Apagar esse registro de ligação?')) return;
+        await fetch(`/api/chamadas/${c.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+        carregarChamadas();
+      });
+      const fim = document.createElement('div');
+      fim.style.display = 'flex';
+      fim.style.gap = '8px';
+      fim.append(direita, x);
+      linha.append(quem, fim);
+      chamadasLista.appendChild(linha);
+    }
+  } catch (err) {
+    chamadasLista.textContent = `Não consegui carregar as ligações: ${err.message}`;
+  }
+}
+
+document.getElementById('chamadasAtualizar').addEventListener('click', carregarChamadas);
+
+document.getElementById('chamadasAtivar').addEventListener('click', async () => {
+  chamadasAtivarMsg.textContent = 'Ativando...';
+  try {
+    const res = await fetch('/api/chamadas/ativar', { method: 'POST', headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    chamadasAtivarMsg.textContent = d.resultado.length
+      ? d.resultado.map((r) => `${r.instancia}: ${r.ok ? (r.jaTinha ? 'já estava ativo' : 'ativado') : `erro (${r.erro})`}`).join(' · ')
+      : 'Nenhum número conectado agora.';
+  } catch (err) {
+    chamadasAtivarMsg.textContent = err.message;
+  }
+});
+
+document.getElementById('chamadaSalvar').addEventListener('click', async () => {
+  chamadaErro.hidden = true;
+  const quando = document.getElementById('chamadaQuando').value;
+  try {
+    const res = await fetch('/api/chamadas/manual', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({
+        numero: document.getElementById('chamadaNumero').value,
+        nome: document.getElementById('chamadaNome').value,
+        direcao: document.getElementById('chamadaDirecao').value,
+        status: document.getElementById('chamadaStatus').value,
+        quando: quando ? new Date(quando).toISOString() : null,
+        duracaoSeg: Number(document.getElementById('chamadaDuracao').value || 0) * 60,
+        obs: document.getElementById('chamadaObs').value,
+      }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    for (const id of ['chamadaNumero', 'chamadaNome', 'chamadaQuando', 'chamadaDuracao', 'chamadaObs']) document.getElementById(id).value = '';
+    mostrarAviso('Ligação registrada', 'ok');
+    carregarChamadas();
+  } catch (err) {
+    chamadaErro.textContent = err.message;
+    chamadaErro.hidden = false;
   }
 });
