@@ -796,5 +796,13 @@
     "tipo": "melhoria",
     "titulo": "Cérebro realista: neurônios coloridos por IA, regiões separadas e sinapses vivas",
     "conteudo": "Pedido do dono: visual mais realista, dinâmico e colorido. public/cerebro.js: cada memória virou um neurônio 3D (soma + dendritos ramificados + axônio + brilho pulsante) com three.js separado; COR = IA que salvou (paleta mais viva), FORMATO = tipo (decisão piramidal, fato estrelado, preferência bipolar, tarefa multipolar, contexto glia, aprendizado Purkinje em leque); cada IA tem seu 'lobo' do cérebro (força de agrupamento + nebulosa colorida + rótulo); ligações curvas na cor da IA com pulsos de sinapse; legenda dos formatos. Fallback 2D também desenha neurônios. Testado com dados fictícios no navegador; pendente ver com as memórias reais. Dependência: three@0.149 via jsdelivr."
+  },
+  {
+    "chave": "cerebro:desempenho",
+    "modulo": "cerebro",
+    "data": "2026-11-06",
+    "tipo": "correcao",
+    "titulo": "Cérebro leve e fluido: nível de detalhe, materiais compartilhados e menos trabalho por quadro",
+    "conteudo": "O visual de neurônios pesou (cada memória = 5 objetos 3D + materiais próprios + pulso por quadro + 1 partícula por ligação + o grafo se refazia a cada 30s). Correção em public/cerebro.js: LOD pelo tamanho do cérebro (<=150 completo, <=500 soma+dendritos, >500 só o soma, dendritos só no selecionado); materiais compartilhados por cor/estado; animação a ~15 quadros/s e brilho global; só as 40 ligações mais fortes têm pulso; curvas só com <=200 ligações; grafo só é refeito quando os dados mudam (assinatura); pixel ratio limitado a 1.5; 2D sem gradiente por quadro. Também corrigido: cores lavadas (three r149 separado não converte pra linear). Medido no navegador de teste com 1500 memórias: ~7 -> ~80 quadros/s. Pendente: validar com o cérebro real do dono."
   }
 ]

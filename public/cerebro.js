@@ -207,7 +207,14 @@
     const ids = new Set(nos.map((n) => n.id));
     const idDe = (x) => (typeof x === 'object' ? x.id : x);
     const links = dados.links.filter((l) => ids.has(idDe(l.source)) && ids.has(idDe(l.target)));
-    grafo.graphData({ nodes: nos, links });
+    const sig = `${lod}|${nos.map((n) => n.id).join(',')}|${links.map((l) => `${idDe(l.source)}-${idDe(l.target)}`).join(',')}`;
+    if (sig !== assinatura) {
+      assinatura = sig;
+      curvas = links.length <= 200;
+      particulas = new Set([...links].sort((a, b) => (b.peso || 0) - (a.peso || 0)).slice(0, 40));
+      configurarLigacoes(grafo, true);
+      grafo.graphData({ nodes: nos, links });
+    }
     el.vazio.hidden = nos.length > 0;
     for (const [k, l] of Object.entries(lobos)) { const tem = nos.some((n) => chaveOrigem(n.origem) === k); l.neb.visible = tem; l.rotulo.visible = tem; }
     if (!nos.length) el.vazio.textContent = dados.nos.length ? 'Nenhuma memória com esses filtros.' : 'O cérebro ainda está vazio. Conecte uma IA em "Conectar IAs" (ela vai salvando sozinha o que for importante) ou crie a primeira memória em "+ Memória".';
@@ -225,7 +232,7 @@
 
   function atualizarCores() {
     if (!grafo) return;
-    if (modo2d) { configurarLigacoes(grafo); return; }
+    if (modo2d) { configurarLigacoes(grafo); grafo.nodeColor(corNo); return; }
     for (const n of grafo.graphData().nodes) { const g = cacheNeuronio.get(n.id); if (g) estilizarNeuronio(n, g); }
     configurarLigacoes(grafo);
   }
@@ -358,12 +365,12 @@
     const T = window.THREE;
     if (cacheGeoSoma[tipo]) return cacheGeoSoma[tipo];
     let g;
-    if (tipo === 'decisao') g = new T.ConeGeometry(0.95, 1.8, 14);
-    else if (tipo === 'preferencia') { g = new T.SphereGeometry(0.8, 18, 14); g.scale(0.75, 1.35, 0.75); }
+    if (tipo === 'decisao') g = new T.ConeGeometry(0.95, 1.8, 10);
+    else if (tipo === 'preferencia') { g = new T.SphereGeometry(0.8, 12, 9); g.scale(0.75, 1.35, 0.75); }
     else if (tipo === 'tarefa') g = new T.OctahedronGeometry(1.15);
     else if (tipo === 'contexto') g = new T.IcosahedronGeometry(0.85, 0);
     else if (tipo === 'aprendizado') g = new T.DodecahedronGeometry(1);
-    else g = new T.SphereGeometry(1, 20, 16);
+    else g = new T.SphereGeometry(1, 12, 9);
     cacheGeoSoma[tipo] = g;
     return g;
   }
@@ -385,41 +392,84 @@
     return texGlow;
   }
 
+  // ---------- desempenho ----------
+  // nivel de detalhe conforme o tamanho do cerebro: 2 = completo (soma + dendritos + brilho),
+  // 1 = soma + dendritos, 0 = so o soma (dendritos aparecem so no neuronio selecionado)
+  let lod = 2;
+  const calcularLod = () => { const q = dados.nos.length; return q <= 150 ? 2 : q <= 500 ? 1 : 0; };
+  let particulas = new Set(); // so as ligacoes mais fortes ganham pulso animado (cada pulso e um objeto 3D)
+  let curvas = true;
+  let assinatura = '';
+
+  // materiais COMPARTILHADOS (poucas dezenas em vez de 5 por neuronio): menos troca de estado na GPU
+  const matCache = new Map();
+  function matCompartilhado(tipo, cor, estado) {
+    const k = `${tipo}|${cor}|${estado}`;
+    let m = matCache.get(k);
+    if (m) return m;
+    const T = window.THREE;
+    const dim = estado === 'dim';
+    const forte = estado === 'forte';
+    // o three.js separado (r149) nao converte cor pra linear como o renderer do grafo espera: converte na mao,
+    // senao as cores saem lavadas (quase brancas)
+    const C = (css) => new T.Color(css).convertSRGBToLinear();
+    const c = C(forte ? '#ffffff' : cor);
+    if (tipo === 'soma') m = new T.MeshPhongMaterial({ color: c, emissive: c, emissiveIntensity: 0.3, shininess: 30, transparent: dim, opacity: dim ? 0.18 : 1 });
+    else if (tipo === 'linhas') m = new T.LineBasicMaterial({ color: C(forte ? '#ffffff' : clarear(cor, 0.3)), transparent: true, opacity: dim ? 0.08 : 0.8, blending: T.AdditiveBlending, depthWrite: false });
+    else if (tipo === 'pontas') m = new T.PointsMaterial({ color: C(clarear(cor, 0.55)), size: 0.55, sizeAttenuation: true, transparent: true, opacity: dim ? 0.1 : 0.95, blending: T.AdditiveBlending, depthWrite: false });
+    else m = new T.SpriteMaterial({ map: texturaGlow(), color: c, transparent: true, opacity: dim ? 0.05 : (forte ? 0.8 : 0.5), blending: T.AdditiveBlending, depthWrite: false });
+    m.userData = { fase: (parseInt(cor.slice(1), 16) % 628) / 100 };
+    matCache.set(k, m);
+    return m;
+  }
+
+  function adicionarDendritos(g, n) {
+    const T = window.THREE;
+    const arv = arvore(n.tipo, n.id);
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.Float32BufferAttribute(arv.seg, 3));
+    const linhas = new T.LineSegments(geo, matCompartilhado('linhas', '#888888', 'normal'));
+    g.add(linhas);
+    g.userData.linhas = linhas;
+    if (lod === 2) {
+      const gp = new T.BufferGeometry();
+      gp.setAttribute('position', new T.Float32BufferAttribute(arv.pontas.flat(), 3));
+      const botoes = new T.Points(gp, matCompartilhado('pontas', '#888888', 'normal'));
+      g.add(botoes);
+      g.userData.botoes = botoes;
+    }
+  }
+
   function construirNeuronio(n) {
     const T = window.THREE;
     const g = new T.Group();
-    const arv = arvore(n.tipo, n.id);
-    const soma = new T.Mesh(geoSoma(n.tipo), new T.MeshPhongMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.55, shininess: 70, transparent: true, opacity: 0.96 }));
-    const geo = new T.BufferGeometry();
-    geo.setAttribute('position', new T.Float32BufferAttribute(arv.seg, 3));
-    const linhas = new T.LineSegments(geo, new T.LineBasicMaterial({ transparent: true, opacity: 0.85, blending: T.AdditiveBlending, depthWrite: false }));
-    const gp = new T.BufferGeometry();
-    gp.setAttribute('position', new T.Float32BufferAttribute(arv.pontas.flat(), 3));
-    const botoes = new T.Points(gp, new T.PointsMaterial({ size: 0.55, sizeAttenuation: true, transparent: true, opacity: 0.95, blending: T.AdditiveBlending, depthWrite: false }));
-    const glow = new T.Sprite(new T.SpriteMaterial({ map: texturaGlow(), transparent: true, opacity: 0.55, blending: T.AdditiveBlending, depthWrite: false }));
-    // area de clique/hover maior que o soma (os fios sao finos demais pra acertar)
-    const area = new T.Mesh(new T.SphereGeometry(1.7, 8, 6), new T.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
-    g.add(glow, linhas, botoes, soma, area);
-    g.userData = { soma, linhas, botoes, glow, fase: (Number(n.id) % 97) * 0.37, glowBase: 7 };
+    const soma = new T.Mesh(geoSoma(n.tipo), matCompartilhado('soma', '#888888', 'normal'));
+    g.add(soma);
+    g.userData = { soma, fase: (Number(n.id) % 97) * 0.37, est: '', r: 0, glowBase: 7 };
+    if (lod >= 1) adicionarDendritos(g, n);
+    if (lod === 2) {
+      const glow = new T.Sprite(matCompartilhado('glow', '#888888', 'normal'));
+      g.add(glow);
+      g.userData.glow = glow;
+    }
     return g;
   }
 
   function estilizarNeuronio(n, g) {
     const { cor, dim, forte } = estadoNo(n);
     const u = g.userData;
-    const base = forte ? '#ffffff' : cor;
-    u.soma.material.color.set(base);
-    u.soma.material.emissive.set(base);
-    u.soma.material.opacity = dim ? 0.18 : 0.96;
-    u.linhas.material.color.set(forte ? '#ffffff' : clarear(cor, 0.3));
-    u.linhas.material.opacity = dim ? 0.08 : 0.85;
-    u.botoes.material.color.set(clarear(cor, 0.55));
-    u.botoes.material.opacity = dim ? 0.1 : 0.95;
-    u.glow.material.color.set(base);
-    u.glowBase = forte ? 11 : 7;
-    u.glow.material.opacity = dim ? 0.05 : (forte ? 0.8 : 0.5);
-    u.dim = dim;
-    g.scale.setScalar(raioNo(n));
+    const est = dim ? 'dim' : (forte ? 'forte' : 'normal');
+    if (u.est !== est) {
+      u.est = est;
+      u.soma.material = matCompartilhado('soma', cor, est);
+      if (lod === 0 && forte && !u.linhas) adicionarDendritos(g, n); // detalhe so no selecionado
+      if (u.linhas) { u.linhas.material = matCompartilhado('linhas', cor, est); u.linhas.visible = lod >= 1 || forte; }
+      if (u.botoes) u.botoes.material = matCompartilhado('pontas', cor, est);
+      if (u.glow) { u.glow.material = matCompartilhado('glow', cor, est); u.glowBase = forte ? 11 : 7; u.glow.scale.set(u.glowBase, u.glowBase, 1); }
+      u.dim = dim;
+    }
+    const r = raioNo(n);
+    if (u.r !== r) { u.r = r; g.scale.setScalar(r); }
   }
 
   function objetoNo(n) {
@@ -429,24 +479,31 @@
     return g;
   }
 
-  // pulso lento de cada neuronio (cerebro "vivo")
+  // pulso lento (cerebro "vivo"), limitado a ~15 quadros/s: o brilho dos materiais e global
+  // (barato) e so cerebros pequenos pulsam o brilho de cada neuronio
   function animarNeuronios() {
     if (animando) return;
     animando = true;
-    const passo = () => {
+    let ultimo = 0;
+    const passo = (agora) => {
       requestAnimationFrame(passo);
+      if (agora - ultimo < 66) return;
+      ultimo = agora;
       if (!grafo || modo2d || document.hidden || !raiz || raiz.offsetParent === null) return;
-      const t = performance.now() / 1000;
-      for (const g of cacheNeuronio.values()) {
-        const u = g.userData;
-        const s = 0.5 + 0.5 * Math.sin(t * 1.5 + u.fase);
-        const gb = u.glowBase * (1 + 0.14 * s);
-        u.glow.scale.set(gb, gb, 1);
-        if (!u.dim) u.soma.material.emissiveIntensity = 0.4 + 0.35 * s;
+      const t = agora / 1000;
+      for (const [k, m] of matCache) {
+        if (k.startsWith('soma|') && k.endsWith('|normal')) m.emissiveIntensity = 0.2 + 0.2 * (0.5 + 0.5 * Math.sin(t * 1.5 + m.userData.fase));
       }
-      for (const l of Object.values(lobos)) l.neb.material.rotation += 0.0006;
+      if (lod === 2) {
+        for (const g of cacheNeuronio.values()) {
+          const u = g.userData;
+          if (!u.glow || u.dim) continue;
+          const s = u.glowBase * (1 + 0.14 * (0.5 + 0.5 * Math.sin(t * 1.5 + u.fase)));
+          u.glow.scale.set(s, s, 1);
+        }
+      }
     };
-    passo();
+    requestAnimationFrame(passo);
   }
 
   function criarLobos() {
@@ -454,7 +511,7 @@
     const cena = grafo.scene();
     for (const [k, c] of Object.entries(CENTROS)) {
       const cor = ORIGENS[k].cor;
-      const neb = new T.Sprite(new T.SpriteMaterial({ map: texturaGlow(), color: cor, transparent: true, opacity: 0.2, blending: T.AdditiveBlending, depthWrite: false }));
+      const neb = new T.Sprite(new T.SpriteMaterial({ map: texturaGlow(), color: new T.Color(cor).convertSRGBToLinear(), transparent: true, opacity: 0.2, blending: T.AdditiveBlending, depthWrite: false }));
       neb.scale.set(190, 190, 1);
       neb.position.set(c[0], c[1], c[2]);
       const cv = document.createElement('canvas');
@@ -477,7 +534,7 @@
   function forcaLobos() {
     let ns = [];
     const f = (alpha) => {
-      const k = 0.25 * alpha;
+      const k = 0.35 * alpha;
       for (const n of ns) {
         const c = CENTROS[chaveOrigem(n.origem)];
         n.vx += (c[0] - n.x) * k;
@@ -495,38 +552,54 @@
     return n ? corOrigem(n.origem) : '#9a8cff';
   };
 
-  function configurarLigacoes(g) {
+  let ligChave = '';
+  function configurarLigacoes(g, forcar = false) {
+    const chave = `${destaque ? 1 : 0}|${particulas.size}|${curvas ? 1 : 0}`;
+    if (!forcar && chave === ligChave) return;
+    ligChave = chave;
     g.linkColor((l) => hexA(origemDoLink(l, 'source'), destaque ? 0.06 : 0.38))
-      .linkCurvature(0.14)
-      .linkDirectionalParticles((l) => (l.peso >= 0.85 ? 3 : 1))
+      .linkCurvature(curvas ? 0.14 : 0)
+      .linkDirectionalParticles((l) => (particulas.has(l) ? 1 : 0))
       .linkDirectionalParticleColor((l) => clarear(origemDoLink(l, 'target'), 0.5))
       .linkDirectionalParticleSpeed((l) => 0.003 + (l.peso || 0.5) * 0.005);
+  }
+
+  // brilho pre-renderizado por cor (drawImage e bem mais barato que gradiente a cada quadro)
+  const brilhos2D = new Map();
+  function brilho2D(hex) {
+    let c = brilhos2D.get(hex);
+    if (c) return c;
+    c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const x = c.getContext('2d');
+    const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, hexA(hex, 0.55));
+    gr.addColorStop(1, hexA(hex, 0));
+    x.fillStyle = gr;
+    x.fillRect(0, 0, 64, 64);
+    brilhos2D.set(hex, c);
+    return c;
   }
 
   function desenharNeuronio2D(n, ctx, escala) {
     if (n.x == null) return;
     const { cor, dim, forte } = estadoNo(n);
     const R = raioNo(n) * 0.9;
-    const arv = arvore(n.tipo, n.id);
-    const fase = (Number(n.id) % 97) * 0.37;
-    const s = 0.5 + 0.5 * Math.sin(performance.now() / 1000 * 1.5 + fase);
     const base = forte ? '#ffffff' : cor;
-    const rg = R * 3.4 * (1 + 0.12 * s);
-    const gr = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, rg);
-    gr.addColorStop(0, hexA(base, dim ? 0.05 : 0.45));
-    gr.addColorStop(1, hexA(base, 0));
-    ctx.fillStyle = gr;
-    ctx.beginPath(); ctx.arc(n.x, n.y, rg, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = dim ? 'rgba(120,120,140,0.15)' : hexA(cor, 0.85);
-    ctx.lineWidth = Math.max(0.5, 1.1 / escala);
-    ctx.beginPath();
-    for (let i = 0; i < arv.seg.length; i += 6) {
-      ctx.moveTo(n.x + arv.seg[i] * R * 0.8, n.y - arv.seg[i + 1] * R * 0.8);
-      ctx.lineTo(n.x + arv.seg[i + 3] * R * 0.8, n.y - arv.seg[i + 4] * R * 0.8);
+    const rg = R * 3.4;
+    if (!dim) ctx.drawImage(brilho2D(base), n.x - rg, n.y - rg, rg * 2, rg * 2);
+    // dendritos so quando nao e um cerebro grande (ou no selecionado) e com zoom suficiente
+    if (lod > 0 || forte) {
+      const arv = arvore(n.tipo, n.id);
+      ctx.strokeStyle = dim ? 'rgba(120,120,140,0.15)' : hexA(cor, 0.85);
+      ctx.lineWidth = Math.max(0.5, 1.1 / escala);
+      ctx.beginPath();
+      for (let i = 0; i < arv.seg.length; i += 6) {
+        ctx.moveTo(n.x + arv.seg[i] * R * 0.8, n.y - arv.seg[i + 1] * R * 0.8);
+        ctx.lineTo(n.x + arv.seg[i + 3] * R * 0.8, n.y - arv.seg[i + 4] * R * 0.8);
+      }
+      ctx.stroke();
     }
-    ctx.stroke();
-    ctx.fillStyle = dim ? 'rgba(150,150,170,0.2)' : clarear(cor, 0.55);
-    for (const p of arv.pontas) { ctx.beginPath(); ctx.arc(n.x + p[0] * R * 0.8, n.y - p[1] * R * 0.8, Math.max(0.5, 0.5 / escala + 0.3), 0, Math.PI * 2); ctx.fill(); }
     ctx.fillStyle = dim ? 'rgba(120,120,140,0.3)' : base;
     ctx.strokeStyle = dim ? 'rgba(120,120,140,0.3)' : clarear(cor, 0.6);
     ctx.lineWidth = Math.max(0.4, 0.8 / escala);
@@ -544,6 +617,7 @@
   function criarGrafo() {
     const largura = () => el.grafo.clientWidth;
     const altura = () => el.grafo.clientHeight;
+    lod = calcularLod();
     grafo = window.ForceGraph3D({ controlType: 'orbit' })(el.grafo)
       .backgroundColor('rgba(0,0,0,0)')
       .showNavInfo(false)
@@ -556,14 +630,14 @@
       .linkWidth(0)
       .linkOpacity(0.7)
       .linkDirectionalParticleWidth(1.6)
-      .cooldownTicks(220)
+      .cooldownTicks(dados.nos.length > 300 ? 280 : 220)
       .warmupTicks(40)
       .onNodeClick((n) => selecionar(n.id))
       // enquadra o cerebro inteiro na tela quando o layout assenta (so na primeira vez - depois
       // respeita o zoom/angulo que o usuario escolheu)
       .onEngineStop(() => enquadrar())
       .onBackgroundClick(() => { selecionado = null; atualizarCores(); if (!destaque) painelInicial(); });
-    configurarLigacoes(grafo);
+    try { grafo.renderer().setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); } catch { /* segue */ }
     criarLobos();
     animarNeuronios();
     // rotacao lenta automatica (o efeito "cerebro vivo"); para quando o usuario mexe na camera
@@ -576,13 +650,14 @@
     // distanceMax: sem limite, memoria sem ligacao nenhuma era empurrada pra longe pra sempre e
     // ficava perdida fora da tela
     grafo.d3Force('charge').strength(-70).distanceMax(150);
-    grafo.d3Force('link').distance(60).strength(0.015);
+    grafo.d3Force('link').distance(60).strength(dados.nos.length > 300 ? 0.004 : 0.015);
     grafo.d3Force('lobos', forcaLobos());
     new ResizeObserver(() => { if (grafo && largura() && altura()) grafo.width(largura()).height(altura()); }).observe(el.grafo);
   }
 
   function criarGrafo2D() {
     modo2d = true;
+    lod = calcularLod();
     const largura = () => el.grafo.clientWidth;
     const altura = () => el.grafo.clientHeight;
     grafo = window.ForceGraph()(el.grafo)
@@ -593,7 +668,6 @@
       .nodeCanvasObjectMode(() => 'replace')
       .nodeCanvasObject(desenharNeuronio2D)
       .nodePointerAreaPaint((n, cor, ctx) => { ctx.fillStyle = cor; ctx.beginPath(); ctx.arc(n.x, n.y, raioNo(n) * 1.7, 0, Math.PI * 2); ctx.fill(); })
-      .autoPauseRedraw(false)
       .nodeLabel(rotuloNo)
       .linkWidth(0.8)
       .linkDirectionalParticleWidth(2)
@@ -601,7 +675,6 @@
       .onNodeClick((n) => selecionar(n.id))
       .onEngineStop(() => enquadrar())
       .onBackgroundClick(() => { selecionado = null; atualizarCores(); if (!destaque) painelInicial(); });
-    configurarLigacoes(grafo);
     grafo.d3Force('charge').strength(-70).distanceMax(150);
     grafo.d3Force('link').distance(60).strength(0.015);
     grafo.d3Force('lobos', forcaLobos());
@@ -852,6 +925,14 @@
 
   async function recarregar() {
     await carregarDados();
+    const novoLod = calcularLod();
+    if (grafo && !modo2d && novoLod !== lod) {
+      lod = novoLod;
+      cacheNeuronio.clear();
+      assinatura = '';
+      grafo.nodeThreeObject(objetoNo);
+    }
+    lod = novoLod;
     aplicarFiltros();
     if (grafo) { grafo.nodeVal(tamanhoNo); atualizarCores(); }
   }
