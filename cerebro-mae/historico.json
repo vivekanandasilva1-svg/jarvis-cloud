@@ -772,5 +772,13 @@
     "tipo": "funcao",
     "titulo": "Clinicorp -> CRM: orçamento em Follow Up entra sozinho na coluna Follow Up + funil por número",
     "conteudo": "Pedido do dono: paciente que sai da avaliação (Dr. Thales) e a Vânia move pra coluna Follow Up do CRC (Orçamentos em aberto) no Clinicorp entra sozinho na coluna Follow Up do CRM. Fonte: /estimates/list com Status FOLLOWUP (Date vira FollowUpDate). src/clinicorpFollowUp.js: varre a cada 10min (últimos 31d + próximos 62d), acha o contato pelo telefone (com/sem 9) ou cria (origem clinicorp, WhatsApp ativo do tenant), move pra follow_up e inicia o acompanhamento; cada orçamento entra UMA vez (tabela clinicorp_followup_sync) pra não brigar com movimento manual; contatos pessoais ficam de fora; 1ª rodada só importa o marcado nos últimos 7 dias (histórico antigo vira baseline). Botão 'Follow Up Inteligente' no CRM liga/desliga por número (clinicorp_followup_config; padrão ligado; ao religar só vale o marcado depois). CRM agora tem seletor de número: com 2+ números abre num número só (guardado no navegador) pra setores não misturarem leads. Pendente: se quiserem isolar também Conversas/Contatos por número."
+  },
+  {
+    "chave": "crm:funil-por-numero-contatos-disparos",
+    "modulo": "crm",
+    "data": "2026-11-06",
+    "tipo": "melhoria",
+    "titulo": "Contatos e Disparos separados por número do WhatsApp",
+    "conteudo": "Pedido do dono: setores não podem misturar leads. Seletor de número agora também em Contatos e Disparos (mesma escolha do CRM, guardada no navegador; com 2+ números abre num só). Disparos: lista de campanhas e Painel geral filtram pelo número; nova campanha já vem com o número escolhido; 'montar lista pelo CRM' só puxa contatos do número da campanha (adicionarDoCrm). Pendente: Conversas já tinha filtro próprio; Lumia (chat) continua enxergando tudo."
   }
 ]

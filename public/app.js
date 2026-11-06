@@ -3485,6 +3485,7 @@ const ctBusca = document.getElementById('ctBusca');
 const ctEtapa = document.getElementById('ctEtapa');
 const ctEtiqueta = document.getElementById('ctEtiqueta');
 const ctOrigem = document.getElementById('ctOrigem');
+const ctFiltroNumero = document.getElementById('ctFiltroNumero');
 const ctResumo = document.getElementById('ctResumo');
 const ctCorpo = document.getElementById('ctCorpo');
 const ctMaisBtn = document.getElementById('ctMaisBtn');
@@ -3568,6 +3569,7 @@ async function carregarContatos() {
     ctContatos = data.contatos || [];
     ctEtapas = data.etapas || [];
     ctInstancias = data.instancias || [];
+    numeroPreencher(ctFiltroNumero, [...ctInstancias, ...ctContatos.map((c) => c.instancia)], null);
 
     const etapaAtual = ctEtapa.value;
     ctEtapa.textContent = '';
@@ -3595,6 +3597,7 @@ function ctFiltrados() {
   const termo = ctSemAcento(ctBusca.value);
   const digitos = termo.replace(/\D/g, '');
   return ctContatos.filter((c) => {
+    if (ctFiltroNumero.value && c.instancia !== ctFiltroNumero.value) return false;
     if (ctEtapa.value && c.etapa !== ctEtapa.value) return false;
     if (ctOrigem.value && c.origem !== ctOrigem.value) return false;
     if (ctEtiqueta.value && !(c.etiquetas || []).includes(ctEtiqueta.value)) return false;
@@ -3609,7 +3612,7 @@ function ctFiltrados() {
 function renderizarContatos() {
   const lista = ctFiltrados();
   const nomeEtapa = Object.fromEntries(ctEtapas.map((e) => [e.id, e.nome]));
-  const total = ctContatos.length;
+  const total = ctContatos.filter((c) => !ctFiltroNumero.value || c.instancia === ctFiltroNumero.value).length;
   ctResumo.textContent = !total
     ? 'Nenhum contato ainda. Eles aparecem aqui sozinhos quando alguém conversa no WhatsApp, ou você pode cadastrar e importar uma planilha.'
     : lista.length === total
@@ -3651,7 +3654,8 @@ function renderizarContatos() {
   if (!ctMaisBtn.hidden) ctMaisBtn.textContent = `Mostrar mais (${lista.length - ctLimite} restantes)`;
 }
 
-for (const el of [ctEtapa, ctEtiqueta, ctOrigem]) el.addEventListener('change', () => { ctLimite = CT_POR_PAGINA; renderizarContatos(); });
+ctFiltroNumero.addEventListener('change', () => numeroSalvar(ctFiltroNumero.value));
+for (const el of [ctFiltroNumero, ctEtapa, ctEtiqueta, ctOrigem]) el.addEventListener('change', () => { ctLimite = CT_POR_PAGINA; renderizarContatos(); });
 ctBusca.addEventListener('input', () => { ctLimite = CT_POR_PAGINA; renderizarContatos(); });
 ctMaisBtn.addEventListener('click', () => { ctLimite += CT_POR_PAGINA; renderizarContatos(); });
 
@@ -8931,6 +8935,21 @@ function crmFiltrarPorOperador(contatos) {
 const crmFiltroNumero = document.getElementById('crmFiltroNumero');
 const crmFuiClinicorp = document.getElementById('crmFuiClinicorp');
 let crmFuiEstado = null;
+function numeroSalvo() { try { return localStorage.getItem('crmNumero'); } catch { return null; } }
+function numeroSalvar(v) { try { localStorage.setItem('crmNumero', v); } catch { /* sem storage */ } }
+// preenche um seletor de numero (CRM/Contatos/Disparos compartilham a escolha); com 2+ numeros abre num so
+function numeroPreencher(select, instancias, ativa) {
+  const lista = [...new Set(instancias.filter(Boolean))].sort();
+  const salvo = select.dataset.iniciado ? select.value : numeroSalvo();
+  select.textContent = '';
+  select.add(new Option('Todos os números', ''));
+  for (const i of lista) select.add(new Option(i.startsWith('ig:') ? `Instagram @${i.slice(3)}` : i, i));
+  let escolha = salvo === null ? (lista.length > 1 ? (ativa || lista[0]) : '') : salvo;
+  if (escolha && !lista.includes(escolha)) escolha = '';
+  select.value = escolha;
+  select.dataset.iniciado = '1';
+  select.hidden = lista.length < 2;
+}
 function crmLerNumeroSalvo() { try { return localStorage.getItem('crmNumero'); } catch { return null; } }
 
 function crmPreencherNumeros(contatos, instanciaAtiva) {
@@ -8948,7 +8967,7 @@ function crmPreencherNumeros(contatos, instanciaAtiva) {
 }
 
 crmFiltroNumero.addEventListener('change', () => {
-  try { localStorage.setItem('crmNumero', crmFiltroNumero.value); } catch { /* sem storage */ }
+  numeroSalvar(crmFiltroNumero.value);
   if (crmUltimosDados) renderizarCrmBoard(crmUltimosDados.etapas || [], crmFiltrarPorOperador(crmUltimosDados.contatos || []));
   crmCarregarFuiClinicorp();
 });
@@ -9398,6 +9417,7 @@ crmConversaEtapa.addEventListener('change', async () => {
 const dispLista = document.getElementById('dispLista');
 const dispDetalhe = document.getElementById('dispDetalhe');
 const dispNova = document.getElementById('dispNova');
+const dispNumero = document.getElementById('dispNumero');
 let dispInstancias = [];
 let dispAbertoId = null;
 let dispPolling = null;
@@ -9418,9 +9438,11 @@ async function carregarDisparos() {
     const d = await res.json();
     if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
     dispInstancias = d.instancias || [];
+    numeroPreencher(dispNumero, [...dispInstancias, ...d.campanhas.map((c) => c.instancia)], null);
+    const campanhas = d.campanhas.filter((c) => !dispNumero.value || c.instancia === dispNumero.value);
     dispLista.textContent = '';
-    if (!d.campanhas.length) dispLista.appendChild(dispEl('p', { className: 'agenda-vazia', textContent: 'Nenhuma campanha ainda. Clique em "+ Nova campanha".' }));
-    for (const c of d.campanhas) {
+    if (!campanhas.length) dispLista.appendChild(dispEl('p', { className: 'agenda-vazia', textContent: 'Nenhuma campanha ainda. Clique em "+ Nova campanha".' }));
+    for (const c of campanhas) {
       const card = dispEl('div', { className: `disp-card${c.id === dispAbertoId ? ' ativo' : ''}` });
       card.append(
         dispEl('div', { className: 'disp-card-topo' }, dispEl('strong', { textContent: c.nome }), dispEl('span', { className: `disp-status ${c.status}`, textContent: DISP_STATUS[c.status] || c.status })),
@@ -9436,6 +9458,7 @@ async function carregarDisparos() {
   }
 }
 
+dispNumero.addEventListener('change', () => { numeroSalvar(dispNumero.value); carregarDisparos(); });
 dispNova.addEventListener('click', () => { dispAbertoId = null; dispStaged = []; renderizarEditorDisparo(null); carregarDisparos(); });
 
 async function abrirCampanhaDisparo(id) {
@@ -9470,6 +9493,7 @@ function renderizarEditorDisparo(c) {
   const instancia = dispEl('select', { disabled: !editavel });
   for (const i of dispInstancias) instancia.add(new Option(i, i));
   if (c?.instancia) instancia.value = c.instancia;
+  else if (dispNumero.value && dispInstancias.includes(dispNumero.value)) instancia.value = dispNumero.value;
   const mensagem = dispEl('textarea', { rows: 6, value: c?.mensagem || '', disabled: !editavel, placeholder: '{Oi|Olá|E aí} {nome}, tudo bem? Passando pra avisar que...' });
   mensagem.style.minHeight = '130px';
   const dica = dispEl('p', { className: 'agenda-vazia', textContent: 'Variáveis: {nome} (primeiro nome), {nome_completo} e qualquer coluna da sua planilha, ex {cidade}. Variações: {oi|olá|e aí} sorteia uma opção por mensagem. Mensagens diferentes entre si reduzem o risco de bloqueio.' });
@@ -9853,7 +9877,7 @@ async function abrirPainelDisparos() {
   }
   dispDetalhe.textContent = 'Carregando...';
   try {
-    const res = await fetch(`/api/disparos/painel?de=${dispPainelPeriodo.de}&ate=${dispPainelPeriodo.ate}`, { headers: { 'x-app-password': appPassword } });
+    const res = await fetch(`/api/disparos/painel?de=${dispPainelPeriodo.de}&ate=${dispPainelPeriodo.ate}${dispNumero.value ? `&instancia=${encodeURIComponent(dispNumero.value)}` : ''}`, { headers: { 'x-app-password': appPassword } });
     const d = await res.json();
     if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
     const r = d.resumo;

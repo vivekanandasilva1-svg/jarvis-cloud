@@ -300,11 +300,13 @@ export async function adicionarDoCrm(tenantId, campanhaId, { etapa, etiqueta }) 
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
   if (etapa === 'contatos_pessoais') throw new Error('Contatos pessoais nunca entram em disparo.');
-  const cond = ['tenant_id = $1', 'oculto = false', "etapa <> 'contatos_pessoais'", "instancia NOT LIKE 'ig:%'", "numero ~ '^[0-9]{10,15}$'"];
-  const params = [tenantId];
+  const { rows: [camp] } = await pool.query('SELECT instancia FROM disparo_campanhas WHERE id = $1 AND tenant_id = $2', [Number(campanhaId), tenantId]);
+  if (!camp) throw new Error('Campanha nao encontrada.');
+  const cond = ['tenant_id = $1', 'instancia = $2', 'oculto = false', "etapa <> 'contatos_pessoais'", "instancia NOT LIKE 'ig:%'", "numero ~ '^[0-9]{10,15}$'"];
+  const params = [tenantId, camp.instancia];
   if (etapa) { params.push(etapa); cond.push(`etapa = $${params.length}`); }
   if (etiqueta) { params.push(String(etiqueta).toLowerCase()); cond.push(`EXISTS (SELECT 1 FROM unnest(etiquetas) e WHERE lower(e) = $${params.length})`); }
-  if (params.length === 1) throw new Error('Escolha uma etapa ou uma etiqueta do CRM.');
+  if (params.length === 2) throw new Error('Escolha uma etapa ou uma etiqueta do CRM.');
   const { rows } = await pool.query(`SELECT numero, nome FROM crm_contatos WHERE ${cond.join(' AND ')} LIMIT 5000`, params);
   return adicionarDestinatarios(tenantId, campanhaId, rows);
 }
@@ -570,13 +572,14 @@ export async function removerDestinatario(tenantId, campanhaId, destId) {
 }
 
 // numeros de TODAS as campanhas num periodo (de/ate 'YYYY-MM-DD', Maceio) + por dia + por campanha
-export async function painelGeral(tenantId, { de, ate }) {
+export async function painelGeral(tenantId, { de, ate, instancia = null }) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
   const inicio = new Date(`${de}T00:00:00-03:00`);
   const fim = new Date(new Date(`${ate}T00:00:00-03:00`).getTime() + 86400000);
   if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime()) || fim <= inicio) throw new Error('Periodo invalido.');
-  const p = [tenantId, inicio, fim];
+  const p = [tenantId, inicio, fim, instancia || null];
+  const soNumero = 'AND ($4::text IS NULL OR campanha_id IN (SELECT id FROM disparo_campanhas WHERE tenant_id = $1 AND instancia = $4))';
   const [{ rows: [t] }, { rows: dias }, { rows: camps }, { rows: [fila] }] = await Promise.all([
     pool.query(
       `SELECT (count(*) FILTER (WHERE enviado_em IS NOT NULL))::int AS enviadas,
@@ -587,11 +590,11 @@ export async function painelGeral(tenantId, { de, ate }) {
               (count(*) FILTER (WHERE entregue_em IS NOT NULL))::int AS entregues,
               (count(*) FILTER (WHERE lido_em IS NOT NULL))::int AS lidas,
               (count(*) FILTER (WHERE wa_id IS NOT NULL AND entregue_em IS NULL AND enviado_em < now() - interval '6 hours'))::int AS nao_entregues
-       FROM disparo_destinatarios WHERE tenant_id = $1 AND COALESCE(enviado_em, now()) >= $2 AND COALESCE(enviado_em, now()) < $3 AND status <> 'pendente'`, p),
+       FROM disparo_destinatarios WHERE tenant_id = $1 AND COALESCE(enviado_em, now()) >= $2 AND COALESCE(enviado_em, now()) < $3 AND status <> 'pendente' ${soNumero}`, p),
     pool.query(
       `SELECT to_char((enviado_em AT TIME ZONE 'America/Maceio')::date, 'DD/MM') AS dia, count(*)::int AS enviadas,
               (count(*) FILTER (WHERE respondeu_em IS NOT NULL))::int AS respostas
-       FROM disparo_destinatarios WHERE tenant_id = $1 AND enviado_em >= $2 AND enviado_em < $3 GROUP BY 1, (enviado_em AT TIME ZONE 'America/Maceio')::date ORDER BY (enviado_em AT TIME ZONE 'America/Maceio')::date`, p),
+       FROM disparo_destinatarios WHERE tenant_id = $1 AND enviado_em >= $2 AND enviado_em < $3 ${soNumero} GROUP BY 1, (enviado_em AT TIME ZONE 'America/Maceio')::date ORDER BY (enviado_em AT TIME ZONE 'America/Maceio')::date`, p),
     pool.query(
       `SELECT c.id, c.nome, c.status,
               (count(d.id) FILTER (WHERE d.enviado_em IS NOT NULL AND d.enviado_em >= $2 AND d.enviado_em < $3))::int AS enviadas,
@@ -600,8 +603,8 @@ export async function painelGeral(tenantId, { de, ate }) {
               (count(d.id) FILTER (WHERE d.respondeu_em IS NOT NULL))::int AS respostas,
               (count(d.id) FILTER (WHERE d.wa_id IS NOT NULL AND d.entregue_em IS NULL AND d.enviado_em < now() - interval '6 hours'))::int AS nao_entregues
        FROM disparo_campanhas c LEFT JOIN disparo_destinatarios d ON d.campanha_id = c.id
-       WHERE c.tenant_id = $1 AND (c.criado_em < $3) GROUP BY c.id ORDER BY c.id DESC LIMIT 30`, p),
-    pool.query(`SELECT (count(*) FILTER (WHERE d.status = 'pendente'))::int AS pendentes FROM disparo_destinatarios d JOIN disparo_campanhas c ON c.id = d.campanha_id WHERE d.tenant_id = $1 AND c.status IN ('enviando', 'agendada', 'pausada', 'rascunho')`, [tenantId]),
+       WHERE c.tenant_id = $1 AND (c.criado_em < $3) AND ($4::text IS NULL OR c.instancia = $4) GROUP BY c.id ORDER BY c.id DESC LIMIT 30`, p),
+    pool.query(`SELECT (count(*) FILTER (WHERE d.status = 'pendente'))::int AS pendentes FROM disparo_destinatarios d JOIN disparo_campanhas c ON c.id = d.campanha_id WHERE d.tenant_id = $1 AND c.status IN ('enviando', 'agendada', 'pausada', 'rascunho') AND ($2::text IS NULL OR c.instancia = $2)`, [tenantId, instancia || null]),
   ]);
   return { resumo: { ...t, pendentes: fila.pendentes }, porDia: dias, campanhas: camps };
 }

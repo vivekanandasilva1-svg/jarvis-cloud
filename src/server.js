@@ -2158,7 +2158,7 @@ app.get('/api/disparos/painel', async (req, res) => {
   const de = String(req.query.de || new Date(Date.now() - 3 * 3600000 - 29 * 86400000).toISOString().slice(0, 10));
   const ate = String(req.query.ate || hoje);
   try {
-    res.json({ de, ate, ...(await disparos.painelGeral(req.tenantId, { de, ate })) });
+    res.json({ de, ate, ...(await disparos.painelGeral(req.tenantId, { de, ate, instancia: req.query.instancia ? String(req.query.instancia) : null })) });
   } catch (err) {
     res.status(400).json({ erro: err.message });
   }

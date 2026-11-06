@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261106b" />
+  <link rel="stylesheet" href="style.css?v=20261106c" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -709,6 +709,7 @@
     <div class="window-body tab-contatos" id="tabContatos" hidden>
       <div class="ct-barra">
         <input type="search" id="ctBusca" placeholder="Buscar por nome, telefone, e-mail ou etiqueta" autocomplete="off" />
+        <select id="ctFiltroNumero" title="Cada número do WhatsApp tem a sua própria base" hidden><option value="">Todos os números</option></select>
         <select id="ctEtapa"><option value="">Todas as etapas</option></select>
         <select id="ctEtiqueta"><option value="">Todas as etiquetas</option></select>
         <select id="ctOrigem">
@@ -1233,6 +1234,7 @@
           e para a campanha sozinha se der muita falha seguida. Use só com quem já te conhece ou autorizou contato,
           e comece com poucos envios por dia.
         </div>
+        <select id="dispNumero" title="Cada número do WhatsApp tem as suas próprias campanhas" hidden><option value="">Todos os números</option></select>
         <div class="disp-botoes"><button type="button" id="dispNova">+ Nova campanha</button><button type="button" id="dispPainel" class="crm-btn-secundario">📊 Painel geral</button></div>
         <div id="dispLista"><p class="agenda-vazia">Carregando...</p></div>
       </div>
@@ -1526,6 +1528,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261106b"></script>
+  <script src="app.js?v=20261106c"></script>
 </body>
 </html>
