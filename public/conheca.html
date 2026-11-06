@@ -741,7 +741,7 @@
               <div class="anuncio">
                 <div class="ad-card"><div class="img">Implante</div><div class="txt"><b>Clínica Sorriso</b><br>Avaliação de implante com horário essa semana.</div><div class="cta">Enviar mensagem</div></div>
                 <span class="seta">➜</span>
-                <div class="card-grande"><strong>Camila S.</strong><small>Oi! Vi o anúncio do implante…</small><br><span class="tag ads">Campanha Implante · Maceió</span> <span class="tag ia">Novo lead</span></div>
+                <div class="card-grande"><strong>Luana S.</strong><small>Oi! Vi o anúncio do implante…</small><br><span class="tag ads">Campanha Implante · Maceió</span> <span class="tag ia">Novo lead</span></div>
               </div>
             </div>
           </div>
@@ -777,7 +777,7 @@
             <div class="visual">
               <div class="linha-tempo" id="jLinha">
                 <div class="lt-trilho"><div class="ench"></div></div>
-                <div class="lt-msg" id="jLinhaMsg">Dia 1 · "Oi, Camila! Ficou alguma dúvida sobre o orçamento?"</div>
+                <div class="lt-msg" id="jLinhaMsg">Dia 1 · "Oi, Luana! Ficou alguma dúvida sobre o orçamento?"</div>
               </div>
             </div>
           </div>
@@ -825,9 +825,9 @@
             </ul>
           </div>
           <div class="demo" id="demo" aria-label="Exemplo de conversa">
-            <div class="quem"><span class="av">CS</span><div>Camila S.<small>online</small></div></div>
+            <div class="quem"><span class="av">LS</span><div>Luana S.<small>online</small></div></div>
             <div class="bolha lead">Boa noite! Vocês fazem implante? Quanto fica?</div>
-            <div class="bolha lumia" style="align-self:flex-end">Boa noite, Camila! Fazemos sim 😊 O valor depende da avaliação, porque cada caso é um caso. A avaliação é com o Dr. Caio. Posso ver um horário pra você?</div>
+            <div class="bolha lumia" style="align-self:flex-end">Boa noite, Luana! Fazemos sim 😊 O valor depende da avaliação, porque cada caso é um caso. A avaliação é com o Dr. Caio. Posso ver um horário pra você?</div>
             <div class="bolha lead">Pode ser quinta de manhã</div>
             <div class="bolha lumia" style="align-self:flex-end">Quinta tenho 8h30 ou 11h. Qual prefere?</div>
             <div class="bolha lead">8h30</div>
@@ -1594,10 +1594,10 @@
         const trilho = lt.querySelector('.lt-trilho');
         const msg = document.getElementById('jLinhaMsg');
         const dias = [
-          [1, '"Oi, Camila! Ficou alguma dúvida sobre o orçamento?"'],
+          [1, '"Oi, Luana! Ficou alguma dúvida sobre o orçamento?"'],
           [3, '"Separei um áudio do Dr. Caio explicando o tratamento 🎧"'],
           [5, '"Essa semana ainda tenho horário pra começar. Reservo pra você?"'],
-          [7, 'Camila respondeu: "Pode reservar!" → a sequência para sozinha'],
+          [7, 'Luana respondeu: "Pode reservar!" → a sequência para sozinha'],
         ];
         trilho.querySelectorAll('.lt-ponto').forEach((p) => p.remove());
         const pts = dias.map(([d], x) => {
@@ -1712,8 +1712,8 @@
         trilho.querySelector('.ench').style.width = (d === 1 ? 0 : ((ds[ultimo] - 1) / (d - 1)) * 100) + '%';
         let html = '';
         ds.forEach((dia, i) => {
-          html += `<div class="fu-item${i >= parou ? ' parou' : ''}"><b>Dia ${dia}</b><span>${textos[i % textos.length].replace('{nome}', 'Camila')}</span></div>`;
-          if (i === parou - 1) html += `<div class="fu-item resp"><b>Resposta</b><span>Camila: "Quero sim!" → a sequência para e a IA continua a conversa</span></div>`;
+          html += `<div class="fu-item${i >= parou ? ' parou' : ''}"><b>Dia ${dia}</b><span>${textos[i % textos.length].replace('{nome}', 'Luana')}</span></div>`;
+          if (i === parou - 1) html += `<div class="fu-item resp"><b>Resposta</b><span>Luana: "Quero sim!" → a sequência para e a IA continua a conversa</span></div>`;
         });
         lista.innerHTML = html;
       };
