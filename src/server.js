@@ -31,6 +31,8 @@ import * as metaAds from './metaads.js';
 import * as propostas from './propostas.js';
 import * as relatorioGerador from './relatorioGerador.js';
 import * as followUp from './followUp.js';
+import * as clinicorpFollowUp from './clinicorpFollowUp.js';
+import { iniciarSchedulerClinicorpFollowUp } from './clinicorpFollowUp.js';
 import * as followUpInteligente from './followUpInteligente.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
 import { iniciarCerebroMae } from './cerebroMae.js';
@@ -1928,6 +1930,30 @@ app.get('/api/crm/contatos', async (req, res) => {
   }
 });
 
+// botao "Follow Up Inteligente" do CRM: automacao Clinicorp (coluna Follow Up do CRC) -> coluna Follow Up do CRM, por numero
+app.get('/api/crm/clinicorp-followup', async (req, res) => {
+  try {
+    if (!(await tenantConfig.obterClinicorp(req.tenantId))) return res.json({ disponivel: false });
+    const { instanciaAtiva } = await whatsappInstances.obterConfig(req.tenantId);
+    const instancia = String(req.query.instancia || instanciaAtiva || '');
+    if (!instancia) return res.json({ disponivel: false });
+    res.json({ disponivel: true, instancia, ...(await clinicorpFollowUp.obterAtivacao(req.tenantId, instancia)) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/clinicorp-followup', async (req, res) => {
+  try {
+    const instancia = String(req.body?.instancia || '').trim();
+    if (!instancia) return res.status(400).json({ erro: 'Informe o número.' });
+    await clinicorpFollowUp.definirAtivacao(req.tenantId, instancia, !!req.body?.ativo);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 // ---------- Instagram (DMs, respostas a comentario e publicacoes - ver instagram.js) ----------
 
 app.get('/api/instagram/webhook', (req, res) => {
@@ -2752,6 +2778,8 @@ followUp.iniciarSchedulerFollowUp();
 followUpInteligente.iniciarSchedulerFollowUpInteligente();
 // Disparos (campanhas de mensagens em massa) - so envia campanhas que o dono iniciou/agendou na aba Disparos
 disparos.iniciarSchedulerDisparos();
+// Clinicorp -> CRM: orcamento que vai pra coluna Follow Up do CRC entra sozinho na coluna Follow Up do CRM (tenants com Clinicorp)
+iniciarSchedulerClinicorpFollowUp();
 
 // bloqueia assinantes do Gerador de Propostas E clientes da Lumia cujo periodo contratado
 // (1-12 meses) venceu - roda no boot e depois a cada 30min; vitalicio (sem data de expiracao)

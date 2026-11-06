@@ -2727,6 +2727,8 @@ async function carregarCrm() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
     crmUltimosDados = data;
+    crmPreencherNumeros(data.contatos, null);
+    crmCarregarFuiClinicorp();
     preencherSeletorEtapaConversa(data.etapas || []);
     await carregarOperadoresCrm();
     renderizarCrmBoard(data.etapas || [], crmFiltrarPorOperador(data.contatos || []));
@@ -8918,12 +8920,67 @@ function preencherSeletoresOperador() {
 }
 
 function crmFiltrarPorOperador(contatos) {
+  if (crmFiltroNumero.value) contatos = contatos.filter((c) => c.instancia === crmFiltroNumero.value);
   const f = crmFiltroOperador.value;
   if (!f) return contatos;
   if (f === 'livre') return contatos.filter((c) => c.atendente_id === null || c.atendente_id === undefined);
   const id = f === 'eu' ? crmOperadores.euId : Number(f.slice(3));
   return contatos.filter((c) => c.atendente_id === id);
 }
+// ---- funil exclusivo por numero de WhatsApp (setores diferentes nao misturam leads) ----
+const crmFiltroNumero = document.getElementById('crmFiltroNumero');
+const crmFuiClinicorp = document.getElementById('crmFuiClinicorp');
+let crmFuiEstado = null;
+function crmLerNumeroSalvo() { try { return localStorage.getItem('crmNumero'); } catch { return null; } }
+
+function crmPreencherNumeros(contatos, instanciaAtiva) {
+  const instancias = [...new Set([...(contatos || []).map((c) => c.instancia), instanciaAtiva].filter(Boolean))].sort();
+  const salvo = crmFiltroNumero.dataset.iniciado ? crmFiltroNumero.value : crmLerNumeroSalvo();
+  crmFiltroNumero.textContent = '';
+  crmFiltroNumero.add(new Option('Todos os números', ''));
+  for (const i of instancias) crmFiltroNumero.add(new Option(i.startsWith('ig:') ? `Instagram @${i.slice(3)}` : i, i));
+  // com 2+ numeros o funil abre ja num numero so (o ultimo escolhido, ou o ativo) pra nao misturar leads
+  let escolha = salvo === null ? (instancias.length > 1 ? (instanciaAtiva || instancias[0]) : '') : salvo;
+  if (escolha && !instancias.includes(escolha)) escolha = '';
+  crmFiltroNumero.value = escolha;
+  crmFiltroNumero.dataset.iniciado = '1';
+  crmFiltroNumero.hidden = instancias.length < 2;
+}
+
+crmFiltroNumero.addEventListener('change', () => {
+  try { localStorage.setItem('crmNumero', crmFiltroNumero.value); } catch { /* sem storage */ }
+  if (crmUltimosDados) renderizarCrmBoard(crmUltimosDados.etapas || [], crmFiltrarPorOperador(crmUltimosDados.contatos || []));
+  crmCarregarFuiClinicorp();
+});
+
+// botao "Follow Up Inteligente": liga/desliga, por numero, a automacao Clinicorp -> coluna Follow Up
+async function crmCarregarFuiClinicorp() {
+  try {
+    const q = crmFiltroNumero.value ? `?instancia=${encodeURIComponent(crmFiltroNumero.value)}` : '';
+    const res = await fetch(`/api/crm/clinicorp-followup${q}`, { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok || !d.disponivel) { crmFuiClinicorp.hidden = true; return; }
+    crmFuiEstado = d;
+    crmFuiClinicorp.hidden = false;
+    crmFuiClinicorp.textContent = `Follow Up Inteligente: ${d.ativo ? 'Ligado' : 'Desligado'}`;
+    crmFuiClinicorp.classList.toggle('crm-btn-ligado', !!d.ativo);
+    crmFuiClinicorp.title = `Automação Clinicorp → Follow Up do CRM para o número ${d.instancia}. Clique pra ${d.ativo ? 'desligar' : 'ligar'}.`;
+  } catch { crmFuiClinicorp.hidden = true; }
+}
+crmFuiClinicorp.addEventListener('click', async () => {
+  if (!crmFuiEstado) return;
+  try {
+    const res = await fetch('/api/crm/clinicorp-followup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ instancia: crmFuiEstado.instancia, ativo: !crmFuiEstado.ativo }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro');
+  } catch (err) { alert(`Não consegui alterar: ${err.message}`); }
+  crmCarregarFuiClinicorp();
+});
+
 crmFiltroOperador.addEventListener('change', () => {
   if (crmUltimosDados) renderizarCrmBoard(crmUltimosDados.etapas || [], crmFiltrarPorOperador(crmUltimosDados.contatos || []));
 });

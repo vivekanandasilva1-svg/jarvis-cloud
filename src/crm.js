@@ -397,6 +397,34 @@ async function acharPorNumero(cliente, tenantId, numero) {
   return rows[0] || null;
 }
 
+// usado pelo sync Clinicorp -> Follow Up: acha o contato do tenant pelo telefone (com/sem o 9)
+export async function acharContatoPorTelefone(tenantId, numero) {
+  if (!pool) return null;
+  await tabelasProntas;
+  const variante = varianteNonoDigito(numero);
+  const { rows } = await pool.query(
+    `SELECT id, etapa, instancia FROM crm_contatos WHERE tenant_id = $1 AND numero = ANY($2::text[]) ORDER BY ultima_mensagem_em DESC NULLS LAST LIMIT 1`,
+    [tenantId, variante ? [numero, variante] : [numero]],
+  );
+  return rows[0] || null;
+}
+
+// paciente do Clinicorp que ainda nao tem conversa no CRM: cria o card ja na etapa pedida
+// (ultima_mensagem_em preenchida pra aparecer no board)
+export async function criarContatoDoClinicorp(tenantId, { numero, nome, instancia, etapa }) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  if (!IDS_ETAPAS.has(etapa)) throw new Error(`Etapa invalida: "${etapa}"`);
+  const { rows } = await pool.query(
+    `INSERT INTO crm_contatos (tenant_id, numero, instancia, nome, etapa, origem, ultima_mensagem_em)
+     VALUES ($1, $2, $3, $4, $5, 'clinicorp', now()) RETURNING id`,
+    [tenantId, numero, String(instancia), textoOuNull(nome, 120), etapa],
+  );
+  await registrarEventoEtapa(tenantId, rows[0].id, String(instancia), etapa);
+  eventosCrm.emit('contato-atualizado', { tenantId, contatoId: rows[0].id });
+  return rows[0].id;
+}
+
 // cadastro manual (sem id) ou edicao dos dados extras (com id). Numero/instancia so no cadastro -
 // trocar o numero de um contato com conversa desligaria o historico dele
 export async function salvarContatoBase(tenantId, dados) {

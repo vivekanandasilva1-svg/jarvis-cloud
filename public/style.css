@@ -3528,3 +3528,5 @@ body.lumien-em-conversas .lumien-btn { bottom: 92px; }
 .chamadas-resumo .cartao.alerta strong { color: #e8836b; }
 .disp-previa { margin: 6px 0; }
 .disp-previa p { font-size: 12px; color: var(--text); margin: 4px 0; }
+
+.crm-btn-ligado { color: var(--gold-bright) !important; border-color: var(--gold) !important; }
