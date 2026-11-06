@@ -860,5 +860,13 @@
     "tipo": "correcao",
     "titulo": "Seletor de operador: conta principal = todas as conversas",
     "conteudo": "Dono voltava pro 'Vitaly' e as conversas dos operadores sumiam (o filtro do dono mostrava só dele + sem operador). Agora a 1ª opção é a conta principal (nome do dono, 'principal · todas') = sem filtro; as demais opções são só os operadores (colaboradores) da conta. Valores guardados 'op:0'/'eu' viram principal (ou o próprio operador, se logado como colaborador)."
+  },
+  {
+    "chave": "plataforma:landing-redes-suporte",
+    "modulo": "plataforma",
+    "data": "2026-11-06",
+    "tipo": "melhoria",
+    "titulo": "Landing page: plano Redes de Clínicas e faixa de suporte",
+    "conteudo": "Pedido do dono: quarto plano para grupos e redes (valor sob consulta, projeto a quatro mãos, prioridade de suporte, piloto sem custo, tudo da clínica individual, um número e um funil por unidade, treinamento da rede), com botão que pede a proposta de piloto pelo WhatsApp. Planos passaram para grade 2x2. Faixa abaixo dos planos: suporte humano em horário comercial e suporte 24h com a Lumien. Visão unificada de várias unidades ainda não existe no app: na página ficou como dashboards e IA da rede construídos no projeto. Mesmo conteúdo entrou nos PDFs comerciais (entregas/lumia-pdfs, fora do git). Pendente: confirmar se o suporte humano vale para todos os planos."
   }
 ]

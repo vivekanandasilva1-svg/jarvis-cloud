@@ -480,11 +480,19 @@
     .cadeado svg { width: 30px; height: 30px; }
 
     /* planos */
-    .planos { display: grid; gap: 18px; grid-template-columns: 1fr; max-width: 980px; margin: 0 auto; }
-    @media (min-width: 820px) { .planos { grid-template-columns: 1fr 1fr; } }
-    @media (min-width: 1100px) { .planos { grid-template-columns: repeat(3, 1fr); max-width: none; } }
-    @media (min-width: 820px) and (max-width: 1099px) { .plano.monte { grid-column: 1 / -1; } }
+    .planos { display: grid; gap: 18px; grid-template-columns: 1fr; max-width: 1060px; margin: 0 auto; }
+    @media (min-width: 820px) { .planos { grid-template-columns: 1fr 1fr; gap: 26px 18px; } }
     .plano.monte { border-style: dashed; border-color: var(--borda-ouro); }
+    .plano.rede { background: radial-gradient(420px 220px at 100% 0%, rgba(212,175,55,.16), transparent 70%), var(--card); border-color: var(--borda-ouro); }
+    .plano.rede .preco { color: var(--ouro-claro); }
+    .suporte-faixa { display: grid; gap: 14px; grid-template-columns: 1fr; max-width: 1060px; margin: 26px auto 0; }
+    @media (min-width: 720px) { .suporte-faixa { grid-template-columns: 1fr 1fr; } }
+    .suporte-faixa div { display: flex; gap: 14px; align-items: center; padding: 16px 18px; border-radius: 14px; border: 1px solid var(--borda-ouro); background: linear-gradient(120deg, rgba(212,175,55,.1), transparent 70%), var(--card); }
+    .suporte-faixa .ico { margin: 0; width: 42px; height: 42px; flex: none; }
+    .suporte-faixa .ico svg { width: 20px; height: 20px; }
+    .suporte-faixa p { margin: 0; }
+    .suporte-faixa b { display: block; font-size: 15.5px; }
+    .suporte-faixa span { font-size: 13.5px; color: var(--dim); }
     .modulos { display: flex; flex-wrap: wrap; gap: 7px; margin: 16px 0 14px; }
     .modulos label { cursor: pointer; user-select: none; }
     .modulos input { position: absolute; opacity: 0; pointer-events: none; }
@@ -1327,6 +1335,25 @@
           <p class="monte-resumo" id="monteResumo"></p>
           <a href="#" class="btn btn-linha" id="monteBtn" target="_blank" rel="noopener">Pedir orçamento do meu pacote</a>
         </div>
+        <div class="plano rede rev">
+          <h3>Lumia Redes de Clínicas</h3>
+          <p class="para">Ideal para grupos e redes que precisam padronizar o atendimento, aumentar a conversão e ter controle unificado sobre todas as unidades.</p>
+          <div class="preco">Valor sob consulta</div>
+          <ul class="lista">
+            <li>Projeto construído a quatro mãos com a sua rede</li>
+            <li>Prioridade máxima de suporte</li>
+            <li>Possibilidade de piloto sem custo</li>
+            <li><strong>Tudo da solução para clínica individual</strong></li>
+            <li>Um número de WhatsApp e um funil para cada unidade</li>
+            <li>Dashboards e IA da rede personalizados, construídos no projeto</li>
+            <li>Treinamento completo para toda a rede</li>
+          </ul>
+          <a href="#" class="btn btn-ouro js-zap" data-msg="Olá! Quero a proposta de piloto da Lumia para rede de clínicas.">Receba nossa proposta de piloto</a>
+        </div>
+      </div>
+      <div class="suporte-faixa rev">
+        <div><span class="ico"><svg><use href="#i-users"/></svg></span><p><b>Suporte humano em horário comercial</b><span>Nossa equipe acompanha sua clínica de perto, em todos os planos.</span></p></div>
+        <div><span class="ico"><svg><use href="#i-owl"/></svg></span><p><b>Suporte 24h com a Lumien</b><span>A assistente de IA do app tira dúvidas e executa ações a qualquer hora.</span></p></div>
       </div>
       <p class="obs-planos">Contratos de 1 a 12 meses. O consumo de IA do atendimento já entra no valor que a gente te passar.</p>
     </div>
