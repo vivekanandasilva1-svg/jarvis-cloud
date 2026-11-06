@@ -8941,7 +8941,7 @@ async function carregarOperadoresCrm() {
 function preencherSeletoresOperador() {
   const filtroAtual = crmFiltroOperador.value;
   crmFiltroOperador.textContent = '';
-  const opcoes = [['', 'Todos os operadores'], ['eu', 'Meus leads'], ['meuslivres', 'Meus + sem operador'], ['livre', 'Sem operador'], ...crmOperadores.lista.map((o) => [`op:${o.id}`, o.nome])];
+  const opcoes = [['', 'Todos os operadores'], ...crmOperadores.lista.map((o) => [`op:${o.id}`, o.id === (minhaVisao.euId || crmOperadores.euId) ? `${o.nome} (eu)` : o.nome])];
   for (const [valor, texto] of opcoes) crmFiltroOperador.add(new Option(texto, valor));
   crmFiltroOperador.value = visaoOp;
   const atual = crmConversaOperador.value;
@@ -10005,7 +10005,7 @@ function preencherVisaoNumero() {
 
 function preencherVisaoOperador() {
   visaoOperadorSel.textContent = '';
-  const opcoes = [['', 'Todos os operadores'], ['eu', 'Meus leads'], ['meuslivres', 'Meus + sem operador'], ['livre', 'Sem operador'], ...minhaVisao.operadores.map((o) => [`op:${o.id}`, `Operador: ${o.nome}`])];
+  const opcoes = [['', 'Todos os operadores'], ...minhaVisao.operadores.map((o) => [`op:${o.id}`, o.id === minhaVisao.euId ? `${o.nome} (eu)` : o.nome])];
   for (const [v, t] of opcoes) visaoOperadorSel.add(new Option(t, v));
   visaoOperadorSel.value = visaoOp;
   visaoOperadorSel.hidden = minhaVisao.operadores.length < 2;
@@ -10015,11 +10015,18 @@ function preencherVisaoOperador() {
 function iniciarPerfilTopo(dados) {
   meuPerfil = dados.perfil || null;
   minhaVisao = { instancias: (dados.instancias || []).filter((i) => !String(i).startsWith('ig:')), operadores: dados.operadores || [], euId: dados.euId || 0, instanciaAtiva: dados.instanciaAtiva || null };
-  // 1o acesso com 2+ numeros: abre no numero ativo (cada setor ve so o seu); operador comeca vendo os leads dele + os sem dono
-  if (minhaVisao.instancias.length > 1 && numeroSalvo() === null) numeroSalvar(minhaVisao.instancias.includes(minhaVisao.instanciaAtiva) ? minhaVisao.instanciaAtiva : minhaVisao.instancias[0]);
+  // 1o acesso com 2+ numeros: abre no numero ativo (cada setor ve so o seu)
+  if (numeroSalvo() && !minhaVisao.instancias.includes(numeroSalvo())) numeroSalvar(''); // numero guardado de outra conta
+  if (minhaVisao.instancias.length > 1 && (numeroSalvo() === null || numeroSalvo() === '')) numeroSalvar(minhaVisao.instancias.includes(minhaVisao.instanciaAtiva) ? minhaVisao.instanciaAtiva : minhaVisao.instancias[0]);
+  // o navegador pode ter guardado a escolha de OUTRA conta: so vale operador que existe nesta conta
   let opSalvo = null;
   try { opSalvo = localStorage.getItem('crmOperador'); } catch { /* sem storage */ }
-  if (opSalvo === null && minhaVisao.euId > 0) { visaoOp = 'meuslivres'; try { localStorage.setItem('crmOperador', visaoOp); } catch { /* sem storage */ } }
+  const idsDaConta = new Set(minhaVisao.operadores.map((o) => `op:${o.id}`));
+  if (opSalvo === 'eu') opSalvo = `op:${minhaVisao.euId}`;
+  if (opSalvo !== null && opSalvo !== '' && !idsDaConta.has(opSalvo)) opSalvo = null;
+  // operador (colaborador) comeca vendo os proprios leads; dono/admin, todos
+  visaoOp = opSalvo !== null ? opSalvo : (minhaVisao.euId > 0 && idsDaConta.has(`op:${minhaVisao.euId}`) ? `op:${minhaVisao.euId}` : '');
+  try { localStorage.setItem('crmOperador', visaoOp); } catch { /* sem storage */ }
   renderizarPerfilTopo();
   preencherVisaoNumero();
   preencherVisaoOperador();

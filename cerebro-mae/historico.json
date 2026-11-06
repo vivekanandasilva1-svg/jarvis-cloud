@@ -836,5 +836,13 @@
     "tipo": "funcao",
     "titulo": "Perfil no topo (foto/nome/papel) e visão por número e operador",
     "conteudo": "Pedido do dono: mostrar no topo quem está logado, editar perfil (nome e foto) e, em contas com 2+ números e operadores, poder acompanhar outros números/operadores. Topo: chip com foto (ou iniciais), nome e papel (Administrador / Dono da conta / Operador), menu Editar perfil / Sair; modal de perfil com foto reduzida a 256px JPEG no navegador. Back: tenants.nome_perfil/foto_perfil e tenant_colaboradores.foto_perfil, GET /api/me devolve perfil/instancias/operadores/instanciaAtiva, PUT /api/perfil. Visão: seletores 'Número' e 'Operador' no topo, sincronizados com os de CRM, Conversas, Contatos e Disparos (operador vale p/ CRM e Conversas; Contatos/Disparos só por número). Operador (colaborador) abre por padrão em 'Meus + sem operador' e pode trocar pra acompanhar outros. Importante: é só VISÃO - o operador ainda consegue abrir qualquer lead (não há bloqueio de permissão por número/operador). Pendente: restringir de verdade se o dono quiser."
+  },
+  {
+    "chave": "app:visao-operador-por-conta",
+    "modulo": "app",
+    "data": "2026-11-06",
+    "tipo": "correcao",
+    "titulo": "Seletor de operador mostra só os operadores da própria conta",
+    "conteudo": "Pedido do dono: cada conta com seus próprios operadores. Dados já eram isolados por tenant (listarOperadores filtra tenant_id; conferido no banco: cada conta só lista os seus). O risco real era o navegador: a escolha de operador/número fica no localStorage e podia vir de OUTRA conta logada no mesmo navegador. Agora no login a escolha é validada contra os operadores/números da conta atual (senão reseta). Seletor simplificado: 'Todos os operadores' + cada operador da conta (o logado marcado '(eu)'); operador comum abre vendo os próprios leads. Leads sem operador só aparecem em 'Todos'."
   }
 ]
