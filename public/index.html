@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261106f" />
+  <link rel="stylesheet" href="style.css?v=20261106g" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -249,6 +249,26 @@
           </div>
         </div>
       </div>
+
+      <div class="ct-modal" id="perfilModal" hidden>
+        <div class="ct-caixa">
+          <div class="ct-caixa-topo">
+            <strong>Meu perfil</strong>
+            <button type="button" class="ct-fechar" data-fechar="perfilModal">✕</button>
+          </div>
+          <div class="perfil-edit-foto">
+            <span class="perfil-avatar perfil-avatar-grande" id="perfilFotoPrev"></span>
+            <div class="perfil-edit-botoes">
+              <label class="crm-btn-secundario perfil-arquivo">Escolher foto<input type="file" id="perfilFotoArq" accept="image/*" hidden /></label>
+              <button type="button" class="crm-btn-secundario" id="perfilFotoRemover">Remover foto</button>
+            </div>
+          </div>
+          <label class="ct-campo">Nome<input type="text" id="perfilNomeInput" maxlength="80" autocomplete="off" /></label>
+          <p class="crm-conversa-erro" id="perfilErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="button" id="perfilSalvar" class="relatorio-config-enviar">Salvar</button></div>
+        </div>
+      </div>
+
 
     <!-- Lumien: assistente flutuante (coruja) presente em todas as telas, menos no Inicio -->
     <button type="button" class="lumien-btn" id="lumienBtn" title="Falar com o Lumien" aria-label="Abrir o assistente Lumien" hidden>
@@ -771,25 +791,6 @@
             <button type="submit" id="ctSalvarBtn" class="relatorio-config-enviar">Salvar</button>
           </div>
         </form>
-      </div>
-
-      <div class="ct-modal" id="perfilModal" hidden>
-        <div class="ct-caixa">
-          <div class="ct-caixa-topo">
-            <strong>Meu perfil</strong>
-            <button type="button" class="ct-fechar" data-fechar="perfilModal">✕</button>
-          </div>
-          <div class="perfil-edit-foto">
-            <span class="perfil-avatar perfil-avatar-grande" id="perfilFotoPrev"></span>
-            <div class="perfil-edit-botoes">
-              <label class="crm-btn-secundario perfil-arquivo">Escolher foto<input type="file" id="perfilFotoArq" accept="image/*" hidden /></label>
-              <button type="button" class="crm-btn-secundario" id="perfilFotoRemover">Remover foto</button>
-            </div>
-          </div>
-          <label class="ct-campo">Nome<input type="text" id="perfilNomeInput" maxlength="80" autocomplete="off" /></label>
-          <p class="crm-conversa-erro" id="perfilErro" hidden></p>
-          <div class="ct-rodape"><span class="ct-espaco"></span><button type="button" id="perfilSalvar" class="relatorio-config-enviar">Salvar</button></div>
-        </div>
       </div>
 
       <div class="ct-modal" id="ctImpModal" hidden>
@@ -1562,6 +1563,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261106f"></script>
+  <script src="app.js?v=20261106g"></script>
 </body>
 </html>
