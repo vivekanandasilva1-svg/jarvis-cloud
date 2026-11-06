@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Lumia · Atendimento com IA, CRM e marketing para clínicas</title>
-  <meta name="description" content="A Lumia atende seus leads no WhatsApp e no Instagram 24h, agenda consultas, organiza tudo num CRM e mostra os resultados. Tudo em um só lugar." />
+  <meta name="description" content="A Lumia atende seus leads no WhatsApp e no Instagram 24h, agenda consultas, faz follow-up, dispara campanhas, distribui leads pra equipe e mostra qual anúncio vende. Tudo em um só lugar." />
   <meta property="og:title" content="Lumia · Atendimento com IA, CRM e marketing em um só lugar" />
-  <meta property="og:description" content="IA que atende no WhatsApp e no Instagram, agenda, faz follow-up e organiza seus leads num CRM." />
+  <meta property="og:description" content="IA que atende no WhatsApp e no Instagram, agenda, faz follow-up inteligente, dispara campanhas e mostra de qual anúncio veio cada lead." />
   <meta property="og:image" content="/login-logo.png" />
   <meta name="theme-color" content="#1c1d20" />
   <link rel="icon" href="/icon.svg" />
@@ -26,6 +26,7 @@
       --texto: #ecebe7;
       --dim: #a9abb0;
       --verde: #30a46c;
+      --verde-claro: #5fd19b;
       --vermelho: #e5484d;
       --raio: 16px;
       --max: 1160px;
@@ -42,19 +43,23 @@
     }
     img { max-width: 100%; display: block; }
     a { color: inherit; text-decoration: none; }
+    button { font: inherit; color: inherit; }
     .wrap { max-width: var(--max); margin: 0 auto; padding: 0 16px; }
     @media (min-width: 720px) { .wrap { padding: 0 28px; } }
 
     .ouro-txt {
       background: linear-gradient(100deg, var(--ouro-claro) 0%, var(--ouro) 45%, #fff2c4 70%, var(--ouro) 100%);
+      background-size: 200% 100%;
       -webkit-background-clip: text; background-clip: text; color: transparent;
+      animation: brilhoTxt 7s ease-in-out infinite;
     }
+    @keyframes brilhoTxt { 0%, 100% { background-position: 0% 0; } 50% { background-position: 100% 0; } }
 
     /* ---------- botoes ---------- */
     .btn {
       display: inline-flex; align-items: center; justify-content: center; gap: 8px;
       padding: 14px 26px; border-radius: 999px; font-weight: 700; font-size: 16px;
-      border: 1px solid transparent; cursor: pointer; transition: transform .15s, box-shadow .2s, background .2s;
+      border: 1px solid transparent; cursor: pointer; transition: transform .15s, box-shadow .2s, background .2s, border-color .2s, color .2s;
       white-space: nowrap;
     }
     .btn-ouro {
@@ -77,22 +82,31 @@
     .topo .wrap { display: flex; align-items: center; gap: 24px; height: 68px; }
     .marca { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .14em; font-size: 18px; }
     .marca img { width: 32px; height: 32px; }
-    .topo nav { display: none; gap: 26px; margin-left: 12px; font-size: 15px; color: var(--dim); }
+    .topo nav { display: none; gap: 24px; margin-left: 12px; font-size: 15px; color: var(--dim); }
     .topo nav a:hover { color: var(--ouro-claro); }
+    .topo nav a.novo::after { content: "novo"; margin-left: 6px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: #241c05; background: var(--ouro-claro); padding: 1px 6px; border-radius: 999px; vertical-align: 2px; }
     .topo .acoes { margin-left: auto; display: flex; gap: 10px; align-items: center; }
     .topo .entrar { display: none; }
-    @media (min-width: 900px) { .topo nav { display: flex; } .topo .entrar { display: inline-flex; } }
+    @media (min-width: 980px) { .topo nav { display: flex; } .topo .entrar { display: inline-flex; } }
+    .progresso { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; background: linear-gradient(90deg, var(--ouro), var(--ouro-claro)); box-shadow: 0 0 10px rgba(212,175,55,.6); }
 
     /* ---------- hero ---------- */
-    .hero { position: relative; padding: 72px 0 56px; text-align: center; overflow: hidden; }
+    .hero { position: relative; padding: 64px 0 56px; text-align: center; overflow: hidden; }
     .hero::before {
       content: ""; position: absolute; inset: -20% -10% auto; height: 760px; pointer-events: none;
       background:
         radial-gradient(600px 380px at 50% 18%, rgba(212,175,55,.20), transparent 70%),
         radial-gradient(500px 300px at 85% 60%, rgba(201,204,209,.07), transparent 70%);
     }
+    .grade-fundo {
+      position: absolute; inset: 0; pointer-events: none; opacity: .35;
+      background-image: linear-gradient(rgba(212,175,55,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(212,175,55,.07) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse 70% 55% at 50% 30%, #000 30%, transparent 75%);
+      -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 30%, #000 30%, transparent 75%);
+    }
     .hero .logo-giro {
-      width: 76px; height: 76px; margin: 0 auto 26px; position: relative;
+      width: 72px; height: 72px; margin: 0 auto 24px; position: relative;
       animation: girar 26s linear infinite;
       filter: drop-shadow(0 0 22px rgba(212,175,55,.35));
     }
@@ -102,18 +116,26 @@
       border: 1px solid var(--borda-ouro); background: rgba(212,175,55,.08);
       color: var(--ouro-claro); font-size: 13px; font-weight: 600; letter-spacing: .02em;
     }
-    .selo .ponto { width: 7px; height: 7px; border-radius: 50%; background: var(--verde); box-shadow: 0 0 0 4px rgba(48,164,108,.18); }
+    .selo .ponto { width: 7px; height: 7px; border-radius: 50%; background: var(--verde); box-shadow: 0 0 0 4px rgba(48,164,108,.18); animation: pulsar 2s ease-in-out infinite; }
+    @keyframes pulsar { 50% { box-shadow: 0 0 0 7px rgba(48,164,108,.05); } }
     .hero h1 {
       position: relative; margin: 20px auto 18px; max-width: 900px;
       font-size: clamp(36px, 6.4vw, 68px); line-height: 1.05; letter-spacing: -0.02em; font-weight: 800;
     }
-    .hero p.sub { position: relative; max-width: 680px; margin: 0 auto 32px; color: var(--dim); font-size: clamp(17px, 2vw, 20px); }
+    .hero h1 .rodizio { display: inline-block; min-width: 1ch; }
+    .hero h1 .rodizio span { display: inline-block; transition: opacity .35s, transform .35s; }
+    .hero h1 .rodizio span.sai { opacity: 0; transform: translateY(-14px); }
+    .hero p.sub { position: relative; max-width: 700px; margin: 0 auto 32px; color: var(--dim); font-size: clamp(17px, 2vw, 20px); }
     .hero .ctas { position: relative; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
     .hero .nota { position: relative; margin-top: 14px; color: var(--dim); font-size: 14px; }
+    .novidades-faixa { position: relative; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 0 auto 6px; max-width: 820px; }
+    .novidades-faixa a { font-size: 13px; padding: 5px 12px; border-radius: 999px; background: var(--fundo-2); border: 1px solid var(--borda); color: #dcdad3; transition: border-color .2s, color .2s; }
+    .novidades-faixa a:hover { border-color: var(--ouro); color: var(--ouro-claro); }
+    .novidades-faixa b { color: var(--ouro-claro); font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; align-self: center; margin-right: 4px; }
 
     /* mockup do app no hero */
     .mock {
-      position: relative; margin: 56px auto 0; max-width: 1020px; text-align: left;
+      position: relative; margin: 52px auto 0; max-width: 1060px; text-align: left;
       border-radius: 18px; border: 1px solid var(--borda); background: var(--lateral);
       box-shadow: 0 40px 100px rgba(0,0,0,.55), 0 0 0 1px rgba(212,175,55,.08);
       overflow: hidden;
@@ -121,31 +143,48 @@
     .mock-barra { display: flex; gap: 7px; align-items: center; padding: 12px 16px; background: #1f2023; border-bottom: 1px solid var(--borda); }
     .mock-barra i { width: 11px; height: 11px; border-radius: 50%; background: #45474d; }
     .mock-barra span { margin-left: 12px; font-size: 12px; color: var(--dim); }
+    .mock-barra .numero { margin-left: auto; font-size: 11.5px; padding: 3px 10px; border-radius: 999px; background: rgba(212,175,55,.12); color: var(--ouro-claro); border: 1px solid var(--borda-ouro); }
     .mock-corpo { display: grid; grid-template-columns: 1fr; min-height: 340px; }
-    @media (min-width: 820px) { .mock-corpo { grid-template-columns: 190px 1fr 300px; } }
-    .mock-menu { display: none; background: #202124; border-right: 1px solid var(--borda); padding: 16px 12px; font-size: 13px; }
-    @media (min-width: 820px) { .mock-menu { display: block; } }
-    .mock-menu b { display: block; color: var(--dim); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; margin: 12px 8px 6px; font-weight: 600; }
-    .mock-menu div { padding: 7px 10px; border-radius: 8px; color: #d6d4cd; }
+    @media (min-width: 860px) { .mock-corpo { grid-template-columns: 170px 1fr; } }
+    @media (min-width: 1140px) { .mock-corpo { grid-template-columns: 180px 1fr 280px; } }
+    .mock-menu { display: none; background: #202124; border-right: 1px solid var(--borda); padding: 14px 10px; font-size: 12.5px; }
+    @media (min-width: 860px) { .mock-menu { display: block; } }
+    .mock-menu b { display: block; color: var(--dim); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; margin: 10px 8px 5px; font-weight: 600; }
+    .mock-menu div { padding: 6px 10px; border-radius: 8px; color: #d6d4cd; }
     .mock-menu div.ativo { background: rgba(212,175,55,.14); color: var(--ouro-claro); box-shadow: inset 2px 0 0 var(--ouro); }
-    .kanban { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 10px; padding: 16px; overflow-x: auto; }
-    .col h5 { margin: 0 0 8px; font-size: 12px; color: var(--dim); font-weight: 600; display: flex; justify-content: space-between; }
+    .mock-menu div em { font-style: normal; font-size: 9.5px; font-weight: 800; color: #241c05; background: var(--ouro-claro); border-radius: 999px; padding: 0 5px; margin-left: 4px; }
+    .kanban { display: grid; grid-template-columns: repeat(4, minmax(132px, 1fr)); gap: 10px; padding: 16px; overflow-x: auto; align-content: start; }
+    .col { min-height: 220px; border-radius: 10px; padding: 4px; transition: background .3s; }
+    .col.recebe { background: rgba(212,175,55,.06); }
+    .col h5 { margin: 0 0 8px; padding: 0 4px; font-size: 12px; color: var(--dim); font-weight: 600; display: flex; justify-content: space-between; }
     .col h5 em { font-style: normal; color: var(--ouro-claro); }
+    .col.comprou h5 { color: var(--verde-claro); }
     .cartao { background: var(--card-2); border: 1px solid var(--borda); border-radius: 10px; padding: 9px 10px; margin-bottom: 8px; font-size: 12.5px; }
     .cartao strong { display: block; font-size: 13px; }
-    .cartao small { color: var(--dim); }
+    .cartao small { color: var(--dim); display: block; line-height: 1.35; }
+    .cartao .op { float: right; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 800; background: #4a4d54; color: var(--prata); }
+    .cartao.vivo { border-color: var(--ouro); box-shadow: 0 0 0 3px rgba(212,175,55,.16), 0 10px 24px rgba(0,0,0,.35); animation: entraCard .5s ease; }
+    @keyframes entraCard { from { transform: translateY(-10px) scale(.96); opacity: .3; } }
     .tag { display: inline-block; font-size: 10.5px; padding: 1px 7px; border-radius: 999px; margin-top: 5px; font-weight: 600; }
     .tag.ia { background: rgba(212,175,55,.16); color: var(--ouro-claro); }
-    .tag.ok { background: rgba(48,164,108,.16); color: #5fd19b; }
+    .tag.ok { background: rgba(48,164,108,.16); color: var(--verde-claro); }
     .tag.ig { background: rgba(201,204,209,.12); color: var(--prata); }
+    .tag.ads { background: rgba(90,140,255,.14); color: #9db8ff; }
     .mock-chat { display: none; border-left: 1px solid var(--borda); background: #222326; padding: 14px; flex-direction: column; gap: 8px; }
-    @media (min-width: 820px) { .mock-chat { display: flex; } }
-    .mock-chat .quem { font-size: 13px; font-weight: 700; padding-bottom: 8px; border-bottom: 1px solid var(--borda); margin-bottom: 4px; }
+    @media (min-width: 1140px) { .mock-chat { display: flex; } }
+    .mock-chat .quem { font-size: 13px; font-weight: 700; padding-bottom: 8px; border-bottom: 1px solid var(--borda); margin-bottom: 4px; display: flex; justify-content: space-between; align-items: baseline; }
     .mock-chat .quem small { display: block; font-weight: 400; color: var(--verde); font-size: 11.5px; }
+    .mock-chat .quem .etapa { font-size: 10.5px; font-weight: 600; color: var(--ouro-claro); background: rgba(212,175,55,.12); padding: 2px 8px; border-radius: 999px; }
     .bolha { max-width: 88%; padding: 7px 10px; border-radius: 10px; font-size: 12.5px; line-height: 1.45; }
     .bolha.lead { background: #34363c; align-self: flex-start; border-top-left-radius: 3px; }
     .bolha.lumia { background: rgba(212,175,55,.18); align-self: flex-end; border-top-right-radius: 3px; }
-    .bolha.sistema { align-self: center; background: rgba(48,164,108,.14); color: #5fd19b; font-size: 11.5px; border-radius: 999px; padding: 4px 12px; }
+    .bolha.sistema { align-self: center; background: rgba(48,164,108,.14); color: var(--verde-claro); font-size: 11.5px; border-radius: 999px; padding: 4px 12px; }
+    .mock-chat .bolha { transition: opacity .35s, transform .35s; }
+    .mock-chat .bolha.esc { opacity: 0; transform: translateY(6px); }
+    .digitando { align-self: flex-end; display: inline-flex; gap: 4px; padding: 9px 12px; background: rgba(212,175,55,.12); border-radius: 10px; }
+    .digitando i { width: 6px; height: 6px; border-radius: 50%; background: var(--ouro-claro); animation: pula 1s infinite; }
+    .digitando i:nth-child(2) { animation-delay: .15s; } .digitando i:nth-child(3) { animation-delay: .3s; }
+    @keyframes pula { 0%, 60%, 100% { transform: none; opacity: .5; } 30% { transform: translateY(-4px); opacity: 1; } }
 
     /* ---------- faixa de integracoes ---------- */
     .faixa { padding: 40px 0 16px; text-align: center; }
@@ -160,8 +199,8 @@
     /* ---------- secoes ---------- */
     section.bloco { padding: 88px 0; }
     section.bloco.alt { background: linear-gradient(180deg, var(--fundo-2), var(--fundo)); border-top: 1px solid rgba(255,255,255,.04); }
-    .cab { text-align: center; max-width: 760px; margin: 0 auto 48px; }
-    .cab .sobre { color: var(--ouro); font-weight: 700; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; }
+    .cab { text-align: center; max-width: 780px; margin: 0 auto 48px; }
+    .sobre { color: var(--ouro); font-weight: 700; font-size: 13px; letter-spacing: .16em; text-transform: uppercase; }
     .cab h2 { font-size: clamp(28px, 4.2vw, 44px); line-height: 1.12; margin: 12px 0 14px; letter-spacing: -0.015em; }
     .cab p { color: var(--dim); font-size: 18px; margin: 0; }
 
@@ -172,6 +211,81 @@
     .prova b { display: block; font-size: clamp(26px, 3.4vw, 36px); line-height: 1.1; margin-bottom: 6px; }
     .prova span { color: var(--dim); font-size: 14px; }
 
+    /* ---------- jornada do lead (interativa) ---------- */
+    .jornada { display: grid; gap: 22px; grid-template-columns: 1fr; }
+    @media (min-width: 940px) { .jornada { grid-template-columns: 360px 1fr; gap: 28px; } }
+    .passos-j { display: grid; gap: 8px; position: relative; }
+    .passo-j {
+      text-align: left; cursor: pointer; background: var(--card); border: 1px solid var(--borda); border-radius: 14px;
+      padding: 14px 16px 14px 60px; position: relative; transition: border-color .25s, background .25s, transform .2s; overflow: hidden;
+    }
+    .passo-j:hover { transform: translateX(3px); }
+    @media (max-width: 939px) {
+      .passos-j { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; scrollbar-width: none; }
+      .passos-j::-webkit-scrollbar { display: none; }
+      .passo-j { flex: 0 0 auto; scroll-snap-align: start; padding: 10px 16px 10px 10px; display: flex; align-items: center; gap: 10px; }
+      .passo-j:hover { transform: none; }
+      .passos-j .passo-j .n { position: static; flex: none; }
+      .passos-j .passo-j p { display: none; }
+      .palco { padding: 20px; min-height: 0; }
+      .cena { inset: 20px; }
+    }
+    .passo-j .n {
+      position: absolute; left: 14px; top: 14px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+      font-weight: 800; font-size: 14px; background: #3a3c42; color: var(--dim); transition: background .25s, color .25s;
+    }
+    .passo-j h4 { margin: 0; font-size: 16px; }
+    .passo-j p { margin: 2px 0 0; color: var(--dim); font-size: 13.5px; }
+    .passo-j .barra { position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--ouro); }
+    .passo-j.ativo { border-color: var(--borda-ouro); background: linear-gradient(120deg, rgba(212,175,55,.12), var(--card) 70%); }
+    .passo-j.ativo .n { background: linear-gradient(180deg, var(--ouro-claro), var(--ouro)); color: #241c05; }
+    .passo-j.ativo .barra { animation: enche var(--dur, 6s) linear forwards; }
+    .passo-j.parado .barra { animation: none; width: 100%; }
+    @keyframes enche { to { width: 100%; } }
+    .palco {
+      position: relative; background: var(--lateral); border: 1px solid var(--borda); border-radius: 20px; min-height: 420px;
+      padding: 28px; overflow: hidden; box-shadow: 0 30px 70px rgba(0,0,0,.35);
+    }
+    .palco::before { content: ""; position: absolute; inset: 0; background: radial-gradient(420px 260px at 80% 0%, rgba(212,175,55,.12), transparent 70%); pointer-events: none; }
+    .cena { position: absolute; inset: 28px; opacity: 0; transform: translateY(14px); transition: opacity .45s, transform .45s; pointer-events: none; display: flex; flex-direction: column; }
+    .cena.on { opacity: 1; transform: none; pointer-events: auto; position: relative; inset: auto; }
+    .cena .rot { font-size: 12px; color: var(--ouro); letter-spacing: .14em; text-transform: uppercase; font-weight: 700; }
+    .cena h3 { margin: 6px 0 8px; font-size: clamp(22px, 2.6vw, 28px); line-height: 1.2; }
+    .cena > p { margin: 0 0 22px; color: var(--dim); max-width: 560px; }
+    .visual { flex: 1; display: grid; place-items: center; }
+    .anuncio { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; justify-content: center; }
+    .ad-card { width: 190px; border-radius: 14px; overflow: hidden; background: #fff; color: #1c1d20; box-shadow: 0 18px 40px rgba(0,0,0,.4); font-size: 12px; }
+    .ad-card .img { height: 96px; background: linear-gradient(135deg, #d4af37, #8a6108); display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 20px; }
+    .ad-card .txt { padding: 10px; }
+    .ad-card .cta { margin: 0 10px 10px; padding: 7px; text-align: center; border-radius: 8px; background: #25d366; color: #fff; font-weight: 700; }
+    .seta { font-size: 26px; color: var(--ouro); animation: seta 1.4s ease-in-out infinite; }
+    @keyframes seta { 50% { transform: translateX(6px); } }
+    .card-grande { width: 230px; background: var(--card-2); border: 1px solid var(--ouro); border-radius: 14px; padding: 14px; box-shadow: 0 0 0 4px rgba(212,175,55,.12); }
+    .card-grande strong { display: block; }
+    .card-grande small { color: var(--dim); }
+    .operadores { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+    .operador { width: 120px; text-align: center; background: var(--card); border: 1px solid var(--borda); border-radius: 14px; padding: 14px 10px; transition: border-color .3s, transform .3s, box-shadow .3s; }
+    .operador .av { width: 44px; height: 44px; margin: 0 auto 8px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: #44474e; color: var(--prata); }
+    .operador b { display: block; font-size: 14px; }
+    .operador span { font-size: 12px; color: var(--dim); }
+    .operador.pega { border-color: var(--ouro); transform: translateY(-6px); box-shadow: 0 0 0 4px rgba(212,175,55,.14); }
+    .operador.pega .av { background: linear-gradient(180deg, var(--ouro-claro), var(--ouro)); color: #241c05; }
+    .linha-tempo { width: 100%; max-width: 560px; }
+    .lt-trilho { position: relative; height: 4px; background: #3a3c42; border-radius: 4px; margin: 46px 10px 18px; }
+    .lt-trilho .ench { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, var(--ouro), var(--ouro-claro)); border-radius: 4px; transition: width .6s; }
+    .lt-ponto { position: absolute; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: #3a3c42; border: 2px solid var(--fundo); transition: background .3s, transform .3s; }
+    .lt-ponto.feito { background: var(--ouro); transform: scale(1.15); }
+    .lt-ponto.cancel { background: #55585f; }
+    .lt-ponto span { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); font-size: 11.5px; white-space: nowrap; color: var(--dim); font-weight: 600; }
+    .lt-ponto.feito span { color: var(--ouro-claro); }
+    .lt-msg { background: var(--card); border: 1px solid var(--borda); border-radius: 12px; padding: 12px 14px; font-size: 14px; color: #dcdad3; min-height: 48px; transition: opacity .3s; }
+    .barras-mini { width: 100%; max-width: 520px; display: grid; gap: 12px; }
+    .bm { display: grid; grid-template-columns: 130px 1fr 44px; gap: 10px; align-items: center; font-size: 13.5px; }
+    .bm .trilho { height: 12px; background: #3a3c42; border-radius: 999px; overflow: hidden; }
+    .bm .trilho i { display: block; height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, var(--ouro-escuro), var(--ouro-claro)); transition: width 1s cubic-bezier(.2,.8,.2,1); }
+    .bm b { text-align: right; }
+    .exemplo { font-size: 11.5px; color: var(--dim); text-align: center; margin-top: 14px; }
+
     /* grade de modulos */
     .grade { display: grid; grid-template-columns: 1fr; gap: 16px; }
     @media (min-width: 640px) { .grade { grid-template-columns: repeat(2, 1fr); } }
@@ -181,18 +295,19 @@
       padding: 24px; transition: transform .2s, border-color .2s, box-shadow .2s;
     }
     .mod:hover { transform: translateY(-4px); border-color: var(--borda-ouro); box-shadow: 0 18px 40px rgba(0,0,0,.35); }
-    .mod .ico {
+    .ico {
       width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 16px;
       background: rgba(212,175,55,.12); color: var(--ouro-claro); border: 1px solid var(--borda-ouro);
     }
-    .mod .ico svg { width: 23px; height: 23px; }
+    .ico svg { width: 23px; height: 23px; }
     .mod h3 { margin: 0 0 8px; font-size: 19px; }
     .mod p { margin: 0; color: var(--dim); font-size: 15px; }
-    .mod .rotulo {
+    .rotulo {
       position: absolute; top: 20px; right: 20px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
       padding: 3px 9px; border-radius: 999px; background: rgba(212,175,55,.14); color: var(--ouro-claro);
     }
-    .mod .rotulo.prata { background: rgba(201,204,209,.1); color: var(--prata); }
+    .rotulo.prata { background: rgba(201,204,209,.1); color: var(--prata); }
+    .rotulo.novo { background: linear-gradient(180deg, var(--ouro-claro), var(--ouro)); color: #241c05; }
     .mod.destaque { grid-column: 1 / -1; display: grid; gap: 24px; align-items: center; background: linear-gradient(135deg, rgba(212,175,55,.10), var(--card) 55%); border-color: var(--borda-ouro); }
     @media (min-width: 900px) { .mod.destaque { grid-template-columns: 1.1fr 1fr; padding: 36px; } }
     .mod.destaque h3 { font-size: 26px; }
@@ -209,6 +324,119 @@
     .demo .bolha.on { opacity: 1; transform: none; }
     .demo .aviso { margin-top: auto; font-size: 11.5px; color: var(--dim); text-align: center; }
 
+    /* ---------- funil (colunas do CRM) ---------- */
+    .funil { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 14px; scroll-snap-type: x mandatory; }
+    .etapa {
+      flex: 1 0 128px; scroll-snap-align: start; background: var(--card); border: 1px solid var(--borda); border-radius: 12px; padding: 12px;
+      position: relative; cursor: default; transition: border-color .2s, transform .2s;
+    }
+    .etapa:hover { transform: translateY(-3px); border-color: var(--borda-ouro); }
+    .etapa b { display: block; font-size: 13.5px; }
+    .etapa small { display: block; color: var(--dim); font-size: 12px; line-height: 1.4; margin-top: 4px; }
+    .etapa.nova { border-color: var(--borda-ouro); background: linear-gradient(170deg, rgba(212,175,55,.12), var(--card) 60%); }
+    .etapa.nova::after { content: "nova"; position: absolute; top: -8px; right: 10px; font-size: 10px; font-weight: 800; text-transform: uppercase; color: #241c05; background: var(--ouro-claro); padding: 1px 7px; border-radius: 999px; }
+    .etapa .bolinha { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; background: var(--ouro); }
+
+    /* ---------- novidades (abas interativas) ---------- */
+    .abas { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 22px; scrollbar-width: thin; }
+    @media (min-width: 980px) { .abas { justify-content: center; flex-wrap: wrap; overflow: visible; } }
+    .aba {
+      flex: none; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+      padding: 10px 16px; border-radius: 999px; border: 1px solid var(--borda); background: var(--card);
+      font-weight: 600; font-size: 14.5px; color: #dcdad3; transition: all .2s;
+    }
+    .aba svg { width: 16px; height: 16px; color: var(--ouro); }
+    .aba:hover { border-color: var(--borda-ouro); }
+    .aba[aria-selected="true"] { background: linear-gradient(180deg, var(--ouro-claro), var(--ouro)); color: #241c05; border-color: transparent; box-shadow: 0 8px 22px rgba(212,175,55,.25); }
+    .aba[aria-selected="true"] svg { color: #241c05; }
+    .painel { display: none; }
+    .painel.on { display: grid; gap: 26px; animation: surge .45s ease; }
+    @keyframes surge { from { opacity: 0; transform: translateY(10px); } }
+    @media (min-width: 940px) { .painel.on { grid-template-columns: 1fr 1.15fr; align-items: start; } }
+    .painel .exp h3 { font-size: clamp(24px, 3vw, 32px); line-height: 1.15; margin: 10px 0 10px; }
+    .painel .exp > p { color: var(--dim); margin: 0 0 6px; font-size: 16.5px; }
+    .caixa { background: var(--lateral); border: 1px solid var(--borda); border-radius: 18px; padding: 20px; box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+    .caixa h5 { margin: 0 0 12px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); font-weight: 700; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .campo-txt { width: 100%; min-height: 86px; resize: vertical; background: var(--campo, #2a2c31); color: var(--texto); border: 1px solid var(--borda); border-radius: 12px; padding: 12px; font: 14.5px/1.5 inherit; font-family: inherit; }
+    .campo-txt:focus { outline: none; border-color: var(--ouro); box-shadow: 0 0 0 3px rgba(212,175,55,.15); }
+    .dica { font-size: 12.5px; color: var(--dim); margin: 8px 0 14px; }
+    .dica code { background: rgba(212,175,55,.12); color: var(--ouro-claro); padding: 1px 6px; border-radius: 6px; font-size: 12px; }
+    .previas { display: grid; gap: 8px; }
+    .previa { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: start; }
+    .previa .av { width: 34px; height: 34px; border-radius: 50%; background: #3d3f45; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--prata); }
+    .previa .bolha { max-width: 100%; background: rgba(212,175,55,.16); border-top-left-radius: 3px; font-size: 13.5px; }
+    .previa .bolha small { display: block; color: var(--dim); font-size: 11px; margin-top: 3px; }
+    .mini-btn { cursor: pointer; font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--borda-ouro); background: rgba(212,175,55,.1); color: var(--ouro-claro); text-transform: none; letter-spacing: 0; }
+    .mini-btn:hover { background: rgba(212,175,55,.2); }
+    .travas { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .trava { font-size: 12.5px; padding: 6px 11px; border-radius: 999px; background: var(--card); border: 1px solid var(--borda); color: #dcdad3; display: inline-flex; gap: 6px; align-items: center; }
+    .trava::before { content: "🛡"; font-size: 12px; }
+    .kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 16px; }
+    @media (min-width: 560px) { .kpis { grid-template-columns: repeat(4, 1fr); } }
+    .kpi { background: var(--card); border: 1px solid var(--borda); border-radius: 12px; padding: 12px; }
+    .kpi b { display: block; font-size: 22px; line-height: 1.1; }
+    .kpi span { font-size: 12px; color: var(--dim); }
+    .controles { display: grid; gap: 14px; grid-template-columns: 1fr; margin-bottom: 8px; }
+    @media (min-width: 560px) { .controles { grid-template-columns: 1fr 1fr; } }
+    .controle label { display: flex; justify-content: space-between; font-size: 13.5px; color: #dcdad3; margin-bottom: 6px; }
+    .controle label b { color: var(--ouro-claro); }
+    input[type=range] { width: 100%; accent-color: var(--ouro); }
+    .etapas-sel { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
+    .etapa-chip { cursor: pointer; font-size: 12.5px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--borda); background: var(--card); color: var(--dim); transition: all .2s; }
+    .etapa-chip.on { border-color: var(--ouro); color: var(--ouro-claro); background: rgba(212,175,55,.12); }
+    .alternar { display: inline-flex; gap: 10px; align-items: center; cursor: pointer; font-size: 13.5px; color: #dcdad3; user-select: none; }
+    .alternar input { display: none; }
+    .alternar .tr { width: 38px; height: 22px; border-radius: 999px; background: #4a4d54; position: relative; transition: background .2s; }
+    .alternar .tr::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .2s; }
+    .alternar input:checked + .tr { background: var(--ouro); }
+    .alternar input:checked + .tr::after { transform: translateX(16px); }
+    .fu-lista { display: grid; gap: 6px; margin-top: 10px; max-height: 210px; overflow: auto; }
+    .fu-item { display: grid; grid-template-columns: 62px 1fr; gap: 10px; align-items: center; font-size: 13px; padding: 8px 10px; border-radius: 10px; background: var(--card); border: 1px solid var(--borda); transition: opacity .3s; }
+    .fu-item b { color: var(--ouro-claro); font-size: 12.5px; }
+    .fu-item.parou { opacity: .38; text-decoration: line-through; }
+    .fu-item.resp { border-color: rgba(48,164,108,.5); background: rgba(48,164,108,.08); }
+    .fu-item.resp b { color: var(--verde-claro); }
+    .rodizio-ops { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .rodizio-ops .operador { width: auto; }
+    .rodizio-ops .operador .cont { font-size: 22px; font-weight: 800; color: var(--texto); display: block; margin-top: 4px; }
+    .fila-leads { height: 54px; position: relative; margin: 6px 0 14px; border: 1px dashed var(--borda); border-radius: 12px; overflow: hidden; }
+    .lead-voa { position: absolute; top: 9px; left: 50%; transform: translateX(-50%); padding: 7px 12px; border-radius: 10px; background: var(--card-2); border: 1px solid var(--ouro); font-size: 12.5px; white-space: nowrap; transition: transform .7s cubic-bezier(.5,0,.3,1), opacity .7s; }
+    .tabela { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    .tabela th { text-align: left; font-weight: 600; color: var(--dim); font-size: 12px; padding: 0 6px 8px; }
+    .tabela td { padding: 9px 6px; border-top: 1px solid var(--borda); vertical-align: middle; }
+    .tabela td.n { text-align: right; font-variant-numeric: tabular-nums; width: 56px; }
+    .tabela .mb { height: 6px; border-radius: 999px; background: #3a3c42; margin-top: 5px; overflow: hidden; }
+    .tabela .mb i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--ouro-escuro), var(--ouro-claro)); transition: width 1s; }
+    .grafico-horas { display: flex; align-items: flex-end; gap: 5px; height: 150px; padding-top: 10px; }
+    .grafico-horas .h { flex: 1; display: flex; flex-direction: column-reverse; gap: 2px; height: 100%; position: relative; cursor: default; }
+    .grafico-horas .h i { display: block; border-radius: 4px 4px 0 0; background: var(--ouro); height: 0; transition: height .9s cubic-bezier(.2,.8,.2,1); }
+    .grafico-horas .h i.p { background: var(--vermelho); border-radius: 4px 4px 0 0; }
+    .grafico-horas .h i.a { border-radius: 0; }
+    .grafico-horas .h span { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 10.5px; color: var(--dim); }
+    .legenda { display: flex; gap: 14px; font-size: 12px; color: var(--dim); margin-top: 28px; flex-wrap: wrap; }
+    .legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+    .setores-sel { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+    .setor-btn { cursor: pointer; padding: 8px 14px; border-radius: 10px; border: 1px solid var(--borda); background: var(--card); font-size: 13px; font-weight: 600; text-align: left; line-height: 1.3; transition: all .2s; }
+    .setor-btn small { display: block; font-weight: 400; color: var(--dim); font-size: 11.5px; }
+    .setor-btn.on { border-color: var(--ouro); background: rgba(212,175,55,.12); color: var(--ouro-claro); }
+    .setor-lista { display: grid; gap: 8px; }
+    .setor-lista .cartao { margin: 0; display: flex; justify-content: space-between; align-items: center; gap: 10px; animation: surge .35s ease both; }
+    .setor-lista .cartao .tag { margin: 0; }
+    .ligado { display: grid; gap: 10px; margin-top: 6px; }
+    .ligado .passo-cc { display: grid; grid-template-columns: 40px 1fr; gap: 12px; align-items: center; background: var(--card); border: 1px solid var(--borda); border-radius: 12px; padding: 12px; opacity: .35; transition: opacity .4s, border-color .4s; }
+    .ligado .passo-cc.on { opacity: 1; border-color: var(--borda-ouro); }
+    .ligado .passo-cc .ico { margin: 0; width: 40px; height: 40px; }
+    .ligado .passo-cc b { display: block; font-size: 14px; }
+    .ligado .passo-cc small { color: var(--dim); font-size: 12.5px; }
+
+    /* ---------- cerebro ---------- */
+    .cerebro-bloco { display: grid; gap: 28px; align-items: center; grid-template-columns: 1fr; }
+    @media (min-width: 940px) { .cerebro-bloco { grid-template-columns: 1fr 1.2fr; } }
+    .cerebro-tela { position: relative; height: 380px; border-radius: 22px; overflow: hidden; border: 1px solid var(--borda); background: radial-gradient(circle at 50% 50%, #26231a 0%, #141416 70%); }
+    .cerebro-tela canvas { width: 100%; height: 100%; display: block; }
+    .cerebro-leg { position: absolute; left: 14px; bottom: 12px; display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #dcdad3; }
+    .cerebro-leg i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+
     /* comparacao */
     .comparar { display: grid; gap: 16px; grid-template-columns: 1fr; }
     @media (min-width: 820px) { .comparar { grid-template-columns: 1fr 1fr; } }
@@ -220,7 +448,7 @@
     .lado.sem { opacity: .92; }
     .lado.sem li b { background: rgba(229,72,77,.14); color: #ff7b80; }
     .lado.com { border-color: var(--borda-ouro); background: linear-gradient(160deg, rgba(212,175,55,.12), var(--card) 60%); box-shadow: 0 24px 60px rgba(0,0,0,.3); }
-    .lado.com li b { background: rgba(48,164,108,.16); color: #5fd19b; }
+    .lado.com li b { background: rgba(48,164,108,.16); color: var(--verde-claro); }
 
     /* passos */
     .passos { display: grid; gap: 16px; grid-template-columns: 1fr; counter-reset: passo; }
@@ -260,7 +488,6 @@
     .plano h3 { margin: 0; font-size: 24px; }
     .plano .para { color: var(--dim); margin: 6px 0 20px; font-size: 15px; }
     .plano .preco { font-size: 30px; font-weight: 800; margin-bottom: 4px; }
-    .plano .preco small { font-size: 15px; font-weight: 500; color: var(--dim); }
     .plano .lista { margin: 18px 0 28px; flex: 1; }
     .plano .btn { width: 100%; }
     .obs-planos { text-align: center; color: var(--dim); font-size: 14.5px; margin: 26px auto 0; max-width: 680px; }
@@ -285,7 +512,7 @@
     .final::before { content: ""; position: absolute; inset: 0; background: radial-gradient(700px 360px at 50% 100%, rgba(212,175,55,.18), transparent 70%); pointer-events: none; }
     .final h2 { position: relative; font-size: clamp(30px, 5vw, 52px); line-height: 1.1; margin: 0 auto 16px; max-width: 820px; }
     .final p { position: relative; color: var(--dim); font-size: 18px; margin: 0 auto 30px; max-width: 600px; }
-    footer { border-top: 1px solid rgba(255,255,255,.06); padding: 36px 0; color: var(--dim); font-size: 14px; }
+    footer { border-top: 1px solid rgba(255,255,255,.06); padding: 36px 0 90px; color: var(--dim); font-size: 14px; }
     footer .wrap { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; justify-content: space-between; }
     footer nav { display: flex; gap: 22px; flex-wrap: wrap; }
     footer a:hover { color: var(--ouro-claro); }
@@ -304,8 +531,9 @@
     .rev.on { opacity: 1; transform: none; }
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
-      .rev, .demo .bolha { opacity: 1; transform: none; transition: none; }
-      .hero .logo-giro { animation: none; }
+      .rev, .demo .bolha, .mock-chat .bolha { opacity: 1; transform: none; transition: none; }
+      .hero .logo-giro, .ouro-txt, .seta, .selo .ponto { animation: none; }
+      .passo-j.ativo .barra { animation: none; width: 100%; }
     }
   </style>
 </head>
@@ -329,6 +557,11 @@
     <symbol id="i-owl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l3 3h8l3-3v9a7 7 0 0 1-14 0z"/><circle cx="9" cy="11" r="2"/><circle cx="15" cy="11" r="2"/><path d="M11 15l1 1 1-1"/></symbol>
     <symbol id="i-tooth" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3c-2.5 0-4 2-4 4.5 0 3 1.5 4.5 2 7S6 21 8 21s2-5 4-5 2 5 4 5 2.5-4 3-6.5 2-4 2-7C21 5 19.5 3 17 3c-2 0-3 1-5 1S9 3 7 3z"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l10 5-10 5L2 7z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></symbol>
     <symbol id="i-zap" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3z"/></symbol>
   </defs>
 </svg>
@@ -337,8 +570,9 @@
   <div class="wrap">
     <a href="#inicio" class="marca"><img src="/login-logo.png" alt="" />LUMIA</a>
     <nav aria-label="Seções">
+      <a href="#jornada">Como funciona</a>
       <a href="#funcoes">Funções</a>
-      <a href="#como">Como funciona</a>
+      <a href="#novidades" class="novo">Novidades</a>
       <a href="#planos">Planos</a>
       <a href="#faq">Dúvidas</a>
     </nav>
@@ -347,62 +581,77 @@
       <a href="#" class="btn btn-ouro btn-sm js-zap" data-msg="Olá! Quero conhecer a Lumia.">Quero a Lumia</a>
     </div>
   </div>
+  <div class="progresso" id="progresso"></div>
 </header>
 
 <main id="inicio">
 
   <!-- HERO -->
   <section class="hero">
+    <div class="grade-fundo"></div>
     <div class="wrap">
       <img class="logo-giro" src="/login-logo.png" alt="" />
       <span class="selo"><span class="ponto"></span>Atendendo agora, 24 horas por dia</span>
-      <h1>Atendimento, CRM e marketing da sua clínica, <span class="ouro-txt">em um só lugar.</span></h1>
-      <p class="sub">A Lumia é a recepcionista com inteligência artificial que responde seus leads no WhatsApp e no Instagram, agenda consultas, faz follow-up de quem sumiu e organiza tudo num CRM, com os resultados na palma da mão.</p>
+      <h1>Sua clínica <span class="rodizio ouro-txt" id="rodizio"><span>atende</span></span><br>no automático, <span class="ouro-txt">sem perder ninguém.</span></h1>
+      <p class="sub">A Lumia é a recepcionista com inteligência artificial que responde no WhatsApp e no Instagram, agenda consultas, faz follow-up, dispara campanhas, distribui os leads pra sua equipe e mostra qual anúncio realmente vende.</p>
       <div class="ctas">
         <a href="#" class="btn btn-ouro js-zap" data-msg="Olá! Quero uma demonstração da Lumia.">Quero uma demonstração</a>
-        <a href="#funcoes" class="btn btn-linha">Ver o que ela faz</a>
+        <a href="#jornada" class="btn btn-linha">Ver como funciona</a>
       </div>
       <p class="nota">Demonstração com o seu caso, sem compromisso.</p>
 
+      <div class="novidades-faixa" style="margin-top:26px">
+        <b>Novo</b>
+        <a href="#novidades" data-aba="disparos">Disparos em massa</a>
+        <a href="#novidades" data-aba="fui">Follow Up Inteligente</a>
+        <a href="#novidades" data-aba="equipe">Distribuição pra equipe</a>
+        <a href="#novidades" data-aba="origem">Origem dos leads</a>
+        <a href="#novidades" data-aba="ligacoes">Ligações</a>
+        <a href="#novidades" data-aba="setores">Um CRM por número</a>
+      </div>
+
       <div class="mock rev" aria-hidden="true">
-        <div class="mock-barra"><i></i><i></i><i></i><span>lumia-marketing.com · CRM</span></div>
+        <div class="mock-barra"><i></i><i></i><i></i><span>lumia-marketing.com · CRM</span><span class="numero">📱 Recepção</span></div>
         <div class="mock-corpo">
           <div class="mock-menu">
             <b>Atendimento</b>
             <div>Conversas</div>
             <div>Auto Atendimento</div>
-            <div>Follow Up</div>
+            <div>Follow Up Inteligente<em>novo</em></div>
+            <div>Disparos<em>novo</em></div>
             <b>Clientes</b>
             <div class="ativo">CRM</div>
             <div>Contatos</div>
+            <div>Origem dos leads<em>novo</em></div>
+            <div>Ligações<em>novo</em></div>
             <div>Resultados</div>
-            <b>Redes sociais</b>
-            <div>Instagram</div>
           </div>
-          <div class="kanban">
-            <div class="col">
-              <h5>Novo lead <em>3</em></h5>
-              <div class="cartao"><strong>Mariana S.</strong><small>Quanto custa o clareamento?</small><br><span class="tag ia">IA respondendo</span></div>
-              <div class="cartao"><strong>@carol.fit</strong><small>Vi o post de vocês…</small><br><span class="tag ig">Instagram</span></div>
-              <div class="cartao"><strong>Roberto L.</strong><small>Áudio · 0:18</small><br><span class="tag ia">Transcrito</span></div>
+          <div class="kanban" id="kanban">
+            <div class="col" data-col="0">
+              <h5>Novo lead <em>0</em></h5>
+              <div class="cartao"><span class="op">B</span><strong>Mariana S.</strong><small>Quanto custa o clareamento?</small><span class="tag ads">Campanha Clareamento</span></div>
+              <div class="cartao"><span class="op">C</span><strong>@carol.fit</strong><small>Vi o post de vocês…</small><span class="tag ig">Instagram</span></div>
             </div>
-            <div class="col">
-              <h5>Em atendimento <em>2</em></h5>
-              <div class="cartao"><strong>Juliana P.</strong><small>Tem horário sábado?</small><br><span class="tag ia">Vendo agenda</span></div>
-              <div class="cartao"><strong>Fernanda R.</strong><small>Retorno marcado p/ amanhã 10h</small></div>
+            <div class="col" data-col="1">
+              <h5>Em atendimento <em>0</em></h5>
+              <div class="cartao"><span class="op">A</span><strong>Roberto L.</strong><small>Áudio · 0:18</small><span class="tag ia">Transcrito</span></div>
             </div>
-            <div class="col">
-              <h5>Agendado <em>4</em></h5>
-              <div class="cartao"><strong>Paulo M.</strong><small>Qui · 14:30 · Dra. Ana</small><br><span class="tag ok">Confirmado</span></div>
-              <div class="cartao"><strong>Lívia C.</strong><small>Sex · 09:00 · Dr. Caio</small><br><span class="tag ok">Confirmado</span></div>
+            <div class="col" data-col="2">
+              <h5>Agendado <em>0</em></h5>
+              <div class="cartao"><span class="op">B</span><strong>Paulo M.</strong><small>Qui · 14:30 · Dra. Ana</small><span class="tag ok">Confirmado</span></div>
+            </div>
+            <div class="col comprou" data-col="3">
+              <h5>Comprou <em>0</em></h5>
+              <div class="cartao"><span class="op">C</span><strong>Lívia C.</strong><small>Fechou tratamento</small><span class="tag ok">Cliente</span></div>
             </div>
           </div>
-          <div class="mock-chat">
-            <div class="quem">Juliana P.<small>online</small></div>
-            <div class="bolha lead">Oi! Tem horário pra avaliação no sábado?</div>
-            <div class="bolha lumia">Oi, Juliana! Tenho sábado às 9h ou às 10h30 com a Dra. Ana. Qual fica melhor pra você?</div>
-            <div class="bolha lead">10h30 😊</div>
-            <div class="bolha sistema">✓ Consulta agendada · Sáb 10:30</div>
+          <div class="mock-chat" id="mockChat">
+            <div class="quem"><div>Juliana P.<small>online</small></div><span class="etapa" id="mockEtapa">Novo lead</span></div>
+            <div class="bolha lead esc">Oi! Vi o anúncio do implante. Tem avaliação no sábado?</div>
+            <div class="bolha lumia esc">Oi, Juliana! Tenho sábado às 9h ou às 10h30 com a Dra. Ana. Qual fica melhor?</div>
+            <div class="bolha lead esc">10h30 😊</div>
+            <div class="bolha sistema esc">✓ Agendado no Clinicorp · Sáb 10:30</div>
+            <div class="bolha sistema esc">★ Fechou o tratamento · movido pra Comprou</div>
           </div>
         </div>
       </div>
@@ -435,15 +684,99 @@
       </div>
       <div class="provas">
         <div class="prova rev"><b class="ouro-txt">24/7</b><span>Atendimento no WhatsApp e no Instagram</span></div>
-        <div class="prova rev"><b class="ouro-txt">Segundos</b><span>pra responder, com tempo de "digitando" configurável</span></div>
+        <div class="prova rev"><b class="ouro-txt">Segundos</b><span>pra responder, com "digitando…" como gente</span></div>
         <div class="prova rev"><b class="ouro-txt">Agenda real</b><span>Consulta horários e marca direto no Clinicorp</span></div>
-        <div class="prova rev"><b class="ouro-txt">1 painel</b><span>Conversas, CRM, contatos, anúncios e resultados</span></div>
+        <div class="prova rev"><b class="ouro-txt">1 painel</b><span>Conversas, CRM, disparos, anúncios e resultados</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- JORNADA INTERATIVA -->
+  <section class="bloco alt" id="jornada">
+    <div class="wrap">
+      <div class="cab rev">
+        <span class="sobre">A jornada do lead</span>
+        <h2>Do clique no anúncio <span class="ouro-txt">ao paciente que fecha.</span></h2>
+        <p>Veja, passo a passo, o que a Lumia faz em cada momento. Clique em uma etapa ou deixe a história andar sozinha.</p>
+      </div>
+      <div class="jornada rev">
+        <div class="passos-j" role="tablist" aria-label="Etapas da jornada">
+          <button class="passo-j" role="tab" data-p="0"><span class="n">1</span><h4>O lead chega</h4><p>e a Lumia já sabe de qual anúncio ele veio</p><i class="barra"></i></button>
+          <button class="passo-j" role="tab" data-p="1"><span class="n">2</span><h4>Vai pra pessoa certa</h4><p>distribuição automática pra equipe</p><i class="barra"></i></button>
+          <button class="passo-j" role="tab" data-p="2"><span class="n">3</span><h4>A IA atende e agenda</h4><p>em segundos, direto na agenda</p><i class="barra"></i></button>
+          <button class="passo-j" role="tab" data-p="3"><span class="n">4</span><h4>Ninguém esfria</h4><p>follow-up no dia certo, sozinho</p><i class="barra"></i></button>
+          <button class="passo-j" role="tab" data-p="4"><span class="n">5</span><h4>Vira resultado</h4><p>você vê o que realmente vende</p><i class="barra"></i></button>
+        </div>
+        <div class="palco">
+          <div class="cena" data-c="0">
+            <span class="rot">Etapa 1 · Origem dos leads</span>
+            <h3>Ele clicou no anúncio. A Lumia anotou de onde veio.</h3>
+            <p>Quando o lead chega por um anúncio de clique pro WhatsApp, a Lumia identifica a campanha sozinha e coloca uma etiqueta no card. Nada de perguntar "como você conheceu a gente?".</p>
+            <div class="visual">
+              <div class="anuncio">
+                <div class="ad-card"><div class="img">Implante</div><div class="txt"><b>Clínica Sorriso</b><br>Avaliação de implante com horário essa semana.</div><div class="cta">Enviar mensagem</div></div>
+                <span class="seta">➜</span>
+                <div class="card-grande"><strong>Camila S.</strong><small>Oi! Vi o anúncio do implante…</small><br><span class="tag ads">Campanha Implante · Maceió</span> <span class="tag ia">Novo lead</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="cena" data-c="1">
+            <span class="rot">Etapa 2 · Operadores</span>
+            <h3>Cada lead novo cai com quem vai atender.</h3>
+            <p>A Lumia distribui os leads em rodízio entre as pessoas que você escolher, ou por regra: lead da campanha de implante vai sempre pra Ana, por exemplo. Cada card mostra quem é o responsável.</p>
+            <div class="visual">
+              <div class="operadores" id="jOps">
+                <div class="operador"><div class="av">A</div><b>Ana</b><span>Implantes</span></div>
+                <div class="operador"><div class="av">B</div><b>Bruno</b><span>Estética</span></div>
+                <div class="operador"><div class="av">C</div><b>Carla</b><span>Ortodontia</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="cena" data-c="2">
+            <span class="rot">Etapa 3 · Auto Atendimento</span>
+            <h3>A IA conversa como gente e marca na agenda.</h3>
+            <p>Ela responde em segundos, tira dúvidas com as suas regras, entende áudio e foto, consulta os horários de cada profissional e agenda no Clinicorp. O card muda de coluna sozinho.</p>
+            <div class="visual">
+              <div class="demo" style="min-height:0;width:100%;max-width:440px">
+                <div class="bolha lead on">Quanto fica o implante?</div>
+                <div class="bolha lumia on" style="align-self:flex-end">Depende da avaliação, cada caso é um caso 😊 Tenho quinta 8h30 ou 11h com o Dr. Caio. Qual prefere?</div>
+                <div class="bolha lead on">8h30</div>
+                <div class="bolha sistema on">✓ Agendado no Clinicorp · Qui 08:30</div>
+              </div>
+            </div>
+          </div>
+          <div class="cena" data-c="3">
+            <span class="rot">Etapa 4 · Follow Up Inteligente</span>
+            <h3>Quem disse "vou pensar" recebe notícia no dia certo.</h3>
+            <p>Você escolhe as etapas do funil, quantas mensagens e em que dia sai cada uma. Se o lead responder, a sequência para. E o paciente que sai da avaliação com orçamento em aberto no Clinicorp entra sozinho na coluna Follow Up.</p>
+            <div class="visual">
+              <div class="linha-tempo" id="jLinha">
+                <div class="lt-trilho"><div class="ench"></div></div>
+                <div class="lt-msg" id="jLinhaMsg">Dia 1 · "Oi, Camila! Ficou alguma dúvida sobre o orçamento?"</div>
+              </div>
+            </div>
+          </div>
+          <div class="cena" data-c="4">
+            <span class="rot">Etapa 5 · Resultados</span>
+            <h3>Você descobre qual campanha traz paciente que paga.</h3>
+            <p>Comprou, não compareceu, agendado: o funil mostra tudo. O relatório de origem cruza cada campanha com quantos leads agendaram e quantos compraram. Assim fica fácil saber onde investir.</p>
+            <div class="visual">
+              <div class="barras-mini" id="jBarras">
+                <div class="bm"><span>Leads</span><span class="trilho"><i data-w="100"></i></span><b>48</b></div>
+                <div class="bm"><span>Agendaram</span><span class="trilho"><i data-w="44"></i></span><b>21</b></div>
+                <div class="bm"><span>Compareceram</span><span class="trilho"><i data-w="31"></i></span><b>15</b></div>
+                <div class="bm"><span>Compraram</span><span class="trilho"><i data-w="19"></i></span><b>9</b></div>
+                <p class="exemplo">Números de exemplo · Campanha Implante</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- FUNCOES -->
-  <section class="bloco alt" id="funcoes">
+  <section class="bloco" id="funcoes">
     <div class="wrap">
       <div class="cab rev">
         <span class="sobre">Tudo o que a Lumia faz</span>
@@ -461,7 +794,7 @@
             <ul class="lista">
               <li>Entende texto, imagem e áudio, e responde por texto ou por áudio</li>
               <li>Consulta horários por profissional e agenda direto no Clinicorp, ou só pré-agenda pra sua equipe confirmar</li>
-              <li>Envia os arquivos que você cadastrar: tabela, cardápio de serviços, localização</li>
+              <li>Envia os arquivos que você cadastrar: tabela, serviços, localização</li>
               <li>Respeita seu horário de funcionamento e responde quem chamou fora dele assim que abrir</li>
               <li>Sabe se o paciente faltou ou compareceu na última consulta e conversa de acordo</li>
             </ul>
@@ -469,9 +802,9 @@
           <div class="demo" id="demo" aria-label="Exemplo de conversa">
             <div class="quem"><span class="av">CS</span><div>Camila S.<small>online</small></div></div>
             <div class="bolha lead">Boa noite! Vocês fazem implante? Quanto fica?</div>
-            <div class="bolha lumia">Boa noite, Camila! Fazemos sim 😊 O valor depende da avaliação, porque cada caso é um caso. A avaliação é com o Dr. Caio. Posso ver um horário pra você?</div>
+            <div class="bolha lumia" style="align-self:flex-end">Boa noite, Camila! Fazemos sim 😊 O valor depende da avaliação, porque cada caso é um caso. A avaliação é com o Dr. Caio. Posso ver um horário pra você?</div>
             <div class="bolha lead">Pode ser quinta de manhã</div>
-            <div class="bolha lumia">Quinta tenho 8h30 ou 11h. Qual prefere?</div>
+            <div class="bolha lumia" style="align-self:flex-end">Quinta tenho 8h30 ou 11h. Qual prefere?</div>
             <div class="bolha lead">8h30</div>
             <div class="bolha sistema">✓ Agendado no Clinicorp · Qui 08:30 · Dr. Caio</div>
             <div class="aviso">Conversa de exemplo</div>
@@ -481,7 +814,43 @@
         <article class="mod rev">
           <div class="ico"><svg><use href="#i-kanban"/></svg></div>
           <h3>CRM Kanban</h3>
-          <p>Cada conversa vira um card que anda sozinho pelas etapas: novo lead, em atendimento, em negociação, pré-agendamento e agendado. Tudo em tempo real.</p>
+          <p>Cada conversa vira um card que anda sozinho pelo funil, em tempo real. Mude a etapa arrastando ou direto de dentro da conversa.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-send"/></svg></div>
+          <span class="rotulo novo">Novo</span>
+          <h3>Disparos</h3>
+          <p>Campanhas no WhatsApp com o nome de cada pessoa, variações de texto, anexos, agendamento e ritmo humano pra proteger seu número.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-repeat"/></svg></div>
+          <span class="rotulo novo">Novo</span>
+          <h3>Follow Up Inteligente</h3>
+          <p>Sequências por etapa do funil: você escolhe quantas mensagens, em que dia sai cada uma e com quais anexos. Para sozinho se o lead responder.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-users"/></svg></div>
+          <span class="rotulo novo">Novo</span>
+          <h3>Operadores</h3>
+          <p>Cada lead tem um responsável. Distribuição automática em rodízio ou por campanha, filtro "meus leads" e botão de assumir.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-target"/></svg></div>
+          <span class="rotulo novo">Novo</span>
+          <h3>Origem dos leads</h3>
+          <p>A Lumia identifica a campanha do Meta Ads de cada lead e mostra, por campanha, quantos agendaram e quantos compraram.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-phone"/></svg></div>
+          <span class="rotulo novo">Novo</span>
+          <h3>Ligações</h3>
+          <p>Toda chamada do WhatsApp fica registrada: atendida, perdida ou recusada, com duração e os horários de maior movimento.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-layers"/></svg></div>
+          <span class="rotulo novo">Novo</span>
+          <h3>Um CRM por número</h3>
+          <p>Tem mais de um WhatsApp? Cada setor vê só os próprios leads, conversas, contatos e disparos. Ninguém mistura nada.</p>
         </article>
         <article class="mod rev">
           <div class="ico"><svg><use href="#i-chat"/></svg></div>
@@ -489,15 +858,14 @@
           <p>Caixa de entrada no estilo WhatsApp Web pra sua equipe atender pelo computador: texto, mídia e áudio, filtros e pausa da IA por conversa.</p>
         </article>
         <article class="mod rev">
-          <div class="ico"><svg><use href="#i-repeat"/></svg></div>
-          <h3>Follow Up automático</h3>
-          <p>O lead parou de responder? A Lumia volta a falar com ele nos dias que você definir, com a mensagem e os arquivos de cada tentativa.</p>
-        </article>
-        <article class="mod rev">
           <div class="ico"><svg><use href="#i-insta"/></svg></div>
-          <span class="rotulo prata">Novo</span>
           <h3>Instagram</h3>
           <p>O direct entra no CRM com resposta por IA, comentários ganham resposta automática e você agenda feed, carrossel, reels e stories.</p>
+        </article>
+        <article class="mod rev">
+          <div class="ico"><svg><use href="#i-tooth"/></svg></div>
+          <h3>Clinicorp integrado</h3>
+          <p>Agenda, pacientes e financeiro conectados. Orçamento que vai pro Follow Up no Clinicorp entra sozinho na coluna Follow Up do CRM.</p>
         </article>
         <article class="mod rev">
           <div class="ico"><svg><use href="#i-users"/></svg></div>
@@ -507,7 +875,7 @@
         <article class="mod rev">
           <div class="ico"><svg><use href="#i-chart"/></svg></div>
           <h3>Resultados</h3>
-          <p>Indicadores do atendimento por período: leads novos, agendamentos, funil por etapa e comparação com o período anterior.</p>
+          <p>Indicadores do atendimento por período: leads novos, agendamentos, compras, funil por etapa e comparação com o período anterior.</p>
         </article>
         <article class="mod rev">
           <div class="ico"><svg><use href="#i-mega"/></svg></div>
@@ -536,18 +904,259 @@
           <h3>Lumien</h3>
           <p>A corujinha assistente em todas as telas: busca um lead, resume a conversa, muda a etapa, pausa a IA ou abre a tela que você precisa, só pedindo.</p>
         </article>
-        <article class="mod rev">
-          <div class="ico"><svg><use href="#i-brain"/></svg></div>
-          <span class="rotulo">IA</span>
-          <h3>Cérebro de IA</h3>
-          <p>Uma memória única para todas as IAs que você usa (Lumia, ChatGPT, Claude e outras): o que uma aprende, as outras sabem.</p>
-        </article>
+      </div>
+
+      <!-- funil -->
+      <div class="cab rev" style="margin:72px auto 24px">
+        <h2 style="font-size:clamp(22px,3vw,30px)">Um funil que conta a história inteira do lead</h2>
+        <p style="font-size:16px">As colunas do CRM agora vão até o fim: quem comprou, quem faltou e até os contatos que a IA não deve atender.</p>
+      </div>
+      <div class="funil rev">
+        <div class="etapa"><b><span class="bolinha"></span>Novo lead</b><small>Acabou de chegar</small></div>
+        <div class="etapa"><b><span class="bolinha"></span>Em atendimento</b><small>Conversando com a IA ou a equipe</small></div>
+        <div class="etapa"><b><span class="bolinha"></span>Em negociação</b><small>Pediu um tempo, com alerta de retorno</small></div>
+        <div class="etapa"><b><span class="bolinha"></span>Follow Up</b><small>Recebendo a sequência</small></div>
+        <div class="etapa"><b><span class="bolinha"></span>Pré-agendamento</b><small>Dia e hora reservados</small></div>
+        <div class="etapa"><b><span class="bolinha"></span>Agendado</b><small>Marcado na agenda</small></div>
+        <div class="etapa"><b><span class="bolinha" style="background:var(--verde)"></span>Compareceu</b><small>Veio na consulta</small></div>
+        <div class="etapa nova"><b><span class="bolinha" style="background:var(--vermelho)"></span>Não compareceu</b><small>Faltou, hora de remarcar</small></div>
+        <div class="etapa nova"><b><span class="bolinha" style="background:var(--verde-claro)"></span>Comprou</b><small>Virou cliente</small></div>
+        <div class="etapa nova"><b><span class="bolinha" style="background:var(--prata)"></span>Contatos pessoais</b><small>Fornecedores e parceiros: a IA não responde</small></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- NOVIDADES INTERATIVAS -->
+  <section class="bloco alt" id="novidades">
+    <div class="wrap">
+      <div class="cab rev">
+        <span class="sobre">Novidades</span>
+        <h2>Teste as novas funções <span class="ouro-txt">aqui mesmo.</span></h2>
+        <p>Mexa nos controles e veja como cada uma funciona antes de falar com a gente.</p>
+      </div>
+
+      <div class="abas" role="tablist" aria-label="Novidades">
+        <button class="aba" role="tab" data-aba="disparos" aria-selected="true"><svg><use href="#i-send"/></svg>Disparos</button>
+        <button class="aba" role="tab" data-aba="fui" aria-selected="false"><svg><use href="#i-repeat"/></svg>Follow Up Inteligente</button>
+        <button class="aba" role="tab" data-aba="equipe" aria-selected="false"><svg><use href="#i-users"/></svg>Operadores</button>
+        <button class="aba" role="tab" data-aba="origem" aria-selected="false"><svg><use href="#i-target"/></svg>Origem dos leads</button>
+        <button class="aba" role="tab" data-aba="ligacoes" aria-selected="false"><svg><use href="#i-phone"/></svg>Ligações</button>
+        <button class="aba" role="tab" data-aba="setores" aria-selected="false"><svg><use href="#i-layers"/></svg>Um CRM por número</button>
+        <button class="aba" role="tab" data-aba="clinicorp" aria-selected="false"><svg><use href="#i-tooth"/></svg>Clinicorp → CRM</button>
+      </div>
+
+      <!-- Disparos -->
+      <div class="painel on" data-painel="disparos" role="tabpanel">
+        <div class="exp">
+          <span class="rotulo novo" style="position:static">Novo</span>
+          <h3>Uma mensagem pra centenas de pessoas, <span class="ouro-txt">com cara de conversa.</span></h3>
+          <p>Suba uma planilha, cole os números ou puxe direto do CRM por etapa ou etiqueta. Cada pessoa recebe o próprio nome, uma variação diferente do texto e, se quiser, a IA reescreve a mensagem pra cada contato.</p>
+          <ul class="lista">
+            <li>Agende o dia e a hora, com janela de horário e limite por dia</li>
+            <li>Anexe áudio, imagem, PDF ou vídeo curto</li>
+            <li>Acompanhe enviadas, entregues, lidas e respondidas num painel</li>
+            <li>Quem responde é atendido normalmente pela IA</li>
+          </ul>
+        </div>
+        <div class="caixa">
+          <h5>Escreva sua mensagem <button class="mini-btn" id="dispRegerar" type="button">↻ Sortear de novo</button></h5>
+          <textarea class="campo-txt" id="dispTexto" aria-label="Mensagem do disparo">{Oi|Olá|E aí}, {nome}! Aqui é da Clínica Sorriso 😊 {Essa semana|Nos próximos dias} temos horários de avaliação. Quer que eu reserve um pra você?</textarea>
+          <p class="dica">Use <code>{nome}</code> pro nome da pessoa e <code>{opção1|opção2}</code> pra variar o texto entre os contatos.</p>
+          <div class="previas" id="dispPrevias"></div>
+          <div class="travas">
+            <span class="trava">Intervalo aleatório entre envios</span>
+            <span class="trava">Limite por dia</span>
+            <span class="trava">Quem pede SAIR nunca mais recebe</span>
+            <span class="trava">Pausa sozinha se começar a falhar</span>
+          </div>
+          <div class="kpis" id="dispKpis">
+            <div class="kpi"><b data-n="320">0</b><span>Enviadas</span></div>
+            <div class="kpi"><b data-n="301">0</b><span>Entregues</span></div>
+            <div class="kpi"><b data-n="214">0</b><span>Lidas</span></div>
+            <div class="kpi"><b data-n="57">0</b><span>Responderam</span></div>
+          </div>
+          <p class="exemplo">Painel com números de exemplo</p>
+        </div>
+      </div>
+
+      <!-- Follow Up Inteligente -->
+      <div class="painel" data-painel="fui" role="tabpanel">
+        <div class="exp">
+          <span class="rotulo novo" style="position:static">Novo</span>
+          <h3>A cadência certa, <span class="ouro-txt">no dia certo, sem ninguém lembrar.</span></h3>
+          <p>Crie um follow-up, escolha quais etapas do funil ele atende, quantas mensagens e em quantos dias. A Lumia distribui os dias, e você ajusta cada um. A IA ainda sugere o texto pra você.</p>
+          <ul class="lista">
+            <li>Até 5 anexos por mensagem: áudio, imagem, PDF ou vídeo</li>
+            <li>Para sozinho quando o lead responde</li>
+            <li>Respeita o horário de envio e nunca toca em contatos pessoais</li>
+          </ul>
+        </div>
+        <div class="caixa">
+          <h5>Monte sua sequência</h5>
+          <div class="etapas-sel" id="fuiEtapas">
+            <span class="etapa-chip on">Novo lead</span><span class="etapa-chip on">Em negociação</span><span class="etapa-chip">Não compareceu</span><span class="etapa-chip">Pré-agendamento</span>
+          </div>
+          <div class="controles">
+            <div class="controle"><label for="fuiQtd">Mensagens <b id="fuiQtdV">5</b></label><input type="range" id="fuiQtd" min="2" max="8" value="5" /></div>
+            <div class="controle"><label for="fuiDias">Duração <b id="fuiDiasV">5 dias</b></label><input type="range" id="fuiDias" min="2" max="30" value="5" /></div>
+          </div>
+          <label class="alternar"><input type="checkbox" id="fuiResp" /><span class="tr"></span>Simular: o lead respondeu na 3ª mensagem</label>
+          <div class="linha-tempo" style="max-width:none">
+            <div class="lt-trilho" id="fuiTrilho"><div class="ench"></div></div>
+          </div>
+          <div class="fu-lista" id="fuiLista"></div>
+        </div>
+      </div>
+
+      <!-- Operadores -->
+      <div class="painel" data-painel="equipe" role="tabpanel">
+        <div class="exp">
+          <span class="rotulo novo" style="position:static">Novo</span>
+          <h3>Lead novo já chega <span class="ouro-txt">com dono.</span></h3>
+          <p>Escolha quem participa da distribuição e a Lumia entrega os leads novos em rodízio, sem favorecer ninguém. Quer regra? Lead de uma campanha vai sempre pra mesma pessoa.</p>
+          <ul class="lista">
+            <li>Cada card mostra quem atende</li>
+            <li>Filtro "meus leads" e "sem operador"</li>
+            <li>Botão Assumir dentro da conversa</li>
+            <li>Quem responde um lead livre vira o responsável</li>
+          </ul>
+        </div>
+        <div class="caixa">
+          <h5>Distribuição em rodízio <button class="mini-btn" id="opBtn" type="button">+ Chegou um lead</button></h5>
+          <div class="fila-leads" id="opFila"></div>
+          <div class="rodizio-ops" id="opLista">
+            <div class="operador"><div class="av">A</div><b>Ana</b><span>leads</span><span class="cont">0</span></div>
+            <div class="operador"><div class="av">B</div><b>Bruno</b><span>leads</span><span class="cont">0</span></div>
+            <div class="operador"><div class="av">C</div><b>Carla</b><span>leads</span><span class="cont">0</span></div>
+          </div>
+          <p class="exemplo">Os leads chegam sozinhos a cada poucos segundos. Clique no botão pra mandar mais.</p>
+        </div>
+      </div>
+
+      <!-- Origem -->
+      <div class="painel" data-painel="origem" role="tabpanel">
+        <div class="exp">
+          <span class="rotulo novo" style="position:static">Novo</span>
+          <h3>Pare de adivinhar <span class="ouro-txt">qual anúncio funciona.</span></h3>
+          <p>Lead que chega por anúncio de clique pro WhatsApp vem com a campanha identificada automaticamente. Também dá pra criar regras pelo texto da primeira mensagem. O relatório cruza cada campanha com o que aconteceu depois.</p>
+          <ul class="lista">
+            <li>Etiqueta da campanha no card do CRM</li>
+            <li>Leads, agendamentos, compras e perdidos por campanha</li>
+            <li>Lead novo pode ir direto pro operador daquela campanha</li>
+          </ul>
+        </div>
+        <div class="caixa">
+          <h5>Relatório por campanha</h5>
+          <table class="tabela" id="origemTab">
+            <thead><tr><th>Campanha</th><th style="text-align:right">Leads</th><th style="text-align:right">Agend.</th><th style="text-align:right">Compr.</th></tr></thead>
+            <tbody>
+              <tr><td>Implante · Maceió<div class="mb"><i data-w="100"></i></div></td><td class="n">48</td><td class="n">21</td><td class="n">9</td></tr>
+              <tr><td>Clareamento<div class="mb"><i data-w="73"></i></div></td><td class="n">35</td><td class="n">12</td><td class="n">7</td></tr>
+              <tr><td>Lentes de contato<div class="mb"><i data-w="46"></i></div></td><td class="n">22</td><td class="n">10</td><td class="n">5</td></tr>
+              <tr><td>Instagram orgânico<div class="mb"><i data-w="29"></i></div></td><td class="n">14</td><td class="n">4</td><td class="n">1</td></tr>
+            </tbody>
+          </table>
+          <p class="exemplo">Dados de exemplo</p>
+        </div>
+      </div>
+
+      <!-- Ligacoes -->
+      <div class="painel" data-painel="ligacoes" role="tabpanel">
+        <div class="exp">
+          <span class="rotulo novo" style="position:static">Novo</span>
+          <h3>Nenhuma ligação perdida <span class="ouro-txt">passa batida.</span></h3>
+          <p>Toda chamada que chega no WhatsApp da clínica fica registrada com horário, duração e se foi atendida, perdida ou recusada. Você vê em que horário o telefone mais toca e quem precisa de retorno. Ligação atendida fora do WhatsApp também pode ser lançada na mão.</p>
+          <ul class="lista">
+            <li>Resumo de atendidas, perdidas e duração média</li>
+            <li>Volume de ligações por hora do dia</li>
+            <li>Lista com cada chamada e o contato</li>
+          </ul>
+        </div>
+        <div class="caixa">
+          <h5>Ligações de hoje</h5>
+          <div class="kpis" style="margin:0 0 12px">
+            <div class="kpi"><b data-n="37">0</b><span>Recebidas</span></div>
+            <div class="kpi"><b data-n="29" style="color:var(--verde-claro)">0</b><span>Atendidas</span></div>
+            <div class="kpi"><b data-n="8" style="color:#ff7b80">0</b><span>Perdidas</span></div>
+            <div class="kpi"><b>3m42s</b><span>Duração média</span></div>
+          </div>
+          <div class="grafico-horas" id="ligGraf"></div>
+          <div class="legenda"><span><i style="background:var(--ouro)"></i>Atendidas</span><span><i style="background:var(--vermelho)"></i>Perdidas</span><span>Números de exemplo</span></div>
+        </div>
+      </div>
+
+      <!-- Setores -->
+      <div class="painel" data-painel="setores" role="tabpanel">
+        <div class="exp">
+          <span class="rotulo novo" style="position:static">Novo</span>
+          <h3>Vários WhatsApps, <span class="ouro-txt">cada setor no seu quadrado.</span></h3>
+          <p>Recepção, ortodontia e estética com números diferentes? Escolha o número no topo da tela e o CRM, as Conversas, os Contatos e os Disparos mostram só os leads dele. A escolha fica salva em cada computador.</p>
+          <ul class="lista">
+            <li>Um funil separado por número</li>
+            <li>Contador de não lidas só do número escolhido</li>
+            <li>Disparo usa só os contatos daquele número</li>
+          </ul>
+        </div>
+        <div class="caixa">
+          <h5>Escolha o número</h5>
+          <div class="setores-sel" id="setorSel">
+            <button class="setor-btn on" type="button" data-s="0">📱 Recepção<small>Avaliações e dúvidas</small></button>
+            <button class="setor-btn" type="button" data-s="1">📱 Ortodontia<small>Aparelhos e manutenção</small></button>
+            <button class="setor-btn" type="button" data-s="2">📱 Estética<small>Harmonização e lentes</small></button>
+          </div>
+          <div class="setor-lista" id="setorLista"></div>
+        </div>
+      </div>
+
+      <!-- Clinicorp -->
+      <div class="painel" data-painel="clinicorp" role="tabpanel">
+        <div class="exp">
+          <span class="rotulo novo" style="position:static">Novo</span>
+          <h3>Saiu da avaliação com orçamento? <span class="ouro-txt">Já entra no follow-up.</span></h3>
+          <p>Quando a equipe move o orçamento do paciente pra Follow Up no Clinicorp, a Lumia percebe sozinha, encontra (ou cria) o contato no CRM pelo telefone e coloca na coluna Follow Up, já começando o acompanhamento. Sem digitar nada duas vezes.</p>
+          <ul class="lista">
+            <li>Verificação automática a cada 10 minutos</li>
+            <li>Cada orçamento entra uma vez só, sem brigar com quem moveu na mão</li>
+            <li>Liga e desliga por número do WhatsApp</li>
+          </ul>
+        </div>
+        <div class="caixa">
+          <h5>Veja acontecendo <button class="mini-btn" id="ccBtn" type="button">▶ Rodar de novo</button></h5>
+          <div class="ligado" id="ccPassos">
+            <div class="passo-cc"><div class="ico"><svg><use href="#i-tooth"/></svg></div><div><b>Avaliação com o Dr. Thales</b><small>Orçamento de implante criado no Clinicorp</small></div></div>
+            <div class="passo-cc"><div class="ico"><svg><use href="#i-doc"/></svg></div><div><b>Orçamento movido pra Follow Up</b><small>A equipe marca no Clinicorp, como sempre fez</small></div></div>
+            <div class="passo-cc"><div class="ico"><svg><use href="#i-spark"/></svg></div><div><b>A Lumia percebe sozinha</b><small>Acha o paciente pelo telefone no CRM</small></div></div>
+            <div class="passo-cc"><div class="ico"><svg><use href="#i-kanban"/></svg></div><div><b>Card na coluna Follow Up</b><small>E a sequência de mensagens começa</small></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CEREBRO -->
+  <section class="bloco">
+    <div class="wrap">
+      <div class="cerebro-bloco">
+        <div class="rev">
+          <span class="sobre">Cérebro de IA</span>
+          <h2 style="font-size:clamp(28px,4vw,42px);line-height:1.12;margin:12px 0 14px">Uma memória só <span class="ouro-txt">pra todas as suas IAs.</span></h2>
+          <p style="color:var(--dim);font-size:17px;margin:0 0 6px">Lumia, ChatGPT, Claude, Gemini: o que uma aprende sobre a sua clínica, as outras sabem. Cada memória vira um neurônio no cérebro 3D, colorido pela IA que salvou, e as ligações mostram o que se relaciona com o quê.</p>
+          <ul class="lista">
+            <li>Busca por significado, não só por palavra</li>
+            <li>Cada IA ganha a sua região do cérebro</li>
+            <li>Memória nova aparece em destaque, ao vivo</li>
+          </ul>
+        </div>
+        <div class="cerebro-tela rev">
+          <canvas id="cerebro" aria-label="Animação de uma rede de memórias"></canvas>
+          <div class="cerebro-leg"><span><i style="background:#f0cf6b"></i>Lumia</span><span><i style="background:#3ddc97"></i>ChatGPT</span><span><i style="background:#ff8a4c"></i>Claude</span><span><i style="background:#6ea8ff"></i>Gemini</span></div>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- COMPARACAO -->
-  <section class="bloco">
+  <section class="bloco alt">
     <div class="wrap">
       <div class="cab rev">
         <span class="sobre">Antes e depois</span>
@@ -559,9 +1168,11 @@
           <ul>
             <li><b>✕</b>Mensagens da noite e do fim de semana esperando até segunda</li>
             <li><b>✕</b>Leads de anúncio esfriando enquanto a recepção atende o telefone</li>
+            <li><b>✕</b>Ninguém sabe de qual campanha o paciente veio</li>
             <li><b>✕</b>Quem disse "vou pensar" nunca mais recebe notícia</li>
-            <li><b>✕</b>Conversas espalhadas em celulares, sem saber em que pé está cada uma</li>
-            <li><b>✕</b>Relatório de anúncio montado na mão, quando dá tempo</li>
+            <li><b>✕</b>Lead sem dono: ou dois atendem, ou ninguém atende</li>
+            <li><b>✕</b>Ligação perdida que ninguém retorna</li>
+            <li><b>✕</b>Campanha de mensagem copiando e colando um por um</li>
           </ul>
         </div>
         <div class="lado com rev">
@@ -569,9 +1180,11 @@
           <ul>
             <li><b>✓</b>Resposta em segundos, 24 horas, com o tom da sua clínica</li>
             <li><b>✓</b>Horário consultado e consulta agendada ainda na conversa</li>
-            <li><b>✓</b>Follow-up e alertas de retorno automáticos no dia combinado</li>
-            <li><b>✓</b>Todo lead num CRM só, com a etapa atualizada sozinha</li>
-            <li><b>✓</b>Resultados e saldo dos anúncios chegando no seu WhatsApp</li>
+            <li><b>✓</b>Campanha identificada e relatório do que cada uma vende</li>
+            <li><b>✓</b>Follow Up Inteligente no dia combinado, com anexos</li>
+            <li><b>✓</b>Cada lead com responsável, distribuído em rodízio</li>
+            <li><b>✓</b>Ligações registradas, com as perdidas à vista</li>
+            <li><b>✓</b>Disparos personalizados, agendados e com painel</li>
           </ul>
         </div>
       </div>
@@ -579,18 +1192,18 @@
   </section>
 
   <!-- COMO FUNCIONA -->
-  <section class="bloco alt" id="como">
+  <section class="bloco" id="como">
     <div class="wrap">
       <div class="cab rev">
-        <span class="sobre">Como funciona</span>
-        <h2>Do primeiro contato à <span class="ouro-txt">cadeira do consultório.</span></h2>
+        <span class="sobre">Pra começar</span>
+        <h2>Em poucos passos, <span class="ouro-txt">sua clínica no automático.</span></h2>
         <p>A gente configura com você. Em pouco tempo sua clínica já está atendendo com a Lumia.</p>
       </div>
       <div class="passos">
-        <div class="passo rev"><h3>Conecte seu WhatsApp</h3><p>Leia um QR code e pronto: o número da clínica passa a ser atendido pela Lumia. O Instagram conecta com o login dele.</p></div>
+        <div class="passo rev"><h3>Conecte seu WhatsApp</h3><p>Leia um QR code e pronto. Pode conectar mais de um número, um pra cada setor. O Instagram conecta com o login dele.</p></div>
         <div class="passo rev"><h3>Ensine a Lumia</h3><p>Escreva como ela deve falar, o que oferecer, os valores e regras, e anexe os arquivos que ela pode enviar.</p></div>
-        <div class="passo rev"><h3>Ela atende e agenda</h3><p>A Lumia conversa, tira dúvidas, consulta a agenda e marca. Quando precisa de gente, ela avisa e pausa.</p></div>
-        <div class="passo rev"><h3>Você acompanha</h3><p>Veja tudo no CRM, entre em qualquer conversa e acompanhe os resultados por período.</p></div>
+        <div class="passo rev"><h3>Chame sua equipe</h3><p>Cada pessoa com seu login. Escolha quem recebe os leads novos e como eles são distribuídos.</p></div>
+        <div class="passo rev"><h3>Acompanhe e cresça</h3><p>Veja tudo no CRM, descubra qual campanha vende e dispare campanhas pra sua base.</p></div>
       </div>
 
       <div class="cab rev" style="margin-top:72px;margin-bottom:28px">
@@ -603,19 +1216,19 @@
         <div class="rev"><h4>Pré-agendamento</h4><p>Prefere confirmar por telefone? A IA reserva dia, hora e profissional e sua equipe confirma.</p></div>
         <div class="rev"><h4>Pausa por conversa</h4><p>Assuma qualquer conversa a hora que quiser. A IA para naquele contato e o resto segue normal.</p></div>
         <div class="rev"><h4>Horário de funcionamento</h4><p>Defina quando a IA atende. Quem chamar fora do horário é respondido assim que abrir.</p></div>
-        <div class="rev"><h4>Equipe com login próprio</h4><p>Colaboradores com acesso individual dentro da conta da clínica.</p></div>
+        <div class="rev"><h4>Contatos pessoais</h4><p>Fornecedor ou parceiro? Mova pra essa coluna e a IA não responde mais aquele número.</p></div>
         <div class="rev"><h4>Ignora o que não é lead</h4><p>Grupos e status do WhatsApp ficam de fora, e a IA não responde no lugar errado.</p></div>
       </div>
     </div>
   </section>
 
   <!-- SEGURANCA -->
-  <section class="bloco">
+  <section class="bloco alt">
     <div class="wrap">
       <div class="seguro rev">
         <div>
           <div class="cadeado"><svg><use href="#i-lock"/></svg></div>
-          <span class="sobre" style="display:block;margin-top:18px;color:var(--ouro);font-weight:700;font-size:13px;letter-spacing:.16em">PRIVACIDADE E SEGURANÇA</span>
+          <span class="sobre" style="display:block;margin-top:18px">Privacidade e segurança</span>
           <h2>Os dados dos seus pacientes <span class="ouro-txt">são só seus.</span></h2>
         </div>
         <div>
@@ -632,7 +1245,7 @@
   </section>
 
   <!-- PLANOS -->
-  <section class="bloco alt" id="planos">
+  <section class="bloco" id="planos">
     <div class="wrap">
       <div class="cab rev">
         <span class="sobre">Planos</span>
@@ -647,10 +1260,10 @@
           <ul class="lista">
             <li>Auto Atendimento com IA no WhatsApp</li>
             <li>CRM Kanban e caixa de Conversas</li>
+            <li>Follow Up Inteligente por etapa do funil</li>
+            <li>Operadores com distribuição automática</li>
             <li>Contatos com importação de planilha</li>
-            <li>Follow Up automático</li>
-            <li>Resultados do atendimento</li>
-            <li>Lumien, a assistente nas telas</li>
+            <li>Resultados e Lumien, a assistente nas telas</li>
           </ul>
           <a href="#" class="btn btn-linha js-zap" data-msg="Olá! Quero saber mais sobre o plano Lumia Atendimento.">Falar sobre este plano</a>
         </div>
@@ -661,26 +1274,27 @@
           <div class="preco">Sob consulta</div>
           <ul class="lista">
             <li><strong>Tudo do Lumia Atendimento</strong></li>
-            <li>Agendamento direto no Clinicorp</li>
-            <li>Instagram: direct, comentários e publicações agendadas</li>
-            <li>Relatórios e saldo do Meta Ads no WhatsApp</li>
-            <li>Gerador de Relatórios com a sua marca</li>
+            <li>Disparos em massa com painel de entrega</li>
+            <li>Origem dos leads por campanha e Ligações</li>
+            <li>Clinicorp: agenda e orçamentos entrando no follow-up</li>
+            <li>Vários números, um CRM por setor</li>
+            <li>Instagram, Meta Ads e Gerador de Relatórios</li>
             <li>Assistente Lumia com voz, Agenda e Cérebro de IA</li>
           </ul>
           <a href="#" class="btn btn-ouro js-zap" data-msg="Olá! Quero saber mais sobre o plano Lumia Completa.">Quero a Lumia Completa</a>
         </div>
       </div>
-      <p class="obs-planos">Contratos de 1 a 12 meses. O consumo de IA do atendimento já é calculado no valor que a gente te passar.</p>
+      <p class="obs-planos">Contratos de 1 a 12 meses. O consumo de IA do atendimento já entra no valor que a gente te passar.</p>
     </div>
   </section>
 
   <!-- GARANTIA / DEMO -->
-  <section class="bloco">
+  <section class="bloco" style="padding-top:0">
     <div class="wrap">
       <div class="garantia rev">
         <span class="selo"><span class="ponto"></span>Sem compromisso</span>
         <h2>Veja a Lumia atendendo <span class="ouro-txt">o seu caso.</span></h2>
-        <p>Na demonstração a gente mostra a Lumia conversando com perguntas reais da sua clínica, o CRM em funcionamento e como fica a configuração. Você decide depois.</p>
+        <p>Na demonstração a gente mostra a Lumia conversando com perguntas reais da sua clínica, o CRM em funcionamento, os disparos e o follow-up. Você decide depois.</p>
         <a href="#" class="btn btn-ouro js-zap" data-msg="Olá! Quero agendar uma demonstração da Lumia.">Agendar demonstração</a>
       </div>
     </div>
@@ -696,31 +1310,39 @@
       <div class="faq">
         <details class="rev">
           <summary>Preciso trocar meu número de WhatsApp?</summary>
-          <p>Não. Você conecta o número que já usa lendo um QR code, como no WhatsApp Web. Se preferir, pode usar um número dedicado só pro atendimento.</p>
+          <p>Não. Você conecta o número que já usa lendo um QR code, como no WhatsApp Web. Se tiver mais de um número, pode conectar todos e cada setor vê só os próprios leads.</p>
         </details>
         <details class="rev">
           <summary>A IA vai responder qualquer coisa pros meus pacientes?</summary>
-          <p>Ela segue as instruções que você escreve: o que pode falar, o que oferecer, valores e regras. Você pode pausar a IA em qualquer conversa e assumir na hora, e ela não responde em grupos nem em status.</p>
+          <p>Ela segue as instruções que você escreve: o que pode falar, o que oferecer, valores e regras. Você pode pausar a IA em qualquer conversa e assumir na hora. Ela não responde em grupos, em status nem nos contatos que você marcar como pessoais.</p>
         </details>
         <details class="rev">
           <summary>Ela agenda de verdade ou só anota?</summary>
           <p>Você escolhe. Com o Clinicorp conectado, ela consulta os horários por profissional e marca direto na sua agenda. Se preferir, ela só pré-agenda e sua equipe confirma. Sem Clinicorp, usa a agenda interna da Lumia.</p>
         </details>
         <details class="rev">
-          <summary>E se o paciente mandar áudio ou foto?</summary>
-          <p>A Lumia ouve o áudio, vê a imagem e responde com base no conteúdo. Ela também pode responder em áudio, se você quiser.</p>
+          <summary>Disparo em massa pode bloquear meu número?</summary>
+          <p>Qualquer envio em massa pelo WhatsApp tem esse risco, e a gente prefere ser direto sobre isso. A Lumia diminui o risco: intervalo aleatório entre mensagens, limite por dia, variações de texto, quem pede SAIR nunca mais recebe e a campanha pausa sozinha se começar a falhar. O ideal é disparar pra quem já conhece a sua clínica.</p>
         </details>
         <details class="rev">
-          <summary>Funciona fora do horário comercial?</summary>
-          <p>Funciona 24 horas por padrão. Se preferir, defina um horário de funcionamento: quem chamar fora dele recebe resposta assim que a clínica abrir.</p>
+          <summary>Qual a diferença entre o Follow Up e o Follow Up Inteligente?</summary>
+          <p>No Follow Up, o lead vai pra uma coluna própria e a IA assume a conversa com a sequência. No Follow Up Inteligente, o lead continua na etapa em que está, as mensagens saem nos dias que você escolheu, e a IA segue atendendo normalmente se ele responder.</p>
+        </details>
+        <details class="rev">
+          <summary>Como a Lumia sabe de qual campanha veio o lead?</summary>
+          <p>Quando a pessoa clica num anúncio de clique pro WhatsApp do Meta Ads, a primeira mensagem chega com a identificação do anúncio, e a Lumia busca o nome da campanha. Pra outros casos, você pode criar regras pelo texto da primeira mensagem.</p>
+        </details>
+        <details class="rev">
+          <summary>A Lumia faz ligações?</summary>
+          <p>Não. O WhatsApp não permite que sistemas façam ligações. O que a Lumia faz é registrar todas as chamadas que chegam (atendidas, perdidas e recusadas), com horário e duração, pra ninguém ficar sem retorno.</p>
         </details>
         <details class="rev">
           <summary>Minha equipe consegue usar junto?</summary>
-          <p>Sim. Cada pessoa pode ter o próprio login, atender pela aba Conversas, mover leads no CRM e assumir conversas da IA quando precisar.</p>
+          <p>Sim. Cada pessoa tem o próprio login, vê os leads que são dela, atende pela aba Conversas e pode assumir qualquer conversa da IA. Os leads novos podem ser distribuídos automaticamente entre a equipe.</p>
         </details>
         <details class="rev">
           <summary>Serve só pra clínica odontológica?</summary>
-          <p>A Lumia nasceu dentro de uma clínica e tem integração pronta com o Clinicorp, mas o atendimento, o CRM, o Instagram e os relatórios servem pra qualquer negócio que atende cliente pelo WhatsApp.</p>
+          <p>A Lumia nasceu dentro de uma clínica e tem integração pronta com o Clinicorp, mas o atendimento, o CRM, os disparos, o Instagram e os relatórios servem pra qualquer negócio que atende cliente pelo WhatsApp.</p>
         </details>
         <details class="rev">
           <summary>Como faço pra contratar?</summary>
@@ -744,7 +1366,9 @@
   <div class="wrap">
     <a href="#inicio" class="marca" style="font-size:15px"><img src="/login-logo.png" alt="" style="width:24px;height:24px" />LUMIA</a>
     <nav aria-label="Rodapé">
+      <a href="#jornada">Como funciona</a>
       <a href="#funcoes">Funções</a>
+      <a href="#novidades">Novidades</a>
       <a href="#planos">Planos</a>
       <a href="#faq">Dúvidas</a>
       <a href="/privacidade.html">Privacidade</a>
@@ -771,10 +1395,41 @@
   document.getElementById('ano').textContent = new Date().getFullYear();
 
   const reduz = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const temIO = 'IntersectionObserver' in window;
+
+  // roda fn uma vez quando el aparece na tela
+  function aoAparecer(el, fn, limiar = 0.3) {
+    if (!temIO) { fn(); return; }
+    const o = new IntersectionObserver((es) => { if (es[0].isIntersecting) { o.disconnect(); fn(); } }, { threshold: limiar });
+    o.observe(el);
+  }
+
+  // conta de 0 ate data-n
+  function contar(els) {
+    els.forEach((b) => {
+      const alvo = Number(b.dataset.n);
+      if (!alvo) return;
+      if (reduz) { b.textContent = alvo; return; }
+      const t0 = performance.now();
+      const passo = (t) => {
+        const k = Math.min(1, (t - t0) / 1200);
+        b.textContent = Math.round(alvo * (1 - Math.pow(1 - k, 3)));
+        if (k < 1) requestAnimationFrame(passo);
+      };
+      requestAnimationFrame(passo);
+    });
+  }
+
+  // barra de progresso de leitura no topo
+  const barraProg = document.getElementById('progresso');
+  addEventListener('scroll', () => {
+    const h = document.documentElement.scrollHeight - innerHeight;
+    barraProg.style.width = (h > 0 ? (scrollY / h) * 100 : 0) + '%';
+  }, { passive: true });
 
   // revela os blocos ao rolar
   const revs = document.querySelectorAll('.rev');
-  if (reduz || !('IntersectionObserver' in window)) {
+  if (reduz || !temIO) {
     revs.forEach((el) => el.classList.add('on'));
   } else {
     const obs = new IntersectionObserver((entradas) => {
@@ -783,19 +1438,338 @@
     revs.forEach((el) => obs.observe(el));
   }
 
-  // conversa de exemplo aparece mensagem por mensagem quando entra na tela
-  const demo = document.getElementById('demo');
-  const bolhas = demo.querySelectorAll('.bolha');
-  if (reduz || !('IntersectionObserver' in window)) {
-    bolhas.forEach((b) => b.classList.add('on'));
-  } else {
-    const obsDemo = new IntersectionObserver((entradas) => {
-      if (!entradas[0].isIntersecting) return;
-      obsDemo.disconnect();
-      bolhas.forEach((b, i) => setTimeout(() => b.classList.add('on'), 300 + i * 900));
-    }, { threshold: 0.35 });
-    obsDemo.observe(demo);
+  // ---------- hero: palavra que troca ----------
+  (() => {
+    const palavras = ['atende', 'agenda', 'dispara', 'distribui', 'vende'];
+    const alvo = document.querySelector('#rodizio span');
+    if (reduz) return;
+    let i = 0;
+    setInterval(() => {
+      alvo.classList.add('sai');
+      setTimeout(() => { i = (i + 1) % palavras.length; alvo.textContent = palavras[i]; alvo.classList.remove('sai'); }, 350);
+    }, 2400);
+  })();
+
+  // ---------- hero: card que anda pelo funil ----------
+  (() => {
+    const kanban = document.getElementById('kanban');
+    const cols = [...kanban.querySelectorAll('.col')];
+    const bolhas = [...document.querySelectorAll('#mockChat .bolha')];
+    const etapaChat = document.getElementById('mockEtapa');
+    const card = document.createElement('div');
+    card.className = 'cartao vivo';
+    const estados = [
+      { col: 0, txt: 'Vi o anúncio do implante…', tag: '<span class="tag ads">Campanha Implante</span>', etapa: 'Novo lead', bolhas: 1 },
+      { col: 1, txt: 'Tem avaliação no sábado?', tag: '<span class="tag ia">IA respondendo</span>', etapa: 'Em atendimento', bolhas: 3 },
+      { col: 2, txt: 'Sáb · 10:30 · Dra. Ana', tag: '<span class="tag ok">Agendado</span>', etapa: 'Agendado', bolhas: 4 },
+      { col: 3, txt: 'Fechou o tratamento', tag: '<span class="tag ok">Cliente</span>', etapa: 'Comprou', bolhas: 5 },
+    ];
+    const contar = () => cols.forEach((c) => { c.querySelector('h5 em').textContent = c.querySelectorAll('.cartao').length; });
+    let k = 0;
+    function aplicar() {
+      const e = estados[k];
+      card.innerHTML = `<span class="op">A</span><strong>Juliana P.</strong><small>${e.txt}</small>${e.tag}`;
+      const col = cols[e.col];
+      col.insertBefore(card, col.querySelector('h5').nextSibling);
+      card.style.animation = 'none'; void card.offsetWidth; card.style.animation = '';
+      cols.forEach((c) => c.classList.toggle('recebe', c === col));
+      etapaChat.textContent = e.etapa;
+      bolhas.forEach((b, i) => b.classList.toggle('esc', i >= e.bolhas));
+      contar();
+      k = (k + 1) % estados.length;
+    }
+    aplicar();
+    if (reduz) { bolhas.forEach((b) => b.classList.remove('esc')); return; }
+    setInterval(aplicar, 2800);
+  })();
+
+  // ---------- jornada do lead ----------
+  (() => {
+    const botoes = [...document.querySelectorAll('.passo-j')];
+    const cenas = [...document.querySelectorAll('.cena')];
+    const DUR = 7000;
+    let atual = -1, timer = null, auto = !reduz, intervaloInterno = null;
+
+    function cenaExtra(i) {
+      clearInterval(intervaloInterno);
+      if (i === 1) {
+        const ops = [...document.querySelectorAll('#jOps .operador')];
+        let j = 0;
+        const gira = () => { ops.forEach((o, x) => o.classList.toggle('pega', x === j)); j = (j + 1) % ops.length; };
+        gira(); intervaloInterno = setInterval(gira, 1100);
+      }
+      if (i === 3) {
+        const lt = document.getElementById('jLinha');
+        const trilho = lt.querySelector('.lt-trilho');
+        const msg = document.getElementById('jLinhaMsg');
+        const dias = [
+          [1, '"Oi, Camila! Ficou alguma dúvida sobre o orçamento?"'],
+          [3, '"Separei um áudio do Dr. Caio explicando o tratamento 🎧"'],
+          [5, '"Essa semana ainda tenho horário pra começar. Reservo pra você?"'],
+          [7, 'Camila respondeu: "Pode reservar!" → a sequência para sozinha'],
+        ];
+        trilho.querySelectorAll('.lt-ponto').forEach((p) => p.remove());
+        const pts = dias.map(([d], x) => {
+          const p = document.createElement('span');
+          p.className = 'lt-ponto';
+          p.style.left = (x / (dias.length - 1)) * 100 + '%';
+          p.innerHTML = `<span>${x === dias.length - 1 ? 'Resposta' : 'Dia ' + d}</span>`;
+          trilho.appendChild(p);
+          return p;
+        });
+        let j = 0;
+        const anda = () => {
+          pts.forEach((p, x) => p.classList.toggle('feito', x <= j));
+          trilho.querySelector('.ench').style.width = (j / (dias.length - 1)) * 100 + '%';
+          msg.textContent = (j === dias.length - 1 ? '' : 'Dia ' + dias[j][0] + ' · ') + dias[j][1];
+          msg.style.color = j === dias.length - 1 ? 'var(--verde-claro)' : '';
+          j = (j + 1) % dias.length;
+        };
+        anda(); intervaloInterno = setInterval(anda, 1600);
+      }
+      if (i === 4) {
+        const is = document.querySelectorAll('#jBarras i');
+        is.forEach((x) => (x.style.width = '0'));
+        setTimeout(() => is.forEach((x) => (x.style.width = x.dataset.w + '%')), 60);
+      }
+    }
+
+    function mostrar(i, manual) {
+      if (manual) auto = false;
+      atual = i;
+      botoes.forEach((b, x) => {
+        b.classList.toggle('ativo', x === i);
+        b.classList.toggle('parado', !auto);
+        b.setAttribute('aria-selected', x === i);
+        b.style.setProperty('--dur', DUR + 'ms');
+        if (x === i) { const br = b.querySelector('.barra'); br.style.animation = 'none'; void br.offsetWidth; br.style.animation = ''; }
+      });
+      cenas.forEach((c, x) => c.classList.toggle('on', x === i));
+      // no celular as etapas viram uma faixa que rola de lado: mantem a ativa visivel
+      const lista = botoes[i].parentElement;
+      if (lista.scrollWidth > lista.clientWidth) lista.scrollTo({ left: botoes[i].offsetLeft - 16, behavior: reduz ? 'auto' : 'smooth' });
+      cenaExtra(i);
+      clearTimeout(timer);
+      if (auto) timer = setTimeout(() => mostrar((atual + 1) % botoes.length), DUR);
+    }
+    botoes.forEach((b, i) => b.addEventListener('click', () => mostrar(i, true)));
+    mostrar(0);
+    if (auto) { clearTimeout(timer); aoAparecer(document.getElementById('jornada'), () => mostrar(0), 0.25); }
+  })();
+
+  // ---------- conversa de exemplo do Auto Atendimento ----------
+  (() => {
+    const demo = document.getElementById('demo');
+    const bolhas = demo.querySelectorAll('.bolha');
+    if (reduz || !temIO) { bolhas.forEach((b) => b.classList.add('on')); return; }
+    aoAparecer(demo, () => bolhas.forEach((b, i) => setTimeout(() => b.classList.add('on'), 300 + i * 900)), 0.35);
+  })();
+
+  // ---------- abas das novidades ----------
+  const abas = [...document.querySelectorAll('.aba')];
+  const iniciados = {};
+  function abrirAba(nome) {
+    abas.forEach((a) => a.setAttribute('aria-selected', a.dataset.aba === nome));
+    document.querySelectorAll('.painel').forEach((p) => p.classList.toggle('on', p.dataset.painel === nome));
+    if (!iniciados[nome] && inicios[nome]) { iniciados[nome] = true; inicios[nome](); }
   }
+  abas.forEach((a) => a.addEventListener('click', () => abrirAba(a.dataset.aba)));
+  document.querySelectorAll('.novidades-faixa a[data-aba]').forEach((a) => a.addEventListener('click', () => abrirAba(a.dataset.aba)));
+
+  const inicios = {
+    disparos() {
+      const campo = document.getElementById('dispTexto');
+      const saida = document.getElementById('dispPrevias');
+      const pessoas = [['Ana', 'AS'], ['Bruno', 'BM'], ['Carla', 'CR']];
+      const sortear = (t, nome) => t.replace(/\{nome\}/gi, nome).replace(/\{([^{}]*\|[^{}]*)\}/g, (_, op) => { const o = op.split('|'); return o[Math.floor(Math.random() * o.length)]; });
+      const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const montar = () => {
+        saida.innerHTML = pessoas.map(([n, ini], i) =>
+          `<div class="previa"><span class="av">${ini}</span><div class="bolha">${esc(sortear(campo.value, n)) || '…'}<small>${n} · envio ${i + 1} · ${['agora', '+ 47s', '+ 1min 32s'][i]}</small></div></div>`).join('');
+      };
+      campo.addEventListener('input', montar);
+      document.getElementById('dispRegerar').addEventListener('click', montar);
+      montar();
+      contar(document.querySelectorAll('#dispKpis b[data-n]'));
+    },
+    fui() {
+      const qtd = document.getElementById('fuiQtd');
+      const dias = document.getElementById('fuiDias');
+      const resp = document.getElementById('fuiResp');
+      const trilho = document.getElementById('fuiTrilho');
+      const lista = document.getElementById('fuiLista');
+      const textos = ['Oi, {nome}! Ficou alguma dúvida? Tô por aqui 😊', 'Separei um áudio explicando como funciona 🎧', 'Olha esse antes e depois de um caso parecido com o seu 📷', 'Essa semana ainda tenho horário. Reservo pra você?', 'Posso te mandar a tabela de condições de pagamento? 📄', 'Passando pra saber se ainda faz sentido pra você', 'Última chamada: o horário de quinta ainda tá livre', 'Fico à disposição quando quiser retomar 💛'];
+      document.querySelectorAll('#fuiEtapas .etapa-chip').forEach((c) => c.addEventListener('click', () => c.classList.toggle('on')));
+      const montar = () => {
+        const n = Number(qtd.value);
+        const d = Math.max(Number(dias.value), n);
+        if (Number(dias.value) < n) dias.value = n;
+        document.getElementById('fuiQtdV').textContent = n;
+        document.getElementById('fuiDiasV').textContent = d + ' dias';
+        // distribui os dias como no app: 1o no dia 1, ultimo no fim
+        const ds = Array.from({ length: n }, (_, i) => n === 1 ? 1 : Math.round(1 + (i * (d - 1)) / (n - 1)));
+        const parou = resp.checked ? 3 : Infinity;
+        trilho.querySelectorAll('.lt-ponto').forEach((p) => p.remove());
+        ds.forEach((dia, i) => {
+          const p = document.createElement('span');
+          p.className = 'lt-ponto ' + (i < parou ? 'feito' : 'cancel');
+          p.style.left = (d === 1 ? 0 : ((dia - 1) / (d - 1)) * 100) + '%';
+          p.innerHTML = n <= 6 || i % 2 === 0 || i === n - 1 ? `<span>D${dia}</span>` : '';
+          trilho.appendChild(p);
+        });
+        const ultimo = Math.min(parou, n) - 1;
+        trilho.querySelector('.ench').style.width = (d === 1 ? 0 : ((ds[ultimo] - 1) / (d - 1)) * 100) + '%';
+        let html = '';
+        ds.forEach((dia, i) => {
+          html += `<div class="fu-item${i >= parou ? ' parou' : ''}"><b>Dia ${dia}</b><span>${textos[i % textos.length].replace('{nome}', 'Camila')}</span></div>`;
+          if (i === parou - 1) html += `<div class="fu-item resp"><b>Resposta</b><span>Camila: "Quero sim!" → a sequência para e a IA continua a conversa</span></div>`;
+        });
+        lista.innerHTML = html;
+      };
+      [qtd, dias, resp].forEach((el) => el.addEventListener('input', montar));
+      montar();
+    },
+    equipe() {
+      const fila = document.getElementById('opFila');
+      const ops = [...document.querySelectorAll('#opLista .operador')];
+      const nomes = ['Marcos T.', 'Paula R.', 'Diego F.', 'Sofia L.', 'Renata M.', 'Igor S.', 'Bianca A.', 'Thiago C.'];
+      let vez = 0, n = 0;
+      function chega() {
+        const alvo = ops[vez];
+        const chip = document.createElement('div');
+        chip.className = 'lead-voa';
+        chip.textContent = '💬 ' + nomes[n++ % nomes.length];
+        fila.appendChild(chip);
+        const r = fila.getBoundingClientRect(), a = alvo.getBoundingClientRect();
+        const dx = a.left + a.width / 2 - (r.left + r.width / 2);
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          chip.style.transform = `translate(calc(-50% + ${dx}px), 60px) scale(.7)`;
+          chip.style.opacity = '0';
+        }));
+        setTimeout(() => {
+          chip.remove();
+          ops.forEach((o) => o.classList.toggle('pega', o === alvo));
+          const c = alvo.querySelector('.cont');
+          c.textContent = Number(c.textContent) + 1;
+        }, 700);
+        vez = (vez + 1) % ops.length;
+      }
+      document.getElementById('opBtn').addEventListener('click', chega);
+      chega();
+      if (!reduz) {
+        const iv = setInterval(() => {
+          if (document.querySelector('.painel[data-painel="equipe"]').classList.contains('on') && !document.hidden) chega();
+        }, 2200);
+        setTimeout(() => clearInterval(iv), 120000);
+      }
+    },
+    origem() {
+      const is = document.querySelectorAll('#origemTab .mb i');
+      setTimeout(() => is.forEach((x) => (x.style.width = x.dataset.w + '%')), 80);
+    },
+    ligacoes() {
+      const g = document.getElementById('ligGraf');
+      const dados = [[8, 2, 0], [9, 4, 1], [10, 5, 1], [11, 4, 2], [12, 1, 1], [13, 2, 0], [14, 3, 1], [15, 4, 0], [16, 2, 1], [17, 1, 1], [18, 1, 0]];
+      const max = 7;
+      g.innerHTML = dados.map(([h, a, p]) => `<div class="h" title="${h}h: ${a} atendidas, ${p} perdidas"><i class="a" data-h="${(a / max) * 100}"></i><i class="p" data-h="${(p / max) * 100}"></i><span>${h}h</span></div>`).join('');
+      setTimeout(() => g.querySelectorAll('i').forEach((x) => (x.style.height = x.dataset.h + '%')), 80);
+      contar(document.querySelectorAll('[data-painel="ligacoes"] b[data-n]'));
+    },
+    setores() {
+      const dados = [
+        [['Mariana S.', 'Avaliação de implante', 'Novo lead'], ['Roberto L.', 'Dúvida sobre convênio', 'Em atendimento'], ['Juliana P.', 'Sáb · 10:30', 'Agendado']],
+        [['Pedro H.', 'Manutenção do aparelho', 'Agendado'], ['Lara V.', 'Orçamento de alinhador', 'Follow Up'], ['Caio N.', 'Quebrou o bráquete', 'Em atendimento']],
+        [['Fernanda R.', 'Lentes de contato', 'Em negociação'], ['Bia M.', 'Harmonização facial', 'Novo lead'], ['Lívia C.', 'Fechou o tratamento', 'Comprou']],
+      ];
+      const lista = document.getElementById('setorLista');
+      const btns = [...document.querySelectorAll('#setorSel .setor-btn')];
+      const pinta = (s) => {
+        btns.forEach((b) => b.classList.toggle('on', Number(b.dataset.s) === s));
+        lista.innerHTML = dados[s].map(([n, t, e], i) => `<div class="cartao" style="animation-delay:${i * 70}ms"><div><strong>${n}</strong><small>${t}</small></div><span class="tag ${e === 'Comprou' || e === 'Agendado' ? 'ok' : 'ia'}">${e}</span></div>`).join('');
+      };
+      btns.forEach((b) => b.addEventListener('click', () => pinta(Number(b.dataset.s))));
+      pinta(0);
+    },
+    clinicorp() {
+      const passos = [...document.querySelectorAll('#ccPassos .passo-cc')];
+      let tms = [];
+      const roda = () => {
+        tms.forEach(clearTimeout); tms = [];
+        passos.forEach((p) => p.classList.remove('on'));
+        passos.forEach((p, i) => tms.push(setTimeout(() => p.classList.add('on'), reduz ? 0 : 250 + i * 800)));
+      };
+      document.getElementById('ccBtn').addEventListener('click', roda);
+      roda();
+    },
+  };
+  aoAparecer(document.getElementById('novidades'), () => { iniciados.disparos = true; inicios.disparos(); }, 0.15);
+
+  // ---------- cerebro: rede de neuronios animada ----------
+  (() => {
+    const cv = document.getElementById('cerebro');
+    const ctx = cv.getContext('2d');
+    const cores = ['#f0cf6b', '#3ddc97', '#ff8a4c', '#6ea8ff'];
+    const centros = [[0.3, 0.35], [0.7, 0.32], [0.33, 0.7], [0.7, 0.68]];
+    let W = 0, H = 0, nos = [], ligs = [], pulsos = [], vis = false, raf = 0;
+    function medir() {
+      const dpr = Math.min(devicePixelRatio || 1, 2);
+      const r = cv.getBoundingClientRect();
+      W = r.width; H = r.height;
+      cv.width = W * dpr; cv.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    function criar() {
+      nos = []; ligs = [];
+      const total = W < 500 ? 40 : 64;
+      for (let i = 0; i < total; i++) {
+        const g = i % 4, [cx, cy] = centros[g];
+        const ang = Math.random() * Math.PI * 2, rad = Math.random() * 0.17;
+        nos.push({ g, bx: cx + Math.cos(ang) * rad, by: cy + Math.sin(ang) * rad * 1.1, f: Math.random() * 6.28, r: 2.4 + Math.random() * 3.2 });
+      }
+      nos.forEach((a, i) => {
+        const perto = nos.map((b, j) => [j, Math.hypot(a.bx - b.bx, a.by - b.by) + (a.g === b.g ? 0 : 0.12)])
+          .filter(([j]) => j !== i).sort((x, y) => x[1] - y[1]).slice(0, 2);
+        perto.forEach(([j]) => { if (i < j || !ligs.some((l) => l[0] === j && l[1] === i)) ligs.push([i, j]); });
+      });
+    }
+    const pos = (n, t) => [(n.bx + Math.sin(t * 0.0004 + n.f) * 0.012) * W, (n.by + Math.cos(t * 0.0005 + n.f) * 0.012) * H];
+    function quadro(t) {
+      ctx.clearRect(0, 0, W, H);
+      const P = nos.map((n) => pos(n, t));
+      ctx.lineWidth = 1;
+      ligs.forEach(([a, b]) => {
+        ctx.strokeStyle = cores[nos[a].g] + '33';
+        ctx.beginPath(); ctx.moveTo(P[a][0], P[a][1]); ctx.lineTo(P[b][0], P[b][1]); ctx.stroke();
+      });
+      if (Math.random() < 0.08 && pulsos.length < 18) pulsos.push({ l: ligs[Math.floor(Math.random() * ligs.length)], k: 0 });
+      pulsos = pulsos.filter((p) => (p.k += 0.018) < 1);
+      pulsos.forEach((p) => {
+        const [a, b] = p.l, x = P[a][0] + (P[b][0] - P[a][0]) * p.k, y = P[a][1] + (P[b][1] - P[a][1]) * p.k;
+        ctx.fillStyle = cores[nos[a].g];
+        ctx.shadowColor = cores[nos[a].g]; ctx.shadowBlur = 10;
+        ctx.beginPath(); ctx.arc(x, y, 2, 0, 6.28); ctx.fill();
+      });
+      nos.forEach((n, i) => {
+        const brilho = 0.6 + 0.4 * Math.sin(t * 0.002 + n.f);
+        ctx.shadowColor = cores[n.g]; ctx.shadowBlur = 14 * brilho;
+        ctx.fillStyle = cores[n.g];
+        ctx.globalAlpha = 0.65 + 0.35 * brilho;
+        ctx.beginPath(); ctx.arc(P[i][0], P[i][1], n.r, 0, 6.28); ctx.fill();
+        ctx.globalAlpha = 1;
+      });
+      ctx.shadowBlur = 0;
+      if (vis && !reduz) raf = requestAnimationFrame(quadro);
+    }
+    medir(); criar(); quadro(0);
+    addEventListener('resize', () => { medir(); criar(); if (!vis || reduz) quadro(performance.now()); });
+    if (temIO && !reduz) {
+      new IntersectionObserver((es) => {
+        vis = es[0].isIntersecting;
+        cancelAnimationFrame(raf);
+        if (vis) raf = requestAnimationFrame(quadro);
+      }).observe(cv);
+    }
+  })();
 </script>
 </body>
 </html>
