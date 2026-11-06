@@ -828,5 +828,13 @@
     "tipo": "melhoria",
     "titulo": "Landing page: terceiro plano \"Monte seu pacote\"",
     "conteudo": "Pedido do dono: terceira opção de compra além de Lumia Atendimento e Lumia Completa, onde a pessoa escolhe as funções que quer (18 opções em chips marcáveis, Auto Atendimento e CRM já vêm marcados) e pede o orçamento do valor final, também sob consulta. O botão abre o WhatsApp comercial com a lista das funções escolhidas na mensagem, e fica desativado sem nenhuma escolhida. Três colunas no computador; no tablet o pacote ocupa a linha inteira embaixo."
+  },
+  {
+    "chave": "app:perfil-e-visao",
+    "modulo": "app",
+    "data": "2026-11-06",
+    "tipo": "funcao",
+    "titulo": "Perfil no topo (foto/nome/papel) e visão por número e operador",
+    "conteudo": "Pedido do dono: mostrar no topo quem está logado, editar perfil (nome e foto) e, em contas com 2+ números e operadores, poder acompanhar outros números/operadores. Topo: chip com foto (ou iniciais), nome e papel (Administrador / Dono da conta / Operador), menu Editar perfil / Sair; modal de perfil com foto reduzida a 256px JPEG no navegador. Back: tenants.nome_perfil/foto_perfil e tenant_colaboradores.foto_perfil, GET /api/me devolve perfil/instancias/operadores/instanciaAtiva, PUT /api/perfil. Visão: seletores 'Número' e 'Operador' no topo, sincronizados com os de CRM, Conversas, Contatos e Disparos (operador vale p/ CRM e Conversas; Contatos/Disparos só por número). Operador (colaborador) abre por padrão em 'Meus + sem operador' e pode trocar pra acompanhar outros. Importante: é só VISÃO - o operador ainda consegue abrir qualquer lead (não há bloqueio de permissão por número/operador). Pendente: restringir de verdade se o dono quiser."
   }
 ]

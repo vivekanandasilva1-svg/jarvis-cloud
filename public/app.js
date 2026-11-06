@@ -346,6 +346,7 @@ let minhasTabsHabilitadas = null; // null = tudo liberado (default); array = so 
 let meuPermiteColaboradores = false; // beneficio liberado pelo super_admin (aba Clientes) - ver tenants.permite_colaboradores
 // Cerebro de IA e recurso pago a parte - false ate o admin liberar (super_admin sempre tem)
 let meuCerebroLiberado = false;
+let meusDadosMe = null; // resposta inteira de /api/me (perfil, numeros, operadores)
 
 
 // confirma que o token guardado ainda e valido (nao expirou, tenant continua ativo) - chamado
@@ -362,6 +363,7 @@ async function tokenValido() {
     minhasTabsHabilitadas = Array.isArray(data?.tabsHabilitadas) && data.tabsHabilitadas.length ? data.tabsHabilitadas : null;
     meuPermiteColaboradores = !!data?.permiteColaboradores;
     meuCerebroLiberado = !!data?.cerebroLiberado;
+    meusDadosMe = data;
     return true;
   } catch {
     return false;
@@ -421,6 +423,7 @@ function mostrarApp() {
   iniciarClima();
   iniciarSino();
   testarConexaoAgenteLocal();
+  if (meusDadosMe) iniciarPerfilTopo(meusDadosMe);
 }
 
 function sair() {
@@ -3102,7 +3105,7 @@ async function carregarConversas() {
       if (novo) { cvAberto = { ...novo, nao_lida: false }; cvAtualizarTopo(); }
     }
     renderizarListaConversas();
-    atualizarBadgeConversas(cvContatos.filter((c) => c.nao_lida && c.id !== cvAberto?.id && (!cvInstancia.value || c.instancia === cvInstancia.value)).length);
+    atualizarBadgeConversas(cvContatos.filter((c) => c.nao_lida && c.id !== cvAberto?.id && (!cvInstancia.value || c.instancia === cvInstancia.value) && contatoNoOperador(c)).length);
   } catch (err) {
     cvLista.textContent = '';
     const p = document.createElement('p');
@@ -3117,6 +3120,7 @@ function renderizarListaConversas() {
   const soDigitos = termo.replace(/\D/g, '');
   const lista = cvContatos.filter((c) => {
     if (cvInstancia.value && c.instancia !== cvInstancia.value) return false;
+    if (!contatoNoOperador(c)) return false;
     if (cvFiltro === 'naoLidas' && !(c.nao_lida && c.id !== cvAberto?.id)) return false;
     if (cvFiltro === 'ia' && c.auto_pausado) return false;
     if (cvFiltro === 'humano' && !c.auto_pausado) return false;
@@ -3279,7 +3283,7 @@ cvBusca.addEventListener('input', renderizarListaConversas);
 cvInstancia.addEventListener('change', () => {
   numeroSalvar(cvInstancia.value);
   renderizarListaConversas();
-  atualizarBadgeConversas(cvContatos.filter((c) => c.nao_lida && c.id !== cvAberto?.id && (!cvInstancia.value || c.instancia === cvInstancia.value)).length);
+  atualizarBadgeConversas(cvContatos.filter((c) => c.nao_lida && c.id !== cvAberto?.id && (!cvInstancia.value || c.instancia === cvInstancia.value) && contatoNoOperador(c)).length);
 });
 cvFiltros.addEventListener('click', (ev) => {
   const btn = ev.target.closest('.cv-filtro');
@@ -8903,6 +8907,25 @@ const crmDistribuicaoBtn = document.getElementById('crmDistribuicaoBtn');
 const crmDistribuicaoModal = document.getElementById('crmDistribuicaoModal');
 let crmUltimosDados = null;
 let crmOperadores = { lista: [], euId: 0 };
+// visao do operador (CRM e Conversas): '' todos | 'eu' | 'meuslivres' | 'livre' | 'op:ID' - guardada no navegador
+let visaoOp = (() => { try { return localStorage.getItem('crmOperador') || ''; } catch { return ''; } })();
+function contatoNoOperador(c) {
+  if (!visaoOp) return true;
+  const sem = c.atendente_id === null || c.atendente_id === undefined;
+  const eu = minhaVisao.euId || crmOperadores.euId;
+  if (visaoOp === 'livre') return sem;
+  if (visaoOp === 'eu') return c.atendente_id === eu;
+  if (visaoOp === 'meuslivres') return sem || c.atendente_id === eu;
+  return c.atendente_id === Number(visaoOp.slice(3));
+}
+function aplicarVisaoOperador(v) {
+  visaoOp = v;
+  try { localStorage.setItem('crmOperador', v); } catch { /* sem storage */ }
+  crmFiltroOperador.value = v;
+  if (typeof visaoOperadorSel !== 'undefined') visaoOperadorSel.value = v;
+  if (crmUltimosDados) renderizarCrmBoard(crmUltimosDados.etapas || [], crmFiltrarPorOperador(crmUltimosDados.contatos || []));
+  if (cvContatos.length) { renderizarListaConversas(); atualizarBadgeConversas(cvContatos.filter((c) => c.nao_lida && c.id !== cvAberto?.id && (!cvInstancia.value || c.instancia === cvInstancia.value) && contatoNoOperador(c)).length); }
+}
 
 async function carregarOperadoresCrm() {
   try {
@@ -8918,9 +8941,9 @@ async function carregarOperadoresCrm() {
 function preencherSeletoresOperador() {
   const filtroAtual = crmFiltroOperador.value;
   crmFiltroOperador.textContent = '';
-  const opcoes = [['', 'Todos os operadores'], ['eu', 'Meus leads'], ['livre', 'Sem operador'], ...crmOperadores.lista.map((o) => [`op:${o.id}`, o.nome])];
+  const opcoes = [['', 'Todos os operadores'], ['eu', 'Meus leads'], ['meuslivres', 'Meus + sem operador'], ['livre', 'Sem operador'], ...crmOperadores.lista.map((o) => [`op:${o.id}`, o.nome])];
   for (const [valor, texto] of opcoes) crmFiltroOperador.add(new Option(texto, valor));
-  crmFiltroOperador.value = filtroAtual;
+  crmFiltroOperador.value = visaoOp;
   const atual = crmConversaOperador.value;
   crmConversaOperador.textContent = '';
   crmConversaOperador.add(new Option('Sem operador', ''));
@@ -8930,11 +8953,7 @@ function preencherSeletoresOperador() {
 
 function crmFiltrarPorOperador(contatos) {
   if (crmFiltroNumero.value) contatos = contatos.filter((c) => c.instancia === crmFiltroNumero.value);
-  const f = crmFiltroOperador.value;
-  if (!f) return contatos;
-  if (f === 'livre') return contatos.filter((c) => c.atendente_id === null || c.atendente_id === undefined);
-  const id = f === 'eu' ? crmOperadores.euId : Number(f.slice(3));
-  return contatos.filter((c) => c.atendente_id === id);
+  return visaoOp ? contatos.filter(contatoNoOperador) : contatos;
 }
 // ---- funil exclusivo por numero de WhatsApp (setores diferentes nao misturam leads) ----
 const crmFiltroNumero = document.getElementById('crmFiltroNumero');
@@ -9005,9 +9024,7 @@ crmFuiClinicorp.addEventListener('click', async () => {
   crmCarregarFuiClinicorp();
 });
 
-crmFiltroOperador.addEventListener('change', () => {
-  if (crmUltimosDados) renderizarCrmBoard(crmUltimosDados.etapas || [], crmFiltrarPorOperador(crmUltimosDados.contatos || []));
-});
+crmFiltroOperador.addEventListener('change', () => aplicarVisaoOperador(crmFiltroOperador.value));
 
 function crmAtualizarOperadorConversa() {
   if (!crmContatoAberto) return;
@@ -9939,3 +9956,156 @@ async function abrirPainelDisparos() {
   }
 }
 dispPainelBtn.addEventListener('click', abrirPainelDisparos);
+
+
+// ---------- Perfil de quem esta logado (topo da janela) + visao por numero/operador ----------
+// O topo mostra quem esta logado (foto, nome, papel), deixa editar nome/foto e, em contas com mais de
+// um numero de WhatsApp ou mais de um operador, escolher qual numero/operador acompanhar. A escolha
+// vale pra CRM, Conversas, Contatos e Disparos (mesmo seletor de cada aba, sempre sincronizados).
+const perfilBtn = document.getElementById('perfilBtn');
+const perfilMenu = document.getElementById('perfilMenu');
+const perfilAvatarEl = document.getElementById('perfilAvatar');
+const perfilNomeEl = document.getElementById('perfilNome');
+const perfilPapelEl = document.getElementById('perfilPapel');
+const visaoNumeroSel = document.getElementById('visaoNumero');
+const visaoOperadorSel = document.getElementById('visaoOperador');
+const perfilModal = document.getElementById('perfilModal');
+const PAPEIS = { admin: 'Administrador', dono: 'Dono da conta', operador: 'Operador' };
+let meuPerfil = null;
+let minhaVisao = { instancias: [], operadores: [], euId: 0, instanciaAtiva: null };
+let perfilFotoNova; // undefined = nao mexe, null = remover, string = nova foto (data URL)
+
+function perfilIniciais(nome) {
+  const p = String(nome || '?').trim().split(/\s+/).filter(Boolean);
+  return ((p[0]?.[0] || '?') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase();
+}
+
+function perfilPintarAvatar(el, foto, nome) {
+  el.textContent = '';
+  el.style.backgroundImage = '';
+  if (foto) { el.style.backgroundImage = `url("${foto}")`; el.classList.add('com-foto'); } else { el.classList.remove('com-foto'); el.textContent = perfilIniciais(nome); }
+}
+
+function renderizarPerfilTopo() {
+  if (!meuPerfil) return;
+  perfilPintarAvatar(perfilAvatarEl, meuPerfil.foto, meuPerfil.nome);
+  perfilNomeEl.textContent = meuPerfil.nome;
+  perfilPapelEl.textContent = `${PAPEIS[meuPerfil.papel] || 'Usuário'}${meuPerfil.empresa && meuPerfil.papel !== 'dono' ? ` · ${meuPerfil.empresa}` : ''}`;
+  perfilBtn.hidden = false;
+}
+
+function preencherVisaoNumero() {
+  const lista = minhaVisao.instancias;
+  visaoNumeroSel.textContent = '';
+  visaoNumeroSel.add(new Option('Todos os números', ''));
+  for (const i of lista) visaoNumeroSel.add(new Option(`Número: ${i}`, i));
+  visaoNumeroSel.value = lista.includes(numeroSalvo()) ? numeroSalvo() : '';
+  visaoNumeroSel.hidden = lista.length < 2;
+}
+
+function preencherVisaoOperador() {
+  visaoOperadorSel.textContent = '';
+  const opcoes = [['', 'Todos os operadores'], ['eu', 'Meus leads'], ['meuslivres', 'Meus + sem operador'], ['livre', 'Sem operador'], ...minhaVisao.operadores.map((o) => [`op:${o.id}`, `Operador: ${o.nome}`])];
+  for (const [v, t] of opcoes) visaoOperadorSel.add(new Option(t, v));
+  visaoOperadorSel.value = visaoOp;
+  visaoOperadorSel.hidden = minhaVisao.operadores.length < 2;
+}
+
+// chamado no login (mostrarApp) com o que /api/me devolveu
+function iniciarPerfilTopo(dados) {
+  meuPerfil = dados.perfil || null;
+  minhaVisao = { instancias: (dados.instancias || []).filter((i) => !String(i).startsWith('ig:')), operadores: dados.operadores || [], euId: dados.euId || 0, instanciaAtiva: dados.instanciaAtiva || null };
+  // 1o acesso com 2+ numeros: abre no numero ativo (cada setor ve so o seu); operador comeca vendo os leads dele + os sem dono
+  if (minhaVisao.instancias.length > 1 && numeroSalvo() === null) numeroSalvar(minhaVisao.instancias.includes(minhaVisao.instanciaAtiva) ? minhaVisao.instanciaAtiva : minhaVisao.instancias[0]);
+  let opSalvo = null;
+  try { opSalvo = localStorage.getItem('crmOperador'); } catch { /* sem storage */ }
+  if (opSalvo === null && minhaVisao.euId > 0) { visaoOp = 'meuslivres'; try { localStorage.setItem('crmOperador', visaoOp); } catch { /* sem storage */ } }
+  renderizarPerfilTopo();
+  preencherVisaoNumero();
+  preencherVisaoOperador();
+}
+
+visaoNumeroSel.addEventListener('change', () => {
+  numeroSalvar(visaoNumeroSel.value);
+  for (const sel of [crmFiltroNumero, ctFiltroNumero, dispNumero, cvInstancia]) {
+    if (![...sel.options].some((o) => o.value === visaoNumeroSel.value)) continue;
+    sel.value = visaoNumeroSel.value;
+    sel.dispatchEvent(new Event('change'));
+  }
+});
+// mexeu no seletor de uma aba: o do topo acompanha
+for (const sel of [crmFiltroNumero, ctFiltroNumero, dispNumero, cvInstancia]) sel.addEventListener('change', () => { if ([...visaoNumeroSel.options].some((o) => o.value === sel.value)) visaoNumeroSel.value = sel.value; });
+visaoOperadorSel.addEventListener('change', () => aplicarVisaoOperador(visaoOperadorSel.value));
+
+// ---- menu do perfil ----
+perfilBtn.addEventListener('click', (e) => { e.stopPropagation(); perfilMenu.hidden = !perfilMenu.hidden; });
+document.addEventListener('click', (e) => { if (!perfilMenu.hidden && !perfilMenu.contains(e.target)) perfilMenu.hidden = true; });
+document.getElementById('perfilSair').addEventListener('click', () => { perfilMenu.hidden = true; sair(); });
+document.getElementById('perfilEditar').addEventListener('click', () => { perfilMenu.hidden = true; abrirPerfilModal(); });
+
+const perfilNomeInput = document.getElementById('perfilNomeInput');
+const perfilFotoPrev = document.getElementById('perfilFotoPrev');
+const perfilFotoArq = document.getElementById('perfilFotoArq');
+const perfilErro = document.getElementById('perfilErro');
+
+function abrirPerfilModal() {
+  if (!meuPerfil) return;
+  perfilFotoNova = undefined;
+  perfilNomeInput.value = meuPerfil.nome;
+  perfilPintarAvatar(perfilFotoPrev, meuPerfil.foto, meuPerfil.nome);
+  perfilErro.hidden = true;
+  perfilFotoArq.value = '';
+  perfilModal.hidden = false;
+  perfilNomeInput.focus();
+}
+perfilModal.addEventListener('click', (e) => { if (e.target === perfilModal || e.target.closest('[data-fechar="perfilModal"]')) perfilModal.hidden = true; });
+
+// reduz a foto pra 256x256 (recorte central) em JPEG - fica leve (~20KB) e carrega junto do login
+function perfilReduzirFoto(arquivo) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(arquivo);
+    const img = new Image();
+    img.onload = () => {
+      const lado = Math.min(img.width, img.height);
+      const c = document.createElement('canvas');
+      c.width = c.height = 256;
+      c.getContext('2d').drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, 256, 256);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Não consegui abrir essa imagem.')); };
+    img.src = url;
+  });
+}
+perfilFotoArq.addEventListener('change', async () => {
+  const arq = perfilFotoArq.files?.[0];
+  if (!arq) return;
+  try {
+    perfilFotoNova = await perfilReduzirFoto(arq);
+    perfilPintarAvatar(perfilFotoPrev, perfilFotoNova, perfilNomeInput.value);
+    perfilErro.hidden = true;
+  } catch (err) { perfilErro.textContent = err.message; perfilErro.hidden = false; }
+});
+document.getElementById('perfilFotoRemover').addEventListener('click', () => {
+  perfilFotoNova = null;
+  perfilFotoArq.value = '';
+  perfilPintarAvatar(perfilFotoPrev, null, perfilNomeInput.value);
+});
+document.getElementById('perfilSalvar').addEventListener('click', async (e) => {
+  const nome = perfilNomeInput.value.trim();
+  if (!nome) { perfilErro.textContent = 'Informe o nome.'; perfilErro.hidden = false; return; }
+  e.target.disabled = true;
+  try {
+    const corpo = { nome };
+    if (perfilFotoNova !== undefined) corpo.foto = perfilFotoNova;
+    const res = await fetch('/api/perfil', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify(corpo) });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    meuPerfil = d.perfil;
+    renderizarPerfilTopo();
+    perfilModal.hidden = true;
+    mostrarAviso('Perfil atualizado');
+    carregarOperadoresCrm().catch(() => {});
+  } catch (err) { perfilErro.textContent = err.message; perfilErro.hidden = false; }
+  e.target.disabled = false;
+});

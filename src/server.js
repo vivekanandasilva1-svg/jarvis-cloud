@@ -199,9 +199,26 @@ app.get('/api/me', async (req, res) => {
     const tabsHabilitadas = await tenantConfig.obterTabsHabilitadas(tenant.id);
     const cerebroLiberado = !!tenant.super_admin || await cerebro.estaLiberado(tenant.id).catch(() => false);
     const operador = (await crm.listarOperadores(tenant.id).catch(() => [])).find((o) => o.id === (req.operadorId || 0)) || { id: 0, nome: tenant.nome };
-    res.json({ operador, tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas, permiteColaboradores: !!tenant.permite_colaboradores, cerebroLiberado });
+    const [perfil, instancias, operadores] = await Promise.all([
+      tenants.obterPerfil(tenant.id, req.operadorId || 0),
+      tenants.listarInstanciasDoTenant(tenant.id).catch(() => []),
+      crm.listarOperadores(tenant.id).catch(() => []),
+    ]);
+    const instanciaAtiva = (await whatsappInstances.obterConfig(tenant.id).catch(() => ({}))).instanciaAtiva || null;
+    res.json({ perfil, instancias, operadores, instanciaAtiva, euId: req.operadorId || 0, operador, tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas, permiteColaboradores: !!tenant.permite_colaboradores, cerebroLiberado });
   } catch (err) {
     res.status(500).json({ erro: err.message });
+  }
+});
+
+// editar o proprio perfil (nome de exibicao + foto) - vale pra quem esta logado (dono ou colaborador)
+app.put('/api/perfil', async (req, res) => {
+  try {
+    if (!req.tenantId) return res.status(401).json({ erro: 'nao autenticado' });
+    await tenants.salvarPerfil(req.tenantId, req.operadorId || 0, { nome: req.body?.nome, foto: req.body?.foto });
+    res.json({ ok: true, perfil: await tenants.obterPerfil(req.tenantId, req.operadorId || 0) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
   }
 });
 

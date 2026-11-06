@@ -77,6 +77,11 @@ async function garantirTabelas() {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS tenant_colaboradores_tenant_idx ON tenant_colaboradores (tenant_id);`);
+  // perfil de quem esta logado (nome de exibicao + foto, ate ~200KB em data URL): o dono usa nome_perfil (o "nome" do
+  // tenant e o da empresa), o colaborador usa o proprio nome
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS nome_perfil TEXT;`);
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS foto_perfil TEXT;`);
+  await pool.query(`ALTER TABLE tenant_colaboradores ADD COLUMN IF NOT EXISTS foto_perfil TEXT;`);
 }
 // exportado pra outros modulos poderem esperar a tabela "tenants" existir antes de criar as
 // PROPRIAS tabelas (que tem REFERENCES tenants(id)) - sem isso, como cada modulo cria sua
@@ -172,7 +177,7 @@ export async function autenticarOperador(username, senha) {
 export async function listarOperadores(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
-  const { rows: [t] } = await pool.query('SELECT nome FROM tenants WHERE id = $1', [tenantId]);
+  const { rows: [t] } = await pool.query('SELECT COALESCE(nome_perfil, nome) AS nome FROM tenants WHERE id = $1', [tenantId]);
   const { rows } = await pool.query('SELECT id, nome FROM tenant_colaboradores WHERE tenant_id = $1 AND ativo = true ORDER BY nome ASC', [tenantId]);
   return [{ id: 0, nome: t?.nome || 'Dono' }, ...rows.map((r) => ({ id: r.id, nome: r.nome }))];
 }
@@ -565,4 +570,41 @@ export async function listarInstanciasDoTenant(tenantId) {
   await tabelasProntas;
   const { rows } = await pool.query('SELECT instancia FROM whatsapp_instance_tenant WHERE tenant_id = $1', [tenantId]);
   return rows.map((r) => r.instancia);
+}
+
+// ---------- perfil de quem esta logado ----------
+
+// colaboradorId 0 = o dono da conta. papel: 'admin' (super_admin), 'dono' ou 'operador'
+export async function obterPerfil(tenantId, colaboradorId = 0) {
+  if (!pool) return null;
+  await tabelasProntas;
+  const { rows: [t] } = await pool.query('SELECT nome, nome_perfil, foto_perfil, super_admin FROM tenants WHERE id = $1', [tenantId]);
+  if (!t) return null;
+  if (!colaboradorId) return { nome: t.nome_perfil || t.nome, foto: t.foto_perfil || null, papel: t.super_admin ? 'admin' : 'dono', empresa: t.nome };
+  const { rows: [c] } = await pool.query('SELECT nome, foto_perfil FROM tenant_colaboradores WHERE id = $1 AND tenant_id = $2', [colaboradorId, tenantId]);
+  if (!c) return { nome: t.nome_perfil || t.nome, foto: t.foto_perfil || null, papel: 'dono', empresa: t.nome };
+  return { nome: c.nome, foto: c.foto_perfil || null, papel: 'operador', empresa: t.nome };
+}
+
+export async function salvarPerfil(tenantId, colaboradorId, { nome, foto }) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const nomeLimpo = String(nome ?? '').trim().slice(0, 80);
+  if (!nomeLimpo) throw new Error('Informe o nome.');
+  let fotoFinal;
+  if (foto === null || foto === '') fotoFinal = null; // remove a foto
+  else if (foto === undefined) fotoFinal = undefined; // nao mexe
+  else {
+    if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(String(foto))) throw new Error('Foto invalida - use uma imagem JPG, PNG ou WebP.');
+    if (String(foto).length > 300000) throw new Error('Foto muito grande - escolha uma imagem menor.');
+    fotoFinal = String(foto);
+  }
+  if (!colaboradorId) {
+    if (fotoFinal === undefined) await pool.query('UPDATE tenants SET nome_perfil = $1 WHERE id = $2', [nomeLimpo, tenantId]);
+    else await pool.query('UPDATE tenants SET nome_perfil = $1, foto_perfil = $3 WHERE id = $2', [nomeLimpo, tenantId, fotoFinal]);
+  } else if (fotoFinal === undefined) {
+    await pool.query('UPDATE tenant_colaboradores SET nome = $1 WHERE id = $2 AND tenant_id = $3', [nomeLimpo, colaboradorId, tenantId]);
+  } else {
+    await pool.query('UPDATE tenant_colaboradores SET nome = $1, foto_perfil = $4 WHERE id = $2 AND tenant_id = $3', [nomeLimpo, colaboradorId, tenantId, fotoFinal]);
+  }
 }
