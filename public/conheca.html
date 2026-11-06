@@ -482,6 +482,23 @@
     /* planos */
     .planos { display: grid; gap: 18px; grid-template-columns: 1fr; max-width: 980px; margin: 0 auto; }
     @media (min-width: 820px) { .planos { grid-template-columns: 1fr 1fr; } }
+    @media (min-width: 1100px) { .planos { grid-template-columns: repeat(3, 1fr); max-width: none; } }
+    @media (min-width: 820px) and (max-width: 1099px) { .plano.monte { grid-column: 1 / -1; } }
+    .plano.monte { border-style: dashed; border-color: var(--borda-ouro); }
+    .modulos { display: flex; flex-wrap: wrap; gap: 7px; margin: 16px 0 14px; }
+    .modulos label { cursor: pointer; user-select: none; }
+    .modulos input { position: absolute; opacity: 0; pointer-events: none; }
+    .modulos span {
+      display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 999px; font-size: 13px;
+      border: 1px solid var(--borda); background: var(--fundo-2); color: var(--dim); transition: all .18s;
+    }
+    .modulos span::before { content: "+"; font-weight: 800; color: var(--ouro); }
+    .modulos input:checked + span { border-color: var(--ouro); background: rgba(212,175,55,.14); color: var(--ouro-claro); }
+    .modulos input:checked + span::before { content: "✓"; }
+    .modulos input:focus-visible + span { outline: 2px solid var(--ouro); outline-offset: 2px; }
+    .monte-resumo { font-size: 14px; color: var(--dim); margin: 0 0 18px; min-height: 22px; flex: 1; }
+    .monte-resumo b { color: var(--ouro-claro); }
+    .plano .btn[aria-disabled="true"] { opacity: .5; pointer-events: none; }
     .plano { position: relative; background: var(--card); border: 1px solid var(--borda); border-radius: 20px; padding: 32px; display: flex; flex-direction: column; }
     .plano.top { border-color: var(--ouro); background: linear-gradient(170deg, rgba(212,175,55,.14), var(--card) 50%); box-shadow: 0 30px 70px rgba(0,0,0,.4), 0 0 0 1px rgba(212,175,55,.25); }
     .plano .fita { position: absolute; top: -13px; left: 32px; background: linear-gradient(180deg, var(--ouro-claro), var(--ouro)); color: #241c05; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding: 5px 12px; border-radius: 999px; }
@@ -1283,6 +1300,33 @@
           </ul>
           <a href="#" class="btn btn-ouro js-zap" data-msg="Olá! Quero saber mais sobre o plano Lumia Completa.">Quero a Lumia Completa</a>
         </div>
+        <div class="plano monte rev">
+          <h3>Monte seu pacote</h3>
+          <p class="para">Escolha só as funções que você quer e a gente faz o orçamento do valor final.</p>
+          <div class="preco">Sob consulta</div>
+          <div class="modulos" id="monteMods">
+            <label><input type="checkbox" value="Auto Atendimento com IA" checked><span>Auto Atendimento com IA</span></label>
+            <label><input type="checkbox" value="CRM Kanban" checked><span>CRM Kanban</span></label>
+            <label><input type="checkbox" value="Conversas"><span>Conversas</span></label>
+            <label><input type="checkbox" value="Contatos"><span>Contatos</span></label>
+            <label><input type="checkbox" value="Follow Up Inteligente"><span>Follow Up Inteligente</span></label>
+            <label><input type="checkbox" value="Operadores e distribuição"><span>Operadores</span></label>
+            <label><input type="checkbox" value="Disparos"><span>Disparos</span></label>
+            <label><input type="checkbox" value="Origem dos leads"><span>Origem dos leads</span></label>
+            <label><input type="checkbox" value="Ligações"><span>Ligações</span></label>
+            <label><input type="checkbox" value="Vários números (CRM por setor)"><span>Vários números</span></label>
+            <label><input type="checkbox" value="Clinicorp"><span>Clinicorp</span></label>
+            <label><input type="checkbox" value="Instagram"><span>Instagram</span></label>
+            <label><input type="checkbox" value="Relatórios do Meta Ads"><span>Meta Ads</span></label>
+            <label><input type="checkbox" value="Gerador de Relatórios"><span>Gerador de Relatórios</span></label>
+            <label><input type="checkbox" value="Resultados"><span>Resultados</span></label>
+            <label><input type="checkbox" value="Agenda"><span>Agenda</span></label>
+            <label><input type="checkbox" value="Assistente Lumia com voz"><span>Assistente Lumia</span></label>
+            <label><input type="checkbox" value="Cérebro de IA"><span>Cérebro de IA</span></label>
+          </div>
+          <p class="monte-resumo" id="monteResumo"></p>
+          <a href="#" class="btn btn-linha" id="monteBtn" target="_blank" rel="noopener">Pedir orçamento do meu pacote</a>
+        </div>
       </div>
       <p class="obs-planos">Contratos de 1 a 12 meses. O consumo de IA do atendimento já entra no valor que a gente te passar.</p>
     </div>
@@ -1393,6 +1437,26 @@
   });
 
   document.getElementById('ano').textContent = new Date().getFullYear();
+
+  // plano "Monte seu pacote": a mensagem do WhatsApp leva as funcoes escolhidas
+  (() => {
+    const caixas = [...document.querySelectorAll('#monteMods input')];
+    const resumo = document.getElementById('monteResumo');
+    const btn = document.getElementById('monteBtn');
+    const atualizar = () => {
+      const escolhidas = caixas.filter((c) => c.checked).map((c) => c.value);
+      const n = escolhidas.length;
+      resumo.innerHTML = n ? `<b>${n}</b> ${n === 1 ? 'função escolhida' : 'funções escolhidas'}` : 'Escolha pelo menos uma função';
+      btn.setAttribute('aria-disabled', n ? 'false' : 'true');
+      btn.classList.toggle('btn-ouro', n > 0);
+      btn.classList.toggle('btn-linha', n === 0);
+      const msg = `Olá! Quero um orçamento da Lumia com estas funções:\n${escolhidas.map((e) => '• ' + e).join('\n')}`;
+      const texto = encodeURIComponent(msg);
+      btn.href = WHATSAPP_VENDAS ? `https://wa.me/${WHATSAPP_VENDAS}?text=${texto}` : `https://wa.me/?text=${texto}`;
+    };
+    caixas.forEach((c) => c.addEventListener('change', atualizar));
+    atualizar();
+  })();
 
   const reduz = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const temIO = 'IntersectionObserver' in window;

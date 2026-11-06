@@ -820,5 +820,13 @@
     "tipo": "melhoria",
     "titulo": "Landing page (/conheca) revisada com as funções novas e demonstrações interativas",
     "conteudo": "Pedido do dono: colocar na página de venda tudo que entrou depois dela, de forma didática e interativa. Entraram: Disparos, Follow Up Inteligente, operadores com distribuição em rodízio, origem dos leads por campanha, Ligações, um CRM por número (setores), orçamento do Clinicorp entrando sozinho no Follow Up, novas colunas do funil (Comprou, Não compareceu, Contatos pessoais) e o Cérebro com neurônios por IA. Novas seções: jornada do lead em 5 etapas que avança sozinha; abas de Novidades com simuladores (texto do disparo com {nome}/{a|b}, cadência do follow-up com controles, rodízio de leads, relatório por campanha, gráfico de ligações por hora, troca de número por setor); funil completo; cérebro animado em canvas; CRM do topo com card andando de Novo lead até Comprou. Continua sem inventar números reais: painéis marcados como exemplo. FAQ honesta sobre risco de bloqueio em disparo e sobre a Lumia não fazer ligações (só monitora). Pendente: depoimentos e preços reais quando houver."
+  },
+  {
+    "chave": "plataforma:landing-monte-pacote",
+    "modulo": "plataforma",
+    "data": "2026-11-06",
+    "tipo": "melhoria",
+    "titulo": "Landing page: terceiro plano \"Monte seu pacote\"",
+    "conteudo": "Pedido do dono: terceira opção de compra além de Lumia Atendimento e Lumia Completa, onde a pessoa escolhe as funções que quer (18 opções em chips marcáveis, Auto Atendimento e CRM já vêm marcados) e pede o orçamento do valor final, também sob consulta. O botão abre o WhatsApp comercial com a lista das funções escolhidas na mensagem, e fica desativado sem nenhuma escolhida. Três colunas no computador; no tablet o pacote ocupa a linha inteira embaixo."
   }
 ]
