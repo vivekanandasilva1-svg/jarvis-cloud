@@ -844,5 +844,13 @@
     "tipo": "correcao",
     "titulo": "Seletor de operador mostra só os operadores da própria conta",
     "conteudo": "Pedido do dono: cada conta com seus próprios operadores. Dados já eram isolados por tenant (listarOperadores filtra tenant_id; conferido no banco: cada conta só lista os seus). O risco real era o navegador: a escolha de operador/número fica no localStorage e podia vir de OUTRA conta logada no mesmo navegador. Agora no login a escolha é validada contra os operadores/números da conta atual (senão reseta). Seletor simplificado: 'Todos os operadores' + cada operador da conta (o logado marcado '(eu)'); operador comum abre vendo os próprios leads. Leads sem operador só aparecem em 'Todos'."
+  },
+  {
+    "chave": "app:visao-operador-dono-ve-sem-operador",
+    "modulo": "app",
+    "data": "2026-11-06",
+    "tipo": "correcao",
+    "titulo": "Voltar pro operador principal (dono) não esconde mais as conversas",
+    "conteudo": "Bug: ao escolher o dono da conta (id 0) no seletor de operador, só apareciam leads com atendente_id = 0 explícito; como quase todo lead não tem operador (null), as conversas sumiam. Agora lead sem operador conta como do dono (contatoNoOperador em public/app.js)."
   }
 ]

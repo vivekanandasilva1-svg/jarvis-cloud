@@ -8914,9 +8914,10 @@ function contatoNoOperador(c) {
   const sem = c.atendente_id === null || c.atendente_id === undefined;
   const eu = minhaVisao.euId || crmOperadores.euId;
   if (visaoOp === 'livre') return sem;
-  if (visaoOp === 'eu') return c.atendente_id === eu;
-  if (visaoOp === 'meuslivres') return sem || c.atendente_id === eu;
-  return c.atendente_id === Number(visaoOp.slice(3));
+  const id = visaoOp === 'eu' ? eu : (visaoOp === 'meuslivres' ? eu : Number(visaoOp.slice(3)));
+  // lead sem operador pertence ao dono da conta (id 0, o "principal") - senao quase tudo sumia ao escolher o dono
+  if (id === 0 || visaoOp === 'meuslivres') return sem || c.atendente_id === id;
+  return c.atendente_id === id;
 }
 function aplicarVisaoOperador(v) {
   visaoOp = v;
