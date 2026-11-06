@@ -8909,6 +8909,11 @@ let crmUltimosDados = null;
 let crmOperadores = { lista: [], euId: 0 };
 // visao do operador (CRM e Conversas): '' todos | 'eu' | 'meuslivres' | 'livre' | 'op:ID' - guardada no navegador
 let visaoOp = (() => { try { return localStorage.getItem('crmOperador') || ''; } catch { return ''; } })();
+// a conta principal (dono) = visao completa (todas as conversas); cada operador filtra so o que e dele
+function opcoesOperador(lista, euId) {
+  const dono = lista.find((o) => o.id === 0);
+  return [['', `${dono ? dono.nome : 'Principal'} (principal · todas)${euId === 0 ? ' (eu)' : ''}`], ...lista.filter((o) => o.id !== 0).map((o) => [`op:${o.id}`, o.id === euId ? `${o.nome} (eu)` : o.nome])];
+}
 function contatoNoOperador(c) {
   if (!visaoOp) return true;
   const sem = c.atendente_id === null || c.atendente_id === undefined;
@@ -8942,7 +8947,7 @@ async function carregarOperadoresCrm() {
 function preencherSeletoresOperador() {
   const filtroAtual = crmFiltroOperador.value;
   crmFiltroOperador.textContent = '';
-  const opcoes = [['', 'Todos os operadores'], ...crmOperadores.lista.map((o) => [`op:${o.id}`, o.id === (minhaVisao.euId || crmOperadores.euId) ? `${o.nome} (eu)` : o.nome])];
+  const opcoes = opcoesOperador(crmOperadores.lista, minhaVisao.euId || crmOperadores.euId);
   for (const [valor, texto] of opcoes) crmFiltroOperador.add(new Option(texto, valor));
   crmFiltroOperador.value = visaoOp;
   const atual = crmConversaOperador.value;
@@ -10006,7 +10011,7 @@ function preencherVisaoNumero() {
 
 function preencherVisaoOperador() {
   visaoOperadorSel.textContent = '';
-  const opcoes = [['', 'Todos os operadores'], ...minhaVisao.operadores.map((o) => [`op:${o.id}`, o.id === minhaVisao.euId ? `${o.nome} (eu)` : o.nome])];
+  const opcoes = opcoesOperador(minhaVisao.operadores, minhaVisao.euId);
   for (const [v, t] of opcoes) visaoOperadorSel.add(new Option(t, v));
   visaoOperadorSel.value = visaoOp;
   visaoOperadorSel.hidden = minhaVisao.operadores.length < 2;
@@ -10022,8 +10027,8 @@ function iniciarPerfilTopo(dados) {
   // o navegador pode ter guardado a escolha de OUTRA conta: so vale operador que existe nesta conta
   let opSalvo = null;
   try { opSalvo = localStorage.getItem('crmOperador'); } catch { /* sem storage */ }
-  const idsDaConta = new Set(minhaVisao.operadores.map((o) => `op:${o.id}`));
-  if (opSalvo === 'eu') opSalvo = `op:${minhaVisao.euId}`;
+  const idsDaConta = new Set(minhaVisao.operadores.filter((o) => o.id !== 0).map((o) => `op:${o.id}`));
+  if (opSalvo === 'eu' || opSalvo === 'op:0') opSalvo = minhaVisao.euId > 0 ? `op:${minhaVisao.euId}` : '';
   if (opSalvo !== null && opSalvo !== '' && !idsDaConta.has(opSalvo)) opSalvo = null;
   // operador (colaborador) comeca vendo os proprios leads; dono/admin, todos
   visaoOp = opSalvo !== null ? opSalvo : (minhaVisao.euId > 0 && idsDaConta.has(`op:${minhaVisao.euId}`) ? `op:${minhaVisao.euId}` : '');

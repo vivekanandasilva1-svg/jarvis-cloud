@@ -852,5 +852,13 @@
     "tipo": "correcao",
     "titulo": "Voltar pro operador principal (dono) não esconde mais as conversas",
     "conteudo": "Bug: ao escolher o dono da conta (id 0) no seletor de operador, só apareciam leads com atendente_id = 0 explícito; como quase todo lead não tem operador (null), as conversas sumiam. Agora lead sem operador conta como do dono (contatoNoOperador em public/app.js)."
+  },
+  {
+    "chave": "app:visao-principal-ve-tudo",
+    "modulo": "app",
+    "data": "2026-11-06",
+    "tipo": "correcao",
+    "titulo": "Seletor de operador: conta principal = todas as conversas",
+    "conteudo": "Dono voltava pro 'Vitaly' e as conversas dos operadores sumiam (o filtro do dono mostrava só dele + sem operador). Agora a 1ª opção é a conta principal (nome do dono, 'principal · todas') = sem filtro; as demais opções são só os operadores (colaboradores) da conta. Valores guardados 'op:0'/'eu' viram principal (ou o próprio operador, se logado como colaborador)."
   }
 ]
