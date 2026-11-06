@@ -391,7 +391,7 @@ export async function listarBaseContatos(tenantId) {
 async function acharPorNumero(cliente, tenantId, numero) {
   const variante = varianteNonoDigito(numero);
   const { rows } = await cliente.query(
-    `SELECT id, etiquetas FROM crm_contatos WHERE tenant_id = $1 AND numero = ANY($2::text[]) ORDER BY ultima_mensagem_em DESC NULLS LAST LIMIT 1`,
+    `SELECT id, etiquetas, etapa FROM crm_contatos WHERE tenant_id = $1 AND numero = ANY($2::text[]) ORDER BY ultima_mensagem_em DESC NULLS LAST LIMIT 1`,
     [tenantId, variante ? [numero, variante] : [numero]],
   );
   return rows[0] || null;
@@ -462,10 +462,15 @@ export async function salvarContatoBase(tenantId, dados) {
 // etiquetas somam), 'pular' deixa como esta. Tudo numa transacao - ou entra o lote todo ou nada.
 // Follow Up fica de fora: entrar nessa etapa dispara a cadencia de mensagens automaticas
 const ETAPAS_IMPORTAVEIS = new Set([...IDS_ETAPAS].filter((e) => e !== 'follow_up'));
-export async function importarContatos(tenantId, instancia, linhas, modo = 'pular') {
+// etapaPadrao = coluna do funil pra onde vai a lista inteira (ex: lista de faltosos -> nao_compareceu); a
+// coluna da propria linha da planilha, se vier, tem prioridade. Contato que cai numa coluna ja aparece no
+// board (ultima_mensagem_em preenchida) - sem coluna, fica so na aba Contatos.
+export async function importarContatos(tenantId, instancia, linhas, modo = 'pular', etapaPadrao = null) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
-  const resultado = { novos: 0, atualizados: 0, ignorados: 0, invalidos: 0 };
+  const resultado = { novos: 0, atualizados: 0, ignorados: 0, invalidos: 0, noFunil: 0 };
+  const padrao = ETAPAS_IMPORTAVEIS.has(etapaPadrao) ? etapaPadrao : null;
+  const eventos = []; // [contatoId, etapa] - registra a entrada na coluna depois do COMMIT
   const cliente = await pool.connect();
   try {
     await cliente.query('BEGIN');
@@ -476,24 +481,26 @@ export async function importarContatos(tenantId, instancia, linhas, modo = 'pula
       const email = textoOuNull(linha.email, 160);
       const observacoes = textoOuNull(linha.observacoes, 2000);
       const etiquetas = limparEtiquetas(linha.etiquetas);
-      const etapa = ETAPAS_IMPORTAVEIS.has(linha.etapa) ? linha.etapa : null;
+      const etapa = ETAPAS_IMPORTAVEIS.has(linha.etapa) ? linha.etapa : padrao;
 
       const existente = await acharPorNumero(cliente, tenantId, numero);
       if (existente) {
         if (modo !== 'atualizar') { resultado.ignorados++; continue; }
         await cliente.query(
           `UPDATE crm_contatos SET nome = COALESCE($1, nome), email = COALESCE($2, email), observacoes = COALESCE($3, observacoes),
-             etiquetas = $4, etapa = COALESCE($5, etapa) WHERE id = $6`,
+             etiquetas = $4, etapa = COALESCE($5, etapa), ultima_mensagem_em = CASE WHEN $5::text IS NOT NULL THEN COALESCE(ultima_mensagem_em, now()) ELSE ultima_mensagem_em END WHERE id = $6`,
           [nome, email, observacoes, limparEtiquetas([...(existente.etiquetas || []), ...etiquetas]), etapa, existente.id],
         );
         resultado.atualizados++;
+        if (etapa) { resultado.noFunil++; if (etapa !== existente.etapa) eventos.push([existente.id, etapa]); }
       } else {
-        await cliente.query(
-          `INSERT INTO crm_contatos (tenant_id, numero, instancia, nome, email, observacoes, etiquetas, etapa, origem)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'novo_lead'), 'importado')`,
+        const ins = await cliente.query(
+          `INSERT INTO crm_contatos (tenant_id, numero, instancia, nome, email, observacoes, etiquetas, etapa, origem, ultima_mensagem_em)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'novo_lead'), 'importado', CASE WHEN $8::text IS NOT NULL THEN now() END) RETURNING id`,
           [tenantId, numero, instancia, nome, email, observacoes, etiquetas, etapa],
         );
         resultado.novos++;
+        if (etapa) { resultado.noFunil++; eventos.push([ins.rows[0].id, etapa]); }
       }
     }
     await cliente.query('COMMIT');
@@ -503,6 +510,8 @@ export async function importarContatos(tenantId, instancia, linhas, modo = 'pula
   } finally {
     cliente.release();
   }
+  for (const [id, etapa] of eventos) await registrarEventoEtapa(tenantId, id, instancia, etapa).catch(() => {});
+  if (eventos.length) eventosCrm.emit('contato-atualizado', { tenantId, contatoId: eventos[0][0] });
   return resultado;
 }
 

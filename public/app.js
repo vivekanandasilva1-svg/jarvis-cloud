@@ -3513,6 +3513,7 @@ const ctImpMapa = document.getElementById('ctImpMapa');
 const ctImpInstancia = document.getElementById('ctImpInstancia');
 const ctImpEtiquetaExtra = document.getElementById('ctImpEtiquetaExtra');
 const ctImpModo = document.getElementById('ctImpModo');
+const ctImpEtapa = document.getElementById('ctImpEtapa');
 const ctImpResumo = document.getElementById('ctImpResumo');
 const ctImpPrevia = document.getElementById('ctImpPrevia');
 const ctImpResultado = document.getElementById('ctImpResultado');
@@ -3922,6 +3923,10 @@ ctImpArquivo.addEventListener('change', async () => {
     ctPreencherInstancias(ctImpInstancia);
     ctImpInstancia.closest('label').hidden = ctInstancias.length < 2;
     ctImpEtiquetaExtra.value = '';
+    // coluna do funil: follow_up fica de fora (entrar nela dispara a cadencia de mensagens automaticas)
+    ctImpEtapa.textContent = '';
+    ctImpEtapa.appendChild(new Option('Nenhuma (só na aba Contatos)', ''));
+    for (const e of ctEtapas) if (e.id !== 'follow_up') ctImpEtapa.appendChild(new Option(e.nome, e.id));
     ctAtualizarPreviaImp();
   } catch (err) {
     ctMostrarErroImp(`Não consegui ler a planilha: ${err.message}`);
@@ -4030,20 +4035,21 @@ ctImpConfirmar.addEventListener('click', async () => {
   if (!validas.length) return;
   ctMostrarErroImp('');
   ctImpConfirmar.disabled = true;
-  const total = { novos: 0, atualizados: 0, ignorados: 0, invalidos: 0 };
+  const total = { novos: 0, atualizados: 0, ignorados: 0, invalidos: 0, noFunil: 0 };
   try {
     for (let i = 0; i < validas.length; i += 500) {
       ctImpConfirmar.textContent = `Importando ${Math.min(i + 500, validas.length)} de ${validas.length}...`;
       const res = await fetch('/api/crm/base-contatos/importar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-        body: JSON.stringify({ instancia: ctImpInstancia.value || ctInstancias[0], modo: ctImpModo.value, linhas: validas.slice(i, i + 500) }),
+        body: JSON.stringify({ instancia: ctImpInstancia.value || ctInstancias[0], modo: ctImpModo.value, etapa: ctImpEtapa.value || null, linhas: validas.slice(i, i + 500) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
       for (const k of Object.keys(total)) total[k] += data[k] || 0;
     }
     const partes = [`${total.novos} ${total.novos === 1 ? 'contato novo' : 'contatos novos'}`];
+    if (total.noFunil) partes.push(`${total.noFunil} no funil (coluna ${ctImpEtapa.selectedOptions[0]?.textContent || 'da planilha'})`);
     if (total.atualizados) partes.push(`${total.atualizados} atualizados`);
     if (total.ignorados) partes.push(`${total.ignorados} já existiam e ficaram como estavam`);
     if (total.invalidos) partes.push(`${total.invalidos} com telefone inválido`);

@@ -2081,13 +2081,13 @@ app.put('/api/crm/base-contatos/:id', async (req, res) => {
 
 // a tela le a planilha no navegador e manda as linhas ja mapeadas em lotes de ate 1000
 app.post('/api/crm/base-contatos/importar', async (req, res) => {
-  const { instancia, linhas, modo } = req.body || {};
+  const { instancia, linhas, modo, etapa } = req.body || {};
   if (!Array.isArray(linhas) || !linhas.length) return res.status(400).json({ erro: 'Nenhuma linha pra importar.' });
   try {
     if (!(await tenants.listarInstanciasDoTenant(req.tenantId)).includes(instancia)) {
       return res.status(400).json({ erro: 'Escolha um numero de WhatsApp dessa conta.' });
     }
-    res.json({ ok: true, ...(await crm.importarContatos(req.tenantId, instancia, linhas, modo === 'atualizar' ? 'atualizar' : 'pular')) });
+    res.json({ ok: true, ...(await crm.importarContatos(req.tenantId, instancia, linhas, modo === 'atualizar' ? 'atualizar' : 'pular', etapa || null)) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }

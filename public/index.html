@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261106d" />
+  <link rel="stylesheet" href="style.css?v=20261106e" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -781,10 +781,13 @@
             <div class="ct-imp-opcoes">
               <label class="ct-campo">Atender pelo número<select id="ctImpInstancia"></select></label>
               <label class="ct-campo">Etiqueta para todos <small>(opcional)</small><input type="text" id="ctImpEtiquetaExtra" placeholder="ex: lista evento outubro" /></label>
+              <label class="ct-campo">Colocar no funil do CRM, na coluna
+                <select id="ctImpEtapa"><option value="">Nenhuma (só na aba Contatos)</option></select>
+              </label>
               <label class="ct-campo">Se o contato já existir
                 <select id="ctImpModo">
                   <option value="pular">Manter como está</option>
-                  <option value="atualizar">Completar com os dados da planilha</option>
+                  <option value="atualizar">Completar com os dados da planilha (e mover pra coluna escolhida)</option>
                 </select>
               </label>
             </div>
@@ -1528,6 +1531,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261106d"></script>
+  <script src="app.js?v=20261106e"></script>
 </body>
 </html>

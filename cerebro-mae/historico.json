@@ -804,5 +804,13 @@
     "tipo": "correcao",
     "titulo": "Cérebro leve e fluido: nível de detalhe, materiais compartilhados e menos trabalho por quadro",
     "conteudo": "O visual de neurônios pesou (cada memória = 5 objetos 3D + materiais próprios + pulso por quadro + 1 partícula por ligação + o grafo se refazia a cada 30s). Correção em public/cerebro.js: LOD pelo tamanho do cérebro (<=150 completo, <=500 soma+dendritos, >500 só o soma, dendritos só no selecionado); materiais compartilhados por cor/estado; animação a ~15 quadros/s e brilho global; só as 40 ligações mais fortes têm pulso; curvas só com <=200 ligações; grafo só é refeito quando os dados mudam (assinatura); pixel ratio limitado a 1.5; 2D sem gradiente por quadro. Também corrigido: cores lavadas (three r149 separado não converte pra linear). Medido no navegador de teste com 1500 memórias: ~7 -> ~80 quadros/s. Pendente: validar com o cérebro real do dono."
+  },
+  {
+    "chave": "contatos:importar-direto-no-funil",
+    "modulo": "crm",
+    "data": "2026-11-06",
+    "tipo": "melhoria",
+    "titulo": "Importar lista de contatos já na coluna do funil escolhida",
+    "conteudo": "Pedido do dono: subir uma lista (ex: clientes faltosos) e já mandar pra uma coluna do CRM. Na importação de planilha (aba Contatos) há o campo 'Colocar no funil do CRM, na coluna' (todas as etapas menos Follow Up, que dispara a cadência de mensagens). A coluna da própria planilha, se existir, tem prioridade. Contato novo entra já na coluna e aparece no board (ultima_mensagem_em preenchida, sem isso o board esconde); contato que já existe só é movido no modo 'Completar com os dados da planilha'. Registra o evento de etapa. Efeito colateral: esses contatos também aparecem na lista de Conversas (vazios)."
   }
 ]
