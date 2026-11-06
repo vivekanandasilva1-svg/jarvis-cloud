@@ -1360,6 +1360,16 @@ app.post('/api/whatsapp-evolution/webhook', (req, res) => {
       .catch((err) => console.error('Erro registrando chamada:', err.message));
     return;
   }
+  // status de entrega/leitura de mensagem (relatorio dos Disparos)
+  if (evento === 'messages.update') {
+    tenants.resolverTenantPorInstancia(req.body?.instance)
+      .then(async (tenantId) => {
+        if (!tenantId || !(await tenants.estaAtivo(tenantId))) return;
+        await disparos.registrarStatusEntrega(tenantId, data);
+      })
+      .catch((err) => console.error('Erro registrando entrega de disparo:', err.message));
+    return;
+  }
   if (evento !== 'messages.upsert') return;
   if (!data) return;
   processarMensagemEvolution(req.body?.instance, data).catch((err) => console.error('Erro ao processar mensagem do Evolution:', err));
@@ -2112,6 +2122,26 @@ app.get('/api/disparos', async (req, res) => {
 app.post('/api/disparos', async (req, res) => {
   try {
     res.json({ ok: true, id: await disparos.salvarCampanha(req.tenantId, req.body || {}) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/disparos/painel', async (req, res) => {
+  const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  const de = String(req.query.de || new Date(Date.now() - 3 * 3600000 - 29 * 86400000).toISOString().slice(0, 10));
+  const ate = String(req.query.ate || hoje);
+  try {
+    res.json({ de, ate, ...(await disparos.painelGeral(req.tenantId, { de, ate })) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/disparos/:id/destinatarios/:destId', async (req, res) => {
+  try {
+    await disparos.removerDestinatario(req.tenantId, req.params.id, req.params.destId);
+    res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });
   }

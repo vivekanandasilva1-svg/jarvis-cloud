@@ -3524,3 +3524,7 @@ body.lumien-em-conversas .lumien-btn { bottom: 92px; }
 .disp-botoes { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; align-items: center; }
 .disp-anexos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; font-size: 12px; color: var(--text-dim); }
 .disp-dest-tabela { max-height: 360px; overflow-y: auto; margin-top: 6px; }
+
+.chamadas-resumo .cartao.alerta strong { color: #e8836b; }
+.disp-previa { margin: 6px 0; }
+.disp-previa p { font-size: 12px; color: var(--text); margin: 4px 0; }

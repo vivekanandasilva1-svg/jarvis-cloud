@@ -9344,6 +9344,7 @@ const dispNova = document.getElementById('dispNova');
 let dispInstancias = [];
 let dispAbertoId = null;
 let dispPolling = null;
+let dispStaged = []; // lista montada ANTES de criar a campanha (planilha/colados/CRM)
 const DISP_STATUS = { rascunho: 'Rascunho', agendada: 'Agendada', enviando: 'Enviando', pausada: 'Pausada', concluida: 'Concluída', cancelada: 'Cancelada' };
 const DEST_STATUS = { pendente: 'Na fila', enviando: 'Enviando', enviado: 'Enviado', falha: 'Falhou', ignorado: 'Ignorado', optout: 'Pediu pra sair' };
 
@@ -9378,7 +9379,7 @@ async function carregarDisparos() {
   }
 }
 
-dispNova.addEventListener('click', () => { dispAbertoId = null; renderizarEditorDisparo(null); carregarDisparos(); });
+dispNova.addEventListener('click', () => { dispAbertoId = null; dispStaged = []; renderizarEditorDisparo(null); carregarDisparos(); });
 
 async function abrirCampanhaDisparo(id) {
   dispAbertoId = id;
@@ -9459,7 +9460,20 @@ function renderizarEditorDisparo(c) {
         });
         const d = await res.json();
         if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
-        mostrarAviso(c ? 'Campanha salva' : 'Campanha criada - agora adicione os destinatários', 'ok');
+        let aviso = c ? 'Campanha salva' : 'Campanha criada';
+        if (!c && dispStaged.length) {
+          let add = 0;
+          for (const op of dispStaged) {
+            const r = op.tipo === 'crm'
+              ? await fetch(`/api/disparos/${d.id}/destinatarios/crm`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ etapa: op.etapa, etiqueta: op.etiqueta }) })
+              : await fetch(`/api/disparos/${d.id}/destinatarios`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ lista: op.lista }) });
+            const rj = await r.json().catch(() => ({}));
+            add += rj.adicionados || 0;
+          }
+          dispStaged = [];
+          aviso += ` com ${add} destinatário(s) na lista`;
+        } else if (!c) aviso += ' - agora adicione os destinatários';
+        mostrarAviso(aviso, 'ok');
         abrirCampanhaDisparo(d.id);
       } catch (err) {
         mostrarErro(err.message);
@@ -9474,6 +9488,10 @@ function renderizarEditorDisparo(c) {
       alert(`Como chega pra "Maria Souza":\n\n${d.texto}${optout.checked ? '\n\nPara não receber mais mensagens, responda SAIR.' : ''}${usarIa.checked ? '\n\n(com a IA ligada o texto muda um pouco em cada envio)' : ''}`);
     });
     botoes.appendChild(previa);
+  }
+  if (!c) {
+    dispDetalhe.appendChild(dispEl('div', { className: 'disp-secao', textContent: 'Lista de quem vai receber' }));
+    montarDestinatariosDisparo(null);
   }
   dispDetalhe.append(botoes, erro);
   if (!c) return;
@@ -9525,7 +9543,7 @@ function renderizarEditorDisparo(c) {
   dispDetalhe.appendChild(dispEl('div', { className: 'disp-secao', textContent: 'Relatório' }));
   const r = c.resumo;
   const cartoes = dispEl('div', { className: 'chamadas-resumo' });
-  for (const [v, t] of [[r.total, 'na lista'], [r.enviados, 'enviadas'], [r.pendentes, 'na fila'], [r.respostas, 'responderam'], [r.falhas, 'falhas'], [r.optouts, 'pediram pra sair'], [r.ignorados, 'ignoradas']]) {
+  for (const [v, t] of [[r.total, 'na lista'], [r.enviados, 'enviadas'], [r.pendentes, 'na fila'], [r.respostas, 'responderam'], [r.falhas, 'falhas'], [r.optouts, 'pediram pra sair'], [r.ignorados, 'ignoradas'], [r.rastreados ? `${r.entregues}/${r.rastreados}` : '-', 'entregues'], [r.rastreados ? `${r.lidos}/${r.rastreados}` : '-', 'lidas'], [r.nao_entregues, 'não entregues (possível bloqueio)']]) {
     cartoes.appendChild(dispEl('div', { className: 'cartao' }, dispEl('strong', { textContent: v }), dispEl('span', { textContent: t })));
   }
   dispDetalhe.appendChild(cartoes);
@@ -9552,7 +9570,16 @@ function renderizarEditorDisparo(c) {
       const quando = x.enviado_em ? new Date(x.enviado_em).toLocaleString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
       const linha = dispEl('div', { className: 'chamada-linha' });
       const quem = dispEl('div', { className: 'quem' }, dispEl('div', { textContent: `${x.nome || ''} ${x.numero}`.trim() }), dispEl('div', { className: 'sub', textContent: x.erro || x.texto_enviado || '' }));
-      linha.append(quem, dispEl('div', { className: x.status === 'falha' ? 'perdida' : '', textContent: `${x.respondeu_em ? '💬 respondeu · ' : ''}${DEST_STATUS[x.status] || x.status}${quando ? ` · ${quando}` : ''}` }));
+      const estado = dispEl('div', { className: x.status === 'falha' ? 'perdida' : '', textContent: `${x.respondeu_em ? '💬 respondeu · ' : ''}${DEST_STATUS[x.status] || x.status}${quando ? ` · ${quando}` : ''}` });
+      linha.append(quem, estado);
+      if (x.status === 'pendente' && editavel) {
+        const rm = dispEl('button', { type: 'button', textContent: '✕', title: 'Tirar da lista' });
+        rm.addEventListener('click', async () => {
+          await fetch(`/api/disparos/${c.id}/destinatarios/${x.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+          carregarTabela();
+        });
+        linha.appendChild(rm);
+      }
       tabela.appendChild(linha);
     }
   };
@@ -9564,7 +9591,23 @@ function renderizarEditorDisparo(c) {
 
 function montarDestinatariosDisparo(c) {
   const msg = dispEl('p', { className: 'agenda-vazia' });
+  const previa = dispEl('div', { className: 'disp-previa' });
+  const emRascunho = !c; // campanha ainda nao criada: a lista fica guardada aqui e vai junto quando criar
+  const resumoStaged = dispEl('p', { className: 'agenda-vazia' });
+  const atualizarStaged = () => {
+    const n = dispStaged.reduce((s, op) => s + (op.tipo === 'lista' ? op.lista.length : 0), 0);
+    const crmOps = dispStaged.filter((op) => op.tipo === 'crm').length;
+    resumoStaged.textContent = dispStaged.length ? `Na lista pra enviar quando criar a campanha: ${n} contato(s) de arquivo/colados${crmOps ? ` + ${crmOps} seleção(ões) do CRM` : ''}.` : '';
+  };
+
   const enviarLista = async (lista, origem) => {
+    previa.textContent = '';
+    if (emRascunho) {
+      dispStaged.push({ tipo: 'lista', lista, origem });
+      atualizarStaged();
+      msg.textContent = `${origem}: ${lista.length} linha(s) guardadas - os telefones inválidos e repetidos são filtrados quando você criar a campanha.`;
+      return;
+    }
     msg.textContent = 'Adicionando...';
     try {
       const res = await fetch(`/api/disparos/${c.id}/destinatarios`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ lista }) });
@@ -9576,6 +9619,30 @@ function montarDestinatariosDisparo(c) {
   const mostrarResultadoDest = (d, origem) => {
     msg.textContent = `${origem}: ${d.adicionados} adicionados · ${d.duplicados} repetidos · ${d.invalidos} telefones inválidos · ${d.optout} pediram pra sair${d.limite ? ' · limite da campanha atingido' : ''}.`;
     abrirCampanhaDisparo(c.id);
+  };
+
+  // confere a lista ANTES de adicionar: mostra quantos, as colunas achadas e as primeiras linhas
+  const mostrarPrevia = (lista, origem) => {
+    previa.textContent = '';
+    if (!lista.length) { msg.textContent = 'Não encontrei nenhum contato nesse arquivo.'; return; }
+    const comNome = lista.filter((x) => x.nome).length;
+    const vars = [...new Set(lista.flatMap((x) => Object.keys(x.vars || {})))];
+    previa.append(dispEl('p', { textContent: `${origem}: ${lista.length} contato(s) · ${comNome} com nome${vars.length ? ` · variáveis disponíveis: ${vars.map((v) => `{${v}}`).join(' ')}` : ''}` }));
+    const tab = dispEl('table', { className: 'origem-tabela' });
+    const cab = tab.createTHead().insertRow();
+    for (const t of ['Telefone', 'Nome', ...vars.slice(0, 3)]) cab.insertCell().textContent = t;
+    const corpo = tab.createTBody();
+    for (const x of lista.slice(0, 5)) {
+      const tr = corpo.insertRow();
+      tr.insertCell().textContent = x.numero;
+      tr.insertCell().textContent = x.nome || '';
+      for (const v of vars.slice(0, 3)) tr.insertCell().textContent = (x.vars || {})[v] || '';
+    }
+    const ok = dispEl('button', { type: 'button', textContent: `Adicionar ${lista.length} contatos` });
+    ok.addEventListener('click', () => enviarLista(lista, origem));
+    const cancelar = dispEl('button', { type: 'button', className: 'crm-btn-secundario', textContent: 'Cancelar' });
+    cancelar.addEventListener('click', () => { previa.textContent = ''; });
+    previa.append(tab, dispEl('div', { className: 'disp-botoes' }, ok, cancelar));
   };
 
   // planilha
@@ -9597,17 +9664,17 @@ function montarDestinatariosDisparo(c) {
         linhas = ctLerCsv(ctDecodificarTexto(buffer));
       }
       linhas = linhas.map((l) => l.map((v) => String(v ?? '').trim())).filter((l) => l.some(Boolean));
-      enviarLista(dispLinhasParaLista(linhas), f.name);
+      mostrarPrevia(dispLinhasParaLista(linhas), f.name);
     } catch (err) { msg.textContent = `Não consegui ler a planilha: ${err.message}`; }
   });
 
   // colar
   const colar = dispEl('textarea', { rows: 3, placeholder: 'Ou cole aqui, um por linha: telefone;nome   (ex: 82 99999-0000;Maria)' });
-  const addColar = dispEl('button', { type: 'button', className: 'crm-btn-secundario', textContent: 'Adicionar os colados' });
+  const addColar = dispEl('button', { type: 'button', className: 'crm-btn-secundario', textContent: 'Conferir os colados' });
   addColar.addEventListener('click', () => {
     const linhas = colar.value.split('\n').map((l) => l.split(/[;\t,]/).map((v) => v.trim())).filter((l) => l.some(Boolean));
     colar.value = '';
-    enviarLista(dispLinhasParaLista(linhas), 'Lista colada');
+    mostrarPrevia(dispLinhasParaLista(linhas), 'Lista colada');
   });
 
   // CRM
@@ -9617,6 +9684,13 @@ function montarDestinatariosDisparo(c) {
   const etiqueta = dispEl('input', { type: 'text', placeholder: 'ou etiqueta (ex: implante)' });
   const addCrm = dispEl('button', { type: 'button', className: 'crm-btn-secundario', textContent: 'Adicionar do CRM' });
   addCrm.addEventListener('click', async () => {
+    if (!etapaSel.value && !etiqueta.value.trim()) { msg.textContent = 'Escolha uma etapa ou digite uma etiqueta do CRM.'; return; }
+    if (emRascunho) {
+      dispStaged.push({ tipo: 'crm', etapa: etapaSel.value || null, etiqueta: etiqueta.value.trim() || null });
+      atualizarStaged();
+      msg.textContent = 'Seleção do CRM guardada - entra quando você criar a campanha.';
+      return;
+    }
     msg.textContent = 'Adicionando...';
     try {
       const res = await fetch(`/api/disparos/${c.id}/destinatarios/crm`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ etapa: etapaSel.value || null, etiqueta: etiqueta.value.trim() || null }) });
@@ -9626,17 +9700,19 @@ function montarDestinatariosDisparo(c) {
     } catch (err) { msg.textContent = err.message; }
   });
 
-  const limpar = dispEl('button', { type: 'button', className: 'crm-btn-perigo', textContent: 'Limpar a fila' });
+  const limpar = dispEl('button', { type: 'button', className: 'crm-btn-perigo', textContent: emRascunho ? 'Descartar lista' : 'Limpar a fila' });
   limpar.addEventListener('click', async () => {
+    if (emRascunho) { dispStaged = []; atualizarStaged(); msg.textContent = ''; previa.textContent = ''; return; }
     if (!confirm('Remover todos que ainda estão na fila (não enviados)?')) return;
     await fetch(`/api/disparos/${c.id}/destinatarios`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
     abrirCampanhaDisparo(c.id);
   });
+  atualizarStaged();
   dispDetalhe.append(
     dispEl('div', { className: 'disp-botoes' }, arq, escolher, limpar),
     colar, addColar,
     dispEl('div', { className: 'auto-upload-row' }, etapaSel, etiqueta, addCrm),
-    msg,
+    previa, resumoStaged, msg,
   );
 }
 
@@ -9701,3 +9777,79 @@ function montarAnexosDisparo(c, editavel) {
   });
   dispDetalhe.append(input, botao);
 }
+
+// ---------- Painel geral dos disparos (tela personalizada: enviadas, fila, falhas, entrega, bloqueio provavel) ----------
+
+const dispPainelBtn = document.getElementById('dispPainel');
+let dispPainelPeriodo = { de: '', ate: '' };
+
+function dispCartao(valor, rotulo, destaque = '') {
+  return dispEl('div', { className: `cartao ${destaque}` }, dispEl('strong', { textContent: valor }), dispEl('span', { textContent: rotulo }));
+}
+
+async function abrirPainelDisparos() {
+  dispAbertoId = null;
+  clearInterval(dispPolling);
+  if (!dispPainelPeriodo.de) {
+    const hoje = new Date(Date.now() - 3 * 3600000);
+    dispPainelPeriodo = { de: new Date(hoje.getTime() - 29 * 86400000).toISOString().slice(0, 10), ate: hoje.toISOString().slice(0, 10) };
+  }
+  dispDetalhe.textContent = 'Carregando...';
+  try {
+    const res = await fetch(`/api/disparos/painel?de=${dispPainelPeriodo.de}&ate=${dispPainelPeriodo.ate}`, { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    const r = d.resumo;
+    dispDetalhe.textContent = '';
+    const de = dispEl('input', { type: 'date', value: dispPainelPeriodo.de });
+    const ate = dispEl('input', { type: 'date', value: dispPainelPeriodo.ate });
+    const atualizar = dispEl('button', { type: 'button', textContent: 'Atualizar' });
+    atualizar.addEventListener('click', () => { dispPainelPeriodo = { de: de.value, ate: ate.value }; abrirPainelDisparos(); });
+    dispDetalhe.append(dispEl('div', { className: 'fui-topo' }, dispEl('div', { className: 'disp-titulo', textContent: 'Painel dos disparos' }), dispEl('div', { className: 'auto-upload-row' }, de, ate, atualizar)));
+
+    const cartoes = dispEl('div', { className: 'chamadas-resumo' });
+    const pct = (a, b) => (b ? ` (${Math.round((a / b) * 100)}%)` : '');
+    cartoes.append(
+      dispCartao(r.enviadas, 'enviadas'),
+      dispCartao(r.pendentes, 'pendentes (na fila)'),
+      dispCartao(r.falhas, 'falhas', r.falhas ? 'alerta' : ''),
+      dispCartao(`${r.entregues}${pct(r.entregues, r.rastreadas)}`, 'entregues'),
+      dispCartao(`${r.lidas}${pct(r.lidas, r.rastreadas)}`, 'lidas'),
+      dispCartao(`${r.respostas}${pct(r.respostas, r.enviadas)}`, 'responderam'),
+      dispCartao(r.optouts, 'pediram pra sair'),
+      dispCartao(r.nao_entregues, 'não entregues (possível bloqueio)', r.nao_entregues ? 'alerta' : ''),
+    );
+    dispDetalhe.appendChild(cartoes);
+    dispDetalhe.appendChild(dispEl('p', { className: 'agenda-vazia', textContent: 'Sobre bloqueios e denúncias: o WhatsApp NÃO avisa quando alguém bloqueia ou denuncia. O que dá pra ver é uma pista: mensagem enviada que continua sem chegar ao aparelho depois de 6 horas ("não entregues") pode ser bloqueio, mas também celular desligado ou número sem WhatsApp. Se esse número subir muito, ou se as respostas "SAIR" aumentarem, reduza o ritmo. Entregues e lidas só são contadas pra mensagens enviadas depois que o rastreio foi ativado.' }));
+
+    if (d.porDia.length) {
+      const max = Math.max(...d.porDia.map((x) => x.enviadas));
+      const grafico = dispEl('div', { className: 'chamadas-horas' });
+      for (const x of d.porDia) {
+        const b = dispEl('div', { className: 'barra', title: `${x.dia}: ${x.enviadas} enviadas · ${x.respostas} respostas` });
+        b.style.height = `${Math.max(4, (x.enviadas / max) * 100)}%`;
+        grafico.appendChild(b);
+      }
+      dispDetalhe.append(dispEl('p', { className: 'agenda-vazia', textContent: `Envios por dia (${d.porDia[0].dia} a ${d.porDia[d.porDia.length - 1].dia})` }), grafico);
+    }
+
+    dispDetalhe.appendChild(dispEl('div', { className: 'disp-secao', textContent: 'Por campanha' }));
+    if (!d.campanhas.length) dispDetalhe.appendChild(dispEl('p', { className: 'agenda-vazia', textContent: 'Nenhuma campanha ainda.' }));
+    else {
+      const tab = dispEl('table', { className: 'origem-tabela' });
+      const cab = tab.createTHead().insertRow();
+      for (const t of ['Campanha', 'Status', 'Enviadas', 'Entregues', 'Responderam', 'Falhas', 'Não entregues']) cab.insertCell().textContent = t;
+      const corpo = tab.createTBody();
+      for (const c of d.campanhas) {
+        const tr = corpo.insertRow();
+        tr.style.cursor = 'pointer';
+        tr.addEventListener('click', () => abrirCampanhaDisparo(c.id));
+        for (const v of [c.nome, DISP_STATUS[c.status] || c.status, c.enviadas, c.entregues, c.respostas, c.falhas, c.nao_entregues]) tr.insertCell().textContent = v;
+      }
+      dispDetalhe.appendChild(tab);
+    }
+  } catch (err) {
+    dispDetalhe.textContent = `Não consegui carregar o painel: ${err.message}`;
+  }
+}
+dispPainelBtn.addEventListener('click', abrirPainelDisparos);

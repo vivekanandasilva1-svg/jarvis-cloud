@@ -69,6 +69,11 @@ async function garantirTabelas() {
       UNIQUE (campanha_id, numero)
     );
   `);
+  // rastreio de entrega: id da mensagem no WhatsApp + quando chegou/foi lida (evento MESSAGES_UPDATE)
+  await pool.query(`ALTER TABLE disparo_destinatarios ADD COLUMN IF NOT EXISTS wa_id TEXT;`);
+  await pool.query(`ALTER TABLE disparo_destinatarios ADD COLUMN IF NOT EXISTS entregue_em TIMESTAMPTZ;`);
+  await pool.query(`ALTER TABLE disparo_destinatarios ADD COLUMN IF NOT EXISTS lido_em TIMESTAMPTZ;`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS disparo_dest_waid_idx ON disparo_destinatarios (tenant_id, wa_id) WHERE wa_id IS NOT NULL;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS disparo_dest_pendente_idx ON disparo_destinatarios (campanha_id, status, id);`);
   await pool.query(`CREATE INDEX IF NOT EXISTS disparo_dest_numero_idx ON disparo_destinatarios (tenant_id, numero);`);
   await pool.query(`
@@ -130,7 +135,11 @@ export async function obterCampanha(tenantId, id) {
             (count(*) FILTER (WHERE status = 'falha'))::int AS falhas,
             (count(*) FILTER (WHERE status = 'ignorado'))::int AS ignorados,
             (count(*) FILTER (WHERE status = 'optout'))::int AS optouts,
-            (count(*) FILTER (WHERE respondeu_em IS NOT NULL))::int AS respostas
+            (count(*) FILTER (WHERE respondeu_em IS NOT NULL))::int AS respostas,
+            (count(*) FILTER (WHERE wa_id IS NOT NULL))::int AS rastreados,
+            (count(*) FILTER (WHERE entregue_em IS NOT NULL))::int AS entregues,
+            (count(*) FILTER (WHERE lido_em IS NOT NULL))::int AS lidos,
+            (count(*) FILTER (WHERE wa_id IS NOT NULL AND entregue_em IS NULL AND enviado_em < now() - interval '6 hours'))::int AS nao_entregues
      FROM disparo_destinatarios WHERE campanha_id = $1`, [c.id]);
   const { rows: porHora } = await pool.query(
     `SELECT to_char(date_trunc('hour', enviado_em AT TIME ZONE 'America/Maceio'), 'DD/MM HH24"h"') AS hora, count(*)::int AS total
@@ -487,7 +496,7 @@ export async function processarCampanha(c) {
     for (const anexo of anexos) {
       try { await enviarArquivo(c.instancia, d.numero, anexo); } catch (err) { erroAnexo = `Texto enviado, mas o anexo "${anexo.nome_arquivo}" falhou: ${err.message}`; }
     }
-    await pool.query(`UPDATE disparo_destinatarios SET status = 'enviado', enviado_em = now(), texto_enviado = $2, erro = $3 WHERE id = $1`, [d.id, texto, erroAnexo]);
+    await pool.query(`UPDATE disparo_destinatarios SET status = 'enviado', enviado_em = now(), texto_enviado = $2, erro = $3, wa_id = $4 WHERE id = $1`, [d.id, texto, erroAnexo, resposta?.key?.id || null]);
     await crm.registrarMensagem(tenantId, { numero: d.numero, instancia: c.instancia, direcao: 'saida', tipo: 'text', texto, nome: null, autor: 'disparo', waId: resposta?.key?.id || null, manterEtapa: true })
       .catch((err) => console.error('Disparo: erro registrando no CRM:', err.message));
     const espera = c.intervalo_min + Math.random() * (c.intervalo_max - c.intervalo_min);
@@ -531,4 +540,68 @@ export function iniciarSchedulerDisparos() {
   // se o servidor reiniciou no meio de um envio, devolve pra fila quem ficou "enviando"
   tabelasProntas.then(() => pool?.query(`UPDATE disparo_destinatarios SET status = 'pendente' WHERE status = 'enviando'`)).catch(() => {});
   setInterval(ciclo, 10 * 1000).unref();
+}
+
+// ---------- rastreio de entrega e painel geral ----------
+
+// evento do Evolution (messages.update): DELIVERY_ACK = chegou no aparelho, READ/PLAYED = lida.
+// O WhatsApp NAO avisa bloqueio nem denuncia - so da pra INFERIR: mensagem enviada que nunca chega
+// (fica com 1 tracinho) por muitas horas pode ser aparelho desligado, numero sem WhatsApp ou bloqueio.
+export async function registrarStatusEntrega(tenantId, evento) {
+  if (!pool || !evento) return;
+  await tabelasProntas;
+  for (const ev of Array.isArray(evento) ? evento : [evento]) {
+    const id = ev?.keyId || ev?.key?.id || ev?.messageId;
+    const status = String(ev?.status || '').toUpperCase();
+    if (!id) continue;
+    if (status === 'READ' || status === 'PLAYED') {
+      await pool.query(`UPDATE disparo_destinatarios SET lido_em = COALESCE(lido_em, now()), entregue_em = COALESCE(entregue_em, now()) WHERE tenant_id = $1 AND wa_id = $2`, [tenantId, String(id)]);
+    } else if (status === 'DELIVERY_ACK') {
+      await pool.query(`UPDATE disparo_destinatarios SET entregue_em = COALESCE(entregue_em, now()) WHERE tenant_id = $1 AND wa_id = $2`, [tenantId, String(id)]);
+    }
+  }
+}
+
+export async function removerDestinatario(tenantId, campanhaId, destId) {
+  if (!pool) return;
+  await tabelasProntas;
+  await exigirEditavel(tenantId, campanhaId);
+  await pool.query(`DELETE FROM disparo_destinatarios WHERE id = $1 AND campanha_id = $2 AND tenant_id = $3 AND status = 'pendente'`, [Number(destId), Number(campanhaId), tenantId]);
+}
+
+// numeros de TODAS as campanhas num periodo (de/ate 'YYYY-MM-DD', Maceio) + por dia + por campanha
+export async function painelGeral(tenantId, { de, ate }) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const inicio = new Date(`${de}T00:00:00-03:00`);
+  const fim = new Date(new Date(`${ate}T00:00:00-03:00`).getTime() + 86400000);
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime()) || fim <= inicio) throw new Error('Periodo invalido.');
+  const p = [tenantId, inicio, fim];
+  const [{ rows: [t] }, { rows: dias }, { rows: camps }, { rows: [fila] }] = await Promise.all([
+    pool.query(
+      `SELECT (count(*) FILTER (WHERE enviado_em IS NOT NULL))::int AS enviadas,
+              (count(*) FILTER (WHERE status = 'falha'))::int AS falhas,
+              (count(*) FILTER (WHERE respondeu_em IS NOT NULL))::int AS respostas,
+              (count(*) FILTER (WHERE status = 'optout'))::int AS optouts,
+              (count(*) FILTER (WHERE wa_id IS NOT NULL))::int AS rastreadas,
+              (count(*) FILTER (WHERE entregue_em IS NOT NULL))::int AS entregues,
+              (count(*) FILTER (WHERE lido_em IS NOT NULL))::int AS lidas,
+              (count(*) FILTER (WHERE wa_id IS NOT NULL AND entregue_em IS NULL AND enviado_em < now() - interval '6 hours'))::int AS nao_entregues
+       FROM disparo_destinatarios WHERE tenant_id = $1 AND COALESCE(enviado_em, now()) >= $2 AND COALESCE(enviado_em, now()) < $3 AND status <> 'pendente'`, p),
+    pool.query(
+      `SELECT to_char((enviado_em AT TIME ZONE 'America/Maceio')::date, 'DD/MM') AS dia, count(*)::int AS enviadas,
+              (count(*) FILTER (WHERE respondeu_em IS NOT NULL))::int AS respostas
+       FROM disparo_destinatarios WHERE tenant_id = $1 AND enviado_em >= $2 AND enviado_em < $3 GROUP BY 1, (enviado_em AT TIME ZONE 'America/Maceio')::date ORDER BY (enviado_em AT TIME ZONE 'America/Maceio')::date`, p),
+    pool.query(
+      `SELECT c.id, c.nome, c.status,
+              (count(d.id) FILTER (WHERE d.enviado_em IS NOT NULL AND d.enviado_em >= $2 AND d.enviado_em < $3))::int AS enviadas,
+              (count(d.id) FILTER (WHERE d.status = 'falha' AND c.id = d.campanha_id))::int AS falhas,
+              (count(d.id) FILTER (WHERE d.entregue_em IS NOT NULL))::int AS entregues,
+              (count(d.id) FILTER (WHERE d.respondeu_em IS NOT NULL))::int AS respostas,
+              (count(d.id) FILTER (WHERE d.wa_id IS NOT NULL AND d.entregue_em IS NULL AND d.enviado_em < now() - interval '6 hours'))::int AS nao_entregues
+       FROM disparo_campanhas c LEFT JOIN disparo_destinatarios d ON d.campanha_id = c.id
+       WHERE c.tenant_id = $1 AND (c.criado_em < $3) GROUP BY c.id ORDER BY c.id DESC LIMIT 30`, p),
+    pool.query(`SELECT (count(*) FILTER (WHERE d.status = 'pendente'))::int AS pendentes FROM disparo_destinatarios d JOIN disparo_campanhas c ON c.id = d.campanha_id WHERE d.tenant_id = $1 AND c.status IN ('enviando', 'agendada', 'pausada', 'rascunho')`, [tenantId]),
+  ]);
+  return { resumo: { ...t, pendentes: fila.pendentes }, porDia: dias, campanhas: camps };
 }

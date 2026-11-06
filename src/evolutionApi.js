@@ -87,7 +87,7 @@ export async function criarInstancia(nome) {
     instanceName: nome,
     integration: 'WHATSAPP-BAILEYS',
     qrcode: true,
-    webhook: { url: WEBHOOK_URL, byEvents: false, base64: false, events: ['MESSAGES_UPSERT', 'CALL'] },
+    webhook: { url: WEBHOOK_URL, byEvents: false, base64: false, events: ['MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'CALL'] },
   });
 }
 
@@ -171,9 +171,11 @@ export async function enviarMensagemTexto(tenantId, numero, texto) {
 export async function habilitarEventoChamada(instancia) {
   const atual = await chamar('GET', `/webhook/find/${instancia}`);
   const eventos = Array.isArray(atual?.events) ? atual.events : ['MESSAGES_UPSERT'];
-  if (eventos.includes('CALL')) return { jaTinha: true };
+  // CALL = ligacoes; MESSAGES_UPDATE = status de entrega/leitura (usado pelo relatorio dos Disparos)
+  const faltam = ['CALL', 'MESSAGES_UPDATE'].filter((x) => !eventos.includes(x));
+  if (!faltam.length) return { jaTinha: true };
   await chamar('POST', `/webhook/set/${instancia}`, {
-    webhook: { enabled: true, url: atual?.url || WEBHOOK_URL, webhookByEvents: false, webhookBase64: false, events: [...eventos, 'CALL'] },
+    webhook: { enabled: true, url: atual?.url || WEBHOOK_URL, webhookByEvents: false, webhookBase64: false, events: [...eventos, ...faltam] },
   });
   return { jaTinha: false };
 }
