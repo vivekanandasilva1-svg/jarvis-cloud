@@ -460,8 +460,9 @@ export async function salvarContatoBase(tenantId, dados) {
 // importacao de planilha (a tela manda em lotes). Duplicado = mesmo telefone (com/sem o 9) em
 // qualquer numero do tenant: modo 'atualizar' completa os dados (nome/email/obs so se vierem,
 // etiquetas somam), 'pular' deixa como esta. Tudo numa transacao - ou entra o lote todo ou nada.
-// Follow Up fica de fora: entrar nessa etapa dispara a cadencia de mensagens automaticas
-const ETAPAS_IMPORTAVEIS = new Set([...IDS_ETAPAS].filter((e) => e !== 'follow_up'));
+// Follow Up entra como as outras colunas - mas a importacao so coloca o card na coluna, NAO inicia a cadencia
+// de mensagens automaticas (iniciarAcompanhamento so roda quando alguem move o card pelo CRM)
+const ETAPAS_IMPORTAVEIS = new Set([...IDS_ETAPAS]);
 // etapaPadrao = coluna do funil pra onde vai a lista inteira (ex: lista de faltosos -> nao_compareceu); a
 // coluna da propria linha da planilha, se vier, tem prioridade. Contato que cai numa coluna ja aparece no
 // board (ultima_mensagem_em preenchida) - sem coluna, fica so na aba Contatos.

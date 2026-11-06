@@ -336,9 +336,15 @@ export async function listarDestinatarios(tenantId, campanhaId, { status, pagina
 
 // ---------- anexos ----------
 
+// navegador as vezes manda "application/octet-stream" ou vazio pra .opus/.m4a/.mp4: deduz pela extensao
+const TIPOS_POR_EXT = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif',
+  mp3: 'audio/mpeg', ogg: 'audio/ogg', opus: 'audio/ogg', oga: 'audio/ogg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', amr: 'audio/amr',
+  mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', '3gp': 'video/3gpp' };
+
 export async function salvarArquivo(tenantId, campanhaId, nomeArquivo, buffer, mediaType) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
+  if (!mediaType || mediaType === 'application/octet-stream') mediaType = TIPOS_POR_EXT[String(nomeArquivo).split('.').pop().toLowerCase()] || mediaType;
   await exigirEditavel(tenantId, campanhaId);
   if (!TIPOS_ARQUIVO.some((re) => re.test(String(mediaType)))) throw new Error('Tipo de arquivo não aceito - use áudio, imagem, PDF ou vídeo curto.');
   if (!buffer?.length) throw new Error('Arquivo vazio.');

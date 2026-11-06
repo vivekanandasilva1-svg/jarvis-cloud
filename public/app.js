@@ -3927,10 +3927,10 @@ ctImpArquivo.addEventListener('change', async () => {
     ctPreencherInstancias(ctImpInstancia);
     ctImpInstancia.closest('label').hidden = ctInstancias.length < 2;
     ctImpEtiquetaExtra.value = '';
-    // coluna do funil: follow_up fica de fora (entrar nela dispara a cadencia de mensagens automaticas)
+    // coluna do funil (inclui Follow Up: a lista so entra na coluna, sem disparar a cadencia automatica)
     ctImpEtapa.textContent = '';
     ctImpEtapa.appendChild(new Option('Nenhuma (só na aba Contatos)', ''));
-    for (const e of ctEtapas) if (e.id !== 'follow_up') ctImpEtapa.appendChild(new Option(e.nome, e.id));
+    for (const e of ctEtapas) ctImpEtapa.appendChild(new Option(e.nome, e.id));
     ctAtualizarPreviaImp();
   } catch (err) {
     ctMostrarErroImp(`Não consegui ler a planilha: ${err.message}`);
@@ -9450,6 +9450,16 @@ let dispInstancias = [];
 let dispAbertoId = null;
 let dispPolling = null;
 let dispStaged = []; // lista montada ANTES de criar a campanha (planilha/colados/CRM)
+let dispStagedArq = []; // anexos escolhidos ANTES de criar a campanha: [{ nome, tipo, tamanho, base64 }]
+// alguns navegadores nao informam o tipo de .opus/.m4a/.mp4... - deduz pela extensao
+function dispTipoDoArquivo(f) {
+  if (f.type && f.type !== 'application/octet-stream') return f.type;
+  const ext = (f.name.split('.').pop() || '').toLowerCase();
+  const mapa = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif',
+    mp3: 'audio/mpeg', ogg: 'audio/ogg', opus: 'audio/ogg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', amr: 'audio/amr', oga: 'audio/ogg',
+    mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', '3gp': 'video/3gpp', mkv: 'video/x-matroska' };
+  return mapa[ext] || 'application/octet-stream';
+}
 const DISP_STATUS = { rascunho: 'Rascunho', agendada: 'Agendada', enviando: 'Enviando', pausada: 'Pausada', concluida: 'Concluída', cancelada: 'Cancelada' };
 const DEST_STATUS = { pendente: 'Na fila', enviando: 'Enviando', enviado: 'Enviado', falha: 'Falhou', ignorado: 'Ignorado', optout: 'Pediu pra sair' };
 
@@ -9487,7 +9497,7 @@ async function carregarDisparos() {
 }
 
 dispNumero.addEventListener('change', () => { numeroSalvar(dispNumero.value); carregarDisparos(); });
-dispNova.addEventListener('click', () => { dispAbertoId = null; dispStaged = []; renderizarEditorDisparo(null); carregarDisparos(); });
+dispNova.addEventListener('click', () => { dispAbertoId = null; dispStaged = []; dispStagedArq = []; renderizarEditorDisparo(null); carregarDisparos(); });
 
 async function abrirCampanhaDisparo(id) {
   dispAbertoId = id;
@@ -9582,6 +9592,15 @@ function renderizarEditorDisparo(c) {
           dispStaged = [];
           aviso += ` com ${add} destinatário(s) na lista`;
         } else if (!c) aviso += ' - agora adicione os destinatários';
+        if (!c && dispStagedArq.length) {
+          let ok = 0;
+          for (const a of dispStagedArq) {
+            const r = await fetch(`/api/disparos/${d.id}/arquivos`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ nomeArquivo: a.nome, mediaType: a.tipo, base64: a.base64 }) });
+            if (r.ok) ok++; else mostrarAviso(`Anexo "${a.nome}" não foi: ${(await r.json().catch(() => ({}))).erro || 'erro'}`, 'erro');
+          }
+          dispStagedArq = [];
+          aviso += `, ${ok} anexo(s)`;
+        }
         mostrarAviso(aviso, 'ok');
         abrirCampanhaDisparo(d.id);
       } catch (err) {
@@ -9601,6 +9620,8 @@ function renderizarEditorDisparo(c) {
   if (!c) {
     dispDetalhe.appendChild(dispEl('div', { className: 'disp-secao', textContent: 'Lista de quem vai receber' }));
     montarDestinatariosDisparo(null);
+    dispDetalhe.appendChild(dispEl('div', { className: 'disp-secao', textContent: 'Anexos (saem junto de cada mensagem) - imagem, áudio, PDF ou vídeo curto' }));
+    montarAnexosNovaCampanha();
   }
   dispDetalhe.append(botoes, erro);
   if (!c) return;
@@ -9842,6 +9863,42 @@ function dispLinhasParaLista(linhas) {
   });
 }
 
+// anexos escolhidos na tela "Nova campanha" (so sobem depois que a campanha e criada)
+function montarAnexosNovaCampanha() {
+  const lista = dispEl('div', { className: 'disp-anexos' });
+  const pintar = () => {
+    lista.textContent = '';
+    for (const a of dispStagedArq) {
+      const icone = a.tipo.startsWith('audio/') ? '🎧' : a.tipo.startsWith('image/') ? '🖼' : a.tipo.startsWith('video/') ? '🎬' : '📄';
+      const item = dispEl('span', { className: 'fui-anexo', textContent: `${icone} ${a.nome} (${formatarTamanho(a.tamanho)}) ` });
+      const x = dispEl('button', { type: 'button', textContent: '✕', title: 'Remover' });
+      x.addEventListener('click', () => { dispStagedArq = dispStagedArq.filter((y) => y !== a); pintar(); });
+      item.appendChild(x);
+      lista.appendChild(item);
+    }
+    if (!dispStagedArq.length) lista.textContent = 'Nenhum anexo.';
+  };
+  pintar();
+  const input = dispEl('input', { type: 'file', accept: 'audio/*,image/*,video/*,application/pdf,.opus,.m4a,.pdf', multiple: true, hidden: true });
+  const botao = dispEl('button', { type: 'button', className: 'fui-anexar', textContent: '📎 Anexar arquivo' });
+  botao.addEventListener('click', () => input.click());
+  input.addEventListener('change', async () => {
+    const arquivos = [...input.files];
+    input.value = '';
+    botao.disabled = true;
+    for (const f of arquivos) {
+      if (dispStagedArq.length >= 5) { mostrarAviso('No máximo 5 anexos por campanha.', 'erro'); break; }
+      if (f.size > 12 * 1024 * 1024) { mostrarAviso(`"${f.name}" é grande demais - o máximo é 12 MB.`, 'erro'); continue; }
+      const tipo = dispTipoDoArquivo(f);
+      if (!/^(image|audio|video)\//.test(tipo) && tipo !== 'application/pdf') { mostrarAviso(`"${f.name}": use imagem, áudio, PDF ou vídeo.`, 'erro'); continue; }
+      try { dispStagedArq.push({ nome: f.name, tipo, tamanho: f.size, base64: await arquivoParaBase64(f) }); } catch { mostrarAviso(`Não consegui ler "${f.name}".`, 'erro'); }
+    }
+    botao.disabled = false;
+    pintar();
+  });
+  dispDetalhe.append(lista, input, botao);
+}
+
 function montarAnexosDisparo(c, editavel) {
   const lista = dispEl('div', { className: 'disp-anexos' });
   const pintar = () => {
@@ -9865,7 +9922,7 @@ function montarAnexosDisparo(c, editavel) {
   pintar();
   dispDetalhe.appendChild(lista);
   if (!editavel) return;
-  const input = dispEl('input', { type: 'file', accept: 'audio/*,image/*,video/*,application/pdf', hidden: true });
+  const input = dispEl('input', { type: 'file', accept: 'audio/*,image/*,video/*,application/pdf,.opus,.m4a,.pdf', hidden: true });
   const botao = dispEl('button', { type: 'button', className: 'fui-anexar', textContent: '📎 Anexar arquivo' });
   botao.addEventListener('click', () => input.click());
   input.addEventListener('change', async () => {
@@ -9876,7 +9933,7 @@ function montarAnexosDisparo(c, editavel) {
     botao.disabled = true;
     try {
       const base64 = await arquivoParaBase64(f);
-      const res = await fetch(`/api/disparos/${c.id}/arquivos`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ nomeArquivo: f.name, mediaType: f.type || 'application/octet-stream', base64 }) });
+      const res = await fetch(`/api/disparos/${c.id}/arquivos`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ nomeArquivo: f.name, mediaType: dispTipoDoArquivo(f), base64 }) });
       const d = await res.json();
       if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
       c.arquivos.push(d.arquivo);

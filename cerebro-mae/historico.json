@@ -868,5 +868,13 @@
     "tipo": "melhoria",
     "titulo": "Landing page: plano Redes de Clínicas e faixa de suporte",
     "conteudo": "Pedido do dono: quarto plano para grupos e redes (valor sob consulta, projeto a quatro mãos, prioridade de suporte, piloto sem custo, tudo da clínica individual, um número e um funil por unidade, treinamento da rede), com botão que pede a proposta de piloto pelo WhatsApp. Planos passaram para grade 2x2. Faixa abaixo dos planos: suporte humano em horário comercial e suporte 24h com a Lumien. Visão unificada de várias unidades ainda não existe no app: na página ficou como dashboards e IA da rede construídos no projeto. Mesmo conteúdo entrou nos PDFs comerciais (entregas/lumia-pdfs, fora do git). Pendente: confirmar se o suporte humano vale para todos os planos."
+  },
+  {
+    "chave": "disparos:anexos-na-criacao-e-followup-importacao",
+    "modulo": "whatsapp",
+    "data": "2026-11-06",
+    "tipo": "melhoria",
+    "titulo": "Disparos: anexar imagem/áudio/PDF/vídeo já na criação; importação aceita coluna Follow Up",
+    "conteudo": "Disparos já aceitavam anexos (imagem, áudio, PDF, vídeo, até 12MB, 5 por campanha) mas o botão só aparecia DEPOIS de criar a campanha - o dono não achou. Agora a tela 'Nova campanha' tem a seção de anexos (vários arquivos; sobem após criar) e o tipo é deduzido pela extensão quando o navegador não informa (.opus/.m4a/.mp4), no front e no back (salvarArquivo). Importação de contatos: a coluna Follow Up agora aparece na escolha; o contato só entra na coluna, sem iniciar a cadência (follow_up_contatos só é criado ao mover pelo CRM). Atenção: se o lead responder, o motor de Follow Up (followUp.processarMensagem) passa a responder enquanto ele estiver nessa coluna."
   }
 ]
