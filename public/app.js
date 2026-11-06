@@ -3094,20 +3094,15 @@ async function carregarConversas() {
     cvContatos = data.contatos || [];
     cvEtapas = data.etapas || [];
 
-    const instancias = [...new Set(cvContatos.map((c) => c.instancia))].sort();
-    const atual = cvInstancia.value;
-    cvInstancia.textContent = '';
-    cvInstancia.appendChild(new Option('Todos os números', ''));
-    for (const i of instancias) cvInstancia.appendChild(new Option(i.startsWith('ig:') ? `Instagram @${i.slice(3)}` : i, i));
-    cvInstancia.value = instancias.includes(atual) ? atual : '';
-    cvInstancia.hidden = instancias.length < 2;
+    // mesmo numero escolhido no CRM/Contatos/Disparos (cada setor so ve o seu)
+    numeroPreencher(cvInstancia, cvContatos.map((c) => c.instancia), null);
 
     if (cvAberto) {
       const novo = cvContatos.find((c) => c.id === cvAberto.id);
       if (novo) { cvAberto = { ...novo, nao_lida: false }; cvAtualizarTopo(); }
     }
     renderizarListaConversas();
-    atualizarBadgeConversas(cvContatos.filter((c) => c.nao_lida && c.id !== cvAberto?.id).length);
+    atualizarBadgeConversas(cvContatos.filter((c) => c.nao_lida && c.id !== cvAberto?.id && (!cvInstancia.value || c.instancia === cvInstancia.value)).length);
   } catch (err) {
     cvLista.textContent = '';
     const p = document.createElement('p');
@@ -3281,7 +3276,11 @@ function cvTratarEvento(data) {
 }
 
 cvBusca.addEventListener('input', renderizarListaConversas);
-cvInstancia.addEventListener('change', renderizarListaConversas);
+cvInstancia.addEventListener('change', () => {
+  numeroSalvar(cvInstancia.value);
+  renderizarListaConversas();
+  atualizarBadgeConversas(cvContatos.filter((c) => c.nao_lida && c.id !== cvAberto?.id && (!cvInstancia.value || c.instancia === cvInstancia.value)).length);
+});
 cvFiltros.addEventListener('click', (ev) => {
   const btn = ev.target.closest('.cv-filtro');
   if (!btn) return;

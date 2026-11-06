@@ -780,5 +780,13 @@
     "tipo": "melhoria",
     "titulo": "Contatos e Disparos separados por número do WhatsApp",
     "conteudo": "Pedido do dono: setores não podem misturar leads. Seletor de número agora também em Contatos e Disparos (mesma escolha do CRM, guardada no navegador; com 2+ números abre num só). Disparos: lista de campanhas e Painel geral filtram pelo número; nova campanha já vem com o número escolhido; 'montar lista pelo CRM' só puxa contatos do número da campanha (adicionarDoCrm). Pendente: Conversas já tinha filtro próprio; Lumia (chat) continua enxergando tudo."
+  },
+  {
+    "chave": "conversas:por-numero",
+    "modulo": "whatsapp",
+    "data": "2026-11-06",
+    "tipo": "melhoria",
+    "titulo": "Conversas separadas por número do WhatsApp",
+    "conteudo": "Pedido do dono (setores sem misturar contatos). A aba Conversas usa a mesma escolha de número do CRM/Contatos/Disparos (numeroPreencher): com 2+ números abre num só; o contador de não lidas conta só o número escolhido. Pendente: o chat da Lumia (assistente) continua global."
   }
 ]
