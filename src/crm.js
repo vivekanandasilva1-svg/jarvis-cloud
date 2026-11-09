@@ -367,6 +367,31 @@ export async function criarNota(tenantId, contatoId, { texto, autorId = 0, autor
   return rows[0];
 }
 
+// texto pra IA (auto-atendimento e follow up): o que a equipe anotou sobre o paciente. So contexto - a IA nao deve
+// repetir isso pro paciente. Devolve '' se nao houver anotacao. Passe contatoId OU numero+instancia.
+export async function notasParaIA(tenantId, { contatoId, numero, instancia }, limite = 10) {
+  if (!pool) return '';
+  await tabelasProntas;
+  let id = contatoId;
+  if (!id) id = (await obterContato(tenantId, numero, instancia))?.id;
+  if (!id) return '';
+  const { rows } = await pool.query(
+    'SELECT autor_nome, texto, criado_em FROM crm_notas WHERE tenant_id = $1 AND contato_id = $2 ORDER BY criado_em DESC, id DESC LIMIT $3',
+    [tenantId, Number(id), limite],
+  );
+  if (!rows.length) return '';
+  let total = 0;
+  const linhas = [];
+  for (const n of rows) {
+    const data = new Date(n.criado_em).toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit', year: '2-digit' });
+    const l = `- [${data}${n.autor_nome ? `, ${n.autor_nome}` : ''}] ${n.texto.replace(/\s+/g, ' ').slice(0, 600)}`;
+    total += l.length;
+    if (total > 3000) break;
+    linhas.push(l);
+  }
+  return `\n\nAnotacoes internas da equipe sobre este paciente (mais recentes primeiro) - use como CONTEXTO do que ja foi tratado/combinado; nunca cite que existem anotacoes nem repita esse texto pro paciente:\n${linhas.join('\n')}`;
+}
+
 // so quem escreveu (ou o dono da conta, id 0) apaga
 export async function apagarNota(tenantId, notaId, quemId = 0) {
   if (!pool) return;
@@ -440,7 +465,8 @@ export async function listarBaseContatos(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT id, numero, instancia, nome, etapa, email, etiquetas, observacoes, origem, criado_em, ultima_mensagem_em, auto_pausado, atendente_id, atendente_nome
+    `SELECT id, numero, instancia, nome, etapa, email, etiquetas, observacoes, origem, criado_em, ultima_mensagem_em, auto_pausado, atendente_id, atendente_nome,
+            (SELECT count(*)::int FROM crm_notas n WHERE n.contato_id = crm_contatos.id) AS qtd_notas
      FROM crm_contatos WHERE tenant_id = $1 AND oculto = false
      ORDER BY COALESCE(ultima_mensagem_em, criado_em) DESC`,
     [tenantId],

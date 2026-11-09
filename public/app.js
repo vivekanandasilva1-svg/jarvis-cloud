@@ -3640,6 +3640,7 @@ function renderizarContatos() {
     };
     const tdNome = celula(c.nome || 'Sem nome', c.nome ? 'ct-nome' : 'ct-nome ct-vazio');
     tdNome.dataset.rotulo = 'Nome';
+    if (c.qtd_notas) { const q = document.createElement('span'); q.className = 'ct-notas-qtd'; q.textContent = `📝 ${c.qtd_notas}`; q.title = `${c.qtd_notas} anotação(ões)`; tdNome.appendChild(q); }
     celula(ctFormatarTelefone(c.numero, c.instancia), 'ct-tel').dataset.rotulo = 'WhatsApp';
     celula(c.email || '', 'ct-email').dataset.rotulo = 'E-mail';
     const tdTags = celula('', 'ct-tags');
@@ -3711,6 +3712,8 @@ function abrirModalContato(contato) {
     ctInstanciaCadLabel.hidden = ctInstancias.length < 2;
     if (!ctInstancias.length) ctMostrarErroModal('Conecte um número na aba WhatsApp antes de cadastrar contatos.');
   }
+  ctNotasEl.hidden = !contato;
+  ctPainelNotas.definirContato(contato ? contato.id : null);
   ctModal.hidden = false;
   (contato ? ctNome : ctNumero).focus();
 }
@@ -10185,7 +10188,7 @@ document.getElementById('perfilSalvar').addEventListener('click', async (e) => {
 // ---------- Anotacoes sobre o paciente (Conversas e CRM) ----------
 // historico do que a equipe esta tratando/resolvendo com cada paciente, pra consultar e lembrar depois.
 // Mesmo painel nos dois lugares; as anotacoes sao do contato (aparecem igual em Conversas e no CRM).
-function criarPainelNotas(raiz, aoMudarContagem) {
+function criarPainelNotas(raiz, aoMudarContagem, { fixo = false } = {}) {
   let contatoId = null;
   const topo = document.createElement('div');
   topo.className = 'notas-topo';
@@ -10194,7 +10197,7 @@ function criarPainelNotas(raiz, aoMudarContagem) {
   const fechar = document.createElement('button');
   fechar.type = 'button'; fechar.className = 'crm-btn-secundario'; fechar.textContent = 'Fechar';
   fechar.addEventListener('click', () => { raiz.hidden = true; });
-  topo.append(titulo, fechar);
+  if (fixo) topo.append(titulo); else topo.append(titulo, fechar);
   const form = document.createElement('div');
   form.className = 'notas-form';
   const area = document.createElement('textarea');
@@ -10313,6 +10316,10 @@ setInterval(() => {
   if (!id) crmPainelNotas.esconder();
   crmNotasBtn.textContent = crmContatoAberto?.qtd_notas ? `📝 Anotações (${crmContatoAberto.qtd_notas})` : '📝 Anotações';
 }, 300);
+
+// Contatos (modal do contato): painel sempre aberto quando o contato ja existe
+const ctNotasEl = document.getElementById('ctNotas');
+const ctPainelNotas = criarPainelNotas(ctNotasEl, (id, n) => { const c = ctContatos.find((x) => x.id === id); if (c) c.qtd_notas = n; }, { fixo: true });
 
 // a busca de Conversas tambem acha pelo texto das anotacoes
 let cvIdsComNota = new Set();

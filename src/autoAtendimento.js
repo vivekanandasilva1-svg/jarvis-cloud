@@ -1103,10 +1103,12 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   const TOOLS = montarTools(config, listaArquivos);
   const contexto = { tenantId, instancia, numero, config };
   const contextoTemporal = await montarContextoTemporal(tenantId, numero, config, sessao);
+  // anotacoes da equipe sobre o paciente entram no bloco DINAMICO (nao quebra o cache do bloco fixo)
+  const notasEquipe = await crm.notasParaIA(tenantId, { numero, instancia }).catch(() => '');
   const system = systemBlocos(config, {
     vaiSerAudio,
     temAgenda: !!(config.agendarClinicorp || config.agendarAgendaInterna),
-    contextoTemporalTexto: contextoTemporal.texto,
+    contextoTemporalTexto: contextoTemporal.texto + notasEquipe,
     retomarPendente,
     retomadaRetorno,
   });

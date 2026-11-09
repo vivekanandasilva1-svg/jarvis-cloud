@@ -277,10 +277,12 @@ function formatarHistorico(historico) {
 }
 
 async function gerarMensagemEtapa({ tenantId, config, etapa, contato, historico }) {
+  const notasEquipe = await crm.notasParaIA(tenantId, { contatoId: contato.contato_id || contato.id }).catch(() => '');
   const texto = `${config.promptGeral}\n\n` +
     `Voce esta tentando reengajar um contato que parou de responder ha ${etapa.dias} dia(s) - essa e a tentativa numero ${etapa.ordem} de reengajamento.` +
     (etapa.prompt ? `\n\nInstrucoes especificas pra essa tentativa: ${etapa.prompt}` : '') +
     `\n\nNome do contato (se souber): ${contato.nome || 'nao informado'}` +
+    notasEquipe +
     `\n\nHistorico do acompanhamento ate agora:\n${formatarHistorico(historico)}` +
     `\n\nEscreva agora a mensagem a ser enviada pra tentar retomar o contato.`;
 
@@ -334,9 +336,11 @@ export async function processarMensagem(tenantId, contatoId, numero, instancia, 
   const etapas = await listarEtapas(tenantId);
   const etapaAtual = etapas.find((e) => e.ordem === (registro?.ultima_etapa_enviada || 0));
 
+  const notasEquipe = await crm.notasParaIA(tenantId, { contatoId }).catch(() => '');
   const prompt = `${config.promptGeral}\n\n` +
     `Voce esta acompanhando um lead que estava sem responder, dentro de um fluxo de reengajamento.` +
     (etapaAtual?.prompt ? `\n\nInstrucoes da tentativa atual: ${etapaAtual.prompt}` : '') +
+    notasEquipe +
     `\n\nHistorico do acompanhamento ate agora:\n${formatarHistorico(historico)}` +
     `\n\nO contato acabou de responder: "${textoContato}"` +
     `\n\nEscreva uma resposta natural pra essa mensagem e decida se ele demonstrou interesse real em retomar o assunto.`;

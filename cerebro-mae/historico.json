@@ -884,5 +884,13 @@
     "tipo": "funcao",
     "titulo": "Anotações sobre o paciente nas conversas (Conversas e CRM)",
     "conteudo": "Pedido do dono: registrar o que está tratando/resolvendo com o paciente pra consultar e lembrar depois. Tabela crm_notas (tenant, contato, autor, texto, data; some junto com o contato). Botão '📝 Anotações (n)' no cabeçalho da conversa em Conversas e no modal do CRM abre um painel com histórico (autor + data/hora), campo pra nova anotação (Ctrl+Enter salva) e apagar (só o autor ou o dono). Mesmas anotações nos dois lugares. A busca de Conversas também acha pelo texto das anotações (/api/crm/notas/buscar). Rotas: GET/POST /api/crm/contatos/:id/notas, DELETE /api/crm/notas/:id. Pendente: não aparecem ainda na aba Contatos nem entram no contexto da IA de atendimento."
+  },
+  {
+    "chave": "crm:anotacoes-contatos-e-ia",
+    "modulo": "crm",
+    "data": "2026-11-09",
+    "tipo": "melhoria",
+    "titulo": "Anotações também na aba Contatos e no contexto da IA",
+    "conteudo": "Complemento das anotações do paciente: (1) aba Contatos - o modal do contato (editar) mostra o painel de anotações sempre aberto e a lista mostra '📝 n' ao lado do nome; (2) a IA lê as anotações: crm.notasParaIA (últimas 10, ~3000 caracteres) entra no bloco DINÂMICO do system prompt do auto-atendimento (não quebra o cache do bloco fixo) e nos prompts do Follow Up (mensagem de reengajamento e resposta ao lead), com instrução de usar só como contexto e nunca citar/repetir pro paciente. Follow Up Inteligente por cards manda texto fixo (sem IA por lead), então não usa. Cuidado: não escrever dado sensível nas anotações pois a IA lê."
   }
 ]
