@@ -3550,3 +3550,20 @@ body.lumien-em-conversas .lumien-btn { bottom: 92px; }
 .perfil-edit-botoes { display: flex; flex-direction: column; gap: 8px; }
 .perfil-arquivo { cursor: pointer; text-align: center; }
 @media (max-width: 860px) { .perfil-info { display: none; } .visao-sel { max-width: 110px; } }
+
+/* ---- anotacoes sobre o paciente ---- */
+.notas-painel { border-bottom: 1px solid var(--border-soft); background: rgba(212,175,55,.05); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; max-height: 46%; overflow-y: auto; flex: 0 0 auto; }
+.notas-painel[hidden] { display: none; }
+.notas-topo { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--gold-bright); font-weight: 700; }
+.notas-form { display: flex; flex-direction: column; gap: 6px; }
+.notas-form textarea { width: 100%; box-sizing: border-box; min-height: 64px; resize: vertical; background: rgba(255,255,255,.05); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font: inherit; font-size: 13px; padding: 8px 10px; }
+.notas-form-acoes { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--text-dim); }
+.notas-lista { display: flex; flex-direction: column; gap: 6px; }
+.nota-item { background: rgba(255,255,255,.04); border: 1px solid var(--border-soft); border-radius: 8px; padding: 8px 10px; }
+.nota-cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--text-dim); margin-bottom: 3px; }
+.nota-cab b { color: var(--gold-bright); font-weight: 600; }
+.nota-cab button { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 13px; padding: 0 4px; }
+.nota-cab button:hover { color: #f87171; }
+.nota-txt { font-size: 13px; color: var(--text); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.notas-vazia { font-size: 12px; color: var(--text-dim); margin: 0; }
+.cv-notas-btn.tem-notas { color: var(--gold-bright); border-color: var(--gold); }

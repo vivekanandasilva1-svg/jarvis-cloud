@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261106k" />
+  <link rel="stylesheet" href="style.css?v=20261109a" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -579,10 +579,12 @@
               <span id="cvSub">--</span>
             </div>
             <div class="cv-chat-acoes">
+              <button type="button" class="cv-ia-btn cv-notas-btn" id="cvNotasBtn" title="Anotações sobre este paciente (o que está tratando, o que ficou combinado)">📝 Anotações</button>
               <select id="cvEtapa" title="Etapa do funil"></select>
               <button type="button" class="cv-ia-btn" id="cvIaBtn" title="Liga ou pausa a IA só nesta conversa">IA atendendo</button>
             </div>
           </header>
+          <div class="notas-painel" id="cvNotas" hidden></div>
           <div class="crm-whatsapp-fundo cv-log" id="cvLog"></div>
           <div class="cv-anexo-preview" id="cvAnexoPreview" hidden>
             <span id="cvAnexoNome"></span>
@@ -870,12 +872,14 @@
             <select id="crmConversaOperador" class="crm-btn-secundario" title="Quem está atendendo este lead"><option value="">Sem operador</option></select>
             <button type="button" id="crmConversaAssumir" class="crm-btn-secundario">Assumir</button>
             <button type="button" id="crmConversaRetorno" class="crm-btn-secundario">Alerta de retorno</button>
+            <button type="button" id="crmConversaNotasBtn" class="crm-btn-secundario" title="Anotações sobre este paciente">📝 Anotações</button>
             <button type="button" id="crmConversaPausar" class="crm-btn-secundario">Pausar auto-atendimento</button>
             <button type="button" id="crmConversaOcultar" class="crm-btn-secundario">Ocultar conversa</button>
             <button type="button" id="crmConversaApagar" class="crm-btn-perigo">Apagar conversa</button>
             <button type="button" id="crmConversaFechar">✕</button>
           </div>
         </div>
+        <div class="notas-painel" id="crmNotas" hidden></div>
         <div class="crm-retorno-banner" id="crmRetornoBanner" hidden></div>
         <div class="crm-retorno-painel" id="crmRetornoPainel" hidden>
           <label class="auto-label">Retomar essa conversa em:</label>
@@ -1563,6 +1567,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261106k"></script>
+  <script src="app.js?v=20261109a"></script>
 </body>
 </html>

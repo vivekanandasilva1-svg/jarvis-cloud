@@ -3127,7 +3127,8 @@ function renderizarListaConversas() {
     if (!termo) return true;
     return (c.nome || '').toLowerCase().includes(termo)
       || (soDigitos && c.numero.includes(soDigitos))
-      || (c.ultima_mensagem || '').toLowerCase().includes(termo);
+      || (c.ultima_mensagem || '').toLowerCase().includes(termo)
+      || cvIdsComNota.has(c.id);
   });
 
   cvLista.textContent = '';
@@ -10178,4 +10179,153 @@ document.getElementById('perfilSalvar').addEventListener('click', async (e) => {
     carregarOperadoresCrm().catch(() => {});
   } catch (err) { perfilErro.textContent = err.message; perfilErro.hidden = false; }
   e.target.disabled = false;
+});
+
+
+// ---------- Anotacoes sobre o paciente (Conversas e CRM) ----------
+// historico do que a equipe esta tratando/resolvendo com cada paciente, pra consultar e lembrar depois.
+// Mesmo painel nos dois lugares; as anotacoes sao do contato (aparecem igual em Conversas e no CRM).
+function criarPainelNotas(raiz, aoMudarContagem) {
+  let contatoId = null;
+  const topo = document.createElement('div');
+  topo.className = 'notas-topo';
+  const titulo = document.createElement('span');
+  titulo.textContent = 'Anotações sobre este paciente';
+  const fechar = document.createElement('button');
+  fechar.type = 'button'; fechar.className = 'crm-btn-secundario'; fechar.textContent = 'Fechar';
+  fechar.addEventListener('click', () => { raiz.hidden = true; });
+  topo.append(titulo, fechar);
+  const form = document.createElement('div');
+  form.className = 'notas-form';
+  const area = document.createElement('textarea');
+  area.maxLength = 4000;
+  area.placeholder = 'O que está tratando/resolvendo com este paciente? (ex.: pediu orçamento de implante, aguarda retorno na sexta, prefere atendimento à tarde)';
+  const acoes = document.createElement('div');
+  acoes.className = 'notas-form-acoes';
+  const dica = document.createElement('span');
+  dica.textContent = 'Ctrl+Enter salva';
+  const salvar = document.createElement('button');
+  salvar.type = 'button'; salvar.className = 'relatorio-config-enviar'; salvar.textContent = 'Salvar anotação';
+  acoes.append(dica, salvar);
+  form.append(area, acoes);
+  const lista = document.createElement('div');
+  lista.className = 'notas-lista';
+  raiz.append(topo, form, lista);
+
+  const quando = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+  async function carregar() {
+    if (!contatoId) return;
+    const pedido = contatoId;
+    try {
+      const res = await fetch(`/api/crm/contatos/${pedido}/notas`, { headers: { 'x-app-password': appPassword } });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro');
+      if (pedido !== contatoId) return;
+      lista.textContent = '';
+      if (!d.notas.length) { const p = document.createElement('p'); p.className = 'notas-vazia'; p.textContent = 'Nenhuma anotação ainda.'; lista.appendChild(p); }
+      for (const n of d.notas) {
+        const item = document.createElement('div');
+        item.className = 'nota-item';
+        const cab = document.createElement('div');
+        cab.className = 'nota-cab';
+        const quem = document.createElement('span');
+        const b = document.createElement('b');
+        b.textContent = n.autor_nome || 'Equipe';
+        quem.append(b, ` · ${quando(n.criado_em)}`);
+        cab.appendChild(quem);
+        if (d.euId === 0 || n.autor_id === d.euId) {
+          const x = document.createElement('button');
+          x.type = 'button'; x.textContent = '✕'; x.title = 'Apagar anotação';
+          x.addEventListener('click', async () => {
+            if (!confirm('Apagar esta anotação?')) return;
+            await fetch(`/api/crm/notas/${n.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+            await carregar();
+          });
+          cab.appendChild(x);
+        }
+        const txt = document.createElement('div');
+        txt.className = 'nota-txt';
+        txt.textContent = n.texto;
+        item.append(cab, txt);
+        lista.appendChild(item);
+      }
+      aoMudarContagem?.(pedido, d.notas.length);
+    } catch (err) { lista.textContent = `Não consegui carregar: ${err.message}`; }
+  }
+  async function enviar() {
+    const texto = area.value.trim();
+    if (!texto || !contatoId) return;
+    salvar.disabled = true;
+    try {
+      const res = await fetch(`/api/crm/contatos/${contatoId}/notas`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ texto }) });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro');
+      area.value = '';
+      await carregar();
+    } catch (err) { mostrarAviso(`Não consegui salvar: ${err.message}`, 'erro'); }
+    salvar.disabled = false;
+  }
+  salvar.addEventListener('click', enviar);
+  area.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); enviar(); } });
+  return {
+    definirContato(id) { contatoId = id; area.value = ''; lista.textContent = ''; if (!raiz.hidden) carregar(); },
+    alternar() { raiz.hidden = !raiz.hidden; if (!raiz.hidden) { carregar(); area.focus(); } },
+    esconder() { raiz.hidden = true; },
+  };
+}
+
+// Conversas
+const cvNotasBtn = document.getElementById('cvNotasBtn');
+const cvPainelNotas = criarPainelNotas(document.getElementById('cvNotas'), (id, n) => {
+  const c = cvContatos.find((x) => x.id === id);
+  if (c) c.qtd_notas = n;
+  if (cvAberto?.id === id) { cvAberto.qtd_notas = n; cvAtualizarBotaoNotas(); }
+});
+function cvAtualizarBotaoNotas() {
+  const n = cvAberto?.qtd_notas || 0;
+  cvNotasBtn.textContent = n ? `📝 Anotações (${n})` : '📝 Anotações';
+  cvNotasBtn.classList.toggle('tem-notas', n > 0);
+}
+cvNotasBtn.addEventListener('click', () => cvPainelNotas.alternar());
+// troca de conversa: o painel acompanha o contato aberto
+let cvNotasContatoAtual = null;
+setInterval(() => {
+  const id = cvAberto?.id ?? null;
+  if (id === cvNotasContatoAtual) return;
+  cvNotasContatoAtual = id;
+  cvPainelNotas.definirContato(id);
+  if (!id) cvPainelNotas.esconder();
+  cvAtualizarBotaoNotas();
+}, 300);
+
+// CRM (modal da conversa)
+const crmNotasBtn = document.getElementById('crmConversaNotasBtn');
+const crmPainelNotas = criarPainelNotas(document.getElementById('crmNotas'), (id, n) => {
+  if (crmContatoAberto?.id === id) { crmContatoAberto.qtd_notas = n; crmNotasBtn.textContent = n ? `📝 Anotações (${n})` : '📝 Anotações'; }
+});
+crmNotasBtn.addEventListener('click', () => crmPainelNotas.alternar());
+let crmNotasContatoAtual = null;
+setInterval(() => {
+  const id = crmContatoAberto?.id ?? null;
+  if (id === crmNotasContatoAtual) return;
+  crmNotasContatoAtual = id;
+  crmPainelNotas.definirContato(id);
+  if (!id) crmPainelNotas.esconder();
+  crmNotasBtn.textContent = crmContatoAberto?.qtd_notas ? `📝 Anotações (${crmContatoAberto.qtd_notas})` : '📝 Anotações';
+}, 300);
+
+// a busca de Conversas tambem acha pelo texto das anotacoes
+let cvIdsComNota = new Set();
+let cvBuscaNotaTimer = null;
+cvBusca.addEventListener('input', () => {
+  clearTimeout(cvBuscaNotaTimer);
+  const q = cvBusca.value.trim();
+  if (q.length < 2) { if (cvIdsComNota.size) { cvIdsComNota = new Set(); renderizarListaConversas(); } return; }
+  cvBuscaNotaTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/crm/notas/buscar?q=${encodeURIComponent(q)}`, { headers: { 'x-app-password': appPassword } });
+      const d = await res.json();
+      if (res.ok && cvBusca.value.trim() === q) { cvIdsComNota = new Set(d.contatoIds || []); renderizarListaConversas(); }
+    } catch { /* busca normal segue valendo */ }
+  }, 350);
 });

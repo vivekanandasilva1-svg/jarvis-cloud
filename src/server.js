@@ -2373,6 +2373,38 @@ app.get('/api/crm/origem/relatorio', async (req, res) => {
   }
 });
 
+// anotacoes sobre o paciente (historico do que esta sendo tratado/resolvido)
+app.get('/api/crm/notas/buscar', async (req, res) => {
+  try {
+    res.json({ contatoIds: await crm.buscarNotas(req.tenantId, req.query.q) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.get('/api/crm/contatos/:id/notas', async (req, res) => {
+  try {
+    res.json({ notas: await crm.listarNotas(req.tenantId, req.params.id), euId: req.operadorId || 0 });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/crm/contatos/:id/notas', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json({ ok: true, nota: await crm.criarNota(req.tenantId, req.params.id, { texto: req.body?.texto, autorId: req.operadorId || 0, autorNome: perfil?.nome }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/crm/notas/:id', async (req, res) => {
+  try {
+    await crm.apagarNota(req.tenantId, req.params.id, req.operadorId || 0);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.get('/api/crm/etapas', (req, res) => res.json({ etapas: crm.ETAPAS }));
 
 app.get('/api/crm/operadores', async (req, res) => {

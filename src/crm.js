@@ -181,6 +181,19 @@ async function garantirTabelas() {
   await pool.query(`ALTER TABLE crm_seguranca DROP CONSTRAINT IF EXISTS crm_seguranca_pkey;`);
   await pool.query(`ALTER TABLE crm_seguranca DROP CONSTRAINT IF EXISTS crm_seguranca_id_check;`);
   await pool.query(`ALTER TABLE crm_seguranca DROP COLUMN IF EXISTS id;`);
+  // anotacoes da equipe sobre cada paciente/conversa (o que esta tratando, o que ficou combinado...)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS crm_notas (
+      id SERIAL PRIMARY KEY,
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      contato_id INT NOT NULL REFERENCES crm_contatos(id) ON DELETE CASCADE,
+      autor_id INT NOT NULL DEFAULT 0,
+      autor_nome TEXT,
+      texto TEXT NOT NULL,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS crm_notas_contato_idx ON crm_notas (tenant_id, contato_id, criado_em DESC);`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas do CRM:', err.message);
@@ -320,11 +333,58 @@ export async function listarContatos(tenantId) {
     `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento, atendente_id, atendente_nome, origem_fonte, origem_campanha, origem_titulo,
             retorno_em, retorno_nota, retorno_origem, retorno_disparado_em,
             (retorno_em IS NOT NULL AND (retorno_em AT TIME ZONE 'America/Maceio')::date <= (now() AT TIME ZONE 'America/Maceio')::date) AS retorno_hoje,
-            (ultima_entrada_em IS NOT NULL AND (lido_em IS NULL OR ultima_entrada_em > lido_em)) AS nao_lida
+            (ultima_entrada_em IS NOT NULL AND (lido_em IS NULL OR ultima_entrada_em > lido_em)) AS nao_lida,
+            (SELECT count(*)::int FROM crm_notas n WHERE n.contato_id = crm_contatos.id) AS qtd_notas
      FROM crm_contatos WHERE tenant_id = $1 AND oculto = false AND ultima_mensagem_em IS NOT NULL ORDER BY ultima_mensagem_em DESC NULLS LAST`,
     [tenantId],
   );
   return rows;
+}
+
+// ---------- anotacoes sobre o paciente ----------
+
+export async function listarNotas(tenantId, contatoId) {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    'SELECT id, autor_id, autor_nome, texto, criado_em FROM crm_notas WHERE tenant_id = $1 AND contato_id = $2 ORDER BY criado_em DESC, id DESC LIMIT 300',
+    [tenantId, Number(contatoId)],
+  );
+  return rows;
+}
+
+export async function criarNota(tenantId, contatoId, { texto, autorId = 0, autorNome = null }) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const t = String(texto ?? '').trim().slice(0, 4000);
+  if (!t) throw new Error('Escreva a anotação.');
+  const { rows: [c] } = await pool.query('SELECT 1 FROM crm_contatos WHERE id = $1 AND tenant_id = $2', [Number(contatoId), tenantId]);
+  if (!c) throw new Error('Contato nao encontrado.');
+  const { rows } = await pool.query(
+    'INSERT INTO crm_notas (tenant_id, contato_id, autor_id, autor_nome, texto) VALUES ($1, $2, $3, $4, $5) RETURNING id, autor_id, autor_nome, texto, criado_em',
+    [tenantId, Number(contatoId), Number(autorId) || 0, autorNome ? String(autorNome).slice(0, 80) : null, t],
+  );
+  return rows[0];
+}
+
+// so quem escreveu (ou o dono da conta, id 0) apaga
+export async function apagarNota(tenantId, notaId, quemId = 0) {
+  if (!pool) return;
+  await tabelasProntas;
+  await pool.query('DELETE FROM crm_notas WHERE id = $1 AND tenant_id = $2 AND ($3 = 0 OR autor_id = $3)', [Number(notaId), tenantId, Number(quemId) || 0]);
+}
+
+// ids dos contatos que tem alguma anotacao com esse texto (a busca de Conversas usa)
+export async function buscarNotas(tenantId, termo) {
+  if (!pool) return [];
+  await tabelasProntas;
+  const q = String(termo || '').trim();
+  if (q.length < 2) return [];
+  const { rows } = await pool.query(
+    `SELECT DISTINCT contato_id FROM crm_notas WHERE tenant_id = $1 AND lower(texto) LIKE '%' || lower($2) || '%' LIMIT 500`,
+    [tenantId, q],
+  );
+  return rows.map((r) => r.contato_id);
 }
 
 export async function listarContatosOcultos(tenantId) {
