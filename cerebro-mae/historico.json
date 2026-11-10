@@ -932,5 +932,13 @@
     "tipo": "correcao",
     "titulo": "Coluna Follow Up do CRM espelha TODOS os pacientes do Follow Up do Clinicorp (padrão por cliente)",
     "conteudo": "Problemas: (1) pacientes antigos da coluna Follow Up do CRC no Clinicorp eram tratados como 'baseline' e nunca entravam; (2) cartões vindos do Clinicorp não têm operador e a visão de um operador (ex.: Vânia) só mostra os dela, então a coluna ficava vazia. Regras agora: o sync é ligado por padrão para toda conta com Clinicorp integrado (cada uma com a SUA credencial); todo paciente em FOLLOWUP no Clinicorp entra/é movido para a coluna Follow Up do CRM; pacientes históricos entram na coluna mas NÃO disparam a cadência de mensagens (sem WhatsApp para paciente antigo); contas que compartilham o mesmo Clinicorp (mesmo subscriber) só rodam na dona - conta de cliente ganha da admin. Na visão de operador, leads sem operador na etapa Follow Up aparecem para toda a equipe. Pendente: paciente que SAI do Follow Up no Clinicorp ainda não sai da coluna do CRM (decisão de produto)."
+  },
+  {
+    "chave": "crm:funil-fu-regra-universal",
+    "modulo": "crm",
+    "data": "2026-11-10",
+    "tipo": "decisao",
+    "titulo": "Regra: todo lead na etapa Follow Up do CRM está no Dia 0 do Funil Follow Up, de qualquer fonte",
+    "conteudo": "Além do gancho em registrarEventoEtapa (cobre quem ENTRA na etapa: Clinicorp, importação de lista, arrastar, conversa, mudança manual), há uma varredura a cada minuto (funilFollowUp.varrerFollowUpDoCrm) que coloca no Dia 0 qualquer lead que já esteja na coluna Follow Up e ainda não tenha passado pelo funil - cobre quem já estava lá e fontes que não passem pelo gancho. Remover do funil agora esconde (removido_em) em vez de apagar, para a varredura não recolocar quem a equipe tirou de propósito; quem concluiu o Dia 5 também não volta sozinho (só se entrar de novo na etapa). Pendente: sair da etapa Follow Up no CRM não tira o lead do funil."
   }
 ]

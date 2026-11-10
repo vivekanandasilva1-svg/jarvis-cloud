@@ -46,6 +46,7 @@ async function garantirTabelas() {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS ffu_leads_tenant_idx ON ffu_leads (tenant_id)`);
+  await pool.query(`ALTER TABLE ffu_leads ADD COLUMN IF NOT EXISTS removido_em TIMESTAMPTZ`);
   // 1 linha por (lead, dia): quando esse dia esta programado pra comecar e se a tarefa foi feita
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ffu_etapas (
@@ -127,7 +128,7 @@ export async function adicionarLead(tenantId, { contatoId, numero, nome, instanc
   // o mesmo paciente nao entra duas vezes no funil enquanto ainda esta em andamento
   if (num) {
     const { rows: dup } = await pool.query(
-      `SELECT id FROM ffu_leads WHERE tenant_id = $1 AND numero = $2 AND COALESCE(instancia,'') = COALESCE($3,'') AND concluido_em IS NULL`,
+      `SELECT id FROM ffu_leads WHERE tenant_id = $1 AND numero = $2 AND COALESCE(instancia,'') = COALESCE($3,'') AND concluido_em IS NULL AND removido_em IS NULL`,
       [tenantId, num, inst],
     );
     if (dup.length) throw new Error('Esse paciente já está no Funil Follow Up.');
@@ -161,7 +162,7 @@ export async function listarLeads(tenantId, instancia) {
   const params = [tenantId];
   let filtro = '';
   if (instancia) { params.push(instancia); filtro = ` AND l.instancia = $${params.length}`; }
-  const { rows: leads } = await pool.query(`SELECT * FROM ffu_leads l WHERE l.tenant_id = $1${filtro} ORDER BY l.entrou_dia_em ASC, l.id ASC`, params);
+  const { rows: leads } = await pool.query(`SELECT * FROM ffu_leads l WHERE l.tenant_id = $1 AND l.removido_em IS NULL${filtro} ORDER BY l.entrou_dia_em ASC, l.id ASC`, params);
   if (!leads.length) return [];
   const { rows: etapas } = await pool.query('SELECT * FROM ffu_etapas WHERE lead_id = ANY($1::int[]) ORDER BY dia', [leads.map((l) => l.id)]);
   const porLead = new Map();
@@ -192,7 +193,7 @@ async function avancarDoTenant(tenantId) {
     `SELECT l.id, l.dia FROM ffu_leads l
        JOIN ffu_etapas atual ON atual.lead_id = l.id AND atual.dia = l.dia AND atual.tarefa_feita_em IS NOT NULL
        JOIN ffu_etapas prox ON prox.lead_id = l.id AND prox.dia = l.dia + 1 AND prox.programado_em <= now()
-      WHERE l.tenant_id = $1 AND l.concluido_em IS NULL AND l.dia < 5`,
+      WHERE l.tenant_id = $1 AND l.concluido_em IS NULL AND l.removido_em IS NULL AND l.dia < 5`,
     [tenantId],
   );
   for (const r of rows) {
@@ -203,7 +204,7 @@ async function avancarDoTenant(tenantId) {
 
 export async function executarTarefa(tenantId, leadId, quem) {
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT id, dia, concluido_em FROM ffu_leads WHERE id = $1 AND tenant_id = $2', [Number(leadId), tenantId]);
+  const { rows } = await pool.query('SELECT id, dia, concluido_em FROM ffu_leads WHERE id = $1 AND tenant_id = $2 AND removido_em IS NULL', [Number(leadId), tenantId]);
   const lead = rows[0];
   if (!lead) throw new Error('Lead não encontrado.');
   if (lead.concluido_em) throw new Error('Esse lead já concluiu o funil.');
@@ -219,7 +220,7 @@ export async function executarTarefa(tenantId, leadId, quem) {
 // reprograma data/hora dos dias ainda NAO iniciados (o dia atual e os anteriores ficam como estao)
 export async function reprogramar(tenantId, leadId, agenda) {
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT id, dia FROM ffu_leads WHERE id = $1 AND tenant_id = $2 AND concluido_em IS NULL', [Number(leadId), tenantId]);
+  const { rows } = await pool.query('SELECT id, dia FROM ffu_leads WHERE id = $1 AND tenant_id = $2 AND concluido_em IS NULL AND removido_em IS NULL', [Number(leadId), tenantId]);
   const lead = rows[0];
   if (!lead) throw new Error('Lead não encontrado.');
   const datas = validarAgenda(agenda, Date.now(), lead.dia + 1);
@@ -232,7 +233,25 @@ export async function reprogramar(tenantId, leadId, agenda) {
 
 export async function removerLead(tenantId, leadId) {
   await tabelasProntas;
-  await pool.query('DELETE FROM ffu_leads WHERE id = $1 AND tenant_id = $2', [Number(leadId), tenantId]);
+  await pool.query('UPDATE ffu_leads SET removido_em = now() WHERE id = $1 AND tenant_id = $2', [Number(leadId), tenantId]);
+}
+
+// REGRA: todo lead do CRM na etapa Follow Up, de qualquer fonte (Clinicorp, importacao, WhatsApp, manual, IA...),
+// tem que estar no Dia 0. O gancho do CRM cobre quem ENTRA na etapa; esta varredura pega quem ja estava la e qualquer
+// caminho que nao passe pelo gancho. Nao recoloca quem ja passou pelo funil (concluido ou removido de proposito).
+export async function varrerFollowUpDoCrm() {
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT c.id, c.tenant_id FROM crm_contatos c JOIN tenants t ON t.id = c.tenant_id
+      WHERE c.etapa = 'follow_up' AND c.oculto = false AND c.instancia NOT LIKE 'ig:%' AND (t.ativo OR t.super_admin)
+        AND NOT EXISTS (SELECT 1 FROM ffu_leads l WHERE l.contato_id = c.id)
+      ORDER BY c.id LIMIT 500`,
+  );
+  let n = 0;
+  for (const r of rows) {
+    try { const x = await adicionarDoCrm(r.tenant_id, r.id); if (!x.jaEstava) n++; } catch (err) { console.error('[ffu] varredura contato', r.id, err.message); }
+  }
+  return n;
 }
 
 export function iniciarSchedulerFunilFollowUp() {
@@ -240,10 +259,12 @@ export function iniciarSchedulerFunilFollowUp() {
     try {
       if (!pool) return;
       await tabelasProntas;
-      const { rows } = await pool.query('SELECT DISTINCT tenant_id FROM ffu_leads WHERE concluido_em IS NULL');
+      const { rows } = await pool.query('SELECT DISTINCT tenant_id FROM ffu_leads WHERE concluido_em IS NULL AND removido_em IS NULL');
       for (const { tenant_id: t } of rows) {
         try { await avancarDoTenant(t); } catch (err) { console.error('[ffu] tenant', t, err.message); }
       }
+      const novos = await varrerFollowUpDoCrm();
+      if (novos) console.log(`[ffu] varredura: ${novos} lead(s) do Follow Up do CRM entraram no Dia 0`);
     } catch (err) {
       console.error('[ffu] scheduler:', err.message);
     }
