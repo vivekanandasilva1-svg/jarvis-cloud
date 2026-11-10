@@ -892,5 +892,13 @@
     "tipo": "melhoria",
     "titulo": "Anotações também na aba Contatos e no contexto da IA",
     "conteudo": "Complemento das anotações do paciente: (1) aba Contatos - o modal do contato (editar) mostra o painel de anotações sempre aberto e a lista mostra '📝 n' ao lado do nome; (2) a IA lê as anotações: crm.notasParaIA (últimas 10, ~3000 caracteres) entra no bloco DINÂMICO do system prompt do auto-atendimento (não quebra o cache do bloco fixo) e nos prompts do Follow Up (mensagem de reengajamento e resposta ao lead), com instrução de usar só como contexto e nunca citar/repetir pro paciente. Follow Up Inteligente por cards manda texto fixo (sem IA por lead), então não usa. Cuidado: não escrever dado sensível nas anotações pois a IA lê."
+  },
+  {
+    "chave": "plataforma:padrao-botoes",
+    "modulo": "plataforma",
+    "data": "2026-11-10",
+    "tipo": "decisao",
+    "titulo": "Padrão de botões do sistema: clique colorido e salvar prata/branco",
+    "conteudo": "Decisão do dono: todo botão muda de cor (dourado) enquanto é clicado; botões 'Salvar...' ficam prata escuro quando há alteração não salva e acendem em branco por ~2,5s ao salvar com sucesso. Implementado de forma global em app.js (listener delegado de input/change marca o botão Salvar do bloco; wrapper de fetch acende o botão quando uma requisição de escrita volta ok logo após o clique) e style.css (fim do arquivo). Substitui o vermelho/verde anterior. Botão Salvar novo já herda o padrão se o texto começar com 'Salvar' ou tiver data-salvar. Pendente: casos com vários botões Salvar no mesmo bloco não são marcados automaticamente."
   }
 ]

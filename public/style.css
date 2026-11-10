@@ -3570,3 +3570,40 @@ body.lumien-em-conversas .lumien-btn { bottom: 92px; }
 
 .notas-fixo { max-height: 300px; border: 1px solid var(--border-soft); border-radius: 10px; }
 .ct-nome .ct-notas-qtd { font-size: 11px; color: var(--gold-bright); margin-left: 6px; }
+
+/* =====================================================================================
+   PADRAO DE BOTOES DO SISTEMA
+   - clique: todo botao muda de cor enquanto esta sendo pressionado (dourado) e encolhe um pouco
+   - salvar: .pendente = prata escuro (tem coisa a salvar) -> .salvo = branco (acabou de salvar)
+   ===================================================================================== */
+button:not(:disabled):active,
+body .app-window button:not(:disabled):active,
+[role="button"]:active {
+  background: var(--gold-bright) !important;
+  border-color: var(--gold-bright) !important;
+  color: #16171a !important;
+  transform: scale(0.96);
+  transition: none !important;
+  filter: none;
+}
+body .app-window button.pendente:not(.nav-btn) {
+  border-color: #aeb2ba !important;
+  background: #5a5d64 !important;
+  color: #f1f2f4 !important;
+  box-shadow: 0 0 0 3px rgba(174, 178, 186, 0.16);
+}
+body .app-window button.pendente:not(.nav-btn)::after { background: #c9ccd2; border-color: var(--bg-0); }
+body .app-window button.salvo:not(.nav-btn) {
+  border-color: #fff !important;
+  background: #fff !important;
+  color: #16171a !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+body .app-window button.pendente:not(.nav-btn):not(:disabled):active,
+body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
+  background: var(--gold-bright) !important;
+  border-color: var(--gold-bright) !important;
+  color: #16171a !important;
+}
+.nav-btn.pendente::after { background: #c9ccd2; }

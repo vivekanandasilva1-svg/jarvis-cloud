@@ -1900,15 +1900,58 @@ function limparPendente(botao) {
   botao.classList.remove('pendente');
   atualizarPendenciasMenu();
 }
+function acenderSalvo(botao) {
+  botao.classList.remove('pendente');
+  botao.classList.add('salvo');
+  clearTimeout(botao._salvoTimer);
+  botao._salvoTimer = setTimeout(() => botao.classList.remove('salvo'), 2500);
+  atualizarPendenciasMenu();
+}
 function marcarSalvo(botao, mensagem) {
-  if (botao) {
-    botao.classList.remove('pendente');
-    botao.classList.add('salvo');
-    setTimeout(() => botao.classList.remove('salvo'), 1800);
-    atualizarPendenciasMenu();
-  }
+  if (botao) acenderSalvo(botao);
   mostrarAviso(mensagem || 'Salvo e atualizado', 'ok');
 }
+
+// PADRAO DO SISTEMA (vale pra todo botao "Salvar..." sem precisar chamar rastrearAlteracoes):
+// mexeu em qualquer campo perto do botao -> ele fica prata escuro (pendente); salvou com sucesso
+// (requisicao de escrita ok logo apos o clique) -> acende em branco. So age quando o botao de
+// salvar mais proximo do campo e unico naquele bloco, pra nao marcar o botao errado.
+function ehBotaoSalvar(b) {
+  return b.dataset.salvar !== undefined || /^salvar/i.test(b.textContent.trim());
+}
+function botaoSalvarDoCampo(el) {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const bs = [...p.querySelectorAll('button')].filter(ehBotaoSalvar);
+    if (bs.length) return bs.length === 1 ? bs[0] : null;
+  }
+  return null;
+}
+function marcarPendenteGenerico(ev) {
+  const el = ev.target;
+  if (!ev.isTrusted || !el || !el.matches || !el.matches('input, textarea, select')) return;
+  if (el.type === 'search' || el.type === 'file' || el.closest('[data-sem-salvar]')) return;
+  if (/busca|filtro|pesquisa|search|periodo/i.test(`${el.id} ${el.className}`)) return;
+  const botao = botaoSalvarDoCampo(el);
+  if (botao && !botao.disabled) marcarPendente(botao);
+}
+document.addEventListener('input', marcarPendenteGenerico, true);
+document.addEventListener('change', marcarPendenteGenerico, true);
+
+let cliqueSalvar = null;
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest && ev.target.closest('button');
+  if (b && !b.disabled && ehBotaoSalvar(b)) cliqueSalvar = { b, t: Date.now() };
+}, true);
+const fetchAntesSalvar = window.fetch.bind(window);
+window.fetch = (entrada, init) => {
+  const p = fetchAntesSalvar(entrada, init);
+  const metodo = String(init?.method || entrada?.method || 'GET').toUpperCase();
+  const clique = cliqueSalvar;
+  if (clique && metodo !== 'GET' && Date.now() - clique.t < 1500) {
+    p.then((r) => { if (r.ok && clique.b.classList.contains('pendente')) acenderSalvo(clique.b); }).catch(() => {});
+  }
+  return p;
+};
 function atualizarPendenciasMenu() {
   for (const btn of document.querySelectorAll('.nav-btn[data-tab]')) {
     const id = btn.dataset.tab;
