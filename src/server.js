@@ -34,6 +34,7 @@ import * as followUp from './followUp.js';
 import * as clinicorpFollowUp from './clinicorpFollowUp.js';
 import { iniciarSchedulerClinicorpFollowUp } from './clinicorpFollowUp.js';
 import * as followUpInteligente from './followUpInteligente.js';
+import * as funilFU from './funilFollowUp.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
 import { iniciarCerebroMae } from './cerebroMae.js';
 import { ehErroDeCredito, creditoEsgotado, registrarFalhaCredito } from './alertaCreditos.js';
@@ -87,6 +88,7 @@ const TAB_ROTA_PREFIXO = {
   auto: '/api/auto-atendimento',
   followUp: '/api/follow-up',
   followUpInteligente: '/api/fu-inteligente',
+  funilFollowUp: '/api/funil-fu',
   disparos: '/api/disparos',
   relatorios: '/api/relatorios',
   geradorRelatorios: '/api/gerador-relatorios',
@@ -1570,6 +1572,60 @@ app.delete('/api/auto-atendimento/arquivos/:id', async (req, res) => {
 
 // ---------- Follow Up Inteligente (cards de follow-up por etapa do funil, cadencia em dias) ----------
 
+// ---------- Funil Follow Up (Dia 0 a Dia 5, com tarefa diaria e alerta de retorno exclusivo) ----------
+app.get('/api/funil-fu', async (req, res) => {
+  try {
+    const [leads, tarefas, instancias] = await Promise.all([
+      funilFU.listarLeads(req.tenantId, req.query.instancia || ''),
+      funilFU.obterTarefas(req.tenantId),
+      tenants.listarInstanciasDoTenant(req.tenantId),
+    ]);
+    res.json({ dias: funilFU.DIAS, tarefas, leads, instancias });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/funil-fu/leads', async (req, res) => {
+  try {
+    res.json({ ok: true, id: await funilFU.adicionarLead(req.tenantId, req.body || {}) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/funil-fu/leads/:id/executar', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    await funilFU.executarTarefa(req.tenantId, req.params.id, perfil?.nome || 'Equipe');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.put('/api/funil-fu/leads/:id/agenda', async (req, res) => {
+  try {
+    await funilFU.reprogramar(req.tenantId, req.params.id, req.body?.agenda);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/funil-fu/leads/:id', async (req, res) => {
+  try {
+    await funilFU.removerLead(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.put('/api/funil-fu/tarefas', async (req, res) => {
+  try {
+    await funilFU.salvarTarefas(req.tenantId, req.body?.tarefas);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
 app.get('/api/fu-inteligente/config', async (req, res) => {
   try {
     res.json(await followUpInteligente.obterConfig(req.tenantId));
@@ -2825,6 +2881,7 @@ relatoriosProgramados.iniciarSchedulerRelatoriosProgramados();
 followUp.iniciarSchedulerFollowUp();
 // Scheduler do Follow Up Inteligente (cards por etapa do funil) - desativado por tenant por padrao.
 followUpInteligente.iniciarSchedulerFollowUpInteligente();
+funilFU.iniciarSchedulerFunilFollowUp();
 // Disparos (campanhas de mensagens em massa) - so envia campanhas que o dono iniciou/agendou na aba Disparos
 disparos.iniciarSchedulerDisparos();
 // Clinicorp -> CRM: orcamento que vai pra coluna Follow Up do CRC entra sozinho na coluna Follow Up do CRM (tenants com Clinicorp)

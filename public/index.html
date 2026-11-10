@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261110a" />
+  <link rel="stylesheet" href="style.css?v=20261110b" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -84,6 +84,10 @@
         <button type="button" class="nav-btn" id="tabBtnFollowUpInteligente" data-tab="followUpInteligente">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2zm7 11l.9 2.6L22.5 16.5l-2.6.9L19 20l-.9-2.6-2.6-.9 2.6-.9L19 13zM6 15l.9 2.6 2.6.9-2.6.9L6 22l-.9-2.6L2.5 18.5l2.6-.9L6 15z"/></svg>
           <span>Follow Up Inteligente</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnFunilFu" data-tab="funilFollowUp">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 4h18l-7 8v6l-4 2v-8L3 4z"/></svg>
+          <span>Funil Follow Up</span>
         </button>
         <div class="nav-grupo">Clientes</div>
         <button type="button" class="nav-btn" id="tabBtnCrm" data-tab="crm">
@@ -840,6 +844,53 @@
       </div>
     </div>
 
+    <div class="window-body tab-crm" id="tabFunilFu" hidden>
+      <div class="crm-board-wrap">
+        <div class="crm-board-header">
+          <span>Funil Follow Up: cada dia tem uma tarefa. O lead só avança na data programada depois de você marcar "Tarefa executada".</span>
+          <div class="crm-board-nav">
+            <select id="ffuFiltroNumero" title="Cada número do WhatsApp tem o seu próprio funil" hidden><option value="">Todos os números</option></select>
+            <button type="button" id="ffuTarefasBtn" title="Edite o texto da tarefa de cada dia">Tarefas dos dias</button>
+            <button type="button" id="ffuNovo">+ Adicionar lead</button>
+            <button type="button" id="ffuRefresh">Atualizar</button>
+          </div>
+        </div>
+        <div class="crm-board" id="ffuBoard"><p class="agenda-vazia">Carregando...</p></div>
+      </div>
+
+      <div class="ct-modal" id="ffuModal" hidden>
+        <form class="ct-caixa" id="ffuForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong id="ffuModalTitulo">Adicionar lead ao Dia 0</strong>
+            <button type="button" class="ct-fechar" data-fechar="ffuModal">✕</button>
+          </div>
+          <div id="ffuCamposLead">
+            <label class="ct-campo">Buscar nos seus contatos (opcional)<input type="text" id="ffuBuscaContato" list="ffuContatosLista" placeholder="Digite o nome ou número" /></label>
+            <datalist id="ffuContatosLista"></datalist>
+            <label class="ct-campo">Nome<input type="text" id="ffuNome" maxlength="120" /></label>
+            <label class="ct-campo">Telefone (WhatsApp)<input type="tel" id="ffuNumero" placeholder="82 99999-9999" /></label>
+            <label class="ct-campo" id="ffuInstanciaLabel">Número da clínica<select id="ffuInstancia"></select></label>
+          </div>
+          <div class="ffu-agenda-titulo">Alerta de retorno: quando ele passa para cada dia</div>
+          <div id="ffuAgendaCampos" class="ffu-agenda-campos"></div>
+          <p class="crm-conversa-erro" id="ffuModalErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="ffuSalvarBtn" class="relatorio-config-enviar">Salvar</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="ffuTarefasModal" hidden>
+        <form class="ct-caixa" id="ffuTarefasForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Tarefa de cada dia</strong>
+            <button type="button" class="ct-fechar" data-fechar="ffuTarefasModal">✕</button>
+          </div>
+          <div id="ffuTarefasCampos"></div>
+          <p class="crm-conversa-erro" id="ffuTarefasErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="ffuTarefasSalvar" class="relatorio-config-enviar">Salvar</button></div>
+        </form>
+      </div>
+    </div>
+
     <div class="window-body tab-crm" id="tabCrm" hidden>
       <div class="crm-board-wrap">
         <div class="crm-board-header">
@@ -1568,6 +1619,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261110a"></script>
+  <script src="app.js?v=20261110b"></script>
 </body>
 </html>

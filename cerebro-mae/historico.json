@@ -900,5 +900,13 @@
     "tipo": "decisao",
     "titulo": "Padrão de botões do sistema: clique colorido e salvar prata/branco",
     "conteudo": "Decisão do dono: todo botão muda de cor (dourado) enquanto é clicado; botões 'Salvar...' ficam prata escuro quando há alteração não salva e acendem em branco por ~2,5s ao salvar com sucesso. Implementado de forma global em app.js (listener delegado de input/change marca o botão Salvar do bloco; wrapper de fetch acende o botão quando uma requisição de escrita volta ok logo após o clique) e style.css (fim do arquivo). Substitui o vermelho/verde anterior. Botão Salvar novo já herda o padrão se o texto começar com 'Salvar' ou tiver data-salvar. Pendente: casos com vários botões Salvar no mesmo bloco não são marcados automaticamente."
+  },
+  {
+    "chave": "crm:funil-follow-up",
+    "modulo": "crm",
+    "data": "2026-11-10",
+    "tipo": "funcao",
+    "titulo": "Aba Funil Follow Up (Dia 0 a Dia 5)",
+    "conteudo": "Nova aba com funil próprio de 6 colunas. Lead entra no Dia 0 com alerta de retorno exclusivo: data/hora programada para ir ao Dia 1..5 (padrão +1..+5 dias às 09:00, editável e reprogramável). Cada dia tem uma tarefa (texto editável por tenant, padrões em funilFollowUp.js); botão 'Tarefa executada' é obrigatório: o lead só avança (scheduler 60s no servidor) quando a tarefa do dia atual está feita E a data do próximo dia chegou. Sem a tarefa o card mostra 'Pendente de execução' (vermelho se já passou da data). Dia 5 executado = funil concluído. Tabelas ffu_config/ffu_leads/ffu_etapas, rotas /api/funil-fu, aba funilFollowUp em TABS_VALIDAS. Pendente: mover manualmente entre dias não existe de propósito; sem notificação no sino ainda; não dispara mensagem automática (é fluxo de tarefas manuais)."
   }
 ]

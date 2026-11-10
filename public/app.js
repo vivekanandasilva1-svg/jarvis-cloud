@@ -73,6 +73,7 @@ const tabBtnDisparos = document.getElementById('tabBtnDisparos');
 const tabBtnChamadas = document.getElementById('tabBtnChamadas');
 const tabBtnOrigem = document.getElementById('tabBtnOrigem');
 const tabBtnFollowUpInteligente = document.getElementById('tabBtnFollowUpInteligente');
+const tabBtnFunilFu = document.getElementById('tabBtnFunilFu');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
 const tabBtnGeradorRelatorios = document.getElementById('tabBtnGeradorRelatorios');
 const tabBtnIntegracoes = document.getElementById('tabBtnIntegracoes');
@@ -98,6 +99,7 @@ const tabDisparos = document.getElementById('tabDisparos');
 const tabChamadas = document.getElementById('tabChamadas');
 const tabOrigem = document.getElementById('tabOrigem');
 const tabFollowUpInteligente = document.getElementById('tabFollowUpInteligente');
+const tabFunilFu = document.getElementById('tabFunilFu');
 const tabRelatorios = document.getElementById('tabRelatorios');
 const tabGeradorRelatorios = document.getElementById('tabGeradorRelatorios');
 const tabIntegracoes = document.getElementById('tabIntegracoes');
@@ -395,6 +397,7 @@ function mostrarApp() {
   tabBtnChamadas.hidden = !abaLiberada('whatsapp'); // ligacoes do numero conectado, mesma permissao do WhatsApp
   tabBtnOrigem.hidden = !abaLiberada('crm'); // origem dos leads usa a base do CRM, mesma permissao
   tabBtnFollowUpInteligente.hidden = !abaLiberada('followUpInteligente');
+  tabBtnFunilFu.hidden = !abaLiberada('funilFollowUp');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
   tabBtnGeradorRelatorios.hidden = !abaLiberada('geradorRelatorios');
   tabBtnIntegracoes.hidden = !abaLiberada('integracoes');
@@ -407,7 +410,7 @@ function mostrarApp() {
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
     const primeiraLiberada = [
       ['conversas', tabBtnConversas], ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm], ['contatos', tabBtnContatos], ['resultados', tabBtnResultados], ['instagram', tabBtnInstagram],
-      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['followUpInteligente', tabBtnFollowUpInteligente], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
+      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['followUpInteligente', tabBtnFollowUpInteligente], ['funilFollowUp', tabBtnFunilFu], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
     ].find(([, btn]) => !btn.hidden);
     if (primeiraLiberada) mudarAba(primeiraLiberada[0]);
   }
@@ -1989,6 +1992,7 @@ const CABECALHOS_ABA = {
   chamadas: ['Atendimento', 'Ligações', 'Ligações do WhatsApp: quantas, que horas, quanto duraram e quantas foram perdidas.'],
   disparos: ['Automação', 'Disparos', 'Campanhas de mensagens no WhatsApp: listas, programação, anexos, relatório e IA.'],
   followUp: ['Atendimento', 'Follow Up', 'Retome automaticamente os leads que pararam de responder.'],
+  funilFollowUp: ['Clientes', 'Funil Follow Up', 'Dia 0 a Dia 5: uma tarefa por dia, com alerta de retorno programado pra cada lead.'],
   followUpInteligente: ['Atendimento', 'Follow Up Inteligente', 'Mensagens automáticas por etapa do funil, nos dias que você escolher.'],
   conversas: ['Atendimento', 'Conversas', 'Atenda o WhatsApp direto pela Lumia, em tempo real.'],
   crm: ['Clientes', 'CRM', 'Seus leads em cada etapa do funil, com a conversa do WhatsApp.'],
@@ -2047,6 +2051,7 @@ function mudarAba(aba) {
   tabChamadas.hidden = aba !== 'chamadas';
   tabOrigem.hidden = aba !== 'origem';
   tabFollowUpInteligente.hidden = aba !== 'followUpInteligente';
+  tabFunilFu.hidden = aba !== 'funilFollowUp';
   tabRelatorios.hidden = aba !== 'relatorios';
   tabGeradorRelatorios.hidden = aba !== 'geradorRelatorios';
   tabIntegracoes.hidden = aba !== 'integracoes';
@@ -2067,6 +2072,7 @@ function mudarAba(aba) {
   tabBtnChamadas.classList.toggle('active', aba === 'chamadas');
   tabBtnOrigem.classList.toggle('active', aba === 'origem');
   tabBtnFollowUpInteligente.classList.toggle('active', aba === 'followUpInteligente');
+  tabBtnFunilFu.classList.toggle('active', aba === 'funilFollowUp');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
   tabBtnGeradorRelatorios.classList.toggle('active', aba === 'geradorRelatorios');
   tabBtnIntegracoes.classList.toggle('active', aba === 'integracoes');
@@ -2101,6 +2107,8 @@ function mudarAba(aba) {
     carregarFollowUp();
   } else if (aba === 'followUpInteligente') {
     carregarFollowUpInteligente();
+  } else if (aba === 'funilFollowUp') {
+    carregarFunilFu();
   } else if (aba === 'relatorios') {
     carregarDestinatariosRelatorios();
     carregarConfigsRelatorios();
@@ -2175,6 +2183,7 @@ tabBtnDisparos.addEventListener('click', () => mudarAba('disparos'));
 tabBtnChamadas.addEventListener('click', () => mudarAba('chamadas'));
 tabBtnOrigem.addEventListener('click', () => mudarAba('origem'));
 tabBtnFollowUpInteligente.addEventListener('click', () => mudarAba('followUpInteligente'));
+tabBtnFunilFu.addEventListener('click', () => mudarAba('funilFollowUp'));
 tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
 tabBtnCerebro.addEventListener('click', () => mudarAba('cerebro'));
 tabBtnClientes.addEventListener('click', () => mudarAba('clientes'));
@@ -8363,7 +8372,7 @@ async function selecionarCliente(id, nome, username) {
   tabsAviso.textContent = 'Nenhuma marcada = tudo liberado (padrão). Marque só pra restringir.';
   clienteIntegracoesPainel.appendChild(tabsAviso);
 
-  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', followUpInteligente: 'Follow Up Inteligente', disparos: 'Disparos', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
+  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', followUpInteligente: 'Follow Up Inteligente', funilFollowUp: 'Funil Follow Up', disparos: 'Disparos', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
   const tabsForm = document.createElement('div');
   tabsForm.className = 'cliente-form';
   const tabsCheckboxes = {};
@@ -10378,4 +10387,247 @@ cvBusca.addEventListener('input', () => {
       if (res.ok && cvBusca.value.trim() === q) { cvIdsComNota = new Set(d.contatoIds || []); renderizarListaConversas(); }
     } catch { /* busca normal segue valendo */ }
   }, 350);
+});
+
+// ---------- Funil Follow Up (Dia 0 a Dia 5) ----------
+// Cada lead tem tarefa por dia e data/hora programada pra ir pro dia seguinte; so avanca depois de
+// "Tarefa executada" (a regra e do servidor - aqui so mostra e chama)
+const ffuBoard = document.getElementById('ffuBoard');
+const ffuModal = document.getElementById('ffuModal');
+const ffuTarefasModal = document.getElementById('ffuTarefasModal');
+const ffuFiltroNumero = document.getElementById('ffuFiltroNumero');
+let ffuDados = { dias: [0, 1, 2, 3, 4, 5], tarefas: {}, leads: [], instancias: [] };
+let ffuTimer = null;
+let ffuEditandoId = null;
+let ffuContatoId = null;
+let ffuContatos = [];
+const ffuHeaders = () => ({ 'x-app-password': appPassword, 'Content-Type': 'application/json' });
+const ffuDH = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+function ffuParaInput(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function ffuAgendaPadrao() {
+  return [1, 2, 3, 4, 5].map((n) => { const d = new Date(); d.setDate(d.getDate() + n); d.setHours(9, 0, 0, 0); return ffuParaInput(d); });
+}
+
+function ffuCriarCard(l) {
+  const card = document.createElement('div');
+  card.className = 'crm-card ffu-card' + (l.atrasado ? ' ffu-atrasado' : '') + (l.tarefaFeita ? ' ffu-feito' : '');
+  const nome = document.createElement('div');
+  nome.className = 'crm-card-nome';
+  nome.textContent = l.nome || l.numero || 'Sem nome';
+  card.appendChild(nome);
+  if (l.numero) { const n = document.createElement('div'); n.className = 'crm-card-numero'; n.textContent = l.numero; card.appendChild(n); }
+  const tarefa = document.createElement('div');
+  tarefa.className = 'ffu-tarefa';
+  tarefa.textContent = `Tarefa do Dia ${l.dia}: ${ffuDados.tarefas[l.dia] || ''}`;
+  card.appendChild(tarefa);
+  const selo = document.createElement('div');
+  if (l.concluidoEm) {
+    selo.className = 'ffu-selo ok'; selo.textContent = '✔ Funil concluído';
+  } else if (l.tarefaFeita) {
+    selo.className = 'ffu-selo ok';
+    selo.textContent = `✔ Tarefa executada${l.tarefaFeitaPor ? ` por ${l.tarefaFeitaPor}` : ''}`;
+  } else {
+    selo.className = 'ffu-selo pend';
+    selo.textContent = l.atrasado ? `⚠ Pendente de execução: já passou da data do Dia ${l.proximoDia}, só avança depois de executar` : '⚠ Pendente de execução da tarefa';
+  }
+  card.appendChild(selo);
+  if (!l.concluidoEm && l.proximoEm) {
+    const q = document.createElement('div'); q.className = 'ffu-quando';
+    q.textContent = `Vai pro Dia ${l.proximoDia} em ${ffuDH(l.proximoEm)}`;
+    card.appendChild(q);
+  }
+  const acoes = document.createElement('div');
+  acoes.className = 'ffu-acoes';
+  if (!l.concluidoEm && !l.tarefaFeita) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'ffu-exec'; b.textContent = 'Tarefa executada';
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        const res = await fetch(`/api/funil-fu/leads/${l.id}/executar`, { method: 'POST', headers: ffuHeaders() });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.erro || 'erro');
+        mostrarAviso(l.dia === 5 ? 'Funil concluído' : 'Tarefa executada', 'ok');
+        carregarFunilFu();
+      } catch (err) { b.disabled = false; mostrarAviso(err.message, 'erro'); }
+    });
+    acoes.appendChild(b);
+  }
+  if (!l.concluidoEm && l.dia < 5) {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Reprogramar';
+    b.addEventListener('click', () => ffuAbrirModal(l));
+    acoes.appendChild(b);
+  }
+  const rm = document.createElement('button'); rm.type = 'button'; rm.textContent = 'Remover';
+  rm.addEventListener('click', async () => {
+    if (!confirm(`Remover ${l.nome || l.numero || 'este lead'} do Funil Follow Up?`)) return;
+    await fetch(`/api/funil-fu/leads/${l.id}`, { method: 'DELETE', headers: ffuHeaders() });
+    carregarFunilFu();
+  });
+  acoes.appendChild(rm);
+  card.appendChild(acoes);
+  return card;
+}
+
+function ffuDesenhar() {
+  ffuBoard.textContent = '';
+  for (const dia of ffuDados.dias) {
+    const col = document.createElement('div');
+    col.className = 'crm-coluna';
+    const leads = ffuDados.leads.filter((l) => l.dia === dia);
+    const head = document.createElement('div');
+    head.className = 'crm-coluna-header';
+    const t = document.createElement('span'); t.textContent = `Dia ${dia}`;
+    const c = document.createElement('span'); c.className = 'crm-coluna-contagem'; c.textContent = leads.length;
+    head.append(t, c);
+    col.appendChild(head);
+    const cards = document.createElement('div');
+    cards.className = 'crm-coluna-cards';
+    if (!leads.length) { const v = document.createElement('div'); v.className = 'crm-coluna-vazia'; v.textContent = 'Nenhum lead'; cards.appendChild(v); }
+    leads.sort((a, b) => (Number(b.atrasado) - Number(a.atrasado)) || (Number(b.pendente) - Number(a.pendente)));
+    for (const l of leads) cards.appendChild(ffuCriarCard(l));
+    col.appendChild(cards);
+    ffuBoard.appendChild(col);
+  }
+}
+
+async function carregarFunilFu() {
+  clearInterval(ffuTimer);
+  ffuTimer = setInterval(() => { if (tabFunilFu.hidden) clearInterval(ffuTimer); else carregarFunilFu(); }, 30000);
+  try {
+    const q = ffuFiltroNumero.value ? `?instancia=${encodeURIComponent(ffuFiltroNumero.value)}` : '';
+    const res = await fetch(`/api/funil-fu${q}`, { headers: ffuHeaders() });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro');
+    ffuDados = d;
+    const atual = ffuFiltroNumero.value;
+    ffuFiltroNumero.length = 1;
+    for (const i of d.instancias || []) ffuFiltroNumero.add(new Option(i, i));
+    ffuFiltroNumero.value = atual;
+    ffuFiltroNumero.hidden = (d.instancias || []).length < 2;
+    ffuDesenhar();
+  } catch (err) {
+    ffuBoard.textContent = '';
+    const p = document.createElement('p'); p.className = 'agenda-vazia'; p.textContent = `Não consegui carregar o funil: ${err.message}`;
+    ffuBoard.appendChild(p);
+  }
+}
+ffuFiltroNumero.addEventListener('change', carregarFunilFu);
+document.getElementById('ffuRefresh').addEventListener('click', carregarFunilFu);
+
+function ffuMontarAgenda(valores, bloquearAteDia) {
+  const box = document.getElementById('ffuAgendaCampos');
+  box.textContent = '';
+  for (let i = 0; i < 5; i++) {
+    const dia = i + 1;
+    const lab = document.createElement('label');
+    lab.className = 'ct-campo';
+    lab.textContent = `Passa para o Dia ${dia} em`;
+    const inp = document.createElement('input');
+    inp.type = 'datetime-local';
+    inp.dataset.dia = dia;
+    inp.value = valores[i];
+    if (dia <= bloquearAteDia) inp.disabled = true;
+    lab.appendChild(inp);
+    box.appendChild(lab);
+  }
+}
+
+async function ffuAbrirModal(lead) {
+  ffuEditandoId = lead ? lead.id : null;
+  ffuContatoId = null;
+  document.getElementById('ffuModalErro').hidden = true;
+  document.getElementById('ffuModalTitulo').textContent = lead ? `Reprogramar: ${lead.nome || lead.numero}` : 'Adicionar lead ao Dia 0';
+  document.getElementById('ffuCamposLead').hidden = !!lead;
+  if (lead) {
+    ffuMontarAgenda(lead.agenda.map((a) => ffuParaInput(new Date(a.programadoEm))), lead.dia);
+  } else {
+    document.getElementById('ffuBuscaContato').value = '';
+    document.getElementById('ffuNome').value = '';
+    document.getElementById('ffuNumero').value = '';
+    const sel = document.getElementById('ffuInstancia');
+    sel.textContent = '';
+    for (const i of ffuDados.instancias || []) sel.add(new Option(i, i));
+    if (ffuFiltroNumero.value) sel.value = ffuFiltroNumero.value;
+    document.getElementById('ffuInstanciaLabel').hidden = (ffuDados.instancias || []).length < 2;
+    ffuMontarAgenda(ffuAgendaPadrao(), 0);
+    try {
+      const res = await fetch('/api/crm/base-contatos', { headers: ffuHeaders() });
+      const d = await res.json();
+      ffuContatos = d.contatos || [];
+      const dl = document.getElementById('ffuContatosLista');
+      dl.textContent = '';
+      for (const c of ffuContatos.slice(0, 2000)) dl.appendChild(new Option(`${c.nome || 'Sem nome'} - ${c.numero}`, `${c.nome || 'Sem nome'} - ${c.numero}`));
+    } catch { /* sem lista: digita na mao */ }
+  }
+  document.getElementById('ffuSalvarBtn').classList.remove('pendente', 'salvo');
+  ffuModal.hidden = false;
+}
+document.getElementById('ffuNovo').addEventListener('click', () => ffuAbrirModal(null));
+document.getElementById('ffuBuscaContato').addEventListener('change', (e) => {
+  const c = ffuContatos.find((x) => `${x.nome || 'Sem nome'} - ${x.numero}` === e.target.value);
+  if (!c) return;
+  ffuContatoId = c.id;
+  document.getElementById('ffuNome').value = c.nome || '';
+  document.getElementById('ffuNumero').value = c.numero || '';
+  if (c.instancia && (ffuDados.instancias || []).includes(c.instancia)) document.getElementById('ffuInstancia').value = c.instancia;
+});
+ffuModal.addEventListener('click', (e) => { if (e.target === ffuModal || e.target.closest('[data-fechar="ffuModal"]')) ffuModal.hidden = true; });
+document.getElementById('ffuForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = document.getElementById('ffuModalErro');
+  erro.hidden = true;
+  const agenda = [...document.querySelectorAll('#ffuAgendaCampos input')].map((i) => (i.value ? new Date(i.value).toISOString() : ''));
+  const btn = document.getElementById('ffuSalvarBtn');
+  btn.disabled = true;
+  try {
+    let res;
+    if (ffuEditandoId) {
+      res = await fetch(`/api/funil-fu/leads/${ffuEditandoId}/agenda`, { method: 'PUT', headers: ffuHeaders(), body: JSON.stringify({ agenda }) });
+    } else {
+      res = await fetch('/api/funil-fu/leads', {
+        method: 'POST', headers: ffuHeaders(),
+        body: JSON.stringify({ contatoId: ffuContatoId, nome: document.getElementById('ffuNome').value, numero: document.getElementById('ffuNumero').value, instancia: document.getElementById('ffuInstancia').value || null, agenda }),
+      });
+    }
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, ffuEditandoId ? 'Alerta de retorno atualizado' : 'Lead adicionado ao Dia 0');
+    setTimeout(() => { ffuModal.hidden = true; }, 600);
+    carregarFunilFu();
+  } catch (err) {
+    erro.textContent = err.message; erro.hidden = false;
+  } finally { btn.disabled = false; }
+});
+
+document.getElementById('ffuTarefasBtn').addEventListener('click', () => {
+  const box = document.getElementById('ffuTarefasCampos');
+  box.textContent = '';
+  for (const d of ffuDados.dias) {
+    const lab = document.createElement('label'); lab.className = 'ct-campo'; lab.textContent = `Tarefa do Dia ${d}`;
+    const ta = document.createElement('textarea'); ta.dataset.dia = d; ta.maxLength = 500; ta.value = ffuDados.tarefas[d] || '';
+    lab.appendChild(ta); box.appendChild(lab);
+  }
+  document.getElementById('ffuTarefasSalvar').classList.remove('pendente', 'salvo');
+  document.getElementById('ffuTarefasErro').hidden = true;
+  ffuTarefasModal.hidden = false;
+});
+ffuTarefasModal.addEventListener('click', (e) => { if (e.target === ffuTarefasModal || e.target.closest('[data-fechar="ffuTarefasModal"]')) ffuTarefasModal.hidden = true; });
+document.getElementById('ffuTarefasForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const tarefas = {};
+  for (const ta of document.querySelectorAll('#ffuTarefasCampos textarea')) tarefas[ta.dataset.dia] = ta.value;
+  const btn = document.getElementById('ffuTarefasSalvar');
+  try {
+    const res = await fetch('/api/funil-fu/tarefas', { method: 'PUT', headers: ffuHeaders(), body: JSON.stringify({ tarefas }) });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, 'Tarefas dos dias salvas');
+    setTimeout(() => { ffuTarefasModal.hidden = true; }, 600);
+    carregarFunilFu();
+  } catch (err) {
+    const er = document.getElementById('ffuTarefasErro'); er.textContent = err.message; er.hidden = false;
+  }
 });
