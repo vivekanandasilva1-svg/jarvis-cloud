@@ -70,7 +70,9 @@ export async function obterAtivacao(tenantId, instancia) {
   if (!pool) return { ativo: true, ativadoEm: null };
   await tabelasProntas;
   const { rows } = await pool.query('SELECT ativo, ativado_em FROM clinicorp_followup_config WHERE tenant_id = $1 AND instancia = $2', [tenantId, instancia]);
-  return rows[0] ? { ativo: rows[0].ativo, ativadoEm: rows[0].ativado_em } : { ativo: true, ativadoEm: null };
+  // sem linha = nunca ligado: fica DESLIGADO (so cria cartoes onde o dono ligou o botao). Antes o padrao era ligado
+  // e uma conta com as mesmas credenciais do Clinicorp de outra recebia os pacientes dela
+  return rows[0] ? { ativo: rows[0].ativo, ativadoEm: rows[0].ativado_em } : { ativo: false, ativadoEm: null };
 }
 
 // ao religar, o que ja estava na coluna do Clinicorp nao entra de uma vez: so vale o que for marcado depois
@@ -155,7 +157,8 @@ export function iniciarSchedulerClinicorpFollowUp() {
     try {
       if (!pool) return;
       await tabelasProntas;
-      const { rows } = await pool.query('SELECT id FROM tenants WHERE ativo OR super_admin');
+      // so as contas que ligaram o botao em algum numero (evita chamadas a toa e erro 429 do Clinicorp)
+      const { rows } = await pool.query('SELECT DISTINCT t.id FROM tenants t JOIN clinicorp_followup_config c ON c.tenant_id = t.id WHERE c.ativo AND (t.ativo OR t.super_admin)');
       for (const { id } of rows) {
         try {
           const r = await sincronizarTenant(id);

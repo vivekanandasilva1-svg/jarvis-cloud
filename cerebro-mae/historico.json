@@ -916,5 +916,13 @@
     "tipo": "melhoria",
     "titulo": "Entrada no Funil Follow Up: automática pela etapa Follow Up e botão nas conversas",
     "conteudo": "Regra do dono: todo lead que entra na etapa Follow Up do CRM (Clinicorp, importação, arrastando ou pela conversa) entra sozinho no Dia 0 do Funil Follow Up - gancho em crm.registrarEventoEtapa (etapa follow_up) chamando funilFollowUp.adicionarDoCrm, que não duplica quem já está em andamento. Também há o botão '+ Funil Follow Up' nas conversas (Conversas e CRM) que coloca qualquer lead no Dia 0 com a agenda padrão. Sair da etapa Follow Up não tira o lead do funil. Pendente: leads que já estavam na etapa Follow Up antes do deploy não foram migrados."
+  },
+  {
+    "chave": "clinicorp:sync-padrao-desligado",
+    "modulo": "clinicorp",
+    "data": "2026-11-10",
+    "tipo": "correcao",
+    "titulo": "Sync Clinicorp -> Follow Up passa a vir desligado e só roda em quem ligou",
+    "conteudo": "Bug: as contas admin (id 1) e Vitaly (id 10) têm as MESMAS credenciais do Clinicorp (clinpopodonto); o sincronizador rodava para todas as contas e a automação vinha ligada por padrão, então os pacientes da Vitaly foram criados também na conta admin (4 cartões, instância Vivekananda) e as chamadas dobravam (erros 429 do Clinicorp). Correção: obterAtivacao sem linha = desligado; scheduler só percorre contas com clinicorp_followup_config ativo. Os 4 cartões do tenant 1 (sem mensagens) foram removidos. Atenção: conta admin com credenciais de Clinicorp de outro cliente - se for ligar o botão nela, vai puxar os pacientes desse mesmo Clinicorp."
   }
 ]
