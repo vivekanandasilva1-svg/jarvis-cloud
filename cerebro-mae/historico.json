@@ -908,5 +908,13 @@
     "tipo": "funcao",
     "titulo": "Aba Funil Follow Up (Dia 0 a Dia 5)",
     "conteudo": "Nova aba com funil próprio de 6 colunas. Lead entra no Dia 0 com alerta de retorno exclusivo: data/hora programada para ir ao Dia 1..5 (padrão +1..+5 dias às 09:00, editável e reprogramável). Cada dia tem uma tarefa (texto editável por tenant, padrões em funilFollowUp.js); botão 'Tarefa executada' é obrigatório: o lead só avança (scheduler 60s no servidor) quando a tarefa do dia atual está feita E a data do próximo dia chegou. Sem a tarefa o card mostra 'Pendente de execução' (vermelho se já passou da data). Dia 5 executado = funil concluído. Tabelas ffu_config/ffu_leads/ffu_etapas, rotas /api/funil-fu, aba funilFollowUp em TABS_VALIDAS. Pendente: mover manualmente entre dias não existe de propósito; sem notificação no sino ainda; não dispara mensagem automática (é fluxo de tarefas manuais)."
+  },
+  {
+    "chave": "crm:funil-fu-entrada-do-crm",
+    "modulo": "crm",
+    "data": "2026-11-10",
+    "tipo": "melhoria",
+    "titulo": "Entrada no Funil Follow Up: automática pela etapa Follow Up e botão nas conversas",
+    "conteudo": "Regra do dono: todo lead que entra na etapa Follow Up do CRM (Clinicorp, importação, arrastando ou pela conversa) entra sozinho no Dia 0 do Funil Follow Up - gancho em crm.registrarEventoEtapa (etapa follow_up) chamando funilFollowUp.adicionarDoCrm, que não duplica quem já está em andamento. Também há o botão '+ Funil Follow Up' nas conversas (Conversas e CRM) que coloca qualquer lead no Dia 0 com a agenda padrão. Sair da etapa Follow Up não tira o lead do funil. Pendente: leads que já estavam na etapa Follow Up antes do deploy não foram migrados."
   }
 ]

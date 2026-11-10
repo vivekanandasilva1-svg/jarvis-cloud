@@ -142,6 +142,19 @@ export async function adicionarLead(tenantId, { contatoId, numero, nome, instanc
   return id;
 }
 
+// usado pelo CRM: contato entrou na etapa Follow Up (automatico ou manual) ou alguem clicou em
+// "Adicionar ao Funil Follow Up". Entra no Dia 0 com a agenda padrao. Se ja esta em andamento no
+// funil, nao duplica (devolve jaEstava: true).
+export async function adicionarDoCrm(tenantId, contatoId) {
+  try {
+    const id = await adicionarLead(tenantId, { contatoId });
+    return { ok: true, id, jaEstava: false };
+  } catch (err) {
+    if (/já está no Funil/.test(err.message)) return { ok: true, jaEstava: true };
+    throw err;
+  }
+}
+
 export async function listarLeads(tenantId, instancia) {
   await tabelasProntas;
   await avancarDoTenant(tenantId);

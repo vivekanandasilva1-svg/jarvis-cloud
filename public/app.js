@@ -10631,3 +10631,20 @@ document.getElementById('ffuTarefasForm').addEventListener('submit', async (e) =
     const er = document.getElementById('ffuTarefasErro'); er.textContent = err.message; er.hidden = false;
   }
 });
+
+// botao "+ Funil Follow Up" nas conversas (Conversas e CRM): coloca o lead no Dia 0 do funil
+async function adicionarAoFunilFu(contato, botao) {
+  if (!contato?.id) return;
+  botao.disabled = true;
+  try {
+    const res = await fetch('/api/funil-fu/do-crm', { method: 'POST', headers: { 'x-app-password': appPassword, 'Content-Type': 'application/json' }, body: JSON.stringify({ contatoId: contato.id }) });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro');
+    mostrarAviso(d.jaEstava ? 'Esse lead já está no Funil Follow Up' : 'Lead adicionado ao Dia 0 do Funil Follow Up', d.jaEstava ? 'erro' : 'ok');
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  finally { botao.disabled = false; }
+}
+const cvFunilFuBtn = document.getElementById('cvFunilFuBtn');
+const crmFunilFuBtn = document.getElementById('crmConversaFunilFu');
+cvFunilFuBtn.addEventListener('click', () => adicionarAoFunilFu(cvAberto, cvFunilFuBtn));
+crmFunilFuBtn.addEventListener('click', () => adicionarAoFunilFu(crmContatoAberto, crmFunilFuBtn));

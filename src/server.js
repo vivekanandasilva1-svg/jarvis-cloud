@@ -1592,6 +1592,13 @@ app.post('/api/funil-fu/leads', async (req, res) => {
     res.status(400).json({ erro: err.message });
   }
 });
+app.post('/api/funil-fu/do-crm', async (req, res) => {
+  try {
+    res.json(await funilFU.adicionarDoCrm(req.tenantId, Number(req.body?.contatoId)));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
 app.post('/api/funil-fu/leads/:id/executar', async (req, res) => {
   try {
     const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);

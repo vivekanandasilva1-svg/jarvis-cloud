@@ -3,6 +3,7 @@
 // tambem o historico de mensagens (entrada/saida) pra abrir a conversa direto no app e responder
 // por aqui, sem precisar abrir o WhatsApp de verdade. Tudo em Postgres, permanente ate o dono
 // apagar/mover manualmente - mesma politica de persistencia da agenda.
+import * as funilFU from './funilFollowUp.js';
 import { EventEmitter } from 'node:events';
 import { pool } from './db.js';
 import * as evolutionApi from './evolutionApi.js';
@@ -205,6 +206,9 @@ async function registrarEventoEtapa(tenantId, contatoId, instancia, etapa) {
     `INSERT INTO crm_etapa_eventos (tenant_id, contato_id, instancia, etapa) VALUES ($1, $2, $3, $4)`,
     [tenantId, contatoId, instancia || null, etapa],
   ).catch((err) => console.error('Erro registrando historico de etapa:', err.message));
+  // regra do Funil Follow Up: todo lead que entra na etapa Follow Up do CRM (Clinicorp, importacao,
+  // arrastando ou pela conversa) entra sozinho no Dia 0 do funil de follow up
+  if (etapa === 'follow_up') await funilFU.adicionarDoCrm(tenantId, contatoId).catch((err) => console.error('Erro adicionando ao Funil Follow Up:', err.message));
 }
 
 // registra uma mensagem (entrada = contato mandou, saida = a gente/Lumia mandou) e garante que

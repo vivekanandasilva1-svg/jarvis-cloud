@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261110b" />
+  <link rel="stylesheet" href="style.css?v=20261110c" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -584,6 +584,7 @@
             </div>
             <div class="cv-chat-acoes">
               <button type="button" class="cv-ia-btn cv-notas-btn" id="cvNotasBtn" title="Anotações sobre este paciente (o que está tratando, o que ficou combinado)">📝 Anotações</button>
+              <button type="button" class="cv-ia-btn" id="cvFunilFuBtn" title="Coloca este lead no Dia 0 do Funil Follow Up">+ Funil Follow Up</button>
               <select id="cvEtapa" title="Etapa do funil"></select>
               <button type="button" class="cv-ia-btn" id="cvIaBtn" title="Liga ou pausa a IA só nesta conversa">IA atendendo</button>
             </div>
@@ -924,6 +925,7 @@
             <select id="crmConversaOperador" class="crm-btn-secundario" title="Quem está atendendo este lead"><option value="">Sem operador</option></select>
             <button type="button" id="crmConversaAssumir" class="crm-btn-secundario">Assumir</button>
             <button type="button" id="crmConversaRetorno" class="crm-btn-secundario">Alerta de retorno</button>
+            <button type="button" id="crmConversaFunilFu" class="crm-btn-secundario" title="Coloca este lead no Dia 0 do Funil Follow Up">+ Funil Follow Up</button>
             <button type="button" id="crmConversaNotasBtn" class="crm-btn-secundario" title="Anotações sobre este paciente">📝 Anotações</button>
             <button type="button" id="crmConversaPausar" class="crm-btn-secundario">Pausar auto-atendimento</button>
             <button type="button" id="crmConversaOcultar" class="crm-btn-secundario">Ocultar conversa</button>
@@ -1619,6 +1621,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261110b"></script>
+  <script src="app.js?v=20261110c"></script>
 </body>
 </html>
