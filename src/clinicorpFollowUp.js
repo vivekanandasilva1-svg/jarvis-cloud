@@ -205,5 +205,5 @@ export function iniciarSchedulerClinicorpFollowUp() {
     }
   };
   setTimeout(rodar, 90 * 1000).unref();
-  setInterval(rodar, 10 * 60 * 1000).unref();
+  setInterval(rodar, 30 * 60 * 1000).unref(); // 30min: o Clinicorp limita a 25 requisicoes por hora
 }

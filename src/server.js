@@ -2184,6 +2184,19 @@ app.post('/api/crm/base-contatos/importar', async (req, res) => {
   }
 });
 
+app.post('/api/crm/follow-up/espelhar', async (req, res) => {
+  const { instancia, linhas } = req.body || {};
+  if (!Array.isArray(linhas) || !linhas.length) return res.status(400).json({ erro: 'Nenhuma linha na lista.' });
+  try {
+    if (!(await tenants.listarInstanciasDoTenant(req.tenantId)).includes(instancia)) {
+      return res.status(400).json({ erro: 'Escolha um numero de WhatsApp dessa conta.' });
+    }
+    res.json({ ok: true, ...(await crm.espelharFollowUp(req.tenantId, instancia, linhas)) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.get('/api/crm/mensagens', async (req, res) => {
   const { numero, instancia } = req.query;
   if (!numero || !instancia) return res.status(400).json({ erro: 'numero e instancia sao obrigatorios' });

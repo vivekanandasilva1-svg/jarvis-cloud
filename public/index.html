@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261110f" />
+  <link rel="stylesheet" href="style.css?v=20261110g" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -830,6 +830,10 @@
                   <option value="atualizar">Completar com os dados da planilha (e mover pra coluna escolhida)</option>
                 </select>
               </label>
+              <label class="ct-campo" id="ctImpEspelharLabel" hidden>
+                <span><input type="checkbox" id="ctImpEspelhar" /> Espelhar o Follow Up do Clinicorp</span>
+                <small>A coluna Follow Up fica igual a esta lista: entram os novos e saem os que vieram de uma lista anterior e não estão mais nesta. O que a equipe colocou na coluna por conta própria nunca sai.</small>
+              </label>
             </div>
             <p class="ct-imp-resumo" id="ctImpResumo"></p>
             <div class="ct-tabela-wrap ct-previa"><table class="ct-tabela" id="ctImpPrevia"></table></div>
@@ -900,6 +904,7 @@
             <button type="button" id="crmScrollEsq" title="Rolar pra esquerda">‹</button>
             <button type="button" id="crmScrollDir" title="Rolar pra direita">›</button>
             <select id="crmFiltroNumero" title="Cada número do WhatsApp tem o seu próprio funil" hidden><option value="">Todos os números</option></select>
+            <button type="button" id="crmEspelharBtn" title="Sobe a lista da coluna Follow Up do CRC do Clinicorp e deixa a coluna Follow Up daqui igual a ela">Espelhar Follow Up do Clinicorp</button>
             <button type="button" id="crmFuiClinicorp" title="Puxa sozinho pro Follow Up do CRM os pacientes que vão pra coluna Follow Up do Clinicorp (por número)" hidden>Follow Up Inteligente: --</button>
             <select id="crmFiltroOperador" title="Filtrar por operador"><option value="">Todos os operadores</option></select>
             <button type="button" id="crmDistribuicaoBtn">Distribuição</button>
@@ -1621,6 +1626,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261110f"></script>
+  <script src="app.js?v=20261110g"></script>
 </body>
 </html>

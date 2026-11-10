@@ -195,6 +195,17 @@ async function garantirTabelas() {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS crm_notas_contato_idx ON crm_notas (tenant_id, contato_id, criado_em DESC);`);
+  // quem entrou na coluna Follow Up por "Espelhar" (lista do Clinicorp): so esses saem quando a lista seguinte nao os trouxer
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS crm_espelho_followup (
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      contato_id INT NOT NULL REFERENCES crm_contatos(id) ON DELETE CASCADE,
+      instancia TEXT NOT NULL,
+      criado BOOLEAN NOT NULL DEFAULT false,
+      em TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (tenant_id, contato_id)
+    );
+  `);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas do CRM:', err.message);
@@ -1088,6 +1099,72 @@ export async function definirAtendente(tenantId, contatoId, operadorId) {
     await pool.query(`UPDATE crm_contatos SET atendente_id = $3, atendente_nome = $4, atendente_em = now() WHERE id = $1 AND tenant_id = $2`, [contatoId, tenantId, op.id, op.nome]);
   }
   eventosCrm.emit('contato-atualizado', { tenantId, contatoId });
+}
+
+// ESPELHAR: a coluna Follow Up do CRM passa a ser igual a lista da coluna Follow Up do Clinicorp (CRC).
+// Entram os da lista (cria o card ou move da etapa atual; ja no Funil Follow Up Dia 0 pelo gancho e com o operador do numero);
+// saem so os que ja tinham entrado por um espelho anterior e nao estao mais na lista (card criado pelo espelho e sem conversa
+// e apagado; os demais voltam pra "Em atendimento"). Quem a equipe colocou na coluna por conta propria nunca e removido.
+export async function espelharFollowUp(tenantId, instancia, linhas) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const r = { naLista: 0, novos: 0, movidos: 0, jaEstavam: 0, pessoais: 0, invalidos: 0, retirados: 0, apagados: 0 };
+  const opNumero = (await operadoresPorNumero(tenantId))[instancia];
+  const naLista = new Set();
+  const vistos = new Set();
+  for (const linha of linhas.slice(0, 2000)) {
+    const numero = normalizarTelefone(linha?.numero);
+    if (!numero) { r.invalidos++; continue; }
+    if (vistos.has(numero)) continue;
+    vistos.add(numero);
+    r.naLista++;
+    const nome = textoOuNull(linha.nome, 120);
+    let existente = await acharContatoPorTelefone(tenantId, numero);
+    let id;
+    if (existente) {
+      if (existente.etapa === 'contatos_pessoais') { r.pessoais++; continue; }
+      id = existente.id;
+      if (existente.etapa === 'follow_up') { r.jaEstavam++; }
+      else {
+        await moverEtapa(tenantId, id, 'follow_up');
+        await pool.query(`INSERT INTO crm_espelho_followup (tenant_id, contato_id, instancia, criado) VALUES ($1,$2,$3,false) ON CONFLICT (tenant_id, contato_id) DO NOTHING`, [tenantId, id, instancia]);
+        r.movidos++;
+      }
+    } else {
+      id = await criarContatoDoClinicorp(tenantId, { numero, nome, instancia, etapa: 'follow_up' });
+      await pool.query(`INSERT INTO crm_espelho_followup (tenant_id, contato_id, instancia, criado) VALUES ($1,$2,$3,true) ON CONFLICT (tenant_id, contato_id) DO NOTHING`, [tenantId, id, instancia]);
+      r.novos++;
+    }
+    naLista.add(id);
+    if (opNumero !== undefined) await atribuirSeLivre(tenantId, id, opNumero).catch(() => {});
+  }
+  if (!naLista.size) return r;
+  const { rows: rastreados } = await pool.query(
+    `SELECT e.contato_id, e.criado, c.etapa, c.numero, c.instancia FROM crm_espelho_followup e JOIN crm_contatos c ON c.id = e.contato_id WHERE e.tenant_id = $1 AND e.instancia = $2`,
+    [tenantId, instancia],
+  );
+  for (const t of rastreados) {
+    if (naLista.has(t.contato_id)) continue;
+    if (t.etapa === 'follow_up') {
+      const { rows: [uso] } = await pool.query(
+        `SELECT (SELECT count(*)::int FROM crm_mensagens m WHERE m.tenant_id = $1 AND m.numero = $2 AND m.instancia = $3) AS msgs,
+                (SELECT count(*)::int FROM crm_notas n WHERE n.contato_id = $4) AS notas`,
+        [tenantId, t.numero, t.instancia, t.contato_id],
+      );
+      if (t.criado && !uso.msgs && !uso.notas) {
+        await pool.query(`UPDATE ffu_leads SET removido_em = now() WHERE tenant_id = $1 AND contato_id = $2`, [tenantId, t.contato_id]).catch(() => {});
+        await pool.query(`DELETE FROM crm_etapa_eventos WHERE tenant_id = $1 AND contato_id = $2`, [tenantId, t.contato_id]);
+        await pool.query(`DELETE FROM crm_contatos WHERE tenant_id = $1 AND id = $2`, [tenantId, t.contato_id]);
+        eventosCrm.emit('contato-atualizado', { tenantId, contatoId: t.contato_id });
+        r.apagados++;
+      } else {
+        await moverEtapa(tenantId, t.contato_id, 'em_atendimento');
+        r.retirados++;
+      }
+    }
+    await pool.query(`DELETE FROM crm_espelho_followup WHERE tenant_id = $1 AND contato_id = $2`, [tenantId, t.contato_id]);
+  }
+  return r;
 }
 
 // entrega o lead a um operador so se ele ainda estiver sem dono

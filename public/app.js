@@ -3606,6 +3606,9 @@ const ctImpResultado = document.getElementById('ctImpResultado');
 const ctImpErro = document.getElementById('ctImpErro');
 const ctImpVoltar = document.getElementById('ctImpVoltar');
 const ctImpConfirmar = document.getElementById('ctImpConfirmar');
+const ctImpEspelhar = document.getElementById('ctImpEspelhar');
+const ctImpEspelharLabel = document.getElementById('ctImpEspelharLabel');
+let ctImpEspelharPendente = false; // veio do botao "Espelhar Follow Up do Clinicorp" do CRM
 
 const CT_POR_PAGINA = 200;
 const CT_ORIGENS = { whatsapp: 'WhatsApp', importado: 'Importado', manual: 'Cadastrado' };
@@ -4016,6 +4019,10 @@ ctImpArquivo.addEventListener('change', async () => {
     ctImpEtapa.textContent = '';
     ctImpEtapa.appendChild(new Option('Nenhuma (só na aba Contatos)', ''));
     for (const e of ctEtapas) ctImpEtapa.appendChild(new Option(e.nome, e.id));
+    ctImpEspelhar.checked = false;
+    if (ctImpEspelharPendente) { ctImpEtapa.value = 'follow_up'; ctImpEspelhar.checked = true; ctImpModo.value = 'atualizar'; }
+    ctImpEspelharPendente = false;
+    ctAtualizarEspelhar();
     ctAtualizarPreviaImp();
   } catch (err) {
     ctMostrarErroImp(`Não consegui ler a planilha: ${err.message}`);
@@ -4119,11 +4126,46 @@ function ctAtualizarPreviaImp() {
 }
 ctImpEtiquetaExtra.addEventListener('input', ctAtualizarPreviaImp);
 
+function ctAtualizarEspelhar() {
+  ctImpEspelharLabel.hidden = ctImpEtapa.value !== 'follow_up';
+  if (ctImpEspelharLabel.hidden) ctImpEspelhar.checked = false;
+}
+ctImpEtapa.addEventListener('change', ctAtualizarEspelhar);
+
 ctImpConfirmar.addEventListener('click', async () => {
   const { validas } = ctMontarLinhasImp();
   if (!validas.length) return;
   ctMostrarErroImp('');
   ctImpConfirmar.disabled = true;
+  if (ctImpEspelhar.checked && ctImpEtapa.value === 'follow_up') {
+    try {
+      if (validas.length > 2000) throw new Error('A lista tem mais de 2000 pacientes - divida em duas.');
+      ctImpConfirmar.textContent = 'Espelhando...';
+      const res = await fetch('/api/crm/follow-up/espelhar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ instancia: ctImpInstancia.value || ctInstancias[0], linhas: validas }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      const partes = [`${d.naLista} na lista`, `${d.novos} novos`, `${d.movidos} movidos pra coluna`, `${d.jaEstavam} já estavam`];
+      if (d.apagados + d.retirados) partes.push(`${d.apagados + d.retirados} saíram (não estão mais no Clinicorp)`);
+      if (d.pessoais) partes.push(`${d.pessoais} são contatos pessoais e foram ignorados`);
+      if (d.invalidos) partes.push(`${d.invalidos} com telefone inválido`);
+      ctImpResultado.textContent = `Follow Up espelhado: ${partes.join(', ')}.`;
+      ctImpResultado.hidden = false;
+      ctImpPasso(0);
+      ctImpVoltar.hidden = false;
+      ctImpVoltar.textContent = 'Espelhar outra lista';
+      mostrarAviso('Follow Up espelhado');
+      carregarContatos();
+    } catch (err) {
+      ctMostrarErroImp(`Não consegui espelhar: ${err.message}`);
+      ctImpConfirmar.disabled = false;
+      ctAtualizarPreviaImp();
+    }
+    return;
+  }
   const total = { novos: 0, atualizados: 0, ignorados: 0, invalidos: 0, noFunil: 0 };
   try {
     for (let i = 0; i < validas.length; i += 500) {
@@ -10682,3 +10724,10 @@ const cvFunilFuBtn = document.getElementById('cvFunilFuBtn');
 const crmFunilFuBtn = document.getElementById('crmConversaFunilFu');
 cvFunilFuBtn.addEventListener('click', () => adicionarAoFunilFu(cvAberto, cvFunilFuBtn));
 crmFunilFuBtn.addEventListener('click', () => adicionarAoFunilFu(crmContatoAberto, crmFunilFuBtn));
+
+// botao do CRM: leva pra importacao ja no modo "Espelhar" (coluna Follow Up)
+document.getElementById('crmEspelharBtn').addEventListener('click', () => {
+  ctImpEspelharPendente = true;
+  mudarAba('contatos');
+  setTimeout(() => document.getElementById('ctImportarBtn').click(), 150);
+});
