@@ -1090,6 +1090,14 @@ export async function definirAtendente(tenantId, contatoId, operadorId) {
   eventosCrm.emit('contato-atualizado', { tenantId, contatoId });
 }
 
+// entrega o lead a um operador so se ele ainda estiver sem dono
+export async function atribuirSeLivre(tenantId, contatoId, operadorId) {
+  if (!pool) return;
+  await tabelasProntas;
+  const { rows } = await pool.query(`SELECT 1 FROM crm_contatos WHERE id = $1 AND tenant_id = $2 AND atendente_id IS NULL`, [contatoId, tenantId]);
+  if (rows[0]) await definirAtendente(tenantId, contatoId, operadorId);
+}
+
 // quem responde um lead que ninguem assumiu ainda passa a ser o operador dele
 export async function assumirSeLivre(tenantId, numero, instancia, operadorId) {
   if (!pool) return;

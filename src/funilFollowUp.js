@@ -162,7 +162,7 @@ export async function listarLeads(tenantId, instancia) {
   const params = [tenantId];
   let filtro = '';
   if (instancia) { params.push(instancia); filtro = ` AND l.instancia = $${params.length}`; }
-  const { rows: leads } = await pool.query(`SELECT * FROM ffu_leads l WHERE l.tenant_id = $1 AND l.removido_em IS NULL${filtro} ORDER BY l.entrou_dia_em ASC, l.id ASC`, params);
+  const { rows: leads } = await pool.query(`SELECT l.*, c.atendente_id, c.atendente_nome FROM ffu_leads l LEFT JOIN crm_contatos c ON c.id = l.contato_id AND c.tenant_id = l.tenant_id WHERE l.tenant_id = $1 AND l.removido_em IS NULL${filtro} ORDER BY l.entrou_dia_em ASC, l.id ASC`, params);
   if (!leads.length) return [];
   const { rows: etapas } = await pool.query('SELECT * FROM ffu_etapas WHERE lead_id = ANY($1::int[]) ORDER BY dia', [leads.map((l) => l.id)]);
   const porLead = new Map();
@@ -175,7 +175,7 @@ export async function listarLeads(tenantId, instancia) {
     const tarefaFeita = !!atual?.tarefa_feita_em;
     const proximoEm = proxima?.programado_em ? new Date(proxima.programado_em).getTime() : null;
     return {
-      id: l.id, contatoId: l.contato_id, instancia: l.instancia, numero: l.numero, nome: l.nome, dia: l.dia,
+      id: l.id, contatoId: l.contato_id, atendenteId: l.atendente_id ?? null, atendenteNome: l.atendente_nome || null, instancia: l.instancia, numero: l.numero, nome: l.nome, dia: l.dia,
       entrouDiaEm: l.entrou_dia_em, concluidoEm: l.concluido_em,
       tarefaFeita, tarefaFeitaEm: atual?.tarefa_feita_em || null, tarefaFeitaPor: atual?.tarefa_feita_por || null,
       pendente: !l.concluido_em && !tarefaFeita,

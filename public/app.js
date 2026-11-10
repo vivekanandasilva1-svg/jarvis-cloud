@@ -8978,12 +8978,11 @@ function contatoNoOperador(c) {
   const id = visaoOp === 'eu' ? eu : (visaoOp === 'meuslivres' ? eu : Number(visaoOp.slice(3)));
   // lead sem operador pertence ao dono da conta (id 0, o "principal") - senao quase tudo sumia ao escolher o dono
   if (id === 0 || visaoOp === 'meuslivres') return sem || c.atendente_id === id;
-  // coluna Follow Up (espelho do Clinicorp) e de toda a equipe: o operador ve os leads dela sem operador definido
-  if (c.etapa === 'follow_up' && sem) return true;
   return c.atendente_id === id;
 }
 function aplicarVisaoOperador(v) {
   visaoOp = v;
+  if (typeof tabFunilFu !== 'undefined' && !tabFunilFu.hidden) ffuDesenhar();
   try { localStorage.setItem('crmOperador', v); } catch { /* sem storage */ }
   crmFiltroOperador.value = v;
   if (typeof visaoOperadorSel !== 'undefined') visaoOperadorSel.value = v;
@@ -9071,9 +9070,34 @@ async function crmCarregarFuiClinicorp() {
     crmFuiClinicorp.hidden = false;
     crmFuiClinicorp.textContent = `Follow Up Inteligente: ${d.ativo ? 'Ligado' : 'Desligado'}`;
     crmFuiClinicorp.classList.toggle('crm-btn-ligado', !!d.ativo);
+    crmPreencherFuiOperador(d);
     crmFuiClinicorp.title = `Automação Clinicorp → Follow Up do CRM para o número ${d.instancia}. Clique pra ${d.ativo ? 'desligar' : 'ligar'}.`;
   } catch { crmFuiClinicorp.hidden = true; }
 }
+const crmFuiOperador = document.getElementById('crmFuiOperador');
+function crmPreencherFuiOperador(d) {
+  const ops = crmOperadores.lista.filter((o) => o.id !== 0);
+  crmFuiOperador.hidden = !ops.length;
+  crmFuiOperador.textContent = '';
+  crmFuiOperador.add(new Option('Follow Up: sem operador', ''));
+  for (const o of ops) crmFuiOperador.add(new Option(`Follow Up: ${o.nome}`, String(o.id)));
+  crmFuiOperador.value = d.operadorId === null || d.operadorId === undefined ? '' : String(d.operadorId);
+}
+crmFuiOperador.addEventListener('change', async () => {
+  if (!crmFuiEstado) return;
+  try {
+    const res = await fetch('/api/crm/clinicorp-followup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ instancia: crmFuiEstado.instancia, operadorId: crmFuiOperador.value === '' ? null : Number(crmFuiOperador.value) }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro');
+    mostrarAviso(d.entregues ? `${d.entregues} lead(s) do Follow Up entregues ao operador` : 'Operador do Follow Up salvo', 'ok');
+    if (typeof carregarCrm === 'function') carregarCrm();
+  } catch (err) { mostrarAviso(`Não consegui alterar: ${err.message}`, 'erro'); }
+  crmCarregarFuiClinicorp();
+});
 crmFuiClinicorp.addEventListener('click', async () => {
   if (!crmFuiEstado) return;
   try {
@@ -10421,6 +10445,7 @@ function ffuCriarCard(l) {
   nome.textContent = l.nome || l.numero || 'Sem nome';
   card.appendChild(nome);
   if (l.numero) { const n = document.createElement('div'); n.className = 'crm-card-numero'; n.textContent = l.numero; card.appendChild(n); }
+  const op = document.createElement('div'); op.className = 'crm-card-operador' + (l.atendenteNome ? '' : ' livre'); op.textContent = l.atendenteNome ? `Operador: ${l.atendenteNome}` : 'Sem operador'; card.appendChild(op);
   const tarefa = document.createElement('div');
   tarefa.className = 'ffu-tarefa';
   tarefa.textContent = `Tarefa do Dia ${l.dia}: ${ffuDados.tarefas[l.dia] || ''}`;
@@ -10478,7 +10503,7 @@ function ffuDesenhar() {
   for (const dia of ffuDados.dias) {
     const col = document.createElement('div');
     col.className = 'crm-coluna';
-    const leads = ffuDados.leads.filter((l) => l.dia === dia);
+    const leads = ffuDados.leads.filter((l) => l.dia === dia && (!visaoOp || contatoNoOperador({ atendente_id: l.atendenteId })));
     const head = document.createElement('div');
     head.className = 'crm-coluna-header';
     const t = document.createElement('span'); t.textContent = `Dia ${dia}`;

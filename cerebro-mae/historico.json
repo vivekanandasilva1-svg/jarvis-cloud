@@ -940,5 +940,13 @@
     "tipo": "decisao",
     "titulo": "Regra: todo lead na etapa Follow Up do CRM está no Dia 0 do Funil Follow Up, de qualquer fonte",
     "conteudo": "Além do gancho em registrarEventoEtapa (cobre quem ENTRA na etapa: Clinicorp, importação de lista, arrastar, conversa, mudança manual), há uma varredura a cada minuto (funilFollowUp.varrerFollowUpDoCrm) que coloca no Dia 0 qualquer lead que já esteja na coluna Follow Up e ainda não tenha passado pelo funil - cobre quem já estava lá e fontes que não passem pelo gancho. Remover do funil agora esconde (removido_em) em vez de apagar, para a varredura não recolocar quem a equipe tirou de propósito; quem concluiu o Dia 5 também não volta sozinho (só se entrar de novo na etapa). Pendente: sair da etapa Follow Up no CRM não tira o lead do funil."
+  },
+  {
+    "chave": "crm:follow-up-por-operador",
+    "modulo": "clinicorp",
+    "data": "2026-11-10",
+    "tipo": "decisao",
+    "titulo": "Follow Up e Funil Follow Up separados por operador; limite da API do Clinicorp",
+    "conteudo": "Regra do dono: a coluna Follow Up do CRM e o Funil Follow Up (Dia 0 a 5) são distintos por operador, cada um com o seu funil. Implementado: leads do Funil seguem o operador do contato do CRM (join em crm_contatos.atendente_id) e respeitam o seletor de visão por operador; removido o atalho que mostrava leads sem operador da coluna Follow Up para todos. Cada número tem 'operador do Follow Up' (clinicorp_followup_config.operador_id, seletor no cabeçalho do CRM): novos leads vindos do Clinicorp entram atribuídos a ele e os já existentes sem operador são entregues ao escolher. DESCOBERTA: a coluna 'Follow Up' do quadro CRC do Clinicorp NÃO é o Status FOLLOWUP da API de orçamentos (pacientes dela aparecem como OPEN) e a API pública não expõe a etapa do quadro (18 caminhos testados, todos 404; /estimates/get também não traz). O sync atual puxa só orçamentos com Status FOLLOWUP, portanto NÃO espelha o quadro. Alternativa viável: importação de lista direto para a coluna Follow Up, ou pedir ao suporte do Clinicorp o endpoint do quadro CRC."
   }
 ]

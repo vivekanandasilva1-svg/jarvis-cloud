@@ -2027,8 +2027,10 @@ app.post('/api/crm/clinicorp-followup', async (req, res) => {
   try {
     const instancia = String(req.body?.instancia || '').trim();
     if (!instancia) return res.status(400).json({ erro: 'Informe o número.' });
-    await clinicorpFollowUp.definirAtivacao(req.tenantId, instancia, !!req.body?.ativo);
-    res.json({ ok: true });
+    let entregues = 0;
+    if (req.body && 'operadorId' in req.body) entregues = (await clinicorpFollowUp.definirOperadorFollowUp(req.tenantId, instancia, req.body.operadorId)).entregues;
+    if (req.body && 'ativo' in req.body) await clinicorpFollowUp.definirAtivacao(req.tenantId, instancia, !!req.body.ativo);
+    res.json({ ok: true, entregues });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }

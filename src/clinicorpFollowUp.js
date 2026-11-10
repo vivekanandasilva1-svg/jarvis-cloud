@@ -44,6 +44,8 @@ async function garantirTabelas() {
       PRIMARY KEY (tenant_id, instancia)
     );
   `);
+  // operador que recebe os leads que entram na coluna Follow Up por esse numero (cada operador tem o seu funil)
+  await pool.query(`ALTER TABLE clinicorp_followup_config ADD COLUMN IF NOT EXISTS operador_id INT`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => console.error('Erro criando tabela de sync Clinicorp->Follow Up:', err.message));
 
@@ -67,11 +69,11 @@ async function buscarOrcamentosFollowUp(tenantId) {
 }
 
 export async function obterAtivacao(tenantId, instancia) {
-  if (!pool) return { ativo: true, ativadoEm: null };
+  if (!pool) return { ativo: true, ativadoEm: null, operadorId: null };
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT ativo, ativado_em FROM clinicorp_followup_config WHERE tenant_id = $1 AND instancia = $2', [tenantId, instancia]);
+  const { rows } = await pool.query('SELECT ativo, ativado_em, operador_id FROM clinicorp_followup_config WHERE tenant_id = $1 AND instancia = $2', [tenantId, instancia]);
   // sem linha = ligado (padrao pra todo cliente com Clinicorp integrado); o dono pode desligar por numero
-    return rows[0] ? { ativo: rows[0].ativo, ativadoEm: rows[0].ativado_em } : { ativo: true, ativadoEm: null };
+    return rows[0] ? { ativo: rows[0].ativo, ativadoEm: rows[0].ativado_em, operadorId: rows[0].operador_id } : { ativo: true, ativadoEm: null, operadorId: null };
 }
 
 // ao religar, o que ja estava na coluna do Clinicorp nao entra de uma vez: so vale o que for marcado depois
@@ -83,6 +85,27 @@ export async function definirAtivacao(tenantId, instancia, ativo) {
      ON CONFLICT (tenant_id, instancia) DO UPDATE SET ativo = $3, ativado_em = CASE WHEN $3 THEN now() ELSE clinicorp_followup_config.ativado_em END`,
     [tenantId, String(instancia), !!ativo],
   );
+}
+
+// define quem recebe os leads da coluna Follow Up desse numero e ja entrega a ele os que estao sem operador
+export async function definirOperadorFollowUp(tenantId, instancia, operadorId) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const op = operadorId === null || operadorId === undefined || operadorId === '' ? null : Number(operadorId);
+  await pool.query(
+    `INSERT INTO clinicorp_followup_config (tenant_id, instancia, ativo, operador_id) VALUES ($1, $2, true, $3)
+     ON CONFLICT (tenant_id, instancia) DO UPDATE SET operador_id = $3`,
+    [tenantId, String(instancia), op],
+  );
+  let entregues = 0;
+  if (op !== null) {
+    const { rows } = await pool.query(
+      `SELECT id FROM crm_contatos WHERE tenant_id = $1 AND instancia = $2 AND etapa = 'follow_up' AND atendente_id IS NULL AND oculto = false`,
+      [tenantId, String(instancia)],
+    );
+    for (const r of rows) { await crm.definirAtendente(tenantId, r.id, op); entregues++; }
+  }
+  return { entregues };
 }
 
 export async function sincronizarTenant(tenantId) {
@@ -139,6 +162,7 @@ export async function sincronizarTenant(tenantId) {
         contatoId = await crm.criarContatoDoClinicorp(tenantId, { numero, nome: o.PatientName, instancia, etapa: 'follow_up' });
         acao = 'criado';
       }
+      if (ativ.operadorId !== null && ativ.operadorId !== undefined) await crm.atribuirSeLivre(tenantId, contatoId, ativ.operadorId).catch(() => {});
       if (acao !== 'ja_estava' && !historico) await followUp.iniciarAcompanhamento(tenantId, contatoId);
       await registrar(acao, contatoId);
       if (acao === 'movido') resultado.movidos++;
