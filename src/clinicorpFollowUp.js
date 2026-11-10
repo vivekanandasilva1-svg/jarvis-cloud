@@ -70,9 +70,8 @@ export async function obterAtivacao(tenantId, instancia) {
   if (!pool) return { ativo: true, ativadoEm: null };
   await tabelasProntas;
   const { rows } = await pool.query('SELECT ativo, ativado_em FROM clinicorp_followup_config WHERE tenant_id = $1 AND instancia = $2', [tenantId, instancia]);
-  // sem linha = nunca ligado: fica DESLIGADO (so cria cartoes onde o dono ligou o botao). Antes o padrao era ligado
-  // e uma conta com as mesmas credenciais do Clinicorp de outra recebia os pacientes dela
-  return rows[0] ? { ativo: rows[0].ativo, ativadoEm: rows[0].ativado_em } : { ativo: false, ativadoEm: null };
+  // sem linha = ligado (padrao pra todo cliente com Clinicorp integrado); o dono pode desligar por numero
+    return rows[0] ? { ativo: rows[0].ativo, ativadoEm: rows[0].ativado_em } : { ativo: true, ativadoEm: null };
 }
 
 // ao religar, o que ja estava na coluna do Clinicorp nao entra de uma vez: so vale o que for marcado depois
@@ -126,8 +125,8 @@ export async function sincronizarTenant(tenantId) {
       resultado.novos++;
       // historico antigo: na primeira rodada, ou marcado antes de o botao ser religado - so registra
       const marcadoEm = new Date(o.LastChange_Date || o.FollowUpUpdateDate || 0).getTime();
-      if (ativ.ativadoEm && marcadoEm < new Date(ativ.ativadoEm).getTime()) { await registrar('baseline', existente?.id); resultado.baseline++; continue; }
-      if (primeiraRodada && Date.now() - marcadoEm > DIAS_IMPORTAR_NA_PRIMEIRA * DIA_MS) { await registrar('baseline', existente?.id); resultado.baseline++; continue; }
+      const historico = (ativ.ativadoEm && marcadoEm < new Date(ativ.ativadoEm).getTime()) || (primeiraRodada && Date.now() - marcadoEm > DIAS_IMPORTAR_NA_PRIMEIRA * DIA_MS);
+      if (historico) resultado.baseline++;
 
       let contatoId;
       let acao;
@@ -140,7 +139,7 @@ export async function sincronizarTenant(tenantId) {
         contatoId = await crm.criarContatoDoClinicorp(tenantId, { numero, nome: o.PatientName, instancia, etapa: 'follow_up' });
         acao = 'criado';
       }
-      if (acao !== 'ja_estava') await followUp.iniciarAcompanhamento(tenantId, contatoId);
+      if (acao !== 'ja_estava' && !historico) await followUp.iniciarAcompanhamento(tenantId, contatoId);
       await registrar(acao, contatoId);
       if (acao === 'movido') resultado.movidos++;
       if (acao === 'criado') resultado.criados++;
@@ -157,8 +156,17 @@ export function iniciarSchedulerClinicorpFollowUp() {
     try {
       if (!pool) return;
       await tabelasProntas;
-      // so as contas que ligaram o botao em algum numero (evita chamadas a toa e erro 429 do Clinicorp)
-      const { rows } = await pool.query('SELECT DISTINCT t.id FROM tenants t JOIN clinicorp_followup_config c ON c.tenant_id = t.id WHERE c.ativo AND (t.ativo OR t.super_admin)');
+      // toda conta com Clinicorp integrado. Se duas contas usam o MESMO Clinicorp (mesmo subscriber), so a dona roda:
+      // conta de cliente ganha da conta admin; empate = a mais antiga (senao o paciente era criado nas duas)
+      const { rows } = await pool.query(`
+        SELECT t.id FROM tenants t JOIN tenant_config c ON c.tenant_id = t.id
+         WHERE c.clinicorp_api_user IS NOT NULL AND c.clinicorp_ativo AND (t.ativo OR t.super_admin)
+           AND NOT EXISTS (
+             SELECT 1 FROM tenants t2 JOIN tenant_config c2 ON c2.tenant_id = t2.id
+              WHERE t2.id <> t.id AND t2.ativo AND c2.clinicorp_api_user IS NOT NULL AND c2.clinicorp_ativo
+                AND c2.clinicorp_subscriber_id = c.clinicorp_subscriber_id
+                AND ((t.super_admin AND NOT t2.super_admin) OR (t.super_admin = t2.super_admin AND t2.id < t.id))
+           )`);
       for (const { id } of rows) {
         try {
           const r = await sincronizarTenant(id);

@@ -924,5 +924,13 @@
     "tipo": "correcao",
     "titulo": "Sync Clinicorp -> Follow Up passa a vir desligado e só roda em quem ligou",
     "conteudo": "Bug: as contas admin (id 1) e Vitaly (id 10) têm as MESMAS credenciais do Clinicorp (clinpopodonto); o sincronizador rodava para todas as contas e a automação vinha ligada por padrão, então os pacientes da Vitaly foram criados também na conta admin (4 cartões, instância Vivekananda) e as chamadas dobravam (erros 429 do Clinicorp). Correção: obterAtivacao sem linha = desligado; scheduler só percorre contas com clinicorp_followup_config ativo. Os 4 cartões do tenant 1 (sem mensagens) foram removidos. Atenção: conta admin com credenciais de Clinicorp de outro cliente - se for ligar o botão nela, vai puxar os pacientes desse mesmo Clinicorp."
+  },
+  {
+    "chave": "clinicorp:espelho-completo-follow-up",
+    "modulo": "clinicorp",
+    "data": "2026-11-10",
+    "tipo": "correcao",
+    "titulo": "Coluna Follow Up do CRM espelha TODOS os pacientes do Follow Up do Clinicorp (padrão por cliente)",
+    "conteudo": "Problemas: (1) pacientes antigos da coluna Follow Up do CRC no Clinicorp eram tratados como 'baseline' e nunca entravam; (2) cartões vindos do Clinicorp não têm operador e a visão de um operador (ex.: Vânia) só mostra os dela, então a coluna ficava vazia. Regras agora: o sync é ligado por padrão para toda conta com Clinicorp integrado (cada uma com a SUA credencial); todo paciente em FOLLOWUP no Clinicorp entra/é movido para a coluna Follow Up do CRM; pacientes históricos entram na coluna mas NÃO disparam a cadência de mensagens (sem WhatsApp para paciente antigo); contas que compartilham o mesmo Clinicorp (mesmo subscriber) só rodam na dona - conta de cliente ganha da admin. Na visão de operador, leads sem operador na etapa Follow Up aparecem para toda a equipe. Pendente: paciente que SAI do Follow Up no Clinicorp ainda não sai da coluna do CRM (decisão de produto)."
   }
 ]

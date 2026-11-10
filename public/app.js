@@ -8978,6 +8978,8 @@ function contatoNoOperador(c) {
   const id = visaoOp === 'eu' ? eu : (visaoOp === 'meuslivres' ? eu : Number(visaoOp.slice(3)));
   // lead sem operador pertence ao dono da conta (id 0, o "principal") - senao quase tudo sumia ao escolher o dono
   if (id === 0 || visaoOp === 'meuslivres') return sem || c.atendente_id === id;
+  // coluna Follow Up (espelho do Clinicorp) e de toda a equipe: o operador ve os leads dela sem operador definido
+  if (c.etapa === 'follow_up' && sem) return true;
   return c.atendente_id === id;
 }
 function aplicarVisaoOperador(v) {
