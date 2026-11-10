@@ -948,5 +948,13 @@
     "tipo": "decisao",
     "titulo": "Follow Up e Funil Follow Up separados por operador; limite da API do Clinicorp",
     "conteudo": "Regra do dono: a coluna Follow Up do CRM e o Funil Follow Up (Dia 0 a 5) são distintos por operador, cada um com o seu funil. Implementado: leads do Funil seguem o operador do contato do CRM (join em crm_contatos.atendente_id) e respeitam o seletor de visão por operador; removido o atalho que mostrava leads sem operador da coluna Follow Up para todos. Cada número tem 'operador do Follow Up' (clinicorp_followup_config.operador_id, seletor no cabeçalho do CRM): novos leads vindos do Clinicorp entram atribuídos a ele e os já existentes sem operador são entregues ao escolher. DESCOBERTA: a coluna 'Follow Up' do quadro CRC do Clinicorp NÃO é o Status FOLLOWUP da API de orçamentos (pacientes dela aparecem como OPEN) e a API pública não expõe a etapa do quadro (18 caminhos testados, todos 404; /estimates/get também não traz). O sync atual puxa só orçamentos com Status FOLLOWUP, portanto NÃO espelha o quadro. Alternativa viável: importação de lista direto para a coluna Follow Up, ou pedir ao suporte do Clinicorp o endpoint do quadro CRC."
+  },
+  {
+    "chave": "whatsapp:operador-por-numero",
+    "modulo": "whatsapp",
+    "data": "2026-11-10",
+    "tipo": "funcao",
+    "titulo": "Operador responsável por cada número (aba WhatsApp)",
+    "conteudo": "Cada instância da aba WhatsApp ganhou o seletor 'Operador' (whatsapp_instance_tenant.operador_id): um lugar só para ligar número e operador. Ao escolher, os leads sem operador desse número (fora Contatos pessoais) são entregues a ele; leads NOVOS do número já entram com ele (antes do rodízio da Distribuição, em crm.distribuirLeadNovo); pacientes puxados do Clinicorp também. Escolher o número no cabeçalho já seleciona a visão do operador dele. Removido o seletor 'Follow Up: operador' do cabeçalho do CRM (substituído por este). Pendente: importação de lista não herda o operador do número."
   }
 ]

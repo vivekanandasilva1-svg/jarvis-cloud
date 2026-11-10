@@ -17,7 +17,7 @@ import * as crm from './crm.js';
 import * as followUp from './followUp.js';
 import * as whatsappInstances from './whatsappInstances.js';
 import * as tenantConfig from './tenantConfig.js';
-import { tabelasProntas as tenantsProntos } from './tenants.js';
+import { tabelasProntas as tenantsProntos, operadoresPorNumero } from './tenants.js';
 
 const DIA_MS = 86400000;
 const DIAS_IMPORTAR_NA_PRIMEIRA = 7;
@@ -162,7 +162,8 @@ export async function sincronizarTenant(tenantId) {
         contatoId = await crm.criarContatoDoClinicorp(tenantId, { numero, nome: o.PatientName, instancia, etapa: 'follow_up' });
         acao = 'criado';
       }
-      if (ativ.operadorId !== null && ativ.operadorId !== undefined) await crm.atribuirSeLivre(tenantId, contatoId, ativ.operadorId).catch(() => {});
+      const opNumero = (await operadoresPorNumero(tenantId))[instancia];
+      if (opNumero !== undefined) await crm.atribuirSeLivre(tenantId, contatoId, opNumero).catch(() => {});
       if (acao !== 'ja_estava' && !historico) await followUp.iniciarAcompanhamento(tenantId, contatoId);
       await registrar(acao, contatoId);
       if (acao === 'movido') resultado.movidos++;

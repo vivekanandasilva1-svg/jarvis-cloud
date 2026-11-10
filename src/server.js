@@ -207,7 +207,7 @@ app.get('/api/me', async (req, res) => {
       crm.listarOperadores(tenant.id).catch(() => []),
     ]);
     const instanciaAtiva = (await whatsappInstances.obterConfig(tenant.id).catch(() => ({}))).instanciaAtiva || null;
-    res.json({ perfil, instancias, operadores, instanciaAtiva, euId: req.operadorId || 0, operador, tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas, permiteColaboradores: !!tenant.permite_colaboradores, cerebroLiberado });
+    res.json({ perfil, instancias, operadores, operadoresPorNumero: await tenants.operadoresPorNumero(tenant.id).catch(() => ({})), instanciaAtiva, euId: req.operadorId || 0, operador, tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas, permiteColaboradores: !!tenant.permite_colaboradores, cerebroLiberado });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -1425,9 +1425,18 @@ app.get('/api/whatsapp/instancias', async (req, res) => {
   try {
     const permitidas = new Set(await tenants.listarInstanciasDoTenant(req.tenantId));
     const todas = await evolutionApi.listarInstancias();
-    res.json({ instancias: todas.filter((i) => permitidas.has(i.nome)) });
+    const [porNumero, operadores] = await Promise.all([tenants.operadoresPorNumero(req.tenantId), crm.listarOperadores(req.tenantId).catch(() => [])]);
+    res.json({ operadores, instancias: todas.filter((i) => permitidas.has(i.nome)).map((i) => ({ ...i, operadorId: porNumero[i.nome] ?? null })) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/whatsapp/instancias/:nome/operador', async (req, res) => {
+  try {
+    res.json({ ok: true, ...(await crm.definirOperadorDoNumero(req.tenantId, req.params.nome, req.body?.operadorId)) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
   }
 });
 

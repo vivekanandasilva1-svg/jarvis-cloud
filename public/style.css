@@ -3623,3 +3623,5 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 .ffu-agenda-titulo { font-size: 12px; color: var(--gold); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin-top: 6px; }
 .ffu-agenda-campos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 @media (max-width: 560px) { .ffu-agenda-campos { grid-template-columns: 1fr; } }
+
+.wa-operador-sel { background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 8px; font-size: 12px; max-width: 190px; }

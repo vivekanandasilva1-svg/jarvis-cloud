@@ -7,7 +7,7 @@ import * as funilFU from './funilFollowUp.js';
 import { EventEmitter } from 'node:events';
 import { pool } from './db.js';
 import * as evolutionApi from './evolutionApi.js';
-import { tabelasProntas as tenantsProntos, listarOperadores } from './tenants.js';
+import { tabelasProntas as tenantsProntos, listarOperadores, operadoresPorNumero, gravarOperadorDoNumero } from './tenants.js';
 
 // avisa quem estiver ouvindo (endpoint SSE em server.js) sempre que uma mensagem nova entra ou
 // sai de alguma conversa - e o que da o "tempo real" da aba CRM, sem precisar de polling
@@ -1132,7 +1132,29 @@ export async function salvarDistribuicao(tenantId, { ativo, operadores, regras }
 
 // chamado quando um lead NOVO chega: regra de campanha primeiro (se o lead ja tiver campanha
 // identificada), senao rodizio entre os operadores escolhidos
+// operador do NUMERO (aba WhatsApp): quem e responsavel por esse numero recebe os leads novos dele, antes de qualquer rodizio
+export async function definirOperadorDoNumero(tenantId, instancia, operadorId) {
+  await tabelasProntas;
+  const op = operadorId === null || operadorId === undefined || operadorId === '' ? null : Number(operadorId);
+  if (op !== null && !(await listarOperadores(tenantId)).some((o) => o.id === op)) throw new Error('Operador nao encontrado (ou desativado).');
+  await gravarOperadorDoNumero(tenantId, instancia, op);
+  let entregues = 0;
+  if (op !== null) {
+    const { rows } = await pool.query(
+      `SELECT id FROM crm_contatos WHERE tenant_id = $1 AND instancia = $2 AND atendente_id IS NULL AND oculto = false AND etapa <> 'contatos_pessoais'`,
+      [tenantId, instancia],
+    );
+    for (const r of rows) { await definirAtendente(tenantId, r.id, op); entregues++; }
+  }
+  return { entregues };
+}
+
 export async function distribuirLeadNovo(tenantId, contatoId) {
+  const { rows: [ct] } = await pool.query(`SELECT instancia FROM crm_contatos WHERE id = $1 AND tenant_id = $2 AND atendente_id IS NULL`, [contatoId, tenantId]).catch(() => ({ rows: [] }));
+  if (ct) {
+    const opNumero = (await operadoresPorNumero(tenantId))[ct.instancia];
+    if (opNumero !== undefined) { await definirAtendente(tenantId, contatoId, opNumero).catch(() => {}); return; }
+  }
   const cfg = await obterDistribuicao(tenantId);
   if (!cfg.ativo || !cfg.operadores.length) return;
   let operadorId = null;

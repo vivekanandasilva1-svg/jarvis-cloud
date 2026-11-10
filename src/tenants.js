@@ -54,6 +54,8 @@ async function garantirTabelas() {
       tenant_id INT NOT NULL REFERENCES tenants(id)
     );
   `);
+  // operador responsavel pelo numero: leads novos desse numero ja entram com ele (um lugar so pra escolher)
+  await pool.query(`ALTER TABLE whatsapp_instance_tenant ADD COLUMN IF NOT EXISTS operador_id INT`);
   // beneficio que so o super_admin liga/desliga por cliente (aba Clientes) - quando true, o
   // PROPRIO cliente pode criar logins extras (colaboradores) pra equipe dele, sem precisar
   // compartilhar a senha principal da conta. Default false (nao muda nada pra quem ja usa,
@@ -563,6 +565,21 @@ export async function mapearInstanciaParaTenant(instancia, tenantId) {
      ON CONFLICT (instancia) DO UPDATE SET tenant_id = $2`,
     [instancia, tenantId],
   );
+}
+
+// { instancia: operadorId } so dos numeros que tem operador definido (0 = o dono da conta)
+export async function operadoresPorNumero(tenantId) {
+  if (!pool) return {};
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT instancia, operador_id FROM whatsapp_instance_tenant WHERE tenant_id = $1 AND operador_id IS NOT NULL', [tenantId]);
+  return Object.fromEntries(rows.map((r) => [r.instancia, r.operador_id]));
+}
+
+export async function gravarOperadorDoNumero(tenantId, instancia, operadorId) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const { rowCount } = await pool.query('UPDATE whatsapp_instance_tenant SET operador_id = $3 WHERE instancia = $1 AND tenant_id = $2', [instancia, tenantId, operadorId]);
+  if (!rowCount) throw new Error('Esse número não é da sua conta.');
 }
 
 export async function listarInstanciasDoTenant(tenantId) {

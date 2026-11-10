@@ -2574,6 +2574,35 @@ async function carregarInstanciasWhatsapp() {
       const acoes = document.createElement('div');
       acoes.className = 'wa-instancia-acoes';
 
+      if ((dataInstancias.operadores || []).length > 1) {
+        const opSel = document.createElement('select');
+        opSel.className = 'wa-operador-sel';
+        opSel.title = 'Operador responsável por este número: os leads dele entram direto com esse operador';
+        opSel.add(new Option('Operador: ninguém', ''));
+        for (const o of dataInstancias.operadores) opSel.add(new Option(`Operador: ${o.nome}`, String(o.id)));
+        opSel.value = inst.operadorId === null || inst.operadorId === undefined ? '' : String(inst.operadorId);
+        opSel.addEventListener('change', async () => {
+          opSel.disabled = true;
+          try {
+            const r = await fetch(`/api/whatsapp/instancias/${encodeURIComponent(inst.nome)}/operador`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+              body: JSON.stringify({ operadorId: opSel.value === '' ? null : Number(opSel.value) }),
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.erro || 'erro');
+            mostrarAviso(d.entregues ? `Operador do número salvo · ${d.entregues} lead(s) sem operador foram entregues a ele` : 'Operador do número salvo', 'ok');
+            if (typeof carregarOperadoresCrm === 'function') carregarOperadoresCrm().catch(() => {});
+            if (typeof carregarCrm === 'function' && !tabCrm.hidden) carregarCrm();
+            // o cabecalho acompanha: numero e operador num lugar so
+            minhaVisao.operadoresPorNumero = { ...(minhaVisao.operadoresPorNumero || {}) };
+            if (opSel.value === '') delete minhaVisao.operadoresPorNumero[inst.nome]; else minhaVisao.operadoresPorNumero[inst.nome] = Number(opSel.value);
+          } catch (err) { mostrarAviso(err.message, 'erro'); }
+          opSel.disabled = false;
+        });
+        acoes.appendChild(opSel);
+      }
+
       if (inst.nome !== dataStatus.instanciaAtiva) {
         const usarBtn = document.createElement('button');
         usarBtn.type = 'button';
@@ -9070,34 +9099,9 @@ async function crmCarregarFuiClinicorp() {
     crmFuiClinicorp.hidden = false;
     crmFuiClinicorp.textContent = `Follow Up Inteligente: ${d.ativo ? 'Ligado' : 'Desligado'}`;
     crmFuiClinicorp.classList.toggle('crm-btn-ligado', !!d.ativo);
-    crmPreencherFuiOperador(d);
     crmFuiClinicorp.title = `Automação Clinicorp → Follow Up do CRM para o número ${d.instancia}. Clique pra ${d.ativo ? 'desligar' : 'ligar'}.`;
   } catch { crmFuiClinicorp.hidden = true; }
 }
-const crmFuiOperador = document.getElementById('crmFuiOperador');
-function crmPreencherFuiOperador(d) {
-  const ops = crmOperadores.lista.filter((o) => o.id !== 0);
-  crmFuiOperador.hidden = !ops.length;
-  crmFuiOperador.textContent = '';
-  crmFuiOperador.add(new Option('Follow Up: sem operador', ''));
-  for (const o of ops) crmFuiOperador.add(new Option(`Follow Up: ${o.nome}`, String(o.id)));
-  crmFuiOperador.value = d.operadorId === null || d.operadorId === undefined ? '' : String(d.operadorId);
-}
-crmFuiOperador.addEventListener('change', async () => {
-  if (!crmFuiEstado) return;
-  try {
-    const res = await fetch('/api/crm/clinicorp-followup', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-      body: JSON.stringify({ instancia: crmFuiEstado.instancia, operadorId: crmFuiOperador.value === '' ? null : Number(crmFuiOperador.value) }),
-    });
-    const d = await res.json();
-    if (!res.ok) throw new Error(d.erro || 'erro');
-    mostrarAviso(d.entregues ? `${d.entregues} lead(s) do Follow Up entregues ao operador` : 'Operador do Follow Up salvo', 'ok');
-    if (typeof carregarCrm === 'function') carregarCrm();
-  } catch (err) { mostrarAviso(`Não consegui alterar: ${err.message}`, 'erro'); }
-  crmCarregarFuiClinicorp();
-});
 crmFuiClinicorp.addEventListener('click', async () => {
   if (!crmFuiEstado) return;
   try {
@@ -10159,7 +10163,7 @@ function preencherVisaoOperador() {
 // chamado no login (mostrarApp) com o que /api/me devolveu
 function iniciarPerfilTopo(dados) {
   meuPerfil = dados.perfil || null;
-  minhaVisao = { instancias: (dados.instancias || []).filter((i) => !String(i).startsWith('ig:')), operadores: dados.operadores || [], euId: dados.euId || 0, instanciaAtiva: dados.instanciaAtiva || null };
+  minhaVisao = { instancias: (dados.instancias || []).filter((i) => !String(i).startsWith('ig:')), operadores: dados.operadores || [], operadoresPorNumero: dados.operadoresPorNumero || {}, euId: dados.euId || 0, instanciaAtiva: dados.instanciaAtiva || null };
   // 1o acesso com 2+ numeros: abre no numero ativo (cada setor ve so o seu)
   if (numeroSalvo() && !minhaVisao.instancias.includes(numeroSalvo())) numeroSalvar(''); // numero guardado de outra conta
   if (minhaVisao.instancias.length > 1 && (numeroSalvo() === null || numeroSalvo() === '')) numeroSalvar(minhaVisao.instancias.includes(minhaVisao.instanciaAtiva) ? minhaVisao.instanciaAtiva : minhaVisao.instancias[0]);
@@ -10179,6 +10183,9 @@ function iniciarPerfilTopo(dados) {
 
 visaoNumeroSel.addEventListener('change', () => {
   numeroSalvar(visaoNumeroSel.value);
+  const opDoNumero = (minhaVisao.operadoresPorNumero || {})[visaoNumeroSel.value];
+  if (opDoNumero !== undefined && opDoNumero !== null && opDoNumero > 0 && [...visaoOperadorSel.options].some((o) => o.value === `op:${opDoNumero}`)) aplicarVisaoOperador(`op:${opDoNumero}`);
+  else if (opDoNumero === 0) aplicarVisaoOperador('');
   for (const sel of [crmFiltroNumero, ctFiltroNumero, dispNumero, cvInstancia]) {
     if (![...sel.options].some((o) => o.value === visaoNumeroSel.value)) continue;
     sel.value = visaoNumeroSel.value;
