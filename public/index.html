@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0a0a0a" />
+  <meta name="theme-color" content="#26282c" />
   <title>Lumia</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=20261110g" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -61,51 +61,90 @@
       <div class="sidebar-nav">
         <button type="button" class="nav-btn active" id="tabBtnPainel" data-tab="painel">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3h8v8H3V3zm10 0h8v5h-8V3zm0 7h8v11h-8V10zM3 13h8v8H3v-8z"/></svg>
-          <span>Painel</span>
+          <span>Início</span>
         </button>
-        <button type="button" class="nav-btn" id="tabBtnAgenda" data-tab="agenda">
-          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zM5 9h14v11H5V9z"/></svg>
-          <span>Agenda</span>
+        <div class="nav-grupo">Atendimento</div>
+        <button type="button" class="nav-btn" id="tabBtnConversas" data-tab="conversas">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2zm3 6v2h10V9H7zm0-3v2h10V6H7zm0 6v2h7v-2H7z"/></svg>
+          <span>Conversas</span>
+          <span class="nav-badge" id="conversasBadge" hidden>0</span>
         </button>
         <button type="button" class="nav-btn" id="tabBtnWhatsapp" data-tab="whatsapp">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.4A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.1-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8 8 0 1 1 12 20z"/></svg>
           <span>WhatsApp</span>
         </button>
-        <button type="button" class="nav-btn" id="tabBtnCrm" data-tab="crm">
-          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3h6v18H3V3zm8 0h6v10h-6V3zm8 0h2v18h-2V3zm-8 12h6v6h-6v-6z"/></svg>
-          <span>CRM</span>
-        </button>
-        <button type="button" class="nav-btn" id="tabBtnAuto" data-tab="auto">
-          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a2 2 0 0 1 2 2v1h2a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3h2V4a2 2 0 0 1 2-2zM8 10a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm8 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm-8 6v1.5h8V16H8z"/></svg>
-          <span>Auto Atendimento</span>
+        <button type="button" class="nav-btn" id="tabBtnAgenda" data-tab="agenda">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zM5 9h14v11H5V9z"/></svg>
+          <span>Agenda</span>
         </button>
         <button type="button" class="nav-btn" id="tabBtnFollowUp" data-tab="followUp">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-8z"/></svg>
           <span>Follow Up</span>
         </button>
+        <button type="button" class="nav-btn" id="tabBtnFollowUpInteligente" data-tab="followUpInteligente">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2zm7 11l.9 2.6L22.5 16.5l-2.6.9L19 20l-.9-2.6-2.6-.9 2.6-.9L19 13zM6 15l.9 2.6 2.6.9-2.6.9L6 22l-.9-2.6L2.5 18.5l2.6-.9L6 15z"/></svg>
+          <span>Follow Up Inteligente</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnFunilFu" data-tab="funilFollowUp">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 4h18l-7 8v6l-4 2v-8L3 4z"/></svg>
+          <span>Funil Follow Up</span>
+        </button>
+        <div class="nav-grupo">Clientes</div>
+        <button type="button" class="nav-btn" id="tabBtnCrm" data-tab="crm">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3h6v18H3V3zm8 0h6v10h-6V3zm8 0h2v18h-2V3zm-8 12h6v6h-6v-6z"/></svg>
+          <span>CRM</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnContatos" data-tab="contatos">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-7 1.7-7 4v3h14v-3c0-2.3-3.7-4-7-4zm8-2a3 3 0 1 0 0-6v6zm1 2.3c1.8.7 4 1.9 4 3.7v3h-4v-3c0-1.4-.5-2.6-1.3-3.6.4 0 .9-.1 1.3-.1z"/></svg>
+          <span>Contatos</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnResultados" data-tab="resultados">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3h2v16h16v2H3V3zm4 10h3v4H7v-4zm5-5h3v9h-3V8zm5-3h3v12h-3V5z"/></svg>
+          <span>Resultados</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnOrigem" data-tab="origem">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/></svg>
+          <span>Origem dos leads</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnChamadas" data-tab="chamadas">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.57 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.25 1L6.6 10.8z"/></svg>
+          <span>Ligações</span>
+        </button>
         <button type="button" class="nav-btn" id="tabBtnAniversariantes" data-tab="aniversariantes">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2c.8 1.2 1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 .7-1.8 1.5-3zM5 11h14a2 2 0 0 1 2 2v2.5c-.9 0-1.5-.5-2-1-.6.7-1.3 1-2 1s-1.4-.3-2-1c-.6.7-1.3 1-2 1s-1.4-.3-2-1c-.6.7-1.3 1-2 1s-1.4-.3-2-1c-.5.5-1.1 1-2 1V13a2 2 0 0 1 2-2zm-2 6.5c1 0 1.7-.4 2.3-1 .6.6 1.3 1 2.2 1s1.6-.4 2.3-1c.6.6 1.3 1 2.2 1s1.6-.4 2.3-1c.6.6 1.3 1 2.2 1s1.3-.4 2.5-1V21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3.5z"/></svg>
           <span>Aniversariantes</span>
         </button>
+        <div class="nav-grupo">Redes sociais</div>
+        <button type="button" class="nav-btn" id="tabBtnInstagram" data-tab="instagram">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM17.3 5.6a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2z"/></svg>
+          <span>Instagram</span>
+        </button>
+        <div class="nav-grupo">Automação</div>
+        <button type="button" class="nav-btn" id="tabBtnAuto" data-tab="auto">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a2 2 0 0 1 2 2v1h2a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3h2V4a2 2 0 0 1 2-2zM8 10a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm8 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm-8 6v1.5h8V16H8z"/></svg>
+          <span>Auto Atendimento</span>
+        </button>
         <button type="button" class="nav-btn" id="tabBtnRelatorios" data-tab="relatorios">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 20V10h4v10H4zm6 0V4h4v16h-4zm6 0v-7h4v7h-4z"/></svg>
-          <span>Relatórios</span>
+          <span>Relatórios automáticos</span>
         </button>
         <button type="button" class="nav-btn" id="tabBtnGeradorRelatorios" data-tab="geradorRelatorios">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 2h9l5 5v15H6V2zm8 1.5V8h4.5L14 3.5zM8 12h8v2H8v-2zm0 4h8v2H8v-2z"/></svg>
           <span>Gerador de Relatórios</span>
         </button>
+        <button type="button" class="nav-btn" id="tabBtnDisparos" data-tab="disparos">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+          <span>Disparos</span>
+        </button>
+        <div class="nav-grupo">Configurações</div>
         <button type="button" class="nav-btn" id="tabBtnIntegracoes" data-tab="integracoes">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M7 2h2v4H7V2zm8 0h2v4h-2V2zM5 8h14a1 1 0 0 1 1 1v3a7 7 0 0 1-6 6.9V21h-4v-2.1A7 7 0 0 1 4 12V9a1 1 0 0 1 1-1z"/></svg>
           <span>Integrações</span>
         </button>
+        <div class="nav-grupo">Administração</div>
         <button type="button" class="nav-btn" id="tabBtnCerebro" data-tab="cerebro" hidden>
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M9.5 2A3.5 3.5 0 0 0 6 5.5v.1A3.5 3.5 0 0 0 3 9a3.5 3.5 0 0 0 1 2.5A3.5 3.5 0 0 0 3 14a3.5 3.5 0 0 0 3 3.5A3.5 3.5 0 0 0 9.5 22c1 0 1.9-.4 2.5-1.1.6.7 1.5 1.1 2.5 1.1a3.5 3.5 0 0 0 3.5-4.5 3.5 3.5 0 0 0 3-3.5 3.5 3.5 0 0 0-1-2.5A3.5 3.5 0 0 0 21 9a3.5 3.5 0 0 0-3-3.4v-.1A3.5 3.5 0 0 0 14.5 2c-1 0-1.9.4-2.5 1.1A3.4 3.4 0 0 0 9.5 2zM11 5.5v13a1.5 1.5 0 1 1-3 0V17H7a1.5 1.5 0 0 1 0-3h1v-2H6.5a1.5 1.5 0 0 1 0-3H8V5.5a1.5 1.5 0 0 1 3 0zm2 0a1.5 1.5 0 0 1 3 0V9h1.5a1.5 1.5 0 0 1 0 3H16v2h1a1.5 1.5 0 0 1 0 3h-1v1.5a1.5 1.5 0 1 1-3 0v-13z"/></svg>
           <span>Cérebro</span>
-        </button>
-        <button type="button" class="nav-btn" id="tabBtnVideo" data-tab="video" hidden>
-          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 5h11a2 2 0 0 1 2 2v2.5l4-2.5v10l-4-2.5V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm3 4v6l5-3-5-3z"/></svg>
-          <span>Editor de Vídeo</span>
         </button>
         <button type="button" class="nav-btn" id="tabBtnClientes" data-tab="clientes" hidden>
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-3.3 0-8 1.7-8 5v2h16v-2c0-3.3-4.7-5-8-5zm8.5-6a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM17 14.2c1.8.9 3 2.4 3 4.3V20h4v-1.5c0-2.6-3.3-4-7-4.3z"/></svg>
@@ -180,8 +219,31 @@
             <label class="saldo-label" for="saldoLimite">Avisar no WhatsApp quando ficar abaixo de (US$)</label>
             <input type="text" id="saldoLimite" inputmode="decimal" placeholder="ex.: 5" autocomplete="off">
             <button type="button" class="saldo-salvar" id="saldoSalvar">Salvar saldo</button>
+            <div class="saldo-extra">
+              <strong>Registrar movimento fora do app</strong>
+              <p class="saldo-aviso" style="margin:2px 0 6px">Recarga, ou gasto da mesma chave em outro lugar (testes, outro app). Entra no saldo e no histórico, sem contar como diferença.</p>
+              <input type="text" id="saldoMovValor" inputmode="decimal" placeholder="valor US$ (ex.: 3,50)" autocomplete="off">
+              <input type="text" id="saldoMovDesc" placeholder="descrição do gasto (ex.: testes locais)" autocomplete="off">
+              <div class="saldo-mov-botoes">
+                <button type="button" class="saldo-salvar" id="saldoRecarga">+ Recarga</button>
+                <button type="button" class="saldo-salvar" id="saldoGastoExterno">− Gasto externo</button>
+              </div>
+              <div class="saldo-uso" id="saldoHistorico"></div>
+            </div>
             <p class="saldo-aviso">É uma estimativa: o app desconta o custo de cada resposta da IA do valor que você informa. A Anthropic não permite consultar o saldo exato — depois de recarregar, informe o novo valor aqui.</p>
             <p class="saldo-msg" id="saldoMsg"></p>
+          </div>
+        </div>
+        <select class="visao-sel" id="visaoNumero" title="Número de WhatsApp que você está vendo (CRM, Conversas, Contatos e Disparos)" hidden></select>
+        <select class="visao-sel" id="visaoOperador" title="Operador que você está acompanhando" hidden></select>
+        <div class="perfil-wrap">
+          <button type="button" class="perfil-btn" id="perfilBtn" title="Meu perfil" hidden>
+            <span class="perfil-avatar" id="perfilAvatar"></span>
+            <span class="perfil-info"><b id="perfilNome"></b><small id="perfilPapel"></small></span>
+          </button>
+          <div class="perfil-menu" id="perfilMenu" hidden>
+            <button type="button" id="perfilEditar">Editar perfil</button>
+            <button type="button" id="perfilSair">Sair</button>
           </div>
         </div>
         <div class="sino-wrap" id="sinoWrap">
@@ -195,6 +257,65 @@
           </div>
         </div>
       </div>
+
+      <div class="ct-modal" id="perfilModal" hidden>
+        <div class="ct-caixa">
+          <div class="ct-caixa-topo">
+            <strong>Meu perfil</strong>
+            <button type="button" class="ct-fechar" data-fechar="perfilModal">✕</button>
+          </div>
+          <div class="perfil-edit-foto">
+            <span class="perfil-avatar perfil-avatar-grande" id="perfilFotoPrev"></span>
+            <div class="perfil-edit-botoes">
+              <label class="crm-btn-secundario perfil-arquivo">Escolher foto<input type="file" id="perfilFotoArq" accept="image/*" hidden /></label>
+              <button type="button" class="crm-btn-secundario" id="perfilFotoRemover">Remover foto</button>
+            </div>
+          </div>
+          <label class="ct-campo">Nome<input type="text" id="perfilNomeInput" maxlength="80" autocomplete="off" /></label>
+          <p class="crm-conversa-erro" id="perfilErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="button" id="perfilSalvar" class="relatorio-config-enviar">Salvar</button></div>
+        </div>
+      </div>
+
+
+    <!-- Lumien: assistente flutuante (coruja) presente em todas as telas, menos no Inicio -->
+    <button type="button" class="lumien-btn" id="lumienBtn" title="Falar com o Lumien" aria-label="Abrir o assistente Lumien" hidden>
+      <svg viewBox="0 0 64 64" width="46" height="46" aria-hidden="true">
+        <path d="M14 14 L22 20 Q32 15 42 20 L50 14 L49 28 Q54 36 50 46 Q44 57 32 57 Q20 57 14 46 Q10 36 15 28 Z" fill="#2a2c31" stroke="#d4af37" stroke-width="2.5" stroke-linejoin="round"/>
+        <circle cx="24" cy="32" r="7.5" fill="#f5f5f2"/><circle cx="40" cy="32" r="7.5" fill="#f5f5f2"/>
+        <circle cx="24.8" cy="32.6" r="3.6" fill="#1b1c1f" class="lumien-olho"/><circle cx="39.2" cy="32.6" r="3.6" fill="#1b1c1f" class="lumien-olho"/>
+        <path d="M29 40 L32 45 L35 40 Z" fill="#d4af37"/>
+        <path d="M22 49 Q32 53 42 49" fill="none" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round" opacity="0.6"/>
+      </svg>
+    </button>
+    <section class="lumien-painel" id="lumienPainel" hidden aria-label="Assistente Lumien">
+      <div class="lumien-topo">
+        <svg viewBox="0 0 64 64" width="30" height="30" aria-hidden="true">
+          <path d="M14 14 L22 20 Q32 15 42 20 L50 14 L49 28 Q54 36 50 46 Q44 57 32 57 Q20 57 14 46 Q10 36 15 28 Z" fill="#2a2c31" stroke="#d4af37" stroke-width="2.5" stroke-linejoin="round"/>
+          <circle cx="24" cy="32" r="7.5" fill="#f5f5f2"/><circle cx="40" cy="32" r="7.5" fill="#f5f5f2"/>
+          <circle cx="24.8" cy="32.6" r="3.6" fill="#1b1c1f"/><circle cx="39.2" cy="32.6" r="3.6" fill="#1b1c1f"/>
+          <path d="M29 40 L32 45 L35 40 Z" fill="#d4af37"/>
+        </svg>
+        <div class="lumien-titulo">
+          <strong>Lumien</strong>
+          <span id="lumienSub">Seu assistente aqui no app</span>
+        </div>
+        <button type="button" class="lumien-icone" id="lumienNova" title="Começar conversa nova">↺</button>
+        <button type="button" class="lumien-icone" id="lumienFechar" title="Fechar">✕</button>
+      </div>
+      <div class="lumien-log" id="lumienLog" aria-live="polite"></div>
+      <div class="lumien-sugestoes" id="lumienSugestoes"></div>
+      <form class="lumien-form" id="lumienForm" autocomplete="off">
+        <textarea id="lumienTexto" rows="1" placeholder="Peça algo: &quot;quem está esperando resposta?&quot;"></textarea>
+        <button type="submit" id="lumienEnviar" aria-label="Enviar">➤</button>
+      </form>
+    </section>
+
+    <header class="page-header" id="pageHeader">
+      <div class="page-header-etiqueta" id="pageHeaderEtiqueta">Início</div>
+      <h1 class="page-header-titulo" id="pageHeaderTitulo">Painel da Lumia</h1>
+      <p class="page-header-sub" id="pageHeaderSub">Converse com a Lumia e acompanhe o sistema em tempo real.</p>
+    </header>
 
     <div class="window-body" id="tabPainel">
       <aside class="sidebar">
@@ -436,6 +557,349 @@
       </div>
     </div>
 
+    <div class="window-body tab-conversas" id="tabConversas" hidden>
+      <aside class="cv-lista-col">
+        <div class="cv-lista-topo">
+          <input type="search" id="cvBusca" placeholder="Buscar por nome, número ou mensagem" autocomplete="off" />
+          <div class="cv-filtros" id="cvFiltros">
+            <button type="button" class="cv-filtro ativo" data-filtro="todas">Todas</button>
+            <button type="button" class="cv-filtro" data-filtro="naoLidas">Não lidas</button>
+            <button type="button" class="cv-filtro" data-filtro="ia">IA atendendo</button>
+            <button type="button" class="cv-filtro" data-filtro="humano">IA pausada</button>
+          </div>
+          <select id="cvInstancia" title="Número do WhatsApp"><option value="">Todos os números</option></select>
+        </div>
+        <div class="cv-lista" id="cvLista"><p class="agenda-vazia">Carregando...</p></div>
+      </aside>
+
+      <section class="cv-chat" id="cvChat">
+        <div class="cv-vazio" id="cvVazio">
+          <div class="cv-vazio-icone">💬</div>
+          <strong>Escolha uma conversa</strong>
+          <p>As conversas do WhatsApp aparecem aqui em tempo real. Tudo que você mandar por aqui sai pelo mesmo número, igual no celular.</p>
+        </div>
+        <div class="cv-chat-inner" id="cvChatInner" hidden>
+          <header class="cv-chat-topo">
+            <button type="button" class="cv-voltar" id="cvVoltar" aria-label="Voltar pra lista">←</button>
+            <div class="cv-avatar" id="cvAvatar">?</div>
+            <div class="cv-chat-info">
+              <strong id="cvNome">--</strong>
+              <span id="cvSub">--</span>
+            </div>
+            <div class="cv-chat-acoes">
+              <button type="button" class="cv-ia-btn cv-notas-btn" id="cvNotasBtn" title="Anotações sobre este paciente (o que está tratando, o que ficou combinado)">📝 Anotações</button>
+              <button type="button" class="cv-ia-btn" id="cvFunilFuBtn" title="Coloca este lead no Dia 0 do Funil Follow Up">+ Funil Follow Up</button>
+              <select id="cvEtapa" title="Etapa do funil"></select>
+              <button type="button" class="cv-ia-btn" id="cvIaBtn" title="Liga ou pausa a IA só nesta conversa">IA atendendo</button>
+            </div>
+          </header>
+          <div class="notas-painel" id="cvNotas" hidden></div>
+          <div class="crm-whatsapp-fundo cv-log" id="cvLog"></div>
+          <div class="cv-anexo-preview" id="cvAnexoPreview" hidden>
+            <span id="cvAnexoNome"></span>
+            <input type="text" id="cvAnexoLegenda" placeholder="Legenda (opcional)" maxlength="1000" autocomplete="off" />
+            <button type="button" id="cvAnexoCancelar">Cancelar</button>
+            <button type="button" id="cvAnexoEnviar" class="cv-enviar-arquivo">Enviar</button>
+          </div>
+          <form class="cv-form" id="cvForm">
+            <button type="button" class="cv-icone-btn" id="cvAnexarBtn" title="Anexar foto, vídeo ou documento">📎</button>
+            <input type="file" id="cvArquivo" hidden accept="image/*,video/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" />
+            <textarea id="cvTexto" rows="1" placeholder="Digite uma mensagem" maxlength="4000"></textarea>
+            <button type="button" class="cv-icone-btn" id="cvGravarBtn" title="Gravar áudio">🎤</button>
+            <button type="submit" class="cv-enviar" id="cvEnviarBtn" title="Enviar">➤</button>
+          </form>
+          <p class="agenda-erro cv-erro" id="cvErro" hidden></p>
+        </div>
+      </section>
+    </div>
+
+    <div class="window-body tab-instagram" id="tabInstagram" hidden>
+      <section class="rs-card ig-conta" id="igConta">
+        <p class="rs-sub">Carregando...</p>
+      </section>
+
+      <div id="igConectadoBloco" hidden>
+        <div class="ig-abas" role="tablist">
+          <button type="button" class="ativo" data-ig-sec="publicar">Publicar</button>
+          <button type="button" data-ig-sec="comentarios">Respostas a comentários</button>
+          <button type="button" data-ig-sec="direct">Direct</button>
+        </div>
+
+        <section class="rs-card" data-ig-painel="publicar">
+          <h3>Nova publicação</h3>
+          <div class="ig-tipos" id="igTipos" role="radiogroup" aria-label="Tipo">
+            <button type="button" data-tipo="feed" class="ativo">Foto no feed</button>
+            <button type="button" data-tipo="carrossel">Carrossel</button>
+            <button type="button" data-tipo="reels">Reels</button>
+            <button type="button" data-tipo="story">Story</button>
+          </div>
+          <p class="rs-sub" id="igTipoDica"></p>
+          <label class="ct-arquivo">
+            <input type="file" id="igArquivos" accept="image/*,video/mp4,video/quicktime" />
+            <span id="igArquivosTexto">Escolher foto</span>
+          </label>
+          <div class="ig-previas" id="igPrevias"></div>
+          <label class="ct-campo" id="igLegendaCampo">Legenda <small id="igLegendaConta">0 / 2200</small>
+            <textarea id="igLegenda" rows="4" maxlength="2200" placeholder="Escreva a legenda, com hashtags se quiser"></textarea>
+          </label>
+          <div class="ig-quando">
+            <label class="ig-radio"><input type="radio" name="igQuando" value="agora" checked /> Publicar agora</label>
+            <label class="ig-radio"><input type="radio" name="igQuando" value="agendar" /> Agendar</label>
+            <input type="datetime-local" id="igAgendarPara" hidden />
+          </div>
+          <p class="crm-conversa-erro" id="igPostErro" hidden></p>
+          <div class="ct-rodape">
+            <span class="ct-espaco"></span>
+            <button type="button" id="igPublicarBtn" class="relatorio-config-enviar">Publicar agora</button>
+          </div>
+        </section>
+
+        <section class="rs-card" data-ig-painel="publicar">
+          <div class="rs-card-topo">
+            <h3>Agendadas e recentes</h3>
+            <button type="button" id="igPostsAtualizar" class="ct-link">Atualizar</button>
+          </div>
+          <div class="ig-lista" id="igPosts"></div>
+        </section>
+
+        <section class="rs-card" data-ig-painel="comentarios" hidden>
+          <h3 id="igRegraTitulo">Nova resposta automática</h3>
+          <p class="rs-sub">Quando alguém comentar uma das palavras-chave, a Lumia responde o comentário e/ou manda uma mensagem no direct da pessoa. Use {nome} para citar o @ de quem comentou.</p>
+          <label class="ct-campo">Palavras-chave <small>(separe por vírgula)</small><input type="text" id="igRegraPalavras" placeholder="ex: preço, valor, quero" /></label>
+          <label class="ct-campo">Vale para
+            <select id="igRegraPost"><option value="">Todas as publicações</option></select>
+          </label>
+          <label class="ct-campo">Resposta no comentário <small>(pública, opcional)</small><input type="text" id="igRegraPublica" maxlength="300" placeholder="ex: {nome} te mandei os detalhes no direct!" /></label>
+          <label class="ct-campo">Mensagem no direct <small>(opcional)</small><textarea id="igRegraDm" rows="3" maxlength="1000" placeholder="ex: Oi! Vi seu comentário. O valor da avaliação é..."></textarea></label>
+          <p class="crm-conversa-erro" id="igRegraErro" hidden></p>
+          <div class="ct-rodape">
+            <button type="button" id="igRegraCancelar" class="crm-btn-secundario" hidden>Cancelar edição</button>
+            <span class="ct-espaco"></span>
+            <button type="button" id="igRegraSalvar" class="relatorio-config-enviar">Salvar resposta</button>
+          </div>
+        </section>
+        <section class="rs-card" data-ig-painel="comentarios" hidden>
+          <h3>Respostas ativas</h3>
+          <div class="ig-lista" id="igRegras"></div>
+        </section>
+
+        <section class="rs-card" data-ig-painel="direct" hidden>
+          <h3>Atendimento no direct</h3>
+          <p class="rs-sub">As mensagens do direct aparecem na aba Conversas, junto com o WhatsApp, e você responde por lá. Ligando a opção abaixo, a mesma IA do Auto Atendimento (com o mesmo prompt e horário) responde sozinha.</p>
+          <div class="auto-toggle-row">
+            <label class="auto-switch">
+              <input type="checkbox" id="igDmIa" />
+              <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+            </label>
+            <span id="igDmIaLabel">IA desligada no direct</span>
+          </div>
+          <p class="wa-hint">O Instagram só permite responder até 24 horas depois da última mensagem da pessoa. Por isso o Follow Up automático não vale para o direct.</p>
+        </section>
+      </div>
+    </div>
+
+    <div class="window-body tab-resultados" id="tabResultados" hidden>
+      <div class="rs-filtros">
+        <div class="rs-periodos" id="rsPeriodos" role="group" aria-label="Período">
+          <button type="button" data-dias="1">Hoje</button>
+          <button type="button" data-dias="7">7 dias</button>
+          <button type="button" data-dias="30" class="ativo">30 dias</button>
+          <button type="button" data-dias="90">90 dias</button>
+          <button type="button" data-dias="custom">Personalizado</button>
+        </div>
+        <div class="rs-custom" id="rsCustom" hidden>
+          <input type="date" id="rsDe" aria-label="De" />
+          <span>até</span>
+          <input type="date" id="rsAte" aria-label="Até" />
+          <button type="button" id="rsAplicar" class="crm-btn-secundario">Aplicar</button>
+        </div>
+        <select id="rsInstancia" hidden aria-label="Número de WhatsApp"></select>
+      </div>
+      <p class="crm-conversa-erro" id="rsErro" hidden></p>
+      <div class="rs-resumo" id="rsResumo">Carregando...</div>
+      <div class="rs-kpis" id="rsKpis"></div>
+      <section class="rs-card">
+        <div class="rs-card-topo">
+          <div>
+            <h3>Mensagens recebidas por dia</h3>
+            <p class="rs-sub">Passe o mouse em cada dia para ver enviadas e novos contatos</p>
+          </div>
+          <button type="button" id="rsTabelaBtn" class="ct-link">Ver em tabela</button>
+        </div>
+        <div class="rs-grafico" id="rsGraficoDias"></div>
+        <div class="ct-tabela-wrap ct-previa rs-tabela" id="rsTabelaDias" hidden></div>
+      </section>
+      <div class="rs-duas">
+        <section class="rs-card">
+          <h3>Horários de pico</h3>
+          <p class="rs-sub">Mensagens recebidas por hora do dia</p>
+          <div class="rs-grafico" id="rsGraficoHoras"></div>
+        </section>
+        <section class="rs-card">
+          <h3>Quem respondeu</h3>
+          <p class="rs-sub">Mensagens enviadas no período</p>
+          <div class="rs-barras" id="rsAutores"></div>
+        </section>
+      </div>
+      <section class="rs-card">
+        <h3>Funil dos contatos que chegaram no período</h3>
+        <p class="rs-sub">Etapa em que cada um está hoje</p>
+        <div class="rs-barras" id="rsFunil"></div>
+      </section>
+      <div class="rs-tooltip" id="rsTooltip" hidden></div>
+    </div>
+
+    <div class="window-body tab-contatos" id="tabContatos" hidden>
+      <div class="ct-barra">
+        <input type="search" id="ctBusca" placeholder="Buscar por nome, telefone, e-mail ou etiqueta" autocomplete="off" />
+        <select id="ctFiltroNumero" title="Cada número do WhatsApp tem a sua própria base" hidden><option value="">Todos os números</option></select>
+        <select id="ctEtapa"><option value="">Todas as etapas</option></select>
+        <select id="ctEtiqueta"><option value="">Todas as etiquetas</option></select>
+        <select id="ctOrigem">
+          <option value="">Todas as origens</option>
+          <option value="whatsapp">Veio do WhatsApp</option>
+          <option value="importado">Importado</option>
+          <option value="manual">Cadastrado</option>
+        </select>
+        <div class="ct-acoes">
+          <button type="button" id="ctNovoBtn" class="relatorio-config-enviar">+ Novo contato</button>
+          <button type="button" id="ctImportarBtn" class="crm-btn-secundario">Importar</button>
+          <button type="button" id="ctExportarXlsxBtn" class="crm-btn-secundario">Exportar Excel</button>
+          <button type="button" id="ctExportarCsvBtn" class="crm-btn-secundario">Exportar CSV</button>
+        </div>
+      </div>
+      <p class="ct-resumo" id="ctResumo">Carregando...</p>
+      <div class="ct-tabela-wrap">
+        <table class="ct-tabela">
+          <thead>
+            <tr><th>Nome</th><th>WhatsApp</th><th>E-mail</th><th>Etiquetas</th><th>Etapa</th><th>Última conversa</th><th>Origem</th></tr>
+          </thead>
+          <tbody id="ctCorpo"></tbody>
+        </table>
+      </div>
+      <button type="button" id="ctMaisBtn" class="crm-btn-secundario ct-mais" hidden>Mostrar mais</button>
+
+      <div class="ct-modal" id="ctModal" hidden>
+        <form class="ct-caixa" id="ctForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong id="ctModalTitulo">Novo contato</strong>
+            <button type="button" class="ct-fechar" data-fechar="ctModal">✕</button>
+          </div>
+          <label class="ct-campo">Nome<input type="text" id="ctNome" maxlength="120" /></label>
+          <div id="ctCampoNovo">
+            <label class="ct-campo">Telefone (WhatsApp)<input type="tel" id="ctNumero" placeholder="82 99999-9999" /></label>
+            <label class="ct-campo" id="ctInstanciaCadLabel">Atender pelo número<select id="ctInstanciaCad"></select></label>
+          </div>
+          <p class="ct-info" id="ctInfoNumero" hidden></p>
+          <label class="ct-campo">E-mail<input type="email" id="ctEmail" maxlength="160" /></label>
+          <label class="ct-campo">Etiquetas <small>(separe por vírgula)</small><input type="text" id="ctEtiquetas" placeholder="ex: implante, indicação" /></label>
+          <label class="ct-campo">Observações<textarea id="ctObs" rows="3" maxlength="2000"></textarea></label>
+          <div class="notas-painel notas-fixo" id="ctNotas" hidden></div>
+          <p class="crm-conversa-erro" id="ctModalErro" hidden></p>
+          <div class="ct-rodape">
+            <button type="button" id="ctApagarBtn" class="crm-btn-perigo" hidden>Apagar</button>
+            <span class="ct-espaco"></span>
+            <button type="button" id="ctConversarBtn" class="crm-btn-secundario" hidden>Abrir conversa</button>
+            <button type="submit" id="ctSalvarBtn" class="relatorio-config-enviar">Salvar</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="ctImpModal" hidden>
+        <div class="ct-caixa ct-caixa-larga">
+          <div class="ct-caixa-topo">
+            <strong>Importar contatos</strong>
+            <button type="button" class="ct-fechar" data-fechar="ctImpModal">✕</button>
+          </div>
+          <div id="ctImpPasso1">
+            <p class="ct-info">Envie uma planilha Excel (.xlsx) ou CSV com uma coluna de telefone. Nome, e-mail, etiquetas, observações e etapa são opcionais. Contatos que já existem são reconhecidos pelo telefone, com ou sem o 9.</p>
+            <label class="ct-arquivo">
+              <input type="file" id="ctImpArquivo" accept=".csv,.xlsx,.xls,text/csv" />
+              <span>Escolher planilha</span>
+            </label>
+            <button type="button" id="ctModeloBtn" class="ct-link">Baixar planilha modelo</button>
+          </div>
+          <div id="ctImpPasso2" hidden>
+            <p class="ct-info" id="ctImpInfo"></p>
+            <div class="ct-mapa" id="ctImpMapa"></div>
+            <div class="ct-imp-opcoes">
+              <label class="ct-campo">Atender pelo número<select id="ctImpInstancia"></select></label>
+              <label class="ct-campo">Etiqueta para todos <small>(opcional)</small><input type="text" id="ctImpEtiquetaExtra" placeholder="ex: lista evento outubro" /></label>
+              <label class="ct-campo">Colocar no funil do CRM, na coluna
+                <select id="ctImpEtapa"><option value="">Nenhuma (só na aba Contatos)</option></select>
+              </label>
+              <label class="ct-campo">Se o contato já existir
+                <select id="ctImpModo">
+                  <option value="pular">Manter como está</option>
+                  <option value="atualizar">Completar com os dados da planilha (e mover pra coluna escolhida)</option>
+                </select>
+              </label>
+              <label class="ct-campo" id="ctImpEspelharLabel" hidden>
+                <span><input type="checkbox" id="ctImpEspelhar" /> Espelhar o Follow Up do Clinicorp</span>
+                <small>A coluna Follow Up fica igual a esta lista: entram os novos e saem os que vieram de uma lista anterior e não estão mais nesta. O que a equipe colocou na coluna por conta própria nunca sai.</small>
+              </label>
+            </div>
+            <p class="ct-imp-resumo" id="ctImpResumo"></p>
+            <div class="ct-tabela-wrap ct-previa"><table class="ct-tabela" id="ctImpPrevia"></table></div>
+          </div>
+          <p class="ct-imp-resultado" id="ctImpResultado" hidden></p>
+          <p class="crm-conversa-erro" id="ctImpErro" hidden></p>
+          <div class="ct-rodape">
+            <button type="button" id="ctImpVoltar" class="crm-btn-secundario" hidden>Trocar planilha</button>
+            <span class="ct-espaco"></span>
+            <button type="button" id="ctImpConfirmar" class="relatorio-config-enviar" hidden>Importar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="window-body tab-crm" id="tabFunilFu" hidden>
+      <div class="crm-board-wrap">
+        <div class="crm-board-header">
+          <span>Funil Follow Up: cada dia tem uma tarefa. O lead só avança na data programada depois de você marcar "Tarefa executada".</span>
+          <div class="crm-board-nav">
+            <select id="ffuFiltroNumero" title="Cada número do WhatsApp tem o seu próprio funil" hidden><option value="">Todos os números</option></select>
+            <button type="button" id="ffuTarefasBtn" title="Edite o texto da tarefa de cada dia">Tarefas dos dias</button>
+            <button type="button" id="ffuNovo">+ Adicionar lead</button>
+            <button type="button" id="ffuRefresh">Atualizar</button>
+          </div>
+        </div>
+        <div class="crm-board" id="ffuBoard"><p class="agenda-vazia">Carregando...</p></div>
+      </div>
+
+      <div class="ct-modal" id="ffuModal" hidden>
+        <form class="ct-caixa" id="ffuForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong id="ffuModalTitulo">Adicionar lead ao Dia 0</strong>
+            <button type="button" class="ct-fechar" data-fechar="ffuModal">✕</button>
+          </div>
+          <div id="ffuCamposLead">
+            <label class="ct-campo">Buscar nos seus contatos (opcional)<input type="text" id="ffuBuscaContato" list="ffuContatosLista" placeholder="Digite o nome ou número" /></label>
+            <datalist id="ffuContatosLista"></datalist>
+            <label class="ct-campo">Nome<input type="text" id="ffuNome" maxlength="120" /></label>
+            <label class="ct-campo">Telefone (WhatsApp)<input type="tel" id="ffuNumero" placeholder="82 99999-9999" /></label>
+            <label class="ct-campo" id="ffuInstanciaLabel">Número da clínica<select id="ffuInstancia"></select></label>
+          </div>
+          <div class="ffu-agenda-titulo">Alerta de retorno: quando ele passa para cada dia</div>
+          <div id="ffuAgendaCampos" class="ffu-agenda-campos"></div>
+          <p class="crm-conversa-erro" id="ffuModalErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="ffuSalvarBtn" class="relatorio-config-enviar">Salvar</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="ffuTarefasModal" hidden>
+        <form class="ct-caixa" id="ffuTarefasForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Tarefa de cada dia</strong>
+            <button type="button" class="ct-fechar" data-fechar="ffuTarefasModal">✕</button>
+          </div>
+          <div id="ffuTarefasCampos"></div>
+          <p class="crm-conversa-erro" id="ffuTarefasErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="ffuTarefasSalvar" class="relatorio-config-enviar">Salvar</button></div>
+        </form>
+      </div>
+    </div>
+
     <div class="window-body tab-crm" id="tabCrm" hidden>
       <div class="crm-board-wrap">
         <div class="crm-board-header">
@@ -443,6 +907,11 @@
           <div class="crm-board-nav">
             <button type="button" id="crmScrollEsq" title="Rolar pra esquerda">‹</button>
             <button type="button" id="crmScrollDir" title="Rolar pra direita">›</button>
+            <select id="crmFiltroNumero" title="Cada número do WhatsApp tem o seu próprio funil" hidden><option value="">Todos os números</option></select>
+            <button type="button" id="crmEspelharBtn" title="Sobe a lista da coluna Follow Up do CRC do Clinicorp e deixa a coluna Follow Up daqui igual a ela">Espelhar Follow Up do Clinicorp</button>
+            <button type="button" id="crmFuiClinicorp" title="Puxa sozinho pro Follow Up do CRM os pacientes que vão pra coluna Follow Up do Clinicorp (por número)" hidden>Follow Up Inteligente: --</button>
+            <select id="crmFiltroOperador" title="Filtrar por operador"><option value="">Todos os operadores</option></select>
+            <button type="button" id="crmDistribuicaoBtn">Distribuição</button>
             <button type="button" id="crmVerOcultas">Ocultas</button>
             <button type="button" id="crmRefresh">Atualizar</button>
           </div>
@@ -461,13 +930,19 @@
             <p class="crm-conversa-sub" id="crmConversaNumero">--</p>
           </div>
           <div class="crm-conversa-acoes">
+            <select id="crmConversaEtapa" class="crm-btn-secundario" title="Mover este lead para outra etapa do funil"></select>
+            <select id="crmConversaOperador" class="crm-btn-secundario" title="Quem está atendendo este lead"><option value="">Sem operador</option></select>
+            <button type="button" id="crmConversaAssumir" class="crm-btn-secundario">Assumir</button>
             <button type="button" id="crmConversaRetorno" class="crm-btn-secundario">Alerta de retorno</button>
+            <button type="button" id="crmConversaFunilFu" class="crm-btn-secundario" title="Coloca este lead no Dia 0 do Funil Follow Up">+ Funil Follow Up</button>
+            <button type="button" id="crmConversaNotasBtn" class="crm-btn-secundario" title="Anotações sobre este paciente">📝 Anotações</button>
             <button type="button" id="crmConversaPausar" class="crm-btn-secundario">Pausar auto-atendimento</button>
             <button type="button" id="crmConversaOcultar" class="crm-btn-secundario">Ocultar conversa</button>
             <button type="button" id="crmConversaApagar" class="crm-btn-perigo">Apagar conversa</button>
             <button type="button" id="crmConversaFechar">✕</button>
           </div>
         </div>
+        <div class="notas-painel" id="crmNotas" hidden></div>
         <div class="crm-retorno-banner" id="crmRetornoBanner" hidden></div>
         <div class="crm-retorno-painel" id="crmRetornoPainel" hidden>
           <label class="auto-label">Retomar essa conversa em:</label>
@@ -487,6 +962,30 @@
           <button type="submit">Enviar</button>
         </form>
         <p class="crm-conversa-erro" id="crmConversaErro" hidden></p>
+      </div>
+
+      <div class="crm-ocultas-modal" id="crmDistribuicaoModal" hidden>
+        <div class="crm-ocultas-caixa">
+          <div class="crm-ocultas-header">
+            <strong>Distribuição de leads entre operadores</strong>
+            <button type="button" id="crmDistribuicaoFechar">✕</button>
+          </div>
+          <p class="wa-hint">Quando um lead NOVO chega, ele é entregue sozinho a um operador, em rodízio entre os escolhidos. Você também pode mandar leads de uma campanha sempre pro mesmo operador. Todo mundo vê quem está atendendo cada lead.</p>
+          <div class="auto-toggle-row">
+            <label class="auto-switch">
+              <input type="checkbox" id="crmDistAtivo" />
+              <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+            </label>
+            <span id="crmDistAtivoLabel">Desativada</span>
+          </div>
+          <label class="auto-label">Operadores que recebem leads (rodízio)</label>
+          <div id="crmDistOperadores" class="fui-etapas"></div>
+          <label class="auto-label">Regras por campanha (opcional)</label>
+          <div id="crmDistRegras"></div>
+          <button type="button" id="crmDistAddRegra" class="crm-btn-secundario">+ Regra de campanha</button>
+          <p class="agenda-erro" id="crmDistErro" hidden></p>
+          <button type="button" id="crmDistSalvar" class="relatorio-config-enviar">Salvar distribuição</button>
+        </div>
       </div>
 
       <div class="crm-ocultas-modal" id="crmOcultasModal" hidden>
@@ -711,6 +1210,141 @@
       </div>
     </div>
 
+    <div class="window-body tab-auto" id="tabFollowUpInteligente" hidden>
+      <div class="auto-coluna-esq">
+        <div class="auto-aviso">
+          Crie follow-ups por etapa do funil: escolha em quais etapas do CRM ele vale, quantas
+          mensagens serao mandadas, em quais dias (contados a partir de quando o lead entrou na
+          etapa) e como a IA deve escrever. Se o lead responder, o envio para na hora e quem
+          conversa com ele e o Auto Atendimento normal. Leads em "Contatos pessoais" e "Follow Up"
+          nunca recebem esses envios.
+        </div>
+
+        <div class="auto-toggle-row">
+          <label class="auto-switch">
+            <input type="checkbox" id="fuiAtivo" />
+            <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+          </label>
+          <span id="fuiAtivoLabel">Desativado</span>
+        </div>
+
+        <label class="auto-label">Horario de envio</label>
+        <p class="agenda-vazia" style="margin: 0 0 4px;">Fora desse horario nenhuma mensagem e enviada - ela sai assim que o horario abrir.</p>
+        <div class="auto-upload-row">
+          <div>
+            <label class="auto-label">Comeca as</label>
+            <input type="time" id="fuiHoraInicio" />
+          </div>
+          <div>
+            <label class="auto-label">Termina as</label>
+            <input type="time" id="fuiHoraFim" />
+          </div>
+        </div>
+
+        <label class="auto-label">Script geral (vale pra todos os follow-ups, opcional)</label>
+        <textarea id="fuiPromptGeral" placeholder="Ex: Voce e a recepcionista virtual da Clinica X. Seja cordial e nada insistente."></textarea>
+
+        <button type="button" id="fuiSalvar">Salvar Configurações</button>
+        <p class="agenda-erro" id="fuiErro" hidden></p>
+      </div>
+
+      <div class="auto-coluna-dir">
+        <div class="fui-topo">
+          <label class="auto-label">Seus follow-ups</label>
+          <button type="button" id="fuiCriar">+ Criar</button>
+        </div>
+        <div id="fuiLista">
+          <p class="agenda-vazia">Carregando...</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="window-body tab-auto" id="tabOrigem" hidden>
+      <div class="auto-coluna-esq">
+        <div class="auto-aviso">
+          Descubra de qual campanha cada lead veio. Dois jeitos, que funcionam juntos:
+          (1) <strong>Automático</strong>: se o lead clicou num anúncio de "clique pro WhatsApp" do Meta Ads,
+          a Lumia reconhece o anúncio e busca o nome da campanha sozinha (precisa da conta de anúncios conectada em Integrações).
+          (2) <strong>Texto da mensagem</strong>: no anúncio, configure a "mensagem pré-preenchida" (ex: "Vim pelo anúncio do implante")
+          e cadastre abaixo o texto e o nome da campanha - quando o lead mandar uma mensagem que contenha esse texto, ele é marcado com essa campanha.
+          Só vale pra leads <strong>novos</strong> a partir de agora.
+        </div>
+        <label class="auto-label">Regras por texto da 1ª mensagem</label>
+        <div id="origemRegras"></div>
+        <button type="button" id="origemAddRegra" class="crm-btn-secundario">+ Adicionar regra</button>
+        <p class="agenda-erro" id="origemErro" hidden></p>
+        <button type="button" id="origemSalvar">Salvar regras</button>
+      </div>
+      <div class="auto-coluna-dir">
+        <div class="fui-topo">
+          <label class="auto-label">Leads por campanha</label>
+          <div class="auto-upload-row">
+            <input type="date" id="origemDe" />
+            <input type="date" id="origemAte" />
+            <button type="button" id="origemAtualizar">Atualizar</button>
+          </div>
+        </div>
+        <div id="origemTabela"></div>
+      </div>
+    </div>
+
+    <div class="window-body tab-auto" id="tabChamadas" hidden>
+      <div class="auto-coluna-esq">
+        <div class="auto-aviso">
+          <strong>Como funciona:</strong> o WhatsApp não permite que um app faça a ligação por você - o que a Lumia faz é
+          <strong>monitorar</strong> as ligações do número conectado (recebidas, feitas pelo celular, atendidas, perdidas),
+          com horário e duração. Ligações feitas por fora (telefone comum, outro celular) você registra aqui na mão pra entrarem no mesmo relatório.
+        </div>
+        <button type="button" id="chamadasAtivar">Ativar monitoramento nos números conectados</button>
+        <p class="agenda-vazia" id="chamadasAtivarMsg"></p>
+
+        <label class="auto-label">Registrar ligação manual</label>
+        <input type="text" id="chamadaNumero" placeholder="Telefone com DDD (ex: 82 99999-9999)" autocomplete="off" />
+        <input type="text" id="chamadaNome" placeholder="Nome (opcional)" autocomplete="off" />
+        <div class="auto-upload-row">
+          <select id="chamadaDirecao"><option value="feita">Feita</option><option value="recebida">Recebida</option></select>
+          <select id="chamadaStatus"><option value="atendida">Atendida</option><option value="perdida">Não atendida</option></select>
+        </div>
+        <div class="auto-upload-row">
+          <input type="datetime-local" id="chamadaQuando" />
+          <input type="number" id="chamadaDuracao" min="0" placeholder="duração (min)" />
+        </div>
+        <input type="text" id="chamadaObs" placeholder="Observação (opcional)" autocomplete="off" />
+        <p class="agenda-erro" id="chamadaErro" hidden></p>
+        <button type="button" id="chamadaSalvar">Registrar ligação</button>
+      </div>
+      <div class="auto-coluna-dir">
+        <div class="fui-topo">
+          <label class="auto-label">Ligações</label>
+          <div class="auto-upload-row">
+            <input type="date" id="chamadasDe" />
+            <input type="date" id="chamadasAte" />
+            <button type="button" id="chamadasAtualizar">Atualizar</button>
+          </div>
+        </div>
+        <div id="chamadasResumo" class="chamadas-resumo"></div>
+        <div id="chamadasHoras" class="chamadas-horas"></div>
+        <div id="chamadasLista"></div>
+      </div>
+    </div>
+
+    <div class="window-body tab-auto" id="tabDisparos" hidden>
+      <div class="auto-coluna-esq">
+        <div class="auto-aviso">
+          <strong>Atenção ao risco:</strong> enviar mensagem em massa é o que mais leva o WhatsApp a restringir um número.
+          A Lumia envia devagar (intervalo aleatório), só no horário que você definir, com limite por dia, para quem pediu "SAIR"
+          e para a campanha sozinha se der muita falha seguida. Use só com quem já te conhece ou autorizou contato,
+          e comece com poucos envios por dia.
+        </div>
+        <select id="dispNumero" title="Cada número do WhatsApp tem as suas próprias campanhas" hidden><option value="">Todos os números</option></select>
+        <div class="disp-botoes"><button type="button" id="dispNova">+ Nova campanha</button><button type="button" id="dispPainel" class="crm-btn-secundario">📊 Painel geral</button></div>
+        <div id="dispLista"><p class="agenda-vazia">Carregando...</p></div>
+      </div>
+      <div class="auto-coluna-dir" id="dispDetalhe">
+        <p class="agenda-vazia">Escolha uma campanha ao lado ou crie uma nova.</p>
+      </div>
+    </div>
+
     <div class="window-body tab-auto" id="tabAniversariantes" hidden>
       <div class="auto-coluna-esq">
         <div class="auto-aviso">
@@ -856,9 +1490,11 @@
         </div>
 
         <label class="auto-label">Tema visual</label>
-        <div class="auto-upload-row">
-          <select id="grTemaSelect"><option value="">Carregando...</option></select>
-          <button type="button" id="grNovoTemaBtn">+ Novo tema</button>
+        <div class="cliente-form">
+          <div class="auto-upload-row">
+            <select id="grTemaSelect"><option value="">Carregando...</option></select>
+            <button type="button" id="grNovoTemaBtn">+ Novo tema</button>
+          </div>
         </div>
 
         <div class="cliente-form" id="grNovoTemaForm" hidden>
@@ -878,13 +1514,17 @@
           <button type="button" id="grSalvarTemaBtn">Salvar tema</button>
         </div>
 
-        <label class="auto-label">Nome do cliente (opcional)</label>
-        <input type="text" id="grClienteNome" placeholder="Preenche automatico se ficar em branco" class="cliente-form" />
+        <div class="cliente-form">
+          <label class="auto-label">Nome do cliente (opcional)</label>
+          <input type="text" id="grClienteNome" placeholder="Preenche automático se ficar em branco" />
 
-        <label class="auto-label">Instrucoes pra IA (opcional)</label>
-        <textarea id="grInstrucoes" class="cliente-form" rows="3" placeholder="Ex: foque na campanha de implantes, cliente esta pedindo mais leads"></textarea>
+          <label class="auto-label" for="grInstrucoes">O que você quer no relatório? (opcional)</label>
+          <textarea id="grInstrucoes" class="gr-pedido-campo" rows="6" maxlength="4000"
+            placeholder="Escreva do seu jeito. Exemplos:&#10;• foque na campanha de implantes, o cliente quer mais leads&#10;• tire o CPM e a frequência, deixe só investimento, leads e custo por lead&#10;• mude o título para &quot;Resultados de Março&quot; e coloque 5 sugestões&#10;• adicione uma seção sobre os criativos e use um tom mais simples"></textarea>
+          <div class="gr-pedido-dica"><span id="grInstrucoesContador">0 / 4000</span> · a IA aplica pedidos de texto e de estrutura (métricas, títulos, seções, sugestões, cores). Os números sempre vêm da fonte real.</div>
 
-        <button type="button" id="grGerarBtn">Gerar Relatorio</button>
+          <button type="button" id="grGerarBtn">Gerar Relatório</button>
+        </div>
         <p class="agenda-erro" id="grErro" hidden></p>
       </div>
 
@@ -909,6 +1549,7 @@
         </div>
 
         <div id="grPreviewWrap" hidden>
+          <div id="grPedidoInfo" class="gr-pedido-info" hidden></div>
           <label class="auto-label">Pre-visualizacao</label>
           <iframe id="grPreviewIframe" style="width:100%;height:480px;border:1px solid #333;border-radius:8px;background:#fff;"></iframe>
           <div class="auto-upload-row" style="margin-top:8px;">
@@ -916,6 +1557,15 @@
             <button type="button" id="grBaixarJpgBtn">Baixar Imagem (JPG)</button>
           </div>
           <p class="agenda-erro" id="grBaixarErro" hidden></p>
+
+          <div class="cliente-form gr-ajuste">
+            <label class="auto-label" for="grAjusteTexto">Pedir ajuste neste relatório</label>
+            <textarea id="grAjusteTexto" class="gr-pedido-campo" rows="4" maxlength="4000"
+              placeholder="Ex: tira o CPM, coloca o custo por lead em destaque, deixa a análise mais curta, adiciona uma nota sobre o feriado..."></textarea>
+            <div class="gr-pedido-dica">Usa os mesmos números (não busca de novo) e muda só o que você pedir · Ctrl+Enter aplica</div>
+            <button type="button" id="grAjustarBtn">Aplicar ajuste</button>
+            <p class="agenda-erro" id="grAjusteErro" hidden></p>
+          </div>
         </div>
       </div>
     </div>
@@ -962,9 +1612,6 @@
     <!-- Cerebro de IA: o conteudo inteiro e montado por cerebro.js, que so e baixado na primeira
          vez que a aba e aberta (o grafo 3D e pesado e quem nao usa nao deve pagar por ele) -->
     <div class="window-body cerebro-aba" id="tabCerebro" hidden></div>
-
-    <!-- Editor de Video: montado por video.js, baixado so na primeira vez que a aba e aberta -->
-    <div class="window-body video-aba" id="tabVideo" hidden></div>
 
     <div class="window-body tab-auto" id="tabClientes" hidden>
       <div class="auto-coluna-esq">
@@ -1053,6 +1700,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=20261110g"></script>
 </body>
 </html>

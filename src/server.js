@@ -16,10 +16,13 @@ import * as evolutionApi from './evolutionApi.js';
 import { enviarMensagemTexto } from './evolutionApi.js';
 import * as agenda from './agenda.js';
 import * as googleCalendar from './googleCalendar.js';
+import * as instagram from './instagram.js';
 import * as whatsappInstances from './whatsappInstances.js';
 import * as autoAtendimento from './autoAtendimento.js';
 import * as autoArquivos from './autoAtendimentoArquivos.js';
 import * as crm from './crm.js';
+import * as chamadas from './chamadas.js';
+import * as disparos from './disparos.js';
 import * as clinicorp from './clinicorp.js';
 import * as relatoriosProgramados from './relatoriosProgramados.js';
 import * as tenants from './tenants.js';
@@ -28,6 +31,10 @@ import * as metaAds from './metaads.js';
 import * as propostas from './propostas.js';
 import * as relatorioGerador from './relatorioGerador.js';
 import * as followUp from './followUp.js';
+import * as clinicorpFollowUp from './clinicorpFollowUp.js';
+import { iniciarSchedulerClinicorpFollowUp } from './clinicorpFollowUp.js';
+import * as followUpInteligente from './followUpInteligente.js';
+import * as funilFU from './funilFollowUp.js';
 import * as aniversariantes from './aniversariantes.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
 import { iniciarCerebroMae } from './cerebroMae.js';
@@ -35,7 +42,6 @@ import { ehErroDeCredito, creditoEsgotado, registrarFalhaCredito } from './alert
 import * as saldoIA from './saldoIA.js';
 import * as cerebro from './cerebro.js';
 import { router as cerebroMcpRouter } from './cerebroMcp.js';
-import * as videoEditor from './videoEditor.js';
 
 const execAsync = promisify(exec);
 
@@ -82,10 +88,14 @@ const TAB_ROTA_PREFIXO = {
   crm: '/api/crm',
   auto: '/api/auto-atendimento',
   followUp: '/api/follow-up',
+  followUpInteligente: '/api/fu-inteligente',
+  funilFollowUp: '/api/funil-fu',
+  disparos: '/api/disparos',
   aniversariantes: '/api/aniversariantes',
   relatorios: '/api/relatorios',
   geradorRelatorios: '/api/gerador-relatorios',
   integracoes: '/api/integracoes',
+  instagram: '/api/instagram',
 };
 
 // endpoint MCP do Cerebro (Claude/ChatGPT/Cursor conectam aqui) - registrado ANTES do auth geral
@@ -100,14 +110,18 @@ app.use(async (req, res, next) => {
     req.path === '/webhook/whatsapp' ||
     req.path === '/api/whatsapp-evolution/webhook' ||
     req.path === '/api/agenda/google/callback' ||
+    // webhook do Instagram (quem chama e a Meta - protegido pela assinatura do app) e a volta do
+    // login do Instagram (protegida pelo state assinado)
+    req.path === '/api/instagram/webhook' ||
+    req.path === '/api/instagram/callback' ||
+    // servico externo reportando gasto de IA (protegido pelo proprio token x-uso-token, conferido no handler)
+    req.path === '/api/saldo-ia/uso-externo' ||
     // EventSource nativo do browser nao manda headers customizados - a senha vai por query
     // string aqui, e o proprio handler da rota confere ela antes de abrir o stream
     req.path === '/api/crm/eventos' ||
     // <img src>/<audio src> tambem nao mandam headers customizados - mesma solucao (senha via
     // query string, conferida dentro do proprio handler)
     req.path.startsWith('/api/crm/midia/') ||
-    // mesma coisa pro <video>/<img> do Editor de Video (token conferido no handler)
-    (req.method === 'GET' && /^\/api\/video\/edicoes\/[^/]+\/(video|capa|tira|midias\/[a-f0-9]{16}\/(miniatura|arquivo))$/.test(req.path)) ||
     // pagina de proposta comercial (public/proposta.html) e publica, sem login - quem preenche
     // e o proprio Vivekananda direto no navegador, e quem le o link e o cliente em potencial
     req.path.startsWith('/api/propostas')
@@ -116,13 +130,15 @@ app.use(async (req, res, next) => {
   // /api/agenda/google/conectar e navegacao de pagina de verdade (o navegador redireciona pro
   // consentimento do Google), nao um fetch que consiga mandar header - o token vem por query
   // param SO nesse caso especifico, nunca como mecanismo geral de auth
-  const provided = req.path === '/api/agenda/google/conectar'
+  const provided = req.path === '/api/agenda/google/conectar' || req.path === '/api/instagram/conectar'
     ? req.query.token
     : req.header('x-app-password');
 
-  const tenantId = tenants.verificarToken(provided);
+  const infoToken = tenants.verificarTokenInfo(provided);
+  const tenantId = infoToken?.tenantId || null;
   if (tenantId) {
     req.tenantId = tenantId;
+    req.operadorId = infoToken.colaboradorId; // 0 = o proprio dono da conta
     // conta desativada pelo admin: derruba a sessao NA HORA (o token continua "valido" por 30 dias, entao
     // so a assinatura nao basta) - o navegador do cliente entende `contaInativa` e desloga sozinho
     if (!(await tenants.estaAtivo(tenantId))) {
@@ -137,17 +153,6 @@ app.use(async (req, res, next) => {
         const tenant = await tenants.obterPorId(tenantId);
         if (!tenant?.super_admin && !(await cerebro.estaLiberado(tenantId))) {
           return res.status(403).json({ erro: 'o Cerebro de IA nao esta liberado pra sua conta' });
-        }
-      } catch (err) {
-        return res.status(500).json({ erro: err.message });
-      }
-    }
-    // Editor de Video: recurso pago a parte, mesma regra do Cerebro
-    if (req.path.startsWith('/api/video')) {
-      try {
-        const tenant = await tenants.obterPorId(tenantId);
-        if (!tenant?.super_admin && !(await videoEditor.estaLiberado(tenantId))) {
-          return res.status(403).json({ erro: 'o Editor de Vídeo nao esta liberado pra sua conta' });
         }
       } catch (err) {
         return res.status(500).json({ erro: err.message });
@@ -180,9 +185,9 @@ app.post('/api/login', async (req, res) => {
   const { username, password } = req.body || {};
   if (!process.env.SESSION_SECRET) return res.json({ ok: true });
   try {
-    const tenantId = await tenants.autenticar(username, password);
-    if (!tenantId) return res.json({ ok: false, contaInativa: await tenants.contaDesativadaComCredenciaisValidas(username, password).catch(() => false) });
-    res.json({ ok: true, token: tenants.firmarToken(tenantId) });
+    const quem = await tenants.autenticarOperador(username, password);
+    if (!quem) return res.json({ ok: false, contaInativa: await tenants.contaDesativadaComCredenciaisValidas(username, password).catch(() => false) });
+    res.json({ ok: true, token: tenants.firmarToken(quem.tenantId, quem.colaboradorId) });
   } catch (err) {
     res.status(500).json({ ok: false, erro: err.message });
   }
@@ -197,10 +202,27 @@ app.get('/api/me', async (req, res) => {
     if (!tenant || !tenant.ativo) return res.status(401).json({ erro: 'tenant nao encontrado' });
     const tabsHabilitadas = await tenantConfig.obterTabsHabilitadas(tenant.id);
     const cerebroLiberado = !!tenant.super_admin || await cerebro.estaLiberado(tenant.id).catch(() => false);
-    const videoLiberado = !!tenant.super_admin || await videoEditor.estaLiberado(tenant.id).catch(() => false);
-    res.json({ tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas, permiteColaboradores: !!tenant.permite_colaboradores, cerebroLiberado, videoLiberado });
+    const operador = (await crm.listarOperadores(tenant.id).catch(() => [])).find((o) => o.id === (req.operadorId || 0)) || { id: 0, nome: tenant.nome };
+    const [perfil, instancias, operadores] = await Promise.all([
+      tenants.obterPerfil(tenant.id, req.operadorId || 0),
+      tenants.listarInstanciasDoTenant(tenant.id).catch(() => []),
+      crm.listarOperadores(tenant.id).catch(() => []),
+    ]);
+    const instanciaAtiva = (await whatsappInstances.obterConfig(tenant.id).catch(() => ({}))).instanciaAtiva || null;
+    res.json({ perfil, instancias, operadores, operadoresPorNumero: await tenants.operadoresPorNumero(tenant.id).catch(() => ({})), instanciaAtiva, euId: req.operadorId || 0, operador, tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas, permiteColaboradores: !!tenant.permite_colaboradores, cerebroLiberado });
   } catch (err) {
     res.status(500).json({ erro: err.message });
+  }
+});
+
+// editar o proprio perfil (nome de exibicao + foto) - vale pra quem esta logado (dono ou colaborador)
+app.put('/api/perfil', async (req, res) => {
+  try {
+    if (!req.tenantId) return res.status(401).json({ erro: 'nao autenticado' });
+    await tenants.salvarPerfil(req.tenantId, req.operadorId || 0, { nome: req.body?.nome, foto: req.body?.foto });
+    res.json({ ok: true, perfil: await tenants.obterPerfil(req.tenantId, req.operadorId || 0) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
   }
 });
 
@@ -263,6 +285,9 @@ app.delete('/api/colaboradores/:id', async (req, res) => {
 });
 
 app.use(express.static(PUBLIC_DIR));
+
+// landing page publica de venda (public/conheca.html) com endereco curto
+app.get('/conheca', (req, res) => res.sendFile('conheca.html', { root: PUBLIC_DIR }));
 
 // ---------- Proposta comercial (public/proposta.html) - link curto por id em vez de query string ----------
 app.post('/api/propostas', async (req, res) => {
@@ -336,7 +361,7 @@ app.post('/api/admin/tenants', exigirSuperAdmin, async (req, res) => {
 app.post('/api/admin/tenants/:id/ativo', exigirSuperAdmin, async (req, res) => {
   const { ativo } = req.body || {};
   try {
-    await tenants.definirAtivo(Number(req.params.id), !!ativo);
+    await tenants.definirAtivo(Number(req.params.id), !!ativo, { manual: true });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -399,24 +424,6 @@ app.get('/api/admin/tenants/:id/cerebro', exigirSuperAdmin, async (req, res) => 
 app.post('/api/admin/tenants/:id/cerebro', exigirSuperAdmin, async (req, res) => {
   try {
     await cerebro.definirLiberado(Number(req.params.id), !!req.body?.liberado);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
-});
-
-// Editor de Video tambem e liberado a parte - ver videoEditor.js
-app.get('/api/admin/tenants/:id/video', exigirSuperAdmin, async (req, res) => {
-  try {
-    res.json({ liberado: await videoEditor.estaLiberado(Number(req.params.id)) });
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
-});
-
-app.post('/api/admin/tenants/:id/video', exigirSuperAdmin, async (req, res) => {
-  try {
-    await videoEditor.definirLiberado(Number(req.params.id), !!req.body?.liberado);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -1059,6 +1066,21 @@ function extrairMensagemEvolution(data) {
   return { ...base, texto, tipo: 'text' };
 }
 
+// lead que clicou num anuncio de "clique pro WhatsApp" (Meta Ads): a primeira mensagem chega com o
+// bloco externalAdReply (id do anuncio, titulo, link) dentro do contextInfo - o caminho muda conforme o
+// tipo da mensagem, entao olha todos os lugares conhecidos
+function extrairAnuncioDaMensagem(data) {
+  const msg = desembrulharMensagem(data?.message);
+  const contextos = [data?.contextInfo, msg.extendedTextMessage?.contextInfo, msg.imageMessage?.contextInfo, msg.videoMessage?.contextInfo, msg.audioMessage?.contextInfo, msg.documentMessage?.contextInfo, msg.buttonsResponseMessage?.contextInfo];
+  for (const c of contextos) {
+    const ad = c?.externalAdReply;
+    if (ad) {
+      return { sourceId: ad.sourceId ? String(ad.sourceId) : null, title: ad.title || null, body: ad.body || null, sourceUrl: ad.sourceUrl || null, ctwaClid: ad.ctwaClid || c.ctwaClid || null };
+    }
+  }
+  return null;
+}
+
 // compara dois numeros de telefone ignorando formatacao (DDI "55" presente ou nao, o "9" extra
 // de celular presente ou nao) - comparar string exata quebrava silenciosamente quando o numero
 // admin era salvo sem o "55" na frente (formato facil de digitar errado na tela de config)
@@ -1107,7 +1129,7 @@ function lembrarEnviada(resposta) {
 // depender do WhatsApp/Evolution ainda ter o arquivo disponivel na hora que o dono for abrir.
 // "melhor esforco": se o download falhar, ainda registra a mensagem (so sem midia, cai no
 // icone de sempre) em vez de perder a mensagem inteira do historico do CRM.
-async function registrarMensagemComMidia(tenantId, { numero, instancia, direcao, tipo, texto, nome, mensagemBruta, quando, waId, evitarEco }) {
+async function registrarMensagemComMidia(tenantId, { numero, instancia, direcao, tipo, texto, nome, mensagemBruta, quando, waId, evitarEco, autor, origemAnuncio }) {
   let midiaBase64 = null;
   let midiaMimetype = null;
   if (tipo === 'image' || tipo === 'audio') {
@@ -1119,7 +1141,7 @@ async function registrarMensagemComMidia(tenantId, { numero, instancia, direcao,
       console.error('Erro baixando midia pro CRM:', err.message);
     }
   }
-  await crm.registrarMensagem(tenantId, { numero, instancia, direcao, tipo, texto, nome, midiaBase64, midiaMimetype, quando, waId, evitarEco });
+  await crm.registrarMensagem(tenantId, { numero, instancia, direcao, tipo, texto, nome, midiaBase64, midiaMimetype, quando, waId, evitarEco, autor, origemAnuncio });
 }
 
 // serializa o processamento de mensagens do MESMO contato (chave "tenantId:numero") - sem isso,
@@ -1188,7 +1210,7 @@ async function atenderContato(tenantId, numero, instanciaDoWebhook, configAuto, 
     if (resultado.respondeComAudio) {
       try {
         await autoAtendimento.enviarRespostaEmAudio(instanciaDoWebhook, numero, resultado.texto);
-        crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'audio', texto: resultado.texto })
+        crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'audio', texto: resultado.texto, autor: 'ia' })
           .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
         return;
       } catch (err) {
@@ -1196,7 +1218,7 @@ async function atenderContato(tenantId, numero, instanciaDoWebhook, configAuto, 
       }
     }
     await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, resultado.texto);
-    crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'text', texto: resultado.texto })
+    crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'text', texto: resultado.texto, autor: 'ia' })
       .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
   } catch (err) {
     console.error('Erro no auto-atendimento via Evolution/WhatsApp:', err);
@@ -1256,7 +1278,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
     // passar pela Lumia nem pelo painel - registra no CRM como 'saida' pra a conversa la
     // ficar identica a conversa real (senao essas respostas manuais nunca apareciam no CRM).
     if (!ehNumeroAdmin) {
-      registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo, texto, mensagemBruta: data, quando, waId: id, evitarEco: true })
+      registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo, texto, mensagemBruta: data, quando, waId: id, evitarEco: true, autor: 'humano' })
         .catch((err) => console.error('Erro registrando mensagem manual (fromMe) no CRM:', err.message));
       return;
     }
@@ -1268,8 +1290,9 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
   // dono, em qualquer instancia conectada - "best-effort", nunca trava o fluxo principal (a
   // resposta da Lumia) se o CRM der erro
   if (!ehNumeroAdmin) {
-    registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'entrada', tipo, texto, nome: data?.pushName, mensagemBruta: data, quando, waId: id })
+    registrarMensagemComMidia(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'entrada', tipo, texto, nome: data?.pushName, mensagemBruta: data, quando, waId: id, origemAnuncio: extrairAnuncioDaMensagem(data) })
       .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
+    disparos.registrarResposta(tenantId, numero, texto).catch(() => {}); // lead respondeu um disparo? (ou pediu pra sair)
   }
 
   // documento, figurinha, localizacao etc: ja foi espelhado no CRM acima, mas nao e algo que a IA
@@ -1314,7 +1337,7 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
         ]);
         if (!resultado) return;
         await evolutionApi.enviarMensagemTextoPor(instanciaDoWebhook, numero, resultado.texto);
-        crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'text', texto: resultado.texto })
+        crm.registrarMensagem(tenantId, { numero, instancia: instanciaDoWebhook, direcao: 'saida', tipo: 'text', texto: resultado.texto, autor: 'ia' })
           .catch((err) => console.error('Erro registrando mensagem no CRM:', err.message));
       } catch (err) {
         console.error('Erro no follow up via Evolution/WhatsApp:', err);
@@ -1349,8 +1372,28 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
 app.post('/api/whatsapp-evolution/webhook', (req, res) => {
   res.sendStatus(200);
   const evento = req.body?.event;
-  if (evento !== 'messages.upsert') return;
   const data = req.body?.data;
+  // ligacao do WhatsApp (tocou/atendida/recusada/perdida/encerrada) - so registra, nunca responde
+  if (evento === 'call') {
+    tenants.resolverTenantPorInstancia(req.body?.instance)
+      .then(async (tenantId) => {
+        if (!tenantId || !(await tenants.estaAtivo(tenantId))) return;
+        for (const ev of Array.isArray(data) ? data : [data]) await chamadas.registrarEventoChamada(tenantId, req.body.instance, ev);
+      })
+      .catch((err) => console.error('Erro registrando chamada:', err.message));
+    return;
+  }
+  // status de entrega/leitura de mensagem (relatorio dos Disparos)
+  if (evento === 'messages.update') {
+    tenants.resolverTenantPorInstancia(req.body?.instance)
+      .then(async (tenantId) => {
+        if (!tenantId || !(await tenants.estaAtivo(tenantId))) return;
+        await disparos.registrarStatusEntrega(tenantId, data);
+      })
+      .catch((err) => console.error('Erro registrando entrega de disparo:', err.message));
+    return;
+  }
+  if (evento !== 'messages.upsert') return;
   if (!data) return;
   processarMensagemEvolution(req.body?.instance, data).catch((err) => console.error('Erro ao processar mensagem do Evolution:', err));
 });
@@ -1384,9 +1427,18 @@ app.get('/api/whatsapp/instancias', async (req, res) => {
   try {
     const permitidas = new Set(await tenants.listarInstanciasDoTenant(req.tenantId));
     const todas = await evolutionApi.listarInstancias();
-    res.json({ instancias: todas.filter((i) => permitidas.has(i.nome)) });
+    const [porNumero, operadores] = await Promise.all([tenants.operadoresPorNumero(req.tenantId), crm.listarOperadores(req.tenantId).catch(() => [])]);
+    res.json({ operadores, instancias: todas.filter((i) => permitidas.has(i.nome)).map((i) => ({ ...i, operadorId: porNumero[i.nome] ?? null })) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/whatsapp/instancias/:nome/operador', async (req, res) => {
+  try {
+    res.json({ ok: true, ...(await crm.definirOperadorDoNumero(req.tenantId, req.params.nome, req.body?.operadorId)) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
   }
 });
 
@@ -1524,6 +1576,139 @@ app.delete('/api/auto-atendimento/arquivos/:id', async (req, res) => {
   try {
     await autoArquivos.apagarArquivo(req.tenantId, Number(req.params.id));
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// ---------- Follow Up Inteligente (cards de follow-up por etapa do funil, cadencia em dias) ----------
+
+// ---------- Funil Follow Up (Dia 0 a Dia 5, com tarefa diaria e alerta de retorno exclusivo) ----------
+app.get('/api/funil-fu', async (req, res) => {
+  try {
+    const [leads, tarefas, instancias] = await Promise.all([
+      funilFU.listarLeads(req.tenantId, req.query.instancia || ''),
+      funilFU.obterTarefas(req.tenantId),
+      tenants.listarInstanciasDoTenant(req.tenantId),
+    ]);
+    res.json({ dias: funilFU.DIAS, tarefas, leads, instancias });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/funil-fu/leads', async (req, res) => {
+  try {
+    res.json({ ok: true, id: await funilFU.adicionarLead(req.tenantId, req.body || {}) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/funil-fu/do-crm', async (req, res) => {
+  try {
+    res.json(await funilFU.adicionarDoCrm(req.tenantId, Number(req.body?.contatoId)));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/funil-fu/leads/:id/executar', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    await funilFU.executarTarefa(req.tenantId, req.params.id, perfil?.nome || 'Equipe');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.put('/api/funil-fu/leads/:id/agenda', async (req, res) => {
+  try {
+    await funilFU.reprogramar(req.tenantId, req.params.id, req.body?.agenda);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/funil-fu/leads/:id', async (req, res) => {
+  try {
+    await funilFU.removerLead(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.put('/api/funil-fu/tarefas', async (req, res) => {
+  try {
+    await funilFU.salvarTarefas(req.tenantId, req.body?.tarefas);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/fu-inteligente/config', async (req, res) => {
+  try {
+    res.json(await followUpInteligente.obterConfig(req.tenantId));
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/fu-inteligente/config', async (req, res) => {
+  try {
+    await followUpInteligente.salvarConfig(req.tenantId, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/fu-inteligente/cards', async (req, res) => {
+  try {
+    res.json({ etapas: followUpInteligente.etapasSelecionaveis(), cards: await followUpInteligente.listarCards(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/fu-inteligente/cards', async (req, res) => {
+  try {
+    const id = await followUpInteligente.salvarCard(req.tenantId, req.body || {});
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/fu-inteligente/cards/:id', async (req, res) => {
+  try {
+    await followUpInteligente.apagarCard(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/fu-inteligente/cards/:id/arquivos', async (req, res) => {
+  const { ordem, nomeArquivo, mediaType, base64 } = req.body || {};
+  if (!nomeArquivo || !mediaType || !base64) return res.status(400).json({ erro: 'nomeArquivo, mediaType e base64 sao obrigatorios' });
+  try {
+    res.json({ ok: true, arquivo: await followUpInteligente.salvarArquivo(req.tenantId, req.params.id, ordem, nomeArquivo, Buffer.from(base64, 'base64'), mediaType) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/fu-inteligente/arquivos/:id', async (req, res) => {
+  try {
+    await followUpInteligente.apagarArquivo(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/fu-inteligente/sugestao', async (req, res) => {
+  try {
+    res.json({ texto: await followUpInteligente.gerarSugestao(req.tenantId, req.body || {}) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -1787,6 +1972,34 @@ app.post('/api/saldo-ia', exigirSuperAdmin, async (req, res) => {
   }
 });
 
+app.post('/api/saldo-ia/uso-externo', async (req, res) => {
+  if (!saldoIA.tokenUsoExternoValido(req.header('x-uso-token'))) return res.status(401).json({ erro: 'token invalido' });
+  try {
+    res.json(await saldoIA.registrarUsoExterno(req.body || {}));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// mostra pro dono o token que um servico externo precisa mandar em x-uso-token
+app.get('/api/saldo-ia/token-uso', exigirSuperAdmin, (req, res) => res.json({ token: saldoIA.tokenUsoExterno() }));
+
+app.post('/api/saldo-ia/gasto-externo', exigirSuperAdmin, async (req, res) => {
+  try {
+    res.json(await saldoIA.registrarGastoExterno({ valorUsd: String(req.body?.valorUsd ?? '').replace(',', '.'), descricao: req.body?.descricao }));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/saldo-ia/recarga', exigirSuperAdmin, async (req, res) => {
+  try {
+    res.json(await saldoIA.registrarRecarga({ valorUsd: String(req.body?.valorUsd ?? '').replace(',', '.') }));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
 app.get('/api/gerador-relatorios/contas', async (req, res) => {
   try {
     res.json({ contas: await metaAds.listAdAccounts(req.tenantId, { apenasAtivas: true }) });
@@ -1861,6 +2074,16 @@ app.get('/api/gerador-relatorios/:id', async (req, res) => {
   }
 });
 
+// ajuste pedido em cima de um relatorio ja gerado (mesmos numeros, IA revisa texto + layout)
+app.post('/api/gerador-relatorios/:id/ajustar', async (req, res) => {
+  try {
+    res.json({ ok: true, ...(await relatorioGerador.ajustarRelatorio(req.tenantId, req.params.id, req.body?.pedido)) });
+  } catch (err) {
+    if (ehErroDeCredito(err)) return res.status(503).json({ erro: 'A IA está sem créditos na Anthropic no momento, por isso o ajuste não pôde ser feito. Recarregue os créditos e tente de novo.', semCredito: true });
+    res.status(400).json({ erro: err.message });
+  }
+});
+
 app.delete('/api/gerador-relatorios/:id', async (req, res) => {
   try {
     const apagou = await relatorioGerador.apagarRelatorio(req.tenantId, req.params.id);
@@ -1898,6 +2121,184 @@ app.get('/api/crm/contatos', async (req, res) => {
   }
 });
 
+// botao "Follow Up Inteligente" do CRM: automacao Clinicorp (coluna Follow Up do CRC) -> coluna Follow Up do CRM, por numero
+app.get('/api/crm/clinicorp-followup', async (req, res) => {
+  try {
+    if (!(await tenantConfig.obterClinicorp(req.tenantId))) return res.json({ disponivel: false });
+    const { instanciaAtiva } = await whatsappInstances.obterConfig(req.tenantId);
+    const instancia = String(req.query.instancia || instanciaAtiva || '');
+    if (!instancia) return res.json({ disponivel: false });
+    res.json({ disponivel: true, instancia, ...(await clinicorpFollowUp.obterAtivacao(req.tenantId, instancia)) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/clinicorp-followup', async (req, res) => {
+  try {
+    const instancia = String(req.body?.instancia || '').trim();
+    if (!instancia) return res.status(400).json({ erro: 'Informe o número.' });
+    let entregues = 0;
+    if (req.body && 'operadorId' in req.body) entregues = (await clinicorpFollowUp.definirOperadorFollowUp(req.tenantId, instancia, req.body.operadorId)).entregues;
+    if (req.body && 'ativo' in req.body) await clinicorpFollowUp.definirAtivacao(req.tenantId, instancia, !!req.body.ativo);
+    res.json({ ok: true, entregues });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// ---------- Instagram (DMs, respostas a comentario e publicacoes - ver instagram.js) ----------
+
+app.get('/api/instagram/webhook', (req, res) => {
+  const ok = req.query['hub.mode'] === 'subscribe' && process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN
+    && req.query['hub.verify_token'] === process.env.INSTAGRAM_WEBHOOK_VERIFY_TOKEN;
+  if (!ok) return res.sendStatus(403);
+  res.send(String(req.query['hub.challenge'] || ''));
+});
+
+app.post('/api/instagram/webhook', (req, res) => {
+  if (!instagram.verificarAssinatura(req.rawBody, req.header('x-hub-signature-256'))) return res.sendStatus(401);
+  res.sendStatus(200); // responde na hora - a Meta reenvia se demorar
+  instagram.processarWebhook(req.body).catch((err) => console.error('Erro no webhook do Instagram:', err.message));
+});
+
+app.get('/api/instagram/conectar', (req, res) => {
+  if (!req.tenantId) return res.status(401).send('Sessao invalida - abre essa tela de dentro do app, nao direto pela URL.');
+  try {
+    res.redirect(instagram.urlAutorizacao(req.tenantId));
+  } catch (err) {
+    res.redirect(`/?instagram=erro&msg=${encodeURIComponent(err.message)}`);
+  }
+});
+
+app.get('/api/instagram/callback', async (req, res) => {
+  const { code, state, error_description: erroDesc, error } = req.query;
+  if (error || !code) return res.redirect(`/?instagram=erro&msg=${encodeURIComponent(String(erroDesc || error || 'conexao cancelada'))}`);
+  try {
+    await instagram.concluirConexao(state, code);
+    res.redirect('/?instagram=conectado');
+  } catch (err) {
+    res.redirect(`/?instagram=erro&msg=${encodeURIComponent(err.message)}`);
+  }
+});
+
+const rotaIg = (fn) => async (req, res) => {
+  try {
+    await fn(req, res);
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+};
+
+app.get('/api/instagram/status', rotaIg(async (req, res) => res.json(await instagram.status(req.tenantId))));
+app.post('/api/instagram/desconectar', rotaIg(async (req, res) => { await instagram.desconectar(req.tenantId); res.json({ ok: true }); }));
+app.post('/api/instagram/dm-ia', rotaIg(async (req, res) => { await instagram.definirDmIa(req.tenantId, !!req.body?.ativa); res.json({ ok: true }); }));
+app.get('/api/instagram/publicacoes', rotaIg(async (req, res) => res.json({ publicacoes: await instagram.listarPublicacoes(req.tenantId) })));
+
+app.get('/api/instagram/regras', rotaIg(async (req, res) => res.json({ regras: await instagram.listarRegras(req.tenantId) })));
+app.post('/api/instagram/regras', rotaIg(async (req, res) => res.json({ ok: true, id: await instagram.salvarRegra(req.tenantId, req.body || {}) })));
+app.post('/api/instagram/regras/:id/ativo', rotaIg(async (req, res) => { await instagram.alternarRegra(req.tenantId, req.params.id, !!req.body?.ativo); res.json({ ok: true }); }));
+app.delete('/api/instagram/regras/:id', rotaIg(async (req, res) => { await instagram.apagarRegra(req.tenantId, req.params.id); res.json({ ok: true }); }));
+
+// arquivo cru no corpo (foto JPG ou video MP4/MOV de ate 100mb) - nao cabe no JSON em base64
+app.post('/api/instagram/midias', express.raw({ type: ['image/jpeg', 'video/mp4', 'video/quicktime'], limit: '100mb' }), rotaIg(async (req, res) => {
+  const nome = decodeURIComponent(req.header('x-nome-arquivo') || '');
+  res.json({ ok: true, ...(await instagram.guardarMidia(req.tenantId, { buffer: Buffer.isBuffer(req.body) ? req.body : null, mimetype: req.header('content-type'), nome })) });
+}));
+app.get('/api/instagram/posts', rotaIg(async (req, res) => res.json({ posts: await instagram.listarPosts(req.tenantId) })));
+app.post('/api/instagram/posts', rotaIg(async (req, res) => res.json({ ok: true, id: await instagram.criarPost(req.tenantId, req.body || {}) })));
+app.post('/api/instagram/posts/:id/cancelar', rotaIg(async (req, res) => { await instagram.cancelarPost(req.tenantId, req.params.id); res.json({ ok: true }); }));
+
+// midia publica pra Meta buscar na hora de publicar (token aleatorio de 48 hex = nao da pra adivinhar)
+app.get('/ig-midia/:token', async (req, res) => {
+  try {
+    const midia = await instagram.lerMidiaPublica(req.params.token);
+    if (!midia) return res.sendStatus(404);
+    res.setHeader('Content-Type', midia.mimetype);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.send(midia.dados);
+  } catch {
+    res.sendStatus(500);
+  }
+});
+
+// ---------- Resultados (indicadores do atendimento por periodo) ----------
+
+app.get('/api/crm/resultados', async (req, res) => {
+  const { de, ate, instancia } = req.query;
+  const dataValida = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
+  if (!dataValida(de) || !dataValida(ate)) return res.status(400).json({ erro: 'de e ate (AAAA-MM-DD) sao obrigatorios' });
+  try {
+    const instancias = await tenants.listarInstanciasDoTenant(req.tenantId);
+    if (instancia && !instancias.includes(instancia)) return res.status(400).json({ erro: 'Numero de WhatsApp invalido pra essa conta.' });
+    const dados = await crm.resultadosAtendimento(req.tenantId, { de, ate, instancia: instancia || null });
+    res.json({ ...dados, instancias, etapas: crm.ETAPAS });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// ---------- Base de contatos (aba Contatos) ----------
+
+app.get('/api/crm/base-contatos', async (req, res) => {
+  try {
+    const [contatos, instancias] = await Promise.all([
+      crm.listarBaseContatos(req.tenantId),
+      tenants.listarInstanciasDoTenant(req.tenantId),
+    ]);
+    res.json({ etapas: crm.ETAPAS, instancias, contatos });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/base-contatos', async (req, res) => {
+  try {
+    const body = req.body || {};
+    if (body.instancia && !(await tenants.listarInstanciasDoTenant(req.tenantId)).includes(body.instancia)) {
+      return res.status(400).json({ erro: 'Numero de WhatsApp invalido pra essa conta.' });
+    }
+    res.json({ ok: true, id: await crm.salvarContatoBase(req.tenantId, { ...body, id: null }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.put('/api/crm/base-contatos/:id', async (req, res) => {
+  try {
+    res.json({ ok: true, id: await crm.salvarContatoBase(req.tenantId, { ...(req.body || {}), id: Number(req.params.id) }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// a tela le a planilha no navegador e manda as linhas ja mapeadas em lotes de ate 1000
+app.post('/api/crm/base-contatos/importar', async (req, res) => {
+  const { instancia, linhas, modo, etapa } = req.body || {};
+  if (!Array.isArray(linhas) || !linhas.length) return res.status(400).json({ erro: 'Nenhuma linha pra importar.' });
+  try {
+    if (!(await tenants.listarInstanciasDoTenant(req.tenantId)).includes(instancia)) {
+      return res.status(400).json({ erro: 'Escolha um numero de WhatsApp dessa conta.' });
+    }
+    res.json({ ok: true, ...(await crm.importarContatos(req.tenantId, instancia, linhas, modo === 'atualizar' ? 'atualizar' : 'pular', etapa || null)) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/follow-up/espelhar', async (req, res) => {
+  const { instancia, linhas } = req.body || {};
+  if (!Array.isArray(linhas) || !linhas.length) return res.status(400).json({ erro: 'Nenhuma linha na lista.' });
+  try {
+    if (!(await tenants.listarInstanciasDoTenant(req.tenantId)).includes(instancia)) {
+      return res.status(400).json({ erro: 'Escolha um numero de WhatsApp dessa conta.' });
+    }
+    res.json({ ok: true, ...(await crm.espelharFollowUp(req.tenantId, instancia, linhas)) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.get('/api/crm/mensagens', async (req, res) => {
   const { numero, instancia } = req.query;
   if (!numero || !instancia) return res.status(400).json({ erro: 'numero e instancia sao obrigatorios' });
@@ -1912,10 +2313,322 @@ app.post('/api/crm/mensagens', async (req, res) => {
   const { numero, instancia, texto } = req.body || {};
   if (!numero || !instancia || !texto) return res.status(400).json({ erro: 'numero, instancia e texto sao obrigatorios' });
   try {
-    await crm.enviarMensagem(req.tenantId, numero, instancia, texto);
+    lembrarEnviada(await crm.enviarMensagem(req.tenantId, numero, instancia, texto));
+    crm.assumirSeLivre(req.tenantId, numero, instancia, req.operadorId || 0).catch(() => {}); // quem responde primeiro vira o operador
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
+  }
+});
+
+// envio de midia pela aba Conversas (foto, video, documento ou audio gravado no navegador) - o
+// arquivo sobe em base64 no JSON (limite de 20mb do express.json)
+app.post('/api/crm/mensagens/midia', async (req, res) => {
+  const { numero, instancia, tipo, mimetype, base64, fileName, legenda } = req.body || {};
+  if (!numero || !instancia || !tipo || !base64) return res.status(400).json({ erro: 'numero, instancia, tipo e arquivo sao obrigatorios' });
+  try {
+    const resposta = await crm.enviarMidiaContato(req.tenantId, String(numero), String(instancia), {
+      tipo, mimetype, base64, fileName, legenda: typeof legenda === 'string' ? legenda.trim().slice(0, 1000) : '',
+    });
+    lembrarEnviada(resposta);
+    crm.assumirSeLivre(req.tenantId, String(numero), String(instancia), req.operadorId || 0).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// ---------- operadores (quem atende cada lead) ----------
+
+// ---------- Disparos (campanhas de mensagens em massa; ver disparos.js) ----------
+
+app.get('/api/disparos', async (req, res) => {
+  try {
+    const [campanhas, instancias] = await Promise.all([disparos.listarCampanhas(req.tenantId), tenants.listarInstanciasDoTenant(req.tenantId)]);
+    res.json({ campanhas, instancias });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/disparos', async (req, res) => {
+  try {
+    res.json({ ok: true, id: await disparos.salvarCampanha(req.tenantId, req.body || {}) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/disparos/painel', async (req, res) => {
+  const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  const de = String(req.query.de || new Date(Date.now() - 3 * 3600000 - 29 * 86400000).toISOString().slice(0, 10));
+  const ate = String(req.query.ate || hoje);
+  try {
+    res.json({ de, ate, ...(await disparos.painelGeral(req.tenantId, { de, ate, instancia: req.query.instancia ? String(req.query.instancia) : null })) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/disparos/:id/destinatarios/:destId', async (req, res) => {
+  try {
+    await disparos.removerDestinatario(req.tenantId, req.params.id, req.params.destId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/disparos/optout', async (req, res) => {
+  try {
+    res.json({ optout: await disparos.listarOptout(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/disparos/optout/:numero', async (req, res) => {
+  try {
+    await disparos.removerOptout(req.tenantId, req.params.numero);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/disparos/previa', (req, res) => {
+  const { mensagem, nome } = req.body || {};
+  res.json({ texto: disparos.renderizarMensagem(String(mensagem || ''), { nome, vars: {} }) });
+});
+
+app.delete('/api/disparos/arquivos/:arqId', async (req, res) => {
+  try {
+    await disparos.apagarArquivo(req.tenantId, req.params.arqId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/disparos/:id', async (req, res) => {
+  try {
+    const c = await disparos.obterCampanha(req.tenantId, req.params.id);
+    if (!c) return res.status(404).json({ erro: 'Campanha não encontrada.' });
+    res.json(c);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/disparos/:id', async (req, res) => {
+  try {
+    await disparos.apagarCampanha(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/disparos/:id/destinatarios', async (req, res) => {
+  try {
+    res.json({ destinatarios: await disparos.listarDestinatarios(req.tenantId, req.params.id, { status: req.query.status, pagina: req.query.pagina }) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/disparos/:id/destinatarios', async (req, res) => {
+  try {
+    res.json(await disparos.adicionarDestinatarios(req.tenantId, req.params.id, req.body?.lista));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/disparos/:id/destinatarios/crm', async (req, res) => {
+  try {
+    res.json(await disparos.adicionarDoCrm(req.tenantId, req.params.id, req.body || {}));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/disparos/:id/destinatarios', async (req, res) => {
+  try {
+    await disparos.limparPendentes(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/disparos/:id/acao', async (req, res) => {
+  try {
+    const r = await disparos.acaoCampanha(req.tenantId, req.params.id, req.body?.acao);
+    res.json({ ok: true, id: r || null });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/disparos/:id/arquivos', async (req, res) => {
+  const { nomeArquivo, mediaType, base64 } = req.body || {};
+  if (!nomeArquivo || !mediaType || !base64) return res.status(400).json({ erro: 'nomeArquivo, mediaType e base64 sao obrigatorios' });
+  try {
+    res.json({ ok: true, arquivo: await disparos.salvarArquivo(req.tenantId, req.params.id, nomeArquivo, Buffer.from(base64, 'base64'), mediaType) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// ---------- ligacoes (monitoramento; ver chamadas.js) ----------
+
+app.get('/api/chamadas', async (req, res) => {
+  const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  const de = String(req.query.de || new Date(Date.now() - 3 * 3600000 - 6 * 86400000).toISOString().slice(0, 10));
+  const ate = String(req.query.ate || hoje);
+  try {
+    res.json({ de, ate, ...(await chamadas.relatorioChamadas(req.tenantId, { de, ate })) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/chamadas/ativar', async (req, res) => {
+  try {
+    const permitidas = await tenants.listarInstanciasDoTenant(req.tenantId);
+    const todas = await evolutionApi.listarInstancias();
+    const resultado = [];
+    for (const i of todas.filter((x) => permitidas.includes(x.nome) && x.status === 'open')) {
+      try {
+        const r = await evolutionApi.habilitarEventoChamada(i.nome);
+        resultado.push({ instancia: i.nome, ok: true, jaTinha: r.jaTinha });
+      } catch (err) {
+        resultado.push({ instancia: i.nome, ok: false, erro: err.message });
+      }
+    }
+    res.json({ resultado });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/chamadas/manual', async (req, res) => {
+  try {
+    const operador = (await crm.listarOperadores(req.tenantId).catch(() => [])).find((o) => o.id === (req.operadorId || 0));
+    const id = await chamadas.registrarChamadaManual(req.tenantId, { ...(req.body || {}), operadorNome: operador?.nome });
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/chamadas/:id', async (req, res) => {
+  try {
+    await chamadas.apagarChamada(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// ---------- origem dos leads (campanhas do Meta Ads) ----------
+
+app.get('/api/crm/origem/regras', async (req, res) => {
+  try {
+    res.json({ regras: await crm.listarRegrasOrigem(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/origem/regras', async (req, res) => {
+  try {
+    await crm.salvarRegrasOrigem(req.tenantId, req.body?.regras);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/crm/origem/relatorio', async (req, res) => {
+  const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+  const de = String(req.query.de || new Date(Date.now() - 3 * 3600000 - 29 * 86400000).toISOString().slice(0, 10));
+  const ate = String(req.query.ate || hoje);
+  try {
+    res.json({ de, ate, linhas: await crm.relatorioOrigem(req.tenantId, { de, ate }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// anotacoes sobre o paciente (historico do que esta sendo tratado/resolvido)
+app.get('/api/crm/notas/buscar', async (req, res) => {
+  try {
+    res.json({ contatoIds: await crm.buscarNotas(req.tenantId, req.query.q) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.get('/api/crm/contatos/:id/notas', async (req, res) => {
+  try {
+    res.json({ notas: await crm.listarNotas(req.tenantId, req.params.id), euId: req.operadorId || 0 });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/crm/contatos/:id/notas', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json({ ok: true, nota: await crm.criarNota(req.tenantId, req.params.id, { texto: req.body?.texto, autorId: req.operadorId || 0, autorNome: perfil?.nome }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/crm/notas/:id', async (req, res) => {
+  try {
+    await crm.apagarNota(req.tenantId, req.params.id, req.operadorId || 0);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/api/crm/etapas', (req, res) => res.json({ etapas: crm.ETAPAS }));
+
+app.get('/api/crm/operadores', async (req, res) => {
+  try {
+    const operadores = await crm.listarOperadores(req.tenantId);
+    res.json({ operadores, euId: req.operadorId || 0 });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/contatos/:id/atendente', async (req, res) => {
+  const { operadorId } = req.body || {};
+  try {
+    await crm.definirAtendente(req.tenantId, Number(req.params.id), operadorId === null || operadorId === undefined || operadorId === '' ? null : Number(operadorId));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/crm/distribuicao', async (req, res) => {
+  try {
+    res.json(await crm.obterDistribuicao(req.tenantId));
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/crm/distribuicao', async (req, res) => {
+  try {
+    await crm.salvarDistribuicao(req.tenantId, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
   }
 });
 
@@ -2278,86 +2991,8 @@ app.delete('/api/cerebro/tokens/:id', rotaCerebro(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// ---------- Editor de Video (aba "Editor de Vídeo") - ver videoEditor.js e video-worker/ ----------
-const rotaVideo = (fn) => async (req, res) => {
-  try {
-    await fn(req, res);
-  } catch (err) {
-    if (!res.headersSent) res.status(err.status && err.status < 600 ? err.status : 400).json({ erro: err.message });
-    else res.destroy();
-  }
-};
-
-// projeto: nasce como rascunho; o cliente envia video principal, referencia e midias de apoio, e so
-// depois pede "Editar com IA"
-app.post('/api/video/edicoes', rotaVideo(async (req, res) => {
-  res.json(await videoEditor.criar(req.tenantId, req.body || {}));
-}));
-
-app.get('/api/video/edicoes', rotaVideo(async (req, res) => {
-  res.json({ edicoes: await videoEditor.listar(req.tenantId) });
-}));
-
-app.get('/api/video/edicoes/:id', rotaVideo(async (req, res) => {
-  res.json(await videoEditor.obter(req.tenantId, req.params.id));
-}));
-
-app.get('/api/video/edicoes/:id/linha-do-tempo', rotaVideo(async (req, res) => {
-  res.json(await videoEditor.linhaDoTempo(req.tenantId, req.params.id));
-}));
-
-// upload de midia: corpo cru (o proprio arquivo), repassado em streaming - tipo/nome na query
-app.put('/api/video/edicoes/:id/midias', rotaVideo(async (req, res) => {
-  res.json(await videoEditor.enviarMidia(req.tenantId, req.params.id, req));
-}));
-
-app.delete('/api/video/edicoes/:id/midias/:mid', rotaVideo(async (req, res) => {
-  res.json(await videoEditor.acao(req.tenantId, req.params.id, `/midias/${encodeURIComponent(req.params.mid)}`, 'DELETE'));
-}));
-
-app.patch('/api/video/edicoes/:id/opcoes', rotaVideo(async (req, res) => {
-  res.json(await videoEditor.acao(req.tenantId, req.params.id, '/opcoes', 'PATCH', req.body || {}));
-}));
-
-app.post('/api/video/edicoes/:id/iniciar', rotaVideo(async (req, res) => {
-  res.json(await videoEditor.acao(req.tenantId, req.params.id, '/iniciar', 'POST', req.body || {}));
-}));
-
-// edicao manual feita na linha do tempo (mover, esticar, apagar, reescrever) - re-render sem IA
-app.post('/api/video/edicoes/:id/edicao', rotaVideo(async (req, res) => {
-  res.json(await videoEditor.acao(req.tenantId, req.params.id, '/edicao', 'POST', req.body || {}));
-}));
-
-app.post('/api/video/edicoes/:id/ajustar', rotaVideo(async (req, res) => {
-  res.json(await videoEditor.acao(req.tenantId, req.params.id, '/ajustar', 'POST', { pedido: req.body?.pedido }));
-}));
-
-app.delete('/api/video/edicoes/:id', rotaVideo(async (req, res) => {
-  await videoEditor.apagar(req.tenantId, req.params.id);
-  res.json({ ok: true });
-}));
-
-// <video src>/<img src> nao mandam header - token vem na query (?senha=), conferido aqui
-async function tenantDaMidia(req, res) {
-  const tenantId = process.env.SESSION_SECRET ? tenants.verificarToken(req.query.senha) : req.tenantId;
-  if (!tenantId) { res.status(401).end(); return null; }
-  const tenant = await tenants.obterPorId(tenantId);
-  if (!tenant?.super_admin && !(await videoEditor.estaLiberado(tenantId))) { res.status(403).end(); return null; }
-  return tenantId;
-}
-
-app.get('/api/video/edicoes/:id/:tipo(video|capa|tira)', rotaVideo(async (req, res) => {
-  const tenantId = await tenantDaMidia(req, res);
-  if (tenantId) await videoEditor.transmitirArquivo(tenantId, req.params.id, req.params.tipo, req, res);
-}));
-
-app.get('/api/video/edicoes/:id/midias/:mid/:qual(miniatura|arquivo)', rotaVideo(async (req, res) => {
-  if (!/^[a-f0-9]{16}$/.test(req.params.mid)) return res.status(400).end();
-  const tenantId = await tenantDaMidia(req, res);
-  if (tenantId) await videoEditor.transmitirArquivo(tenantId, req.params.id, `midias/${req.params.mid}/${req.params.qual}`, req, res);
-}));
-
 iniciarSchedulerLembretes();
+instagram.iniciarAgendadorInstagram();
 iniciarSchedulerSecretaria();
 iniciarCerebroMae();
 // O alerta de saldo baixo fixo (env var LUMIA_WHATSAPP_ADMIN, sem configuracao de
@@ -2377,6 +3012,14 @@ relatoriosProgramados.iniciarSchedulerRelatoriosProgramados();
 // pra cada contato na coluna "follow_up" do CRM; por padrao vem desativado por tenant
 // (follow_up_config.ativo), entao reativar esse scheduler geral e seguro.
 followUp.iniciarSchedulerFollowUp();
+// Scheduler do Follow Up Inteligente (cards por etapa do funil) - desativado por tenant por padrao.
+followUpInteligente.iniciarSchedulerFollowUpInteligente();
+funilFU.iniciarSchedulerFunilFollowUp();
+crm.iniciarVarreduraRepetidos();
+// Disparos (campanhas de mensagens em massa) - so envia campanhas que o dono iniciou/agendou na aba Disparos
+disparos.iniciarSchedulerDisparos();
+// Clinicorp -> CRM: orcamento que vai pra coluna Follow Up do CRC entra sozinho na coluna Follow Up do CRM (tenants com Clinicorp)
+iniciarSchedulerClinicorpFollowUp();
 // Aniversariantes do mes: puxa do Clinicorp e manda a mensagem de parabens no dia, so pra clinicas
 // que ligaram a automacao (aniversariantes_config.ativo, desligada por padrao)
 aniversariantes.iniciarSchedulerAniversariantes();

@@ -28,6 +28,11 @@ async function garantirTabelas() {
   // periodo de contratacao do cliente (acesso geral a Lumia) - NULL = vitalicio. Mesmo modelo
   // do proposta_acesso_expira_em do Gerador de Propostas, so que pro produto principal.
   await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS acesso_expira_em TIMESTAMPTZ;`);
+  // quando o DONO ativou/desativou a conta na mao (aba Clientes) - o sweep de vencimento nunca
+  // pode desfazer uma decisao manual mais nova que a data de vencimento (foi o que reverteu uma
+  // reativacao a cada deploy: o vencimento antigo continuava no passado e o sweep do boot
+  // desativava de novo)
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS ativo_alterado_em TIMESTAMPTZ;`);
   // exclusao suave - "apagar" na UI so MARCA o tenant (desativa + agenda a exclusao real pra
   // daqui DIAS_ANTES_DE_APAGAR_DE_VERDADE dias), nunca apaga dado nenhum na hora. So o sweep
   // purgarTenantsMarcados() (chamado 1x por dia no boot do server.js) apaga de verdade, e so
@@ -49,6 +54,8 @@ async function garantirTabelas() {
       tenant_id INT NOT NULL REFERENCES tenants(id)
     );
   `);
+  // operador responsavel pelo numero: leads novos desse numero ja entram com ele (um lugar so pra escolher)
+  await pool.query(`ALTER TABLE whatsapp_instance_tenant ADD COLUMN IF NOT EXISTS operador_id INT`);
   // beneficio que so o super_admin liga/desliga por cliente (aba Clientes) - quando true, o
   // PROPRIO cliente pode criar logins extras (colaboradores) pra equipe dele, sem precisar
   // compartilhar a senha principal da conta. Default false (nao muda nada pra quem ja usa,
@@ -72,6 +79,11 @@ async function garantirTabelas() {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS tenant_colaboradores_tenant_idx ON tenant_colaboradores (tenant_id);`);
+  // perfil de quem esta logado (nome de exibicao + foto, ate ~200KB em data URL): o dono usa nome_perfil (o "nome" do
+  // tenant e o da empresa), o colaborador usa o proprio nome
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS nome_perfil TEXT;`);
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS foto_perfil TEXT;`);
+  await pool.query(`ALTER TABLE tenant_colaboradores ADD COLUMN IF NOT EXISTS foto_perfil TEXT;`);
 }
 // exportado pra outros modulos poderem esperar a tabela "tenants" existir antes de criar as
 // PROPRIAS tabelas (que tem REFERENCES tenants(id)) - sem isso, como cada modulo cria sua
@@ -112,8 +124,11 @@ function segredoSessao() {
   return s;
 }
 
-export function firmarToken(tenantId) {
-  const payload = JSON.stringify({ tenantId, exp: Date.now() + TOKEN_VALIDADE_MS });
+// colaboradorId (opcional): quando quem entrou foi um colaborador, o token carrega quem e - e o que
+// permite o CRM mostrar "quem esta atendendo" cada lead. Token antigo (sem isso) segue valendo e
+// conta como o proprio dono da conta.
+export function firmarToken(tenantId, colaboradorId = null) {
+  const payload = JSON.stringify({ tenantId, ...(colaboradorId ? { colaboradorId } : {}), exp: Date.now() + TOKEN_VALIDADE_MS });
   const payloadB64 = Buffer.from(payload, 'utf8').toString('base64url');
   const assinatura = crypto.createHmac('sha256', segredoSessao()).update(payloadB64).digest('base64url');
   return `${payloadB64}.${assinatura}`;
@@ -121,6 +136,11 @@ export function firmarToken(tenantId) {
 
 // devolve o tenantId se o token for valido e nao tiver expirado, ou null
 export function verificarToken(token) {
+  return verificarTokenInfo(token)?.tenantId || null;
+}
+
+// igual, mas devolve tambem quem esta logado: { tenantId, colaboradorId } (colaboradorId 0 = o dono)
+export function verificarTokenInfo(token) {
   if (!token || typeof token !== 'string' || !token.includes('.')) return null;
   const [payloadB64, assinatura] = token.split('.');
   const esperada = crypto.createHmac('sha256', segredoSessao()).update(payloadB64).digest('base64url');
@@ -128,15 +148,41 @@ export function verificarToken(token) {
   const bufEsperada = Buffer.from(esperada);
   if (bufAssinatura.length !== bufEsperada.length || !crypto.timingSafeEqual(bufAssinatura, bufEsperada)) return null;
   try {
-    const { tenantId, exp } = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+    const { tenantId, colaboradorId, exp } = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
     if (!tenantId || !exp || Date.now() > exp) return null;
-    return tenantId;
+    return { tenantId, colaboradorId: Number(colaboradorId) || 0 };
   } catch {
     return null;
   }
 }
 
 // ---------- CRUD de tenant ----------
+
+// versao do login que diz QUEM entrou (dono ou colaborador) - o login chama essa
+export async function autenticarOperador(username, senha) {
+  if (!pool) return null;
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT id, password_hash, ativo FROM tenants WHERE username = $1', [username]);
+  const tenant = rows[0];
+  if (tenant && tenant.ativo && senhaConfere(senha, tenant.password_hash)) return { tenantId: tenant.id, colaboradorId: 0 };
+  const { rows: colabRows } = await pool.query(
+    `SELECT c.id, c.password_hash, c.ativo AS colaborador_ativo, c.tenant_id, t.ativo AS tenant_ativo
+     FROM tenant_colaboradores c JOIN tenants t ON t.id = c.tenant_id WHERE c.username = $1`,
+    [username],
+  );
+  const c = colabRows[0];
+  if (c && c.colaborador_ativo && c.tenant_ativo && senhaConfere(senha, c.password_hash)) return { tenantId: c.tenant_id, colaboradorId: c.id };
+  return null;
+}
+
+// quem pode atender leads nessa conta: o dono (id 0) + colaboradores ativos
+export async function listarOperadores(tenantId) {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows: [t] } = await pool.query('SELECT COALESCE(nome_perfil, nome) AS nome FROM tenants WHERE id = $1', [tenantId]);
+  const { rows } = await pool.query('SELECT id, nome FROM tenant_colaboradores WHERE tenant_id = $1 AND ativo = true ORDER BY nome ASC', [tenantId]);
+  return [{ id: 0, nome: t?.nome || 'Dono' }, ...rows.map((r) => ({ id: r.id, nome: r.nome }))];
+}
 
 export async function autenticar(username, senha) {
   if (!pool) return null;
@@ -219,10 +265,13 @@ export async function criarTenant({ slug, nome, username, senha }) {
   return rows[0].id;
 }
 
-export async function definirAtivo(tenantId, ativo) {
+// manual = true quando e uma decisao do dono (botao ativar/desativar, novo periodo, restaurar):
+// grava o momento, e o sweep de vencimento passa a respeitar essa decisao. O proprio sweep chama
+// sem manual.
+export async function definirAtivo(tenantId, ativo, { manual = false } = {}) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
-  await pool.query('UPDATE tenants SET ativo = $1 WHERE id = $2', [!!ativo, tenantId]);
+  await pool.query(`UPDATE tenants SET ativo = $1${manual ? ', ativo_alterado_em = now()' : ''} WHERE id = $2`, [!!ativo, tenantId]);
   avisarMudancaDeAtivo(tenantId, !!ativo);
 }
 
@@ -286,7 +335,7 @@ export async function definirAcessoCliente(tenantId, meses) {
   }
 
   await pool.query('UPDATE tenants SET acesso_expira_em = $1 WHERE id = $2', [expiraEm, tenantId]);
-  await definirAtivo(tenantId, true);
+  await definirAtivo(tenantId, true, { manual: true });
 }
 
 // sweep periodico (chamado pelo server.js) - bloqueia cliente cujo periodo contratado venceu.
@@ -296,6 +345,7 @@ export async function bloquearClientesExpirados() {
   await tabelasProntas;
   const { rows } = await pool.query(`
     SELECT id FROM tenants WHERE acesso_expira_em IS NOT NULL AND acesso_expira_em < now() AND ativo = true
+      AND (ativo_alterado_em IS NULL OR ativo_alterado_em < acesso_expira_em)
   `);
   for (const r of rows) {
     await definirAtivo(r.id, false);
@@ -322,7 +372,7 @@ export async function marcarParaExclusao(tenantId) {
   if (tenant.super_admin) throw new Error('nao e possivel apagar um super_admin');
 
   const apagarEm = new Date(Date.now() + DIAS_ANTES_DE_APAGAR_DE_VERDADE * 24 * 60 * 60 * 1000);
-  await pool.query('UPDATE tenants SET apagar_em = $1, ativo = false WHERE id = $2', [apagarEm, tenantId]);
+  await pool.query('UPDATE tenants SET apagar_em = $1, ativo = false, ativo_alterado_em = now() WHERE id = $2', [apagarEm, tenantId]);
   avisarMudancaDeAtivo(tenantId, false);
   return apagarEm;
 }
@@ -332,7 +382,7 @@ export async function marcarParaExclusao(tenantId) {
 export async function restaurarTenant(tenantId) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
-  await pool.query('UPDATE tenants SET apagar_em = NULL, ativo = true WHERE id = $1', [tenantId]);
+  await pool.query('UPDATE tenants SET apagar_em = NULL, ativo = true, ativo_alterado_em = now() WHERE id = $1', [tenantId]);
   avisarMudancaDeAtivo(tenantId, true);
 }
 
@@ -517,9 +567,61 @@ export async function mapearInstanciaParaTenant(instancia, tenantId) {
   );
 }
 
+// { instancia: operadorId } so dos numeros que tem operador definido (0 = o dono da conta)
+export async function operadoresPorNumero(tenantId) {
+  if (!pool) return {};
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT instancia, operador_id FROM whatsapp_instance_tenant WHERE tenant_id = $1 AND operador_id IS NOT NULL', [tenantId]);
+  return Object.fromEntries(rows.map((r) => [r.instancia, r.operador_id]));
+}
+
+export async function gravarOperadorDoNumero(tenantId, instancia, operadorId) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const { rowCount } = await pool.query('UPDATE whatsapp_instance_tenant SET operador_id = $3 WHERE instancia = $1 AND tenant_id = $2', [instancia, tenantId, operadorId]);
+  if (!rowCount) throw new Error('Esse número não é da sua conta.');
+}
+
 export async function listarInstanciasDoTenant(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query('SELECT instancia FROM whatsapp_instance_tenant WHERE tenant_id = $1', [tenantId]);
   return rows.map((r) => r.instancia);
+}
+
+// ---------- perfil de quem esta logado ----------
+
+// colaboradorId 0 = o dono da conta. papel: 'admin' (super_admin), 'dono' ou 'operador'
+export async function obterPerfil(tenantId, colaboradorId = 0) {
+  if (!pool) return null;
+  await tabelasProntas;
+  const { rows: [t] } = await pool.query('SELECT nome, nome_perfil, foto_perfil, super_admin FROM tenants WHERE id = $1', [tenantId]);
+  if (!t) return null;
+  if (!colaboradorId) return { nome: t.nome_perfil || t.nome, foto: t.foto_perfil || null, papel: t.super_admin ? 'admin' : 'dono', empresa: t.nome };
+  const { rows: [c] } = await pool.query('SELECT nome, foto_perfil FROM tenant_colaboradores WHERE id = $1 AND tenant_id = $2', [colaboradorId, tenantId]);
+  if (!c) return { nome: t.nome_perfil || t.nome, foto: t.foto_perfil || null, papel: 'dono', empresa: t.nome };
+  return { nome: c.nome, foto: c.foto_perfil || null, papel: 'operador', empresa: t.nome };
+}
+
+export async function salvarPerfil(tenantId, colaboradorId, { nome, foto }) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const nomeLimpo = String(nome ?? '').trim().slice(0, 80);
+  if (!nomeLimpo) throw new Error('Informe o nome.');
+  let fotoFinal;
+  if (foto === null || foto === '') fotoFinal = null; // remove a foto
+  else if (foto === undefined) fotoFinal = undefined; // nao mexe
+  else {
+    if (!/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(String(foto))) throw new Error('Foto invalida - use uma imagem JPG, PNG ou WebP.');
+    if (String(foto).length > 300000) throw new Error('Foto muito grande - escolha uma imagem menor.');
+    fotoFinal = String(foto);
+  }
+  if (!colaboradorId) {
+    if (fotoFinal === undefined) await pool.query('UPDATE tenants SET nome_perfil = $1 WHERE id = $2', [nomeLimpo, tenantId]);
+    else await pool.query('UPDATE tenants SET nome_perfil = $1, foto_perfil = $3 WHERE id = $2', [nomeLimpo, tenantId, fotoFinal]);
+  } else if (fotoFinal === undefined) {
+    await pool.query('UPDATE tenant_colaboradores SET nome = $1 WHERE id = $2 AND tenant_id = $3', [nomeLimpo, colaboradorId, tenantId]);
+  } else {
+    await pool.query('UPDATE tenant_colaboradores SET nome = $1, foto_perfil = $4 WHERE id = $2 AND tenant_id = $3', [nomeLimpo, colaboradorId, tenantId, fotoFinal]);
+  }
 }

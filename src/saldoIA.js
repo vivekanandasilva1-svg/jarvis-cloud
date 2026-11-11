@@ -5,6 +5,7 @@
 // tabela de precos abaixo. Quando o saldo estimado cai abaixo do limite escolhido, avisa o dono no
 // WhatsApp (sem usar IA) ANTES de zerar. A chave da Anthropic e unica da plataforma (serve todos os
 // clientes), entao o saldo e da plataforma e so o super_admin ve/edita - nao e por tenant.
+import crypto from 'node:crypto';
 import { pool } from './db.js';
 import * as whatsappInstances from './whatsappInstances.js';
 import { enviarMensagemTexto } from './evolutionApi.js';
@@ -50,10 +51,28 @@ const tabelasProntas = pool ? (async () => {
   await pool.query(`ALTER TABLE ia_uso ADD COLUMN IF NOT EXISTS modulo TEXT NOT NULL DEFAULT ''`);
   await pool.query('ALTER TABLE ia_uso DROP CONSTRAINT IF EXISTS ia_uso_pkey');
   await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS ia_uso_chave ON ia_uso (hora, modelo, tenant_id, modulo)');
+  // historico de tudo que mexe no saldo FORA do consumo automatico: conferencias (dono informa o
+  // saldo real do Console), recargas e gastos externos (uso da mesma chave fora do app - testes,
+  // ferramentas de desenvolvimento, outros apps). E o que permite medir quanto escapa da conta.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ia_saldo_ajustes (
+      id SERIAL PRIMARY KEY,
+      em TIMESTAMPTZ NOT NULL DEFAULT now(),
+      tipo TEXT NOT NULL,
+      valor_usd NUMERIC(12,4) NOT NULL,
+      descricao TEXT,
+      saldo_estimado_antes NUMERIC(12,4),
+      saldo_informado NUMERIC(12,4)
+    )`);
   await pool.query('INSERT INTO ia_saldo (id) VALUES (1) ON CONFLICT DO NOTHING');
 })().catch((err) => console.error('Erro criando tabelas do saldo da IA:', err.message)) : Promise.resolve();
 
+const modelosSemPreco = new Set();
 export function custoDaChamada(modelo, usage) {
+  if (!PRECOS[modelo] && !modelosSemPreco.has(modelo)) {
+    modelosSemPreco.add(modelo);
+    console.error(`[saldoIA] modelo "${modelo}" sem preco cadastrado - usando o preco do claude-sonnet-5; adicione em PRECOS pra o saldo nao derivar.`);
+  }
   const p = PRECOS[modelo] || PRECO_PADRAO;
   const n = (v) => Number(v) || 0;
   // escrita de cache: a resposta separa por duracao (5 min x 1 h, a de 1h custa mais); sem essa quebra, tudo vai como 5 min
@@ -139,6 +158,12 @@ export async function obterSituacao() {
     FROM ia_uso u LEFT JOIN tenants t ON t.id = u.tenant_id
     WHERE u.hora >= now() - interval '7 days'
     GROUP BY u.tenant_id, t.nome, u.modulo ORDER BY custo DESC LIMIT 8`);
+  const { rows: ajustes } = await pool.query(`SELECT id, em, tipo, valor_usd, descricao, saldo_estimado_antes, saldo_informado FROM ia_saldo_ajustes ORDER BY id DESC LIMIT 8`);
+  const { rows: [fora] } = await pool.query(`
+    SELECT COALESCE(SUM(valor_usd) FILTER (WHERE tipo = 'conferencia' AND valor_usd > 0 AND em >= now() - interval '30 days'), 0) AS conferencias_30d,
+           COALESCE(SUM(valor_usd) FILTER (WHERE tipo = 'gasto_externo' AND em >= now() - interval '30 days'), 0) AS externos_30d
+    FROM ia_saldo_ajustes`);
+  const ultimaConferencia = ajustes.find((a) => a.tipo === 'conferencia');
   const diasHistorico = u.primeiro ? Math.min(7, Math.max(1, (Date.now() - new Date(u.primeiro).getTime()) / 86400000)) : 0;
   const mediaDia = diasHistorico ? Number(u.sete_dias) / diasHistorico : 0;
   const configurado = s.saldo_usd !== null;
@@ -163,6 +188,11 @@ export async function obterSituacao() {
     diasRestantes,
     chamadas7dias: Number(u.chamadas_7d),
     cachePct,
+    // diferenca encontrada na ultima vez que o dono conferiu o saldo real: positivo = o app achava que
+    // tinha MAIS do que tinha de verdade (gasto que nao passou pelo app)
+    ultimaConferencia: ultimaConferencia ? { em: ultimaConferencia.em, estimadoUsd: Number(ultimaConferencia.saldo_estimado_antes), realUsd: Number(ultimaConferencia.saldo_informado), diferencaUsd: Number(ultimaConferencia.valor_usd) } : null,
+    foraDoApp30diasUsd: Number(fora.conferencias_30d) + Number(fora.externos_30d),
+    ajustes: ajustes.map((a) => ({ id: a.id, em: a.em, tipo: a.tipo, valorUsd: Number(a.valor_usd), descricao: a.descricao })),
     porCliente: porCliente.map((r) => ({ tenantId: r.tenant_id, nome: r.nome, modulo: r.modulo, custoUsd: Number(r.custo), chamadas: Number(r.chamadas) })),
   };
 }
@@ -170,6 +200,14 @@ export async function obterSituacao() {
 export async function definirSaldo({ saldoUsd, limiteAlertaUsd }) {
   await tabelasProntas;
   if (saldoUsd !== undefined && saldoUsd !== null) {
+    const { rows: [antes] } = await pool.query('SELECT saldo_usd FROM ia_saldo WHERE id = 1');
+    if (antes?.saldo_usd !== null && antes?.saldo_usd !== undefined) {
+      const estimado = Number(antes.saldo_usd);
+      await pool.query(
+        `INSERT INTO ia_saldo_ajustes (tipo, valor_usd, descricao, saldo_estimado_antes, saldo_informado) VALUES ('conferencia', $1, $2, $3, $4)`,
+        [estimado - saldoUsd, 'Saldo real conferido no Console da Anthropic', estimado, saldoUsd],
+      );
+    }
     await pool.query('UPDATE ia_saldo SET saldo_usd = $1, informado_em = now(), aviso_baixo_em = NULL WHERE id = 1', [saldoUsd]);
     ultimoAvisoRam = 0;
   }
@@ -177,4 +215,55 @@ export async function definirSaldo({ saldoUsd, limiteAlertaUsd }) {
     await pool.query('UPDATE ia_saldo SET limite_alerta_usd = $1 WHERE id = 1', [limiteAlertaUsd]);
   }
   return obterSituacao();
+}
+
+// uso da MESMA chave fora do app (testes, ferramentas de desenvolvimento, outros apps) - nao passa
+// pelo cliente compartilhado, entao o dono registra aqui. Entra no gasto de hoje/7 dias (modulo
+// "externo") e desconta do saldo, igual a uma chamada normal.
+export async function registrarGastoExterno({ valorUsd, descricao }) {
+  await tabelasProntas;
+  const valor = Number(valorUsd);
+  if (!Number.isFinite(valor) || valor <= 0 || valor > 1e5) throw new Error('Informe o valor do gasto em dolar (maior que zero).');
+  const texto = String(descricao || '').trim().slice(0, 200) || 'Gasto fora do app';
+  await pool.query(
+    `INSERT INTO ia_uso (hora, modelo, tenant_id, modulo, chamadas, custo_usd) VALUES (date_trunc('hour', now()), 'externo', 0, 'externo', 0, $1)
+     ON CONFLICT (hora, modelo, tenant_id, modulo) DO UPDATE SET custo_usd = ia_uso.custo_usd + EXCLUDED.custo_usd`,
+    [valor],
+  );
+  await pool.query('UPDATE ia_saldo SET saldo_usd = saldo_usd - $1 WHERE id = 1 AND saldo_usd IS NOT NULL', [valor]);
+  await pool.query(`INSERT INTO ia_saldo_ajustes (tipo, valor_usd, descricao) VALUES ('gasto_externo', $1, $2)`, [valor, texto]);
+  return obterSituacao();
+}
+
+// recarga de creditos: soma ao saldo SEM contar como diferenca de conferencia
+export async function registrarRecarga({ valorUsd }) {
+  await tabelasProntas;
+  const valor = Number(valorUsd);
+  if (!Number.isFinite(valor) || valor <= 0 || valor > 1e5) throw new Error('Informe o valor recarregado em dolar (maior que zero).');
+  await pool.query('UPDATE ia_saldo SET saldo_usd = COALESCE(saldo_usd, 0) + $1, aviso_baixo_em = NULL WHERE id = 1', [valor]);
+  await pool.query(`INSERT INTO ia_saldo_ajustes (tipo, valor_usd, descricao) VALUES ('recarga', $1, 'Recarga de creditos')`, [valor]);
+  ultimoAvisoRam = 0;
+  return obterSituacao();
+}
+
+// ---------- servicos separados (ex.: um editor de video rodando fora do app) ----------
+// Quem usa a MESMA chave da Anthropic em outro processo nao passa pelo anthropicClient, entao o gasto
+// dele some do saldo. Esse servico manda o `usage` de cada resposta pra POST /api/saldo-ia/uso-externo
+// com o cabecalho x-uso-token (derivado do SESSION_SECRET - sem env nova) e o app desconta igual a
+// uma chamada normal, atribuindo ao modulo informado.
+export function tokenUsoExterno() {
+  return crypto.createHmac('sha256', process.env.SESSION_SECRET || 'dev').update('saldo-ia-uso-externo').digest('hex');
+}
+
+export function tokenUsoExternoValido(recebido) {
+  const a = Buffer.from(String(recebido || ''));
+  const b = Buffer.from(tokenUsoExterno());
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+export async function registrarUsoExterno({ modelo, usage, modulo }) {
+  if (!usage || typeof usage !== 'object') throw new Error('usage obrigatorio (o objeto "usage" da resposta da Anthropic).');
+  const nome = String(modulo || 'externo').trim().slice(0, 40) || 'externo';
+  await registrarUso(String(modelo || 'desconhecido').slice(0, 60), usage, { tenantId: 0, modulo: nome });
+  return { ok: true, custoUsd: custoDaChamada(modelo, usage) };
 }

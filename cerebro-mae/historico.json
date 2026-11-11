@@ -572,5 +572,421 @@
     "tipo": "fato",
     "titulo": "Editor de Vídeo: criação e evolução do dia",
     "conteudo": "Serviço separado com senha interna derivada do SESSION_SECRET (sem env nova). Render com cache 96MB e arquivo final mais leve; deploy no meio de um render devolve a edição para a fila sem corromper estado. Editor em tela cheia com linha do tempo em camadas, vídeo de referência e mídias de apoio; a IA vê quadros do vídeo antes de planejar (desliga a própria legenda se o vídeo já tem, ajusta altura do texto pelo rosto, avisa limitações). Não transcreve áudio em silêncio (Whisper inventava frases)."
+  },
+  {
+    "chave": "vid:mestre",
+    "modulo": "video",
+    "data": "2026-10-08",
+    "tipo": "decisao",
+    "titulo": "Editor de Vídeo: IA mestre em edição, tudo criativo feito pelo Claude",
+    "conteudo": "O diretor (Claude) ganhou repertório de motion design: texto 3D, texto atrás da pessoa, fundo trocado, tela dividida, efeitos, zoom dramático e transições, guiado por um manual de edição no prompt. Por decisão do dono, imagens/objetos 3D/fundos são desenhados pelo próprio Claude em SVG (rasterizados pelo Chrome do render) - nada de Gemini/outra IA de imagem. Exceção: transcrição pelo Gemini (Claude não recebe áudio), com Whisper da VPS de reserva; Gemini Pro exige faturamento na API (no gratuito usa Flash). Recorte da pessoa por modelo local (RVM). Plano em JSON validado no código (schema grande demais pro structured output). Render em partes de 30s com retomada e áudio montado no ffmpeg, depois de um vídeo de 6,5 min estourar memória. Pendente: com 1 CPU um vídeo de 5 min com fundo trocado leva 1h30-2h; GPU na nuvem reduziria pra minutos."
+  },
+  {
+    "chave": "vid:selecao-lote",
+    "modulo": "video",
+    "data": "2026-10-26",
+    "tipo": "melhoria",
+    "titulo": "Linha do tempo: seleção em lote com o botão direito",
+    "conteudo": "Pedido do dono pra organizar a linha do tempo: botão direito arrastado desenha um laço que seleciona itens de várias faixas; arrastar qualquer selecionado move o lote junto (sem passar do começo/fim do vídeo); Ctrl+clique soma/tira, Ctrl+A tudo, Esc limpa, setas movem 1 quadro (Shift: 1s), Delete apaga; painel mostra apagar/duplicar todos."
+  },
+  {
+    "chave": "vid:removido",
+    "modulo": "video",
+    "data": "2026-10-26",
+    "tipo": "decisao",
+    "titulo": "Editor de Vídeo removido do app",
+    "conteudo": "Por decisão do dono, o Editor de Vídeo saiu da Lumia por completo: aba, rotas /api/video, liberação por cliente na aba Clientes, o código (public/video.js, src/videoEditor.js) e o serviço separado video-worker/ (docker service lumia-video na VPS). O histórico acima fica como registro do que foi construído."
+  },
+  {
+    "chave": "rel:pedidos-ia",
+    "modulo": "relatorios",
+    "data": "2026-10-26",
+    "tipo": "melhoria",
+    "titulo": "Gerador de Relatórios: IA aplica qualquer ajuste pedido e campo de pedido corrigido",
+    "conteudo": "O campo \"Instruções pra IA\" ficava espremido em 6px (classe de contêiner no textarea) e as instruções só mudavam o texto da análise - o layout era fixo, então pedidos como tirar métricas, mudar título ou quantidade de sugestões eram ignorados. Agora a IA devolve análise + layout (título, subtítulo, métricas e ordem, destaque, nomes de seções, sugestões 0-8, seções extras, nota, cores, nome do cliente/período) e avisa o que não deu pra fazer; números continuam vindo da fonte. Dá pra pedir ajuste num relatório já gerado (reaproveita os mesmos números) e o pedido/ajustes aparecem na prévia e na lista. Relatórios gerados antes disso não têm os dados salvos e precisam ser gerados de novo pra aceitar ajuste."
+  },
+  {
+    "chave": "plat:visual-profissional",
+    "modulo": "plataforma",
+    "data": "2026-10-27",
+    "tipo": "melhoria",
+    "titulo": "Visual profissional: cinza médio sólido, menu em grupos e sinalização vermelho/verde",
+    "conteudo": "Seguindo o modelo do app Zonic aprovado pelo dono: tema trocou os vidros/gradientes pretos por superfícies sólidas em cinza médio mantendo dourado/preto/branco, janela em tela cheia, menu lateral agrupado (Atendimento, Clientes, Automação, Configurações, Administração - grupo some se nenhum item estiver liberado pra conta) e cabeçalho de página (etiqueta + título + descrição) em toda aba. Sinalização padrão: alteração não salva deixa o botão de salvar vermelho e põe um ponto vermelho na aba do menu (e avisa ao sair da página); salvar com sucesso pisca verde e mostra 'Salvo e atualizado'. Feito com rastrearAlteracoes/marcarSalvo no app.js, já ligado em Auto Atendimento, Follow Up, número do WhatsApp, marca/tema do Gerador, alerta de retorno do CRM e saldo da IA. A aba antiga 'Relatórios' virou 'Relatórios automáticos' pra liberar o nome pro futuro painel. Próximas fases: Conversas, Contatos (importar/exportar), painel de Relatórios, assistente Lumien (coruja) e integração com Instagram."
+  },
+  {
+    "chave": "crm:aba-conversas",
+    "modulo": "crm",
+    "data": "2026-10-27",
+    "tipo": "melhoria",
+    "titulo": "Aba Conversas: caixa de entrada estilo WhatsApp Web pra atender pelo app",
+    "conteudo": "Nova aba Conversas (grupo Atendimento) usando a mesma base do CRM (crm_contatos/crm_mensagens + tempo real por SSE): lista com busca, filtros (Todas, Não lidas, IA atendendo, IA pausada), filtro por número quando há mais de uma instância, contador de não lidas no menu, etiquetas de etapa/IA pausada/retorno hoje; conversa com bolhas do WhatsApp, troca de etapa e botão pra pausar/retomar a IA só naquele contato; envio de texto (Enter envia, Shift+Enter quebra linha), foto/vídeo/documento com legenda e áudio gravado no navegador (rota nova POST /api/crm/mensagens/midia, guarda base64 só de imagem/áudio, id do WhatsApp evita duplicar com o eco do webhook). Segue a mesma permissão da aba CRM (não criou chave nova em TABS_VALIDAS). Sem disparador em massa, por decisão do dono. O sino de notificações agora abre a conversa direto nessa aba. Pendente: responder citando mensagem e atribuir atendente."
+  },
+  {
+    "chave": "crm:aba-contatos",
+    "modulo": "crm",
+    "data": "2026-10-27",
+    "tipo": "melhoria",
+    "titulo": "Aba Contatos: base de leads com cadastro, importação e exportação de planilha",
+    "conteudo": "Nova aba Contatos (grupo Clientes, mesma permissão do CRM) sobre a mesma tabela crm_contatos, com colunas novas email, etiquetas, observacoes e origem (whatsapp/importado/manual). Lista com busca, filtros por etapa, etiqueta e origem; no celular vira cartões. Cadastro e edição em modal com sinal de não salvo/salvo; 'Abrir conversa' leva pra aba Conversas. Importa .xlsx (SheetJS sob demanda) ou CSV (detecta ; , tab e Windows-1252), reconhece as colunas sozinho, mostra prévia e contagem (sem telefone, repetidos), etiqueta pra todos, escolhe o número de atendimento e o que fazer com duplicados; envia em lotes de 500, cada lote numa transação. Duplicado = mesmo telefone com ou sem o 9. Exporta Excel e CSV (; com BOM) do que está filtrado, no mesmo formato que a importação lê. Importados sem conversa ficam fora do funil e da aba Conversas até a primeira mensagem; quando a pessoa escreve ou recebe a primeira mensagem, o card assume o formato real do número no WhatsApp (com ou sem 9) em vez de duplicar. Etapa Follow Up não entra pela importação (dispararia a cadência automática). Sem disparo em massa, por decisão do dono."
+  },
+  {
+    "chave": "crm:aba-resultados",
+    "modulo": "crm",
+    "data": "2026-10-27",
+    "tipo": "melhoria",
+    "titulo": "Aba Resultados: indicadores do atendimento por período",
+    "conteudo": "Nova aba Resultados (grupo Clientes, mesma permissão do CRM; rota GET /api/crm/resultados). Período Hoje/7/30/90 dias ou personalizado (até 1 ano, horário de Maceió) e filtro por número. Mostra novos contatos, conversas com movimento, mensagens recebidas, tempo mediano da 1ª resposta (com % em até 5 min), agendamentos e % respondido pela IA, cada um comparado ao período anterior de mesmo tamanho; gráfico de recebidas por dia (com tabela), horários de pico, quem respondeu (IA, Follow Up, equipe) e funil dos contatos que chegaram no período. Resumo escrito montado com os próprios números, sem IA (não gasta crédito nem inventa). Para isso passou a gravar o autor de cada mensagem enviada (coluna crm_mensagens.autor: ia/followup/humano) e o histórico de etapa (tabela crm_etapa_eventos, em moverEtapa, marcarAgendado e marcarPreAgendado); os dois só contam a partir de 27/10/2026 e a tela avisa quando o período começa antes disso. Pendente: evento de etapa nas mudanças automáticas do registrarMensagem e do alerta de retorno."
+  },
+  {
+    "chave": "plat:lumien",
+    "modulo": "plataforma",
+    "data": "2026-10-27",
+    "tipo": "melhoria",
+    "titulo": "Lumien: coruja assistente flutuante que executa ações no app",
+    "conteudo": "Botão de coruja no canto de todas as telas (menos no Início, que já é a conversa com a Lumia), com painel de chat. Usa o mesmo /api/chat da Lumia numa sessão própria (sessionId com ':lumien:'), sem as ferramentas de controle do PC e com uma instrução extra de respostas curtas. Cada mensagem leva o contexto da tela (aba e conversa/ficha aberta), então 'resuma esta conversa' funciona sem repetir o nome. Ferramentas novas no cloudAgent (também disponíveis pra Lumia no Início e no WhatsApp): crm_buscar_contatos, crm_ler_conversa, crm_conversas_aguardando, crm_mover_etapa (inicia/encerra o Follow Up como a tela), crm_pausar_ia, crm_cadastrar_contato, crm_editar_contato, crm_resultados e crm_enviar_mensagem, que fica pendente de confirmação (mensagem pra pessoa de verdade) e aparece com botões Sim/Não; app_abrir_tela abre telas e conversas no navegador (o chat devolve acoesTela). Todas respeitam a permissão da aba CRM do tenant. Sugestões rápidas mudam conforme a tela. Pendente: voz no Lumien e ações de agenda/Clinicorp pelo contexto da conversa aberta."
+  },
+  {
+    "chave": "mod:instagram",
+    "hub": true,
+    "modulo": "instagram",
+    "tipo": "contexto",
+    "titulo": "Módulo: Instagram (direct, comentários e publicações)",
+    "conteudo": "Integração com o Instagram profissional de cada conta pela API do Instagram com login do Instagram: o direct entra no CRM e na aba Conversas, respostas automáticas a comentário por palavra-chave e publicação de feed, carrossel, reels e story, na hora ou agendada."
+  },
+  {
+    "chave": "instagram:integracao",
+    "modulo": "instagram",
+    "data": "2026-10-27",
+    "tipo": "melhoria",
+    "titulo": "Integração com o Instagram: direct, respostas a comentário e publicações agendadas",
+    "conteudo": "Nova aba Instagram (grupo Redes sociais, chave de permissão 'instagram'; src/instagram.js). Conexão por OAuth do Instagram por tenant (token longo de 60 dias, criptografado, renovado sozinho; 1 conta por tenant, a mesma conta não entra em 2 tenants). Webhook /api/instagram/webhook com assinatura do app: o direct entra no CRM como mais um número (instancia 'ig:<conta>', numero = id da pessoa no Instagram) e aparece na aba Conversas, onde se responde em texto (mídia ainda não); opção de a mesma IA do Auto Atendimento responder o direct (sem áudio, mesmo prompt e horário, respeita IA pausada). Respostas a comentário por palavra-chave (palavra inteira, sem acento), em todas as publicações ou numa específica, com resposta pública e/ou mensagem no direct ({nome} vira o @). Publicação de foto no feed (cortada no navegador pra 4:5–1,91:1 e convertida pra JPEG), carrossel (2–10), reels e story, agora ou agendada (até 75 dias); arquivos de até 100 MB ficam em instagram_midias e são servidos à Meta por /ig-midia/<token aleatório>, apagados depois de publicar; agendador a cada minuto cria os containers, espera o processamento do vídeo e publica. Follow Up não manda pro Instagram (janela de 24h da Meta). Pendente: criar o app na Meta, pedir aprovação das permissões instagram_business_basic/manage_messages/manage_comments/content_publish e pôr INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET e INSTAGRAM_WEBHOOK_VERIFY_TOKEN no ambiente; até lá a aba mostra 'aguardando liberação da Meta'."
+  },
+  {
+    "chave": "plat:incidente-dns-2026-10-29",
+    "modulo": "plataforma",
+    "data": "2026-10-30",
+    "tipo": "correcao",
+    "titulo": "Queda do domínio por DNS trocado na Hostinger (29–30/10)",
+    "conteudo": "Em 29/10 por volta de 12h a zona DNS de lumia-marketing.com na Hostinger passou a ter um ALIAS @ e um CNAME www apontando pra CDN da Hostinger (cdn.hstgr.net) em vez da VPS 69.62.96.13. O navegador mostrava 'certificado vencido' (era o certificado antigo da CDN; o da VPS estava válido até 18/12) e os webhooks do WhatsApp falhavam com 'certificate has expired', então as mensagens pararam de entrar no CRM. Correção no hPanel: apagado o ALIAS, criado A @ -> 69.62.96.13 e CNAME www -> lumia-marketing.com (TTL 300); MX/TXT do e-mail mantidos. As conversas perdidas foram recuperadas do banco do Evolution direto no CRM, com horário original e sem acionar a IA. Primeira checagem em caso de 'certificado vencido': o DNS público precisa responder 69.62.96.13. Não usar 'Redefinir registros DNS' no hPanel. Pendente: www sem domínio no Easypanel e investigar por que o Evolution não emitiu eventos em 28/10."
+  },
+  {
+    "chave": "relatorios:sem-numeros-nao-gera",
+    "modulo": "relatorios",
+    "data": "2026-10-30",
+    "tipo": "correcao",
+    "titulo": "Gerador de Relatórios: não gera relatório vazio quando o print não tem números",
+    "conteudo": "Caso real: foi anexado por engano um print de outra tela (DNS da Hostinger) no lugar do print do Gerenciador de Anúncios, e saiu um relatório com todos os cartões em '-'. Agora, se a IA não achar nenhuma métrica de anúncio nos arquivos, a geração para com um aviso claro (e o motivo que a IA viu), sem salvar relatório; os anexos continuam na lista pra trocar. A lista de anexos passou a mostrar a miniatura de cada imagem, pra conferir antes de gerar."
+  },
+  {
+    "chave": "plataforma:landing-page-venda",
+    "modulo": "plataforma",
+    "data": "2026-11-03",
+    "tipo": "funcao",
+    "titulo": "Landing page pública de venda da Lumia (/conheca)",
+    "conteudo": "Pedido do dono: página de venda no modelo da Adapta (hero com promessa \"tudo em um só lugar\", faixa de integrações, vitrine de módulos com selos, antes x depois, como funciona, segurança, planos com destaque, demonstração sem compromisso, FAQ e CTA final), na paleta dourado/cinza/preto da Lumia e só com funções reais. Arquivo public/conheca.html, rota curta /conheca, sem login. Não inventa números, depoimentos nem preço: planos aparecem como \"Sob consulta\" e a prova social usa fatos do produto. Todos os botões abrem o WhatsApp com mensagem pronta. Os botões chamam o WhatsApp comercial definido em WHATSAPP_VENDAS. Pendente: definir preços se quiser mostrar e trocar a conversa de exemplo por depoimentos reais quando houver."
+  },
+  {
+    "chave": "cerebro:2d-e-atualizacao-automatica",
+    "modulo": "cerebro",
+    "data": "2026-11-03",
+    "tipo": "correcao",
+    "titulo": "Cérebro: modo 2D quando não há 3D e atualização automática a cada 30s",
+    "conteudo": "Dois problemas relatados pelo dono: (1) a aba mostrava 'Este aparelho não suporta o cérebro 3D' e ficava vazia - acontece quando o navegador recusa WebGL (aceleração gráfica desligada ou bloqueada depois de travamento da placa de vídeo). Agora cai sozinho num grafo 2D (force-graph@1.51.4) com as mesmas cores, ligações e cliques, e mostra como religar o 3D. (2) O cérebro só buscava as memórias de novo ao sair e voltar pra aba; parado na tela ficava sempre igual. Agora busca a cada 30s enquanto a aba está visível (pausa com a aba escondida), atualiza contador e lista de recentes, e memória que acabou de chegar aparece maior e branca por 12s. cerebro.js passou pra v=11. Testado em Chrome headless com e sem WebGL."
+  },
+  {
+    "chave": "crm:coluna-comprou",
+    "modulo": "crm",
+    "data": "2026-11-04",
+    "tipo": "funcao",
+    "titulo": "CRM: nova coluna \"Comprou\" no funil",
+    "conteudo": "Pedido do dono: coluna pra leads que finalizaram e viraram clientes, depois de Compareceu. Movimentação é manual (arrastar o card); nada move pra ela automaticamente. Entrou também na lista de etapas aceitas pela IA (Lumia) e na taxa de conversão da aba Resultados (agendado + compareceu + comprou). Pendente: se quiser, ligar o fechamento automático (ex: pagamento no Clinicorp) a essa etapa."
+  },
+  {
+    "chave": "crm:coluna-nao-compareceu",
+    "modulo": "crm",
+    "data": "2026-11-04",
+    "tipo": "funcao",
+    "titulo": "CRM: nova coluna \"Não compareceu\" no funil",
+    "conteudo": "Pedido do dono: etapa pra leads que faltaram ao agendamento, logo depois de Compareceu. Movimentação manual (arrastar o card), sem automação. Também aceita pela IA (Lumia) e pela importação de contatos. Pendente: ligar ao status Faltou do Clinicorp se quiser mover sozinho."
+  },
+  {
+    "chave": "crm:coluna-contatos-pessoais",
+    "modulo": "crm",
+    "data": "2026-11-04",
+    "tipo": "funcao",
+    "titulo": "CRM: coluna \"Contatos pessoais\" (a IA não atende)",
+    "conteudo": "Pedido do dono: coluna pra fornecedores, profissionais parceiros e colaboradores. Card nessa etapa conta como IA pausada: estaPausado/obterContato (e o Instagram) tratam etapa contatos_pessoais como auto_pausado, então nem o auto-atendimento nem o retorno automático respondem; a mensagem continua sendo registrada no CRM. Movimentação manual. Pendente: contato que já estava em Follow Up só para de receber a cadência depois de ser movido."
+  },
+  {
+    "chave": "followup:aba-follow-up-inteligente",
+    "modulo": "followup",
+    "data": "2026-11-04",
+    "tipo": "funcao",
+    "titulo": "Aba Follow Up Inteligente (cards por etapa do funil)",
+    "conteudo": "Pedido do dono, no modelo de outro app que ele gravou: clicar em Criar, escolher quais etapas do funil o follow-up atende, quantas mensagens, duração em dias e em que DIA sai cada mensagem (contado da entrada do lead na etapa; a distribuição automática por quantidade/duração é editável dia a dia), instruções da IA com botão Gerar Sugestão e opção de parar se o lead responder. Motor novo em src/followUpInteligente.js (tabelas fui_config, fui_cards, fui_execucoes; scheduler a cada 10min; rotas /api/fu-inteligente, aba followUpInteligente em TABS_VALIDAS). Diferente do Follow Up antigo (coluna follow_up, IA assume a conversa): aqui o lead fica na etapa e o Auto Atendimento segue respondendo se ele escrever. Regras: uma etapa só em um follow-up ativo; nunca atende contatos_pessoais nem follow_up; ignora IA pausada, oculto, sem conversa e Instagram; respeita horário de envio; espaçamento mínimo de 6h entre mensagens; mensagem automática não tira o card de Novo Lead (manterEtapa). Anexos: cada mensagem (dia) aceita até 5 arquivos (áudio, imagem, PDF ou vídeo curto, máx 12 MB cada, tabela fui_arquivos) que saem logo depois do texto; só dá pra anexar depois de salvar o card, e diminuir a quantidade de mensagens apaga os anexos das que sumiram. Novo card já vem com 5 mensagens em 5 dias. Pendente: relativo à data do agendamento (hoje conta da entrada na etapa)."
+  },
+  {
+    "chave": "plataforma:ativar-desativar-nao-reverte",
+    "modulo": "plataforma",
+    "data": "2026-11-04",
+    "tipo": "correcao",
+    "titulo": "Cliente reativado voltava a ficar desativado após cada atualização",
+    "conteudo": "Causa: o sweep de vencimento (bloquearClientesExpirados, roda no boot e a cada 30min) desativa quem tem acesso_expira_em no passado e ativo=true. Reativar na aba Clientes não mexe no vencimento, então o próximo deploy desativava de novo (caso real: Vitaly odontologia, vencimento 30/10). Correção: coluna tenants.ativo_alterado_em marca decisão manual (botão ativar/desativar, novo período, restaurar, marcar exclusão); o sweep só desativa se a decisão manual for ANTERIOR ao vencimento. Mesma regra no vencimento do Gerador de Propostas. Regra geral: rotina automática nunca desfaz escolha manual mais nova - se criar outro sweep/seed, respeitar isso."
+  },
+  {
+    "chave": "plataforma:saldo-ia-fora-do-app",
+    "modulo": "plataforma",
+    "data": "2026-11-05",
+    "tipo": "funcao",
+    "titulo": "Saldo da IA: registra gasto fora do app, recarga e a diferença de cada conferência",
+    "conteudo": "Problema: o saldo estimado (saldoIA.js) só desconta chamadas que passam pelo anthropicClient; a mesma chave usada em testes locais/outras ferramentas gasta sem o app ver, e o saldo deriva (caso real: app mostrava mais que os US$ 5,31 do Console). Agora: (1) cada vez que o dono informa o saldo real o app guarda quanto achava x quanto era (tabela ia_saldo_ajustes) e mostra a diferença e o total fora do app em 30 dias; (2) botões Recarga (soma sem virar diferença) e Gasto externo (entra no gasto de hoje/7 dias como módulo externo e desconta); (3) anthropicClient também contabiliza messages.stream e beta.messages.create, e avisa no log se aparecer modelo sem preço cadastrado. Limite: a Anthropic não expõe saldo por API; só uma chave Admin (conta de organização) daria o custo real automático - não configurado. Pendente: gasto de testes rodando o servidor local com a chave de produção não é rastreado (sem banco) - registrar como gasto externo ou usar chave separada. Serviço separado que use a mesma chave (o antigo Editor de Vídeo usava Opus 5.5 com cliente próprio, sem passar pelo saldo - já removido do app e da VPS) pode reportar gasto em POST /api/saldo-ia/uso-externo com o cabeçalho x-uso-token (GET /api/saldo-ia/token-uso, só super_admin) mandando {modelo, usage, modulo}."
+  },
+  {
+    "chave": "crm:operadores-origem-ligacoes",
+    "modulo": "crm",
+    "data": "2026-11-05",
+    "tipo": "funcao",
+    "titulo": "CRM: operadores, origem dos leads (Meta Ads) e monitoramento de ligações",
+    "conteudo": "Pedido do dono em 3 partes. (1) OPERADORES: o token de login agora carrega quem entrou (colaboradorId; 0 = dono; token antigo continua valendo como dono). crm_contatos.atendente_id/nome mostra em cada card quem atende; filtro Todos/Meus/Sem operador/por pessoa; seletor + Assumir na conversa; quem responde um lead livre vira o operador; Distribuição automática de lead NOVO (rodízio atômico entre os escolhidos + regra campanha->operador, tabela crm_distribuicao). Operadores = dono + colaboradores ativos da conta. (2) ORIGEM: webhook lê contextInfo.externalAdReply (id do anúncio, título, ctwaClid) da 1ª mensagem de anúncio clique-pro-WhatsApp e busca o nome da campanha na Graph API (metaads.getAdOrigem, timeout 2,5s, cai no título); regras por texto da 1ª mensagem (crm_origem_regras, sem acento/maiúscula) têm prioridade; aba Origem dos leads com relatório por campanha (leads/agendaram/compraram/perdidos). Só leads novos, origem não muda depois. (3) LIGAÇÕES: o WhatsApp NÃO tem API pra fazer ligação - só dá pra monitorar. Evento CALL do Evolution (ligado só no webhook com habilitarEventoChamada, nunca /settings) vira registro em crm_chamadas (horário, atendida/perdida/recusada, duração accept->terminate) + registro manual; aba Ligações com resumo, volume por hora e lista. CALL já ligado na instância Vivekananda (conexão seguiu open). Pendente: confirmar com uma ligação real que o Evolution manda o evento (testado só com eventos simulados); ligar CALL em instâncias novas é automático (criarInstancia)."
+  },
+  {
+    "chave": "crm:mover-etapa-na-conversa",
+    "modulo": "crm",
+    "data": "2026-11-05",
+    "tipo": "funcao",
+    "titulo": "CRM: mover o lead de etapa de dentro da conversa (sem arrastar)",
+    "conteudo": "Pedido do dono: segunda opção além de arrastar o card. A conversa aberta na aba CRM ganhou o seletor Etapa no cabeçalho (a aba Conversas já tinha o seu). Usa a mesma rota POST /api/crm/contatos/:id/etapa do arrastar, então os efeitos colaterais (Follow Up começa/encerra, histórico de etapa pro relatório) são idênticos; o card muda de coluna na hora."
+  },
+  {
+    "chave": "plataforma:remocao-n8n-vps",
+    "modulo": "plataforma",
+    "data": "2026-11-05",
+    "tipo": "decisao",
+    "titulo": "VPS: n8n removido (sem uso desde 2025) pra liberar recurso",
+    "conteudo": "Pedido do dono pra abrir espaço na VPS (plano de subir um OT 8.6 depois). Antes de remover: nenhum código da Lumia nem webhook da Evolution apontava pro n8n, e a última execução dele foi em 15/06/2025. Backup (pg_dump + workflows em JSON + env) baixado pro PC em backups-lumia/n8n-2026-11-05, fora do git. Removidos os 5 serviços (n8n start/webhook/worker, postgres, redis) e a imagem. Lumia e Evolution seguiram no ar. Pendente: apagar o projeto n8n vazio no painel do Easypanel. Achado no caminho: a instância 'Nando TIM' (desconectada desde 03/2026) tem webhook pra um endereço externo em webhook.office.com, a revisar com o dono."
+  },
+  {
+    "chave": "whatsapp:webhook-externo-nando-tim-removido",
+    "modulo": "whatsapp",
+    "data": "2026-11-05",
+    "tipo": "correcao",
+    "titulo": "WhatsApp: removido webhook externo da instância Nando TIM",
+    "conteudo": "O dono não reconheceu o destino (webhook.office.com/.../omni_ia.jsx-993/evolution-sync), que receberia as mensagens dessa instância se ela fosse reconectada. Desativado pela API da Evolution (/webhook/set) e trocado pro endpoint da Lumia, ainda desligado: se reconectar o número pela Lumia, ela liga o webhook de novo. Nenhum outro registro da Evolution cita esse endereço. As outras instâncias (Vivekananda, Lu LabArts) já apontavam só pra Lumia."
+  },
+  {
+    "chave": "whatsapp:disparos",
+    "modulo": "whatsapp",
+    "data": "2026-11-06",
+    "tipo": "funcao",
+    "titulo": "Aba Disparos: campanhas de mensagens em massa no WhatsApp",
+    "conteudo": "Pedido do dono (modelo do app que ele gravou, item Disparo). src/disparos.js + aba Disparos (chave disparos em TABS_VALIDAS, rotas /api/disparos). Campanha = número (instância) + texto com {nome}/colunas da planilha e variações {oi|olá} + anexos (áudio/imagem/PDF/vídeo, máx 5 de 12 MB) + IA opcional que reescreve o texto por contato + agendamento + janela de horário + intervalo aleatório (mín 10s) + limite por dia + rodapé SAIR. Lista por planilha CSV/Excel (acha coluna de telefone/nome; outras viram variáveis), colar texto ou do CRM por etapa/etiqueta. Relatório: enviadas, fila, respostas, falhas, optout, envios por hora, tabela por destinatário. Travas anti-bloqueio: nunca manda pra quem respondeu SAIR (tabela disparo_optout) nem pra contatos_pessoais; pausa sozinha após 5 falhas seguidas de sistema (número sem WhatsApp não conta); limite diário vale por número somando campanhas; scheduler a cada 10s, 1 mensagem por campanha por ciclo; reinício devolve quem estava enviando pra fila. Resposta do lead: webhook chama disparos.registrarResposta (marca respondeu / SAIR) e o Auto Atendimento segue atendendo normalmente. Mensagens vão pro CRM como saída autor disparo sem mexer na etapa. RISCO: via não oficial (Evolution/Baileys) - disparo em massa pode restringir o número. Testado no servidor com validações, opt-out e pausa automática; caminho de ENVIO com sucesso e a IA de variação não foram testados ao vivo (evitado mandar mensagem real). Pendente: teste real com poucos contatos autorizados. ATUALIZAÇÃO 06/11: lista agora pode ser montada ANTES de criar a campanha (planilha/colados/CRM guardados no navegador e enviados junto ao criar), com prévia (quantidade, colunas/variáveis, 5 primeiras linhas) e remoção individual de quem está na fila. Painel geral (botão Painel geral): enviadas, pendentes, falhas, entregues, lidas, responderam, pediram pra sair e não entregues, por dia e por campanha. Rastreio de entrega via evento MESSAGES_UPDATE do Evolution (ligado só no webhook da Vivekananda; wa_id/entregue_em/lido_em em disparo_destinatarios; só vale pra mensagens enviadas depois). O WhatsApp NÃO avisa bloqueio nem denúncia: o painel mostra só a pista \"não entregues\" (enviada há +6h sem chegar), que também pode ser celular desligado ou número sem WhatsApp."
+  },
+  {
+    "chave": "crm:clinicorp-followup",
+    "modulo": "crm",
+    "data": "2026-11-06",
+    "tipo": "funcao",
+    "titulo": "Clinicorp -> CRM: orçamento em Follow Up entra sozinho na coluna Follow Up + funil por número",
+    "conteudo": "Pedido do dono: paciente que sai da avaliação (Dr. Thales) e a Vânia move pra coluna Follow Up do CRC (Orçamentos em aberto) no Clinicorp entra sozinho na coluna Follow Up do CRM. Fonte: /estimates/list com Status FOLLOWUP (Date vira FollowUpDate). src/clinicorpFollowUp.js: varre a cada 10min (últimos 31d + próximos 62d), acha o contato pelo telefone (com/sem 9) ou cria (origem clinicorp, WhatsApp ativo do tenant), move pra follow_up e inicia o acompanhamento; cada orçamento entra UMA vez (tabela clinicorp_followup_sync) pra não brigar com movimento manual; contatos pessoais ficam de fora; 1ª rodada só importa o marcado nos últimos 7 dias (histórico antigo vira baseline). Botão 'Follow Up Inteligente' no CRM liga/desliga por número (clinicorp_followup_config; padrão ligado; ao religar só vale o marcado depois). CRM agora tem seletor de número: com 2+ números abre num número só (guardado no navegador) pra setores não misturarem leads. Pendente: se quiserem isolar também Conversas/Contatos por número."
+  },
+  {
+    "chave": "crm:funil-por-numero-contatos-disparos",
+    "modulo": "crm",
+    "data": "2026-11-06",
+    "tipo": "melhoria",
+    "titulo": "Contatos e Disparos separados por número do WhatsApp",
+    "conteudo": "Pedido do dono: setores não podem misturar leads. Seletor de número agora também em Contatos e Disparos (mesma escolha do CRM, guardada no navegador; com 2+ números abre num só). Disparos: lista de campanhas e Painel geral filtram pelo número; nova campanha já vem com o número escolhido; 'montar lista pelo CRM' só puxa contatos do número da campanha (adicionarDoCrm). Pendente: Conversas já tinha filtro próprio; Lumia (chat) continua enxergando tudo."
+  },
+  {
+    "chave": "conversas:por-numero",
+    "modulo": "whatsapp",
+    "data": "2026-11-06",
+    "tipo": "melhoria",
+    "titulo": "Conversas separadas por número do WhatsApp",
+    "conteudo": "Pedido do dono (setores sem misturar contatos). A aba Conversas usa a mesma escolha de número do CRM/Contatos/Disparos (numeroPreencher): com 2+ números abre num só; o contador de não lidas conta só o número escolhido. Pendente: o chat da Lumia (assistente) continua global."
+  },
+  {
+    "chave": "cerebro:neuronios-realistas",
+    "modulo": "cerebro",
+    "data": "2026-11-06",
+    "tipo": "melhoria",
+    "titulo": "Cérebro realista: neurônios coloridos por IA, regiões separadas e sinapses vivas",
+    "conteudo": "Pedido do dono: visual mais realista, dinâmico e colorido. public/cerebro.js: cada memória virou um neurônio 3D (soma + dendritos ramificados + axônio + brilho pulsante) com three.js separado; COR = IA que salvou (paleta mais viva), FORMATO = tipo (decisão piramidal, fato estrelado, preferência bipolar, tarefa multipolar, contexto glia, aprendizado Purkinje em leque); cada IA tem seu 'lobo' do cérebro (força de agrupamento + nebulosa colorida + rótulo); ligações curvas na cor da IA com pulsos de sinapse; legenda dos formatos. Fallback 2D também desenha neurônios. Testado com dados fictícios no navegador; pendente ver com as memórias reais. Dependência: three@0.149 via jsdelivr."
+  },
+  {
+    "chave": "cerebro:desempenho",
+    "modulo": "cerebro",
+    "data": "2026-11-06",
+    "tipo": "correcao",
+    "titulo": "Cérebro leve e fluido: nível de detalhe, materiais compartilhados e menos trabalho por quadro",
+    "conteudo": "O visual de neurônios pesou (cada memória = 5 objetos 3D + materiais próprios + pulso por quadro + 1 partícula por ligação + o grafo se refazia a cada 30s). Correção em public/cerebro.js: LOD pelo tamanho do cérebro (<=150 completo, <=500 soma+dendritos, >500 só o soma, dendritos só no selecionado); materiais compartilhados por cor/estado; animação a ~15 quadros/s e brilho global; só as 40 ligações mais fortes têm pulso; curvas só com <=200 ligações; grafo só é refeito quando os dados mudam (assinatura); pixel ratio limitado a 1.5; 2D sem gradiente por quadro. Também corrigido: cores lavadas (three r149 separado não converte pra linear). Medido no navegador de teste com 1500 memórias: ~7 -> ~80 quadros/s. Pendente: validar com o cérebro real do dono."
+  },
+  {
+    "chave": "contatos:importar-direto-no-funil",
+    "modulo": "crm",
+    "data": "2026-11-06",
+    "tipo": "melhoria",
+    "titulo": "Importar lista de contatos já na coluna do funil escolhida",
+    "conteudo": "Pedido do dono: subir uma lista (ex: clientes faltosos) e já mandar pra uma coluna do CRM. Na importação de planilha (aba Contatos) há o campo 'Colocar no funil do CRM, na coluna' (todas as etapas menos Follow Up, que dispara a cadência de mensagens). A coluna da própria planilha, se existir, tem prioridade. Contato novo entra já na coluna e aparece no board (ultima_mensagem_em preenchida, sem isso o board esconde); contato que já existe só é movido no modo 'Completar com os dados da planilha'. Registra o evento de etapa. Efeito colateral: esses contatos também aparecem na lista de Conversas (vazios)."
+  },
+  {
+    "chave": "plataforma:landing-page-novidades",
+    "modulo": "plataforma",
+    "data": "2026-11-06",
+    "tipo": "melhoria",
+    "titulo": "Landing page (/conheca) revisada com as funções novas e demonstrações interativas",
+    "conteudo": "Pedido do dono: colocar na página de venda tudo que entrou depois dela, de forma didática e interativa. Entraram: Disparos, Follow Up Inteligente, operadores com distribuição em rodízio, origem dos leads por campanha, Ligações, um CRM por número (setores), orçamento do Clinicorp entrando sozinho no Follow Up, novas colunas do funil (Comprou, Não compareceu, Contatos pessoais) e o Cérebro com neurônios por IA. Novas seções: jornada do lead em 5 etapas que avança sozinha; abas de Novidades com simuladores (texto do disparo com {nome}/{a|b}, cadência do follow-up com controles, rodízio de leads, relatório por campanha, gráfico de ligações por hora, troca de número por setor); funil completo; cérebro animado em canvas; CRM do topo com card andando de Novo lead até Comprou. Continua sem inventar números reais: painéis marcados como exemplo. FAQ honesta sobre risco de bloqueio em disparo e sobre a Lumia não fazer ligações (só monitora). Pendente: depoimentos e preços reais quando houver."
+  },
+  {
+    "chave": "plataforma:landing-monte-pacote",
+    "modulo": "plataforma",
+    "data": "2026-11-06",
+    "tipo": "melhoria",
+    "titulo": "Landing page: terceiro plano \"Monte seu pacote\"",
+    "conteudo": "Pedido do dono: terceira opção de compra além de Lumia Atendimento e Lumia Completa, onde a pessoa escolhe as funções que quer (18 opções em chips marcáveis, Auto Atendimento e CRM já vêm marcados) e pede o orçamento do valor final, também sob consulta. O botão abre o WhatsApp comercial com a lista das funções escolhidas na mensagem, e fica desativado sem nenhuma escolhida. Três colunas no computador; no tablet o pacote ocupa a linha inteira embaixo."
+  },
+  {
+    "chave": "app:perfil-e-visao",
+    "modulo": "app",
+    "data": "2026-11-06",
+    "tipo": "funcao",
+    "titulo": "Perfil no topo (foto/nome/papel) e visão por número e operador",
+    "conteudo": "Pedido do dono: mostrar no topo quem está logado, editar perfil (nome e foto) e, em contas com 2+ números e operadores, poder acompanhar outros números/operadores. Topo: chip com foto (ou iniciais), nome e papel (Administrador / Dono da conta / Operador), menu Editar perfil / Sair; modal de perfil com foto reduzida a 256px JPEG no navegador. Back: tenants.nome_perfil/foto_perfil e tenant_colaboradores.foto_perfil, GET /api/me devolve perfil/instancias/operadores/instanciaAtiva, PUT /api/perfil. Visão: seletores 'Número' e 'Operador' no topo, sincronizados com os de CRM, Conversas, Contatos e Disparos (operador vale p/ CRM e Conversas; Contatos/Disparos só por número). Operador (colaborador) abre por padrão em 'Meus + sem operador' e pode trocar pra acompanhar outros. Importante: é só VISÃO - o operador ainda consegue abrir qualquer lead (não há bloqueio de permissão por número/operador). Pendente: restringir de verdade se o dono quiser."
+  },
+  {
+    "chave": "app:visao-operador-por-conta",
+    "modulo": "app",
+    "data": "2026-11-06",
+    "tipo": "correcao",
+    "titulo": "Seletor de operador mostra só os operadores da própria conta",
+    "conteudo": "Pedido do dono: cada conta com seus próprios operadores. Dados já eram isolados por tenant (listarOperadores filtra tenant_id; conferido no banco: cada conta só lista os seus). O risco real era o navegador: a escolha de operador/número fica no localStorage e podia vir de OUTRA conta logada no mesmo navegador. Agora no login a escolha é validada contra os operadores/números da conta atual (senão reseta). Seletor simplificado: 'Todos os operadores' + cada operador da conta (o logado marcado '(eu)'); operador comum abre vendo os próprios leads. Leads sem operador só aparecem em 'Todos'."
+  },
+  {
+    "chave": "app:visao-operador-dono-ve-sem-operador",
+    "modulo": "app",
+    "data": "2026-11-06",
+    "tipo": "correcao",
+    "titulo": "Voltar pro operador principal (dono) não esconde mais as conversas",
+    "conteudo": "Bug: ao escolher o dono da conta (id 0) no seletor de operador, só apareciam leads com atendente_id = 0 explícito; como quase todo lead não tem operador (null), as conversas sumiam. Agora lead sem operador conta como do dono (contatoNoOperador em public/app.js)."
+  },
+  {
+    "chave": "app:visao-principal-ve-tudo",
+    "modulo": "app",
+    "data": "2026-11-06",
+    "tipo": "correcao",
+    "titulo": "Seletor de operador: conta principal = todas as conversas",
+    "conteudo": "Dono voltava pro 'Vitaly' e as conversas dos operadores sumiam (o filtro do dono mostrava só dele + sem operador). Agora a 1ª opção é a conta principal (nome do dono, 'principal · todas') = sem filtro; as demais opções são só os operadores (colaboradores) da conta. Valores guardados 'op:0'/'eu' viram principal (ou o próprio operador, se logado como colaborador)."
+  },
+  {
+    "chave": "plataforma:landing-redes-suporte",
+    "modulo": "plataforma",
+    "data": "2026-11-06",
+    "tipo": "melhoria",
+    "titulo": "Landing page: plano Redes de Clínicas e faixa de suporte",
+    "conteudo": "Pedido do dono: quarto plano para grupos e redes (valor sob consulta, projeto a quatro mãos, prioridade de suporte, piloto sem custo, tudo da clínica individual, um número e um funil por unidade, treinamento da rede), com botão que pede a proposta de piloto pelo WhatsApp. Planos passaram para grade 2x2. Faixa abaixo dos planos: suporte humano em horário comercial e suporte 24h com a Lumien. Visão unificada de várias unidades ainda não existe no app: na página ficou como dashboards e IA da rede construídos no projeto. Mesmo conteúdo entrou nos PDFs comerciais (entregas/lumia-pdfs, fora do git). Pendente: confirmar se o suporte humano vale para todos os planos."
+  },
+  {
+    "chave": "disparos:anexos-na-criacao-e-followup-importacao",
+    "modulo": "whatsapp",
+    "data": "2026-11-06",
+    "tipo": "melhoria",
+    "titulo": "Disparos: anexar imagem/áudio/PDF/vídeo já na criação; importação aceita coluna Follow Up",
+    "conteudo": "Disparos já aceitavam anexos (imagem, áudio, PDF, vídeo, até 12MB, 5 por campanha) mas o botão só aparecia DEPOIS de criar a campanha - o dono não achou. Agora a tela 'Nova campanha' tem a seção de anexos (vários arquivos; sobem após criar) e o tipo é deduzido pela extensão quando o navegador não informa (.opus/.m4a/.mp4), no front e no back (salvarArquivo). Importação de contatos: a coluna Follow Up agora aparece na escolha; o contato só entra na coluna, sem iniciar a cadência (follow_up_contatos só é criado ao mover pelo CRM). Atenção: se o lead responder, o motor de Follow Up (followUp.processarMensagem) passa a responder enquanto ele estiver nessa coluna."
+  },
+  {
+    "chave": "crm:anotacoes-do-paciente",
+    "modulo": "crm",
+    "data": "2026-11-09",
+    "tipo": "funcao",
+    "titulo": "Anotações sobre o paciente nas conversas (Conversas e CRM)",
+    "conteudo": "Pedido do dono: registrar o que está tratando/resolvendo com o paciente pra consultar e lembrar depois. Tabela crm_notas (tenant, contato, autor, texto, data; some junto com o contato). Botão '📝 Anotações (n)' no cabeçalho da conversa em Conversas e no modal do CRM abre um painel com histórico (autor + data/hora), campo pra nova anotação (Ctrl+Enter salva) e apagar (só o autor ou o dono). Mesmas anotações nos dois lugares. A busca de Conversas também acha pelo texto das anotações (/api/crm/notas/buscar). Rotas: GET/POST /api/crm/contatos/:id/notas, DELETE /api/crm/notas/:id. Pendente: não aparecem ainda na aba Contatos nem entram no contexto da IA de atendimento."
+  },
+  {
+    "chave": "crm:anotacoes-contatos-e-ia",
+    "modulo": "crm",
+    "data": "2026-11-09",
+    "tipo": "melhoria",
+    "titulo": "Anotações também na aba Contatos e no contexto da IA",
+    "conteudo": "Complemento das anotações do paciente: (1) aba Contatos - o modal do contato (editar) mostra o painel de anotações sempre aberto e a lista mostra '📝 n' ao lado do nome; (2) a IA lê as anotações: crm.notasParaIA (últimas 10, ~3000 caracteres) entra no bloco DINÂMICO do system prompt do auto-atendimento (não quebra o cache do bloco fixo) e nos prompts do Follow Up (mensagem de reengajamento e resposta ao lead), com instrução de usar só como contexto e nunca citar/repetir pro paciente. Follow Up Inteligente por cards manda texto fixo (sem IA por lead), então não usa. Cuidado: não escrever dado sensível nas anotações pois a IA lê."
+  },
+  {
+    "chave": "plataforma:padrao-botoes",
+    "modulo": "plataforma",
+    "data": "2026-11-10",
+    "tipo": "decisao",
+    "titulo": "Padrão de botões do sistema: clique colorido e salvar prata/branco",
+    "conteudo": "Decisão do dono: todo botão muda de cor (dourado) enquanto é clicado; botões 'Salvar...' ficam prata escuro quando há alteração não salva e acendem em branco por ~2,5s ao salvar com sucesso. Implementado de forma global em app.js (listener delegado de input/change marca o botão Salvar do bloco; wrapper de fetch acende o botão quando uma requisição de escrita volta ok logo após o clique) e style.css (fim do arquivo). Substitui o vermelho/verde anterior. Botão Salvar novo já herda o padrão se o texto começar com 'Salvar' ou tiver data-salvar. Pendente: casos com vários botões Salvar no mesmo bloco não são marcados automaticamente."
+  },
+  {
+    "chave": "crm:funil-follow-up",
+    "modulo": "crm",
+    "data": "2026-11-10",
+    "tipo": "funcao",
+    "titulo": "Aba Funil Follow Up (Dia 0 a Dia 5)",
+    "conteudo": "Nova aba com funil próprio de 6 colunas. Lead entra no Dia 0 com alerta de retorno exclusivo: data/hora programada para ir ao Dia 1..5 (padrão +1..+5 dias às 09:00, editável e reprogramável). Cada dia tem uma tarefa (texto editável por tenant, padrões em funilFollowUp.js); botão 'Tarefa executada' é obrigatório: o lead só avança (scheduler 60s no servidor) quando a tarefa do dia atual está feita E a data do próximo dia chegou. Sem a tarefa o card mostra 'Pendente de execução' (vermelho se já passou da data). Dia 5 executado = funil concluído. Tabelas ffu_config/ffu_leads/ffu_etapas, rotas /api/funil-fu, aba funilFollowUp em TABS_VALIDAS. Pendente: mover manualmente entre dias não existe de propósito; sem notificação no sino ainda; não dispara mensagem automática (é fluxo de tarefas manuais)."
+  },
+  {
+    "chave": "crm:funil-fu-entrada-do-crm",
+    "modulo": "crm",
+    "data": "2026-11-10",
+    "tipo": "melhoria",
+    "titulo": "Entrada no Funil Follow Up: automática pela etapa Follow Up e botão nas conversas",
+    "conteudo": "Regra do dono: todo lead que entra na etapa Follow Up do CRM (Clinicorp, importação, arrastando ou pela conversa) entra sozinho no Dia 0 do Funil Follow Up - gancho em crm.registrarEventoEtapa (etapa follow_up) chamando funilFollowUp.adicionarDoCrm, que não duplica quem já está em andamento. Também há o botão '+ Funil Follow Up' nas conversas (Conversas e CRM) que coloca qualquer lead no Dia 0 com a agenda padrão. Sair da etapa Follow Up não tira o lead do funil. Pendente: leads que já estavam na etapa Follow Up antes do deploy não foram migrados."
+  },
+  {
+    "chave": "clinicorp:sync-padrao-desligado",
+    "modulo": "clinicorp",
+    "data": "2026-11-10",
+    "tipo": "correcao",
+    "titulo": "Sync Clinicorp -> Follow Up passa a vir desligado e só roda em quem ligou",
+    "conteudo": "Bug: as contas admin (id 1) e Vitaly (id 10) têm as MESMAS credenciais do Clinicorp (clinpopodonto); o sincronizador rodava para todas as contas e a automação vinha ligada por padrão, então os pacientes da Vitaly foram criados também na conta admin (4 cartões, instância Vivekananda) e as chamadas dobravam (erros 429 do Clinicorp). Correção: obterAtivacao sem linha = desligado; scheduler só percorre contas com clinicorp_followup_config ativo. Os 4 cartões do tenant 1 (sem mensagens) foram removidos. Atenção: conta admin com credenciais de Clinicorp de outro cliente - se for ligar o botão nela, vai puxar os pacientes desse mesmo Clinicorp."
+  },
+  {
+    "chave": "clinicorp:espelho-completo-follow-up",
+    "modulo": "clinicorp",
+    "data": "2026-11-10",
+    "tipo": "correcao",
+    "titulo": "Coluna Follow Up do CRM espelha TODOS os pacientes do Follow Up do Clinicorp (padrão por cliente)",
+    "conteudo": "Problemas: (1) pacientes antigos da coluna Follow Up do CRC no Clinicorp eram tratados como 'baseline' e nunca entravam; (2) cartões vindos do Clinicorp não têm operador e a visão de um operador (ex.: Vânia) só mostra os dela, então a coluna ficava vazia. Regras agora: o sync é ligado por padrão para toda conta com Clinicorp integrado (cada uma com a SUA credencial); todo paciente em FOLLOWUP no Clinicorp entra/é movido para a coluna Follow Up do CRM; pacientes históricos entram na coluna mas NÃO disparam a cadência de mensagens (sem WhatsApp para paciente antigo); contas que compartilham o mesmo Clinicorp (mesmo subscriber) só rodam na dona - conta de cliente ganha da admin. Na visão de operador, leads sem operador na etapa Follow Up aparecem para toda a equipe. Pendente: paciente que SAI do Follow Up no Clinicorp ainda não sai da coluna do CRM (decisão de produto)."
+  },
+  {
+    "chave": "crm:funil-fu-regra-universal",
+    "modulo": "crm",
+    "data": "2026-11-10",
+    "tipo": "decisao",
+    "titulo": "Regra: todo lead na etapa Follow Up do CRM está no Dia 0 do Funil Follow Up, de qualquer fonte",
+    "conteudo": "Além do gancho em registrarEventoEtapa (cobre quem ENTRA na etapa: Clinicorp, importação de lista, arrastar, conversa, mudança manual), há uma varredura a cada minuto (funilFollowUp.varrerFollowUpDoCrm) que coloca no Dia 0 qualquer lead que já esteja na coluna Follow Up e ainda não tenha passado pelo funil - cobre quem já estava lá e fontes que não passem pelo gancho. Remover do funil agora esconde (removido_em) em vez de apagar, para a varredura não recolocar quem a equipe tirou de propósito; quem concluiu o Dia 5 também não volta sozinho (só se entrar de novo na etapa). Pendente: sair da etapa Follow Up no CRM não tira o lead do funil."
+  },
+  {
+    "chave": "crm:follow-up-por-operador",
+    "modulo": "clinicorp",
+    "data": "2026-11-10",
+    "tipo": "decisao",
+    "titulo": "Follow Up e Funil Follow Up separados por operador; limite da API do Clinicorp",
+    "conteudo": "Regra do dono: a coluna Follow Up do CRM e o Funil Follow Up (Dia 0 a 5) são distintos por operador, cada um com o seu funil. Implementado: leads do Funil seguem o operador do contato do CRM (join em crm_contatos.atendente_id) e respeitam o seletor de visão por operador; removido o atalho que mostrava leads sem operador da coluna Follow Up para todos. Cada número tem 'operador do Follow Up' (clinicorp_followup_config.operador_id, seletor no cabeçalho do CRM): novos leads vindos do Clinicorp entram atribuídos a ele e os já existentes sem operador são entregues ao escolher. DESCOBERTA: a coluna 'Follow Up' do quadro CRC do Clinicorp NÃO é o Status FOLLOWUP da API de orçamentos (pacientes dela aparecem como OPEN) e a API pública não expõe a etapa do quadro (18 caminhos testados, todos 404; /estimates/get também não traz). O sync atual puxa só orçamentos com Status FOLLOWUP, portanto NÃO espelha o quadro. Alternativa viável: importação de lista direto para a coluna Follow Up, ou pedir ao suporte do Clinicorp o endpoint do quadro CRC."
+  },
+  {
+    "chave": "whatsapp:operador-por-numero",
+    "modulo": "whatsapp",
+    "data": "2026-11-10",
+    "tipo": "funcao",
+    "titulo": "Operador responsável por cada número (aba WhatsApp)",
+    "conteudo": "Cada instância da aba WhatsApp ganhou o seletor 'Operador' (whatsapp_instance_tenant.operador_id): um lugar só para ligar número e operador. Ao escolher, os leads sem operador desse número (fora Contatos pessoais) são entregues a ele; leads NOVOS do número já entram com ele (antes do rodízio da Distribuição, em crm.distribuirLeadNovo); pacientes puxados do Clinicorp também. Escolher o número no cabeçalho já seleciona a visão do operador dele. Removido o seletor 'Follow Up: operador' do cabeçalho do CRM (substituído por este). Pendente: importação de lista não herda o operador do número."
+  },
+  {
+    "chave": "crm:espelhar-follow-up-clinicorp",
+    "modulo": "clinicorp",
+    "data": "2026-11-10",
+    "tipo": "funcao",
+    "titulo": "Espelhar Follow Up do Clinicorp por lista (a API não expõe o quadro CRC)",
+    "conteudo": "Como a API pública do Clinicorp (49 endpoints, spec em sistema.clinicorp.com/api-docs) não traz a coluna Follow Up do quadro CRC, criado o botão 'Espelhar Follow Up do Clinicorp' no CRM: sobe a lista exportada do CRC e a coluna Follow Up do CRM fica igual (crm.espelharFollowUp, rota POST /api/crm/follow-up/espelhar, opção também no modal de importação de Contatos). Entram novos/movidos (já no Dia 0 do funil e com o operador do número), saem só os que vieram de espelho anterior e não estão na lista (card criado pelo espelho e sem conversa é apagado; os demais voltam para Em atendimento); o que a equipe colocou sozinha nunca sai (tabela crm_espelho_followup rastreia). Não dispara cadência de mensagens. Sync automático por status FOLLOWUP: intervalo passou para 30min (limite de 25 req/hora do Clinicorp) e foi desligado nos dois números da Vitaly. Pendente: se o Clinicorp liberar endpoint do quadro, trocar a lista por chamada automática."
+  },
+  {
+    "chave": "crm:anti-repetidos",
+    "modulo": "crm",
+    "data": "2026-11-11",
+    "tipo": "melhoria",
+    "titulo": "Anti-repetidos: mesmo paciente (com/sem o 9) nunca vira dois cards",
+    "conteudo": "Auditoria em produção: 0 repetidos. Reforços: (1) chegada de mensagem no outro formato do telefone entra no card que já existe no mesmo número de WhatsApp (antes só reaproveitava card sem conversa e podia abrir um segundo); (2) crm.mesclarRepetidos roda no boot e a cada 1h: junta cards do mesmo telefone (DDD + 8 últimos dígitos) no MESMO número, ficando com o de conversa mais recente e levando mensagens, notas, histórico, funil, etiquetas, e-mail e operador; (3) Funil Follow Up não aceita o mesmo paciente (ou contato) duas vezes, com/sem o 9. Decisão: o mesmo telefone em NÚMEROS de WhatsApp diferentes continua separado (cada número tem seu funil). Já existiam: índice único (conta, número, instância), dedupe na importação, no Clinicorp e no cadastro manual."
   }
 ]

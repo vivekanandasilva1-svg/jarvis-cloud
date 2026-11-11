@@ -277,10 +277,12 @@ function formatarHistorico(historico) {
 }
 
 async function gerarMensagemEtapa({ tenantId, config, etapa, contato, historico }) {
+  const notasEquipe = await crm.notasParaIA(tenantId, { contatoId: contato.contato_id || contato.id }).catch(() => '');
   const texto = `${config.promptGeral}\n\n` +
     `Voce esta tentando reengajar um contato que parou de responder ha ${etapa.dias} dia(s) - essa e a tentativa numero ${etapa.ordem} de reengajamento.` +
     (etapa.prompt ? `\n\nInstrucoes especificas pra essa tentativa: ${etapa.prompt}` : '') +
     `\n\nNome do contato (se souber): ${contato.nome || 'nao informado'}` +
+    notasEquipe +
     `\n\nHistorico do acompanhamento ate agora:\n${formatarHistorico(historico)}` +
     `\n\nEscreva agora a mensagem a ser enviada pra tentar retomar o contato.`;
 
@@ -334,9 +336,11 @@ export async function processarMensagem(tenantId, contatoId, numero, instancia, 
   const etapas = await listarEtapas(tenantId);
   const etapaAtual = etapas.find((e) => e.ordem === (registro?.ultima_etapa_enviada || 0));
 
+  const notasEquipe = await crm.notasParaIA(tenantId, { contatoId }).catch(() => '');
   const prompt = `${config.promptGeral}\n\n` +
     `Voce esta acompanhando um lead que estava sem responder, dentro de um fluxo de reengajamento.` +
     (etapaAtual?.prompt ? `\n\nInstrucoes da tentativa atual: ${etapaAtual.prompt}` : '') +
+    notasEquipe +
     `\n\nHistorico do acompanhamento ate agora:\n${formatarHistorico(historico)}` +
     `\n\nO contato acabou de responder: "${textoContato}"` +
     `\n\nEscreva uma resposta natural pra essa mensagem e decida se ele demonstrou interesse real em retomar o assunto.`;
@@ -372,6 +376,9 @@ async function processarContato(tenantId, contato, etapas, config) {
   // fora do horario de funcionamento - nao manda tentativa nenhuma agora; o proprio agendador
   // (roda a cada 15min) pega essa tentativa vencida assim que o horario configurado abrir
   if (!dentroDoHorarioFuncionamento(config)) return;
+  // Instagram so deixa mandar mensagem ate 24h depois da ultima da pessoa - a cadencia de dias
+  // do Follow Up nao funciona la
+  if (String(contato.instancia).startsWith('ig:')) return;
 
   const diasDesdeEntrada = (Date.now() - new Date(contato.entrou_em).getTime()) / (24 * 60 * 60 * 1000);
   const ultimaOrdem = contato.ultima_etapa_enviada || 0;
@@ -381,7 +388,7 @@ async function processarContato(tenantId, contato, etapas, config) {
     const historico = contato.historico || [];
     const mensagem = await gerarMensagemEtapa({ tenantId, config, etapa: proxima, contato, historico });
     await evolutionApi.enviarMensagemTextoPor(contato.instancia, contato.numero, mensagem);
-    await crm.registrarMensagem(tenantId, { numero: contato.numero, instancia: contato.instancia, direcao: 'saida', tipo: 'text', texto: mensagem });
+    await crm.registrarMensagem(tenantId, { numero: contato.numero, instancia: contato.instancia, direcao: 'saida', tipo: 'text', texto: mensagem, autor: 'followup' });
 
     const anexos = await obterArquivosComConteudo(tenantId, proxima.ordem);
     for (const anexo of anexos) {

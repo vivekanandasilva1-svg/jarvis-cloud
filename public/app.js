@@ -70,25 +70,42 @@ const tabBtnCrm = document.getElementById('tabBtnCrm');
 const tabBtnAuto = document.getElementById('tabBtnAuto');
 const tabBtnFollowUp = document.getElementById('tabBtnFollowUp');
 const tabBtnAniversariantes = document.getElementById('tabBtnAniversariantes');
+const tabBtnDisparos = document.getElementById('tabBtnDisparos');
+const tabBtnChamadas = document.getElementById('tabBtnChamadas');
+const tabBtnOrigem = document.getElementById('tabBtnOrigem');
+const tabBtnFollowUpInteligente = document.getElementById('tabBtnFollowUpInteligente');
+const tabBtnFunilFu = document.getElementById('tabBtnFunilFu');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
 const tabBtnGeradorRelatorios = document.getElementById('tabBtnGeradorRelatorios');
 const tabBtnIntegracoes = document.getElementById('tabBtnIntegracoes');
 const tabBtnCerebro = document.getElementById('tabBtnCerebro');
-const tabBtnVideo = document.getElementById('tabBtnVideo');
 const tabBtnClientes = document.getElementById('tabBtnClientes');
 const tabBtnPropostasAdmin = document.getElementById('tabBtnPropostasAdmin');
 const tabPainel = document.getElementById('tabPainel');
 const tabAgenda = document.getElementById('tabAgenda');
 const tabWhatsapp = document.getElementById('tabWhatsapp');
 const tabCrm = document.getElementById('tabCrm');
+const tabConversas = document.getElementById('tabConversas');
+const tabBtnConversas = document.getElementById('tabBtnConversas');
+const conversasBadge = document.getElementById('conversasBadge');
+const tabContatos = document.getElementById('tabContatos');
+const tabBtnContatos = document.getElementById('tabBtnContatos');
+const tabResultados = document.getElementById('tabResultados');
+const tabBtnResultados = document.getElementById('tabBtnResultados');
+const tabInstagram = document.getElementById('tabInstagram');
+const tabBtnInstagram = document.getElementById('tabBtnInstagram');
 const tabAuto = document.getElementById('tabAuto');
 const tabFollowUp = document.getElementById('tabFollowUp');
 const tabAniversariantes = document.getElementById('tabAniversariantes');
+const tabDisparos = document.getElementById('tabDisparos');
+const tabChamadas = document.getElementById('tabChamadas');
+const tabOrigem = document.getElementById('tabOrigem');
+const tabFollowUpInteligente = document.getElementById('tabFollowUpInteligente');
+const tabFunilFu = document.getElementById('tabFunilFu');
 const tabRelatorios = document.getElementById('tabRelatorios');
 const tabGeradorRelatorios = document.getElementById('tabGeradorRelatorios');
 const tabIntegracoes = document.getElementById('tabIntegracoes');
 const tabCerebro = document.getElementById('tabCerebro');
-const tabVideo = document.getElementById('tabVideo');
 const tabClientes = document.getElementById('tabClientes');
 const tabPropostasAdmin = document.getElementById('tabPropostasAdmin');
 
@@ -333,7 +350,7 @@ let minhasTabsHabilitadas = null; // null = tudo liberado (default); array = so 
 let meuPermiteColaboradores = false; // beneficio liberado pelo super_admin (aba Clientes) - ver tenants.permite_colaboradores
 // Cerebro de IA e recurso pago a parte - false ate o admin liberar (super_admin sempre tem)
 let meuCerebroLiberado = false;
-let meuVideoLiberado = false; // Editor de Video - tambem pago a parte
+let meusDadosMe = null; // resposta inteira de /api/me (perfil, numeros, operadores)
 
 
 // confirma que o token guardado ainda e valido (nao expirou, tenant continua ativo) - chamado
@@ -350,7 +367,7 @@ async function tokenValido() {
     minhasTabsHabilitadas = Array.isArray(data?.tabsHabilitadas) && data.tabsHabilitadas.length ? data.tabsHabilitadas : null;
     meuPermiteColaboradores = !!data?.permiteColaboradores;
     meuCerebroLiberado = !!data?.cerebroLiberado;
-    meuVideoLiberado = !!data?.videoLiberado;
+    meusDadosMe = data;
     return true;
   } catch {
     return false;
@@ -372,20 +389,31 @@ function mostrarApp() {
   tabBtnAgenda.hidden = !abaLiberada('agenda');
   tabBtnWhatsapp.hidden = !abaLiberada('whatsapp');
   tabBtnCrm.hidden = !abaLiberada('crm');
+  tabBtnConversas.hidden = !abaLiberada('crm'); // mesmas conversas do CRM, mesma permissao
+  tabBtnContatos.hidden = !abaLiberada('crm'); // a base e a mesma tabela de contatos do CRM
+  tabBtnResultados.hidden = !abaLiberada('crm'); // indicadores calculados sobre as conversas do CRM
+  tabBtnInstagram.hidden = !abaLiberada('instagram');
   tabBtnAuto.hidden = !abaLiberada('auto');
   tabBtnFollowUp.hidden = !abaLiberada('followUp');
   tabBtnAniversariantes.hidden = !abaLiberada('aniversariantes');
+  tabBtnDisparos.hidden = !abaLiberada('disparos');
+  tabBtnChamadas.hidden = !abaLiberada('whatsapp'); // ligacoes do numero conectado, mesma permissao do WhatsApp
+  tabBtnOrigem.hidden = !abaLiberada('crm'); // origem dos leads usa a base do CRM, mesma permissao
+  tabBtnFollowUpInteligente.hidden = !abaLiberada('followUpInteligente');
+  tabBtnFunilFu.hidden = !abaLiberada('funilFollowUp');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
   tabBtnGeradorRelatorios.hidden = !abaLiberada('geradorRelatorios');
   tabBtnIntegracoes.hidden = !abaLiberada('integracoes');
   tabBtnCerebro.hidden = !meuCerebroLiberado;
-  tabBtnVideo.hidden = !meuVideoLiberado;
+  atualizarGruposMenu();
+  atualizarCabecalhoAba(document.querySelector('.nav-btn.active')?.dataset.tab || 'painel');
+  lumienAoMudarAba(document.querySelector('.nav-btn.active')?.dataset.tab || 'painel');
   // se a aba visivel por padrao (Painel) foi restringida, pula pra primeira aba liberada em
   // vez de deixar a tela em branco
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
     const primeiraLiberada = [
-      ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm],
-      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['aniversariantes', tabBtnAniversariantes], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
+      ['conversas', tabBtnConversas], ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm], ['contatos', tabBtnContatos], ['resultados', tabBtnResultados], ['instagram', tabBtnInstagram],
+      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['aniversariantes', tabBtnAniversariantes], ['followUpInteligente', tabBtnFollowUpInteligente], ['funilFollowUp', tabBtnFunilFu], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
     ].find(([, btn]) => !btn.hidden);
     if (primeiraLiberada) mudarAba(primeiraLiberada[0]);
   }
@@ -401,6 +429,7 @@ function mostrarApp() {
   iniciarClima();
   iniciarSino();
   testarConexaoAgenteLocal();
+  if (meusDadosMe) iniciarPerfilTopo(meusDadosMe);
 }
 
 function sair() {
@@ -1856,41 +1885,204 @@ async function capturarFrameCamera() {
   return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
 }
 
-// ---------- Abas: Painel / Agenda / WhatsApp ----------
-// o Editor de Video abre por cima do app inteiro - ao fechar, volta pra aba onde a pessoa estava
-let abaAtualApp = 'painel';
-let abaAntesDoVideo = 'painel';
-window.lumiaFecharVideo = () => mudarAba(abaAntesDoVideo === 'video' ? 'painel' : abaAntesDoVideo);
+// ---------- Sinalizacao: alteracao nao salva (vermelho) / salvo (verde) ----------
+// qualquer botao de salvar pode ser "rastreado": quando o usuario mexe num dos campos dele, o
+// botao fica vermelho e a aba no menu ganha um ponto vermelho, ate salvar com sucesso - ai o
+// botao pisca verde e aparece o aviso "Salvo e atualizado" embaixo da tela
+function rastrearAlteracoes(botao, campos) {
+  const marcar = (ev) => { if (ev.isTrusted) marcarPendente(botao); };
+  for (const el of campos) {
+    if (!el) continue;
+    el.addEventListener('input', marcar);
+    el.addEventListener('change', marcar);
+  }
+}
+function marcarPendente(botao) {
+  botao.classList.remove('salvo');
+  botao.classList.add('pendente');
+  atualizarPendenciasMenu();
+}
+function limparPendente(botao) {
+  botao.classList.remove('pendente');
+  atualizarPendenciasMenu();
+}
+function acenderSalvo(botao) {
+  botao.classList.remove('pendente');
+  botao.classList.add('salvo');
+  clearTimeout(botao._salvoTimer);
+  botao._salvoTimer = setTimeout(() => botao.classList.remove('salvo'), 2500);
+  atualizarPendenciasMenu();
+}
+function marcarSalvo(botao, mensagem) {
+  if (botao) acenderSalvo(botao);
+  mostrarAviso(mensagem || 'Salvo e atualizado', 'ok');
+}
 
+// PADRAO DO SISTEMA (vale pra todo botao "Salvar..." sem precisar chamar rastrearAlteracoes):
+// mexeu em qualquer campo perto do botao -> ele fica prata escuro (pendente); salvou com sucesso
+// (requisicao de escrita ok logo apos o clique) -> acende em branco. So age quando o botao de
+// salvar mais proximo do campo e unico naquele bloco, pra nao marcar o botao errado.
+function ehBotaoSalvar(b) {
+  return b.dataset.salvar !== undefined || /^salvar/i.test(b.textContent.trim());
+}
+function botaoSalvarDoCampo(el) {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const bs = [...p.querySelectorAll('button')].filter(ehBotaoSalvar);
+    if (bs.length) return bs.length === 1 ? bs[0] : null;
+  }
+  return null;
+}
+function marcarPendenteGenerico(ev) {
+  const el = ev.target;
+  if (!ev.isTrusted || !el || !el.matches || !el.matches('input, textarea, select')) return;
+  if (el.type === 'search' || el.type === 'file' || el.closest('[data-sem-salvar]')) return;
+  if (/busca|filtro|pesquisa|search|periodo/i.test(`${el.id} ${el.className}`)) return;
+  const botao = botaoSalvarDoCampo(el);
+  if (botao && !botao.disabled) marcarPendente(botao);
+}
+document.addEventListener('input', marcarPendenteGenerico, true);
+document.addEventListener('change', marcarPendenteGenerico, true);
+
+let cliqueSalvar = null;
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest && ev.target.closest('button');
+  if (b && !b.disabled && ehBotaoSalvar(b)) cliqueSalvar = { b, t: Date.now() };
+}, true);
+const fetchAntesSalvar = window.fetch.bind(window);
+window.fetch = (entrada, init) => {
+  const p = fetchAntesSalvar(entrada, init);
+  const metodo = String(init?.method || entrada?.method || 'GET').toUpperCase();
+  const clique = cliqueSalvar;
+  if (clique && metodo !== 'GET' && Date.now() - clique.t < 1500) {
+    p.then((r) => { if (r.ok && clique.b.classList.contains('pendente')) acenderSalvo(clique.b); }).catch(() => {});
+  }
+  return p;
+};
+function atualizarPendenciasMenu() {
+  for (const btn of document.querySelectorAll('.nav-btn[data-tab]')) {
+    const id = btn.dataset.tab;
+    const tab = document.getElementById(`tab${id[0].toUpperCase()}${id.slice(1)}`);
+    btn.classList.toggle('pendente', !!tab?.querySelector('.pendente'));
+  }
+}
+window.addEventListener('beforeunload', (ev) => {
+  if (document.querySelector('.window-body .pendente')) { ev.preventDefault(); ev.returnValue = ''; }
+});
+
+let avisoTimer = null;
+function mostrarAviso(texto, tipo = 'ok') {
+  let el = document.getElementById('avisoFlutuante');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'avisoFlutuante';
+    el.setAttribute('role', 'status');
+    document.body.appendChild(el);
+  }
+  el.className = `aviso-flutuante ${tipo}`;
+  el.textContent = `${tipo === 'ok' ? '✓' : '!'} ${texto}`;
+  el.classList.add('visivel');
+  clearTimeout(avisoTimer);
+  avisoTimer = setTimeout(() => el.classList.remove('visivel'), 3200);
+}
+
+// titulo grande no topo de cada aba (etiqueta + titulo + descricao), no lugar de cada aba
+// repetir o proprio cabecalho
+const CABECALHOS_ABA = {
+  painel: ['Início', 'Painel da Lumia', 'Converse com a Lumia e acompanhe o sistema em tempo real.'],
+  agenda: ['Atendimento', 'Agenda', 'Compromissos e agendamentos, integrados ao Google Agenda.'],
+  whatsapp: ['Atendimento', 'WhatsApp', 'Números conectados e status de cada instância.'],
+  origem: ['Clientes', 'Origem dos leads', 'De qual campanha cada lead veio, e quanto cada uma rende.'],
+  chamadas: ['Atendimento', 'Ligações', 'Ligações do WhatsApp: quantas, que horas, quanto duraram e quantas foram perdidas.'],
+  disparos: ['Automação', 'Disparos', 'Campanhas de mensagens no WhatsApp: listas, programação, anexos, relatório e IA.'],
+  followUp: ['Atendimento', 'Follow Up', 'Retome automaticamente os leads que pararam de responder.'],
+  aniversariantes: ['Clientes', 'Aniversariantes do mês', 'Parabéns automático, no dia, para os pacientes que fazem aniversário (integrado ao Clinicorp).'],
+  funilFollowUp: ['Clientes', 'Funil Follow Up', 'Dia 0 a Dia 5: uma tarefa por dia, com alerta de retorno programado pra cada lead.'],
+  followUpInteligente: ['Atendimento', 'Follow Up Inteligente', 'Mensagens automáticas por etapa do funil, nos dias que você escolher.'],
+  conversas: ['Atendimento', 'Conversas', 'Atenda o WhatsApp direto pela Lumia, em tempo real.'],
+  crm: ['Clientes', 'CRM', 'Seus leads em cada etapa do funil, com a conversa do WhatsApp.'],
+  contatos: ['Clientes', 'Contatos', 'Toda a sua base de leads: cadastre, importe e exporte planilhas.'],
+  instagram: ['Redes sociais', 'Instagram', 'Publique e agende posts, responda comentários e atenda o direct.'],
+  resultados: ['Clientes', 'Resultados', 'Como está o atendimento: volume, velocidade de resposta e conversão do funil.'],
+  auto: ['Automação', 'Auto Atendimento', 'Configure a IA que atende os contatos no WhatsApp.'],
+  relatorios: ['Automação', 'Relatórios automáticos', 'Relatórios enviados sozinhos no WhatsApp, na frequência que você escolher.'],
+  geradorRelatorios: ['Automação', 'Gerador de Relatórios', 'Relatórios de performance prontos pra mandar pro cliente.'],
+  integracoes: ['Configurações', 'Integrações', 'Conecte as ferramentas e gerencie os colaboradores.'],
+  cerebro: ['Administração', 'Cérebro', 'A memória viva da Lumia.'],
+  clientes: ['Administração', 'Clientes', 'Contas que usam a Lumia.'],
+  propostasAdmin: ['Administração', 'Gerador de Propostas', 'Propostas comerciais e assinaturas.'],
+};
+function atualizarCabecalhoAba(aba) {
+  const cab = CABECALHOS_ABA[aba];
+  const el = document.getElementById('pageHeader');
+  if (!el) return;
+  el.hidden = !cab || aba === 'cerebro' || aba === 'conversas'; // telas de tela cheia
+  if (!cab) return;
+  document.getElementById('pageHeaderEtiqueta').textContent = cab[0];
+  document.getElementById('pageHeaderTitulo').textContent = cab[1];
+  document.getElementById('pageHeaderSub').textContent = cab[2];
+}
+
+// esconde o titulo de grupo do menu quando nenhum item dele esta visivel pra essa conta
+// (ex: grupo Administracao so aparece pro dono)
+function atualizarGruposMenu() {
+  for (const grupo of document.querySelectorAll('.nav-grupo')) {
+    let el = grupo.nextElementSibling;
+    let algumVisivel = false;
+    while (el && !el.classList.contains('nav-grupo')) {
+      if (el.classList.contains('nav-btn') && !el.hidden) algumVisivel = true;
+      el = el.nextElementSibling;
+    }
+    grupo.hidden = !algumVisivel;
+  }
+}
+
+// ---------- Abas: Painel / Agenda / WhatsApp ----------
 function mudarAba(aba) {
-  if (aba === 'video' && abaAtualApp !== 'video') abaAntesDoVideo = abaAtualApp;
-  abaAtualApp = aba;
+  atualizarCabecalhoAba(aba);
+  lumienAoMudarAba(aba);
+  atualizarGruposMenu();
   tabPainel.hidden = aba !== 'painel';
   tabAgenda.hidden = aba !== 'agenda';
   tabWhatsapp.hidden = aba !== 'whatsapp';
   tabCrm.hidden = aba !== 'crm';
+  tabConversas.hidden = aba !== 'conversas';
+  tabContatos.hidden = aba !== 'contatos';
+  tabResultados.hidden = aba !== 'resultados';
+  tabInstagram.hidden = aba !== 'instagram';
   tabAuto.hidden = aba !== 'auto';
   tabFollowUp.hidden = aba !== 'followUp';
   tabAniversariantes.hidden = aba !== 'aniversariantes';
+  tabDisparos.hidden = aba !== 'disparos';
+  tabChamadas.hidden = aba !== 'chamadas';
+  tabOrigem.hidden = aba !== 'origem';
+  tabFollowUpInteligente.hidden = aba !== 'followUpInteligente';
+  tabFunilFu.hidden = aba !== 'funilFollowUp';
   tabRelatorios.hidden = aba !== 'relatorios';
   tabGeradorRelatorios.hidden = aba !== 'geradorRelatorios';
   tabIntegracoes.hidden = aba !== 'integracoes';
   tabCerebro.hidden = aba !== 'cerebro';
-  tabVideo.hidden = aba !== 'video';
   tabClientes.hidden = aba !== 'clientes';
   tabPropostasAdmin.hidden = aba !== 'propostasAdmin';
   tabBtnPainel.classList.toggle('active', aba === 'painel');
   tabBtnAgenda.classList.toggle('active', aba === 'agenda');
   tabBtnWhatsapp.classList.toggle('active', aba === 'whatsapp');
   tabBtnCrm.classList.toggle('active', aba === 'crm');
+  tabBtnConversas.classList.toggle('active', aba === 'conversas');
+  tabBtnContatos.classList.toggle('active', aba === 'contatos');
+  tabBtnResultados.classList.toggle('active', aba === 'resultados');
+  tabBtnInstagram.classList.toggle('active', aba === 'instagram');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   tabBtnFollowUp.classList.toggle('active', aba === 'followUp');
   tabBtnAniversariantes.classList.toggle('active', aba === 'aniversariantes');
+  tabBtnDisparos.classList.toggle('active', aba === 'disparos');
+  tabBtnChamadas.classList.toggle('active', aba === 'chamadas');
+  tabBtnOrigem.classList.toggle('active', aba === 'origem');
+  tabBtnFollowUpInteligente.classList.toggle('active', aba === 'followUpInteligente');
+  tabBtnFunilFu.classList.toggle('active', aba === 'funilFollowUp');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
   tabBtnGeradorRelatorios.classList.toggle('active', aba === 'geradorRelatorios');
   tabBtnIntegracoes.classList.toggle('active', aba === 'integracoes');
   tabBtnCerebro.classList.toggle('active', aba === 'cerebro');
-  tabBtnVideo.classList.toggle('active', aba === 'video');
   tabBtnClientes.classList.toggle('active', aba === 'clientes');
   tabBtnPropostasAdmin.classList.toggle('active', aba === 'propostasAdmin');
   if (aba === 'agenda') {
@@ -1901,12 +2093,30 @@ function mudarAba(aba) {
     carregarInstanciasWhatsapp();
   } else if (aba === 'crm') {
     carregarCrm();
+  } else if (aba === 'conversas') {
+    carregarConversas();
+  } else if (aba === 'contatos') {
+    carregarContatos();
+  } else if (aba === 'resultados') {
+    carregarResultados();
+  } else if (aba === 'instagram') {
+    carregarInstagram();
   } else if (aba === 'auto') {
     carregarConfigAutoAtendimento();
+  } else if (aba === 'origem') {
+    carregarOrigem();
+  } else if (aba === 'chamadas') {
+    carregarChamadas();
+  } else if (aba === 'disparos') {
+    carregarDisparos();
   } else if (aba === 'followUp') {
     carregarFollowUp();
   } else if (aba === 'aniversariantes') {
     carregarAniversariantes();
+  } else if (aba === 'followUpInteligente') {
+    carregarFollowUpInteligente();
+  } else if (aba === 'funilFollowUp') {
+    carregarFunilFu();
   } else if (aba === 'relatorios') {
     carregarDestinatariosRelatorios();
     carregarConfigsRelatorios();
@@ -1924,30 +2134,14 @@ function mudarAba(aba) {
   // batendo na API/banco a toa em segundo plano pra sempre
   pararPollingCrm();
   if (aba === 'crm') iniciarPollingCrm();
+  if (aba === 'conversas') {
+    conectarEventosCrm();
+    crmPollingContatos = setInterval(carregarConversas, 20000); // rede de seguranca do SSE
+  }
   fecharSidebarMobile(); // no celular, escolher uma aba ja fecha a gaveta sozinho
   // o grafo 3D do Cerebro para de renderizar quando a aba nao esta visivel (nao gasta GPU/bateria a toa)
   if (aba === 'cerebro') abrirCerebro();
   else if (window.cerebroPausar) window.cerebroPausar();
-  if (aba === 'video') abrirVideo();
-  else if (window.videoPausar) window.videoPausar();
-}
-
-// video.js so e baixado na primeira vez que a aba Editor de Video e aberta (mesma ideia do Cerebro)
-let videoCarregando = null;
-function abrirVideo() {
-  if (window.videoAbrir) return window.videoAbrir(tabVideo, appPassword);
-  if (!videoCarregando) {
-    videoCarregando = new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = '/video.js?v=5';
-      s.onload = resolve;
-      s.onerror = () => { videoCarregando = null; reject(new Error('falha ao carregar o Editor de Vídeo')); };
-      document.head.appendChild(s);
-    });
-  }
-  videoCarregando
-    .then(() => { if (!tabVideo.hidden) window.videoAbrir(tabVideo, appPassword); })
-    .catch((err) => addBubble(err.message, 'system'));
 }
 
 // cerebro.js (+ a biblioteca do grafo 3D) so e baixado na PRIMEIRA vez que a aba e aberta -
@@ -1958,7 +2152,7 @@ function abrirCerebro() {
   if (!cerebroCarregando) {
     cerebroCarregando = new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = '/cerebro.js?v=10';
+      s.src = '/cerebro.js?v=13';
       s.onload = resolve;
       s.onerror = () => { cerebroCarregando = null; reject(new Error('falha ao carregar o Cerebro')); };
       document.head.appendChild(s);
@@ -1985,14 +2179,22 @@ tabBtnPainel.addEventListener('click', () => mudarAba('painel'));
 tabBtnAgenda.addEventListener('click', () => mudarAba('agenda'));
 tabBtnWhatsapp.addEventListener('click', () => mudarAba('whatsapp'));
 tabBtnCrm.addEventListener('click', () => mudarAba('crm'));
+tabBtnConversas.addEventListener('click', () => mudarAba('conversas'));
+tabBtnContatos.addEventListener('click', () => mudarAba('contatos'));
+tabBtnResultados.addEventListener('click', () => mudarAba('resultados'));
+tabBtnInstagram.addEventListener('click', () => mudarAba('instagram'));
 tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnGeradorRelatorios.addEventListener('click', () => mudarAba('geradorRelatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
 tabBtnFollowUp.addEventListener('click', () => mudarAba('followUp'));
 tabBtnAniversariantes.addEventListener('click', () => mudarAba('aniversariantes'));
+tabBtnDisparos.addEventListener('click', () => mudarAba('disparos'));
+tabBtnChamadas.addEventListener('click', () => mudarAba('chamadas'));
+tabBtnOrigem.addEventListener('click', () => mudarAba('origem'));
+tabBtnFollowUpInteligente.addEventListener('click', () => mudarAba('followUpInteligente'));
+tabBtnFunilFu.addEventListener('click', () => mudarAba('funilFollowUp'));
 tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
 tabBtnCerebro.addEventListener('click', () => mudarAba('cerebro'));
-tabBtnVideo.addEventListener('click', () => mudarAba('video'));
 tabBtnClientes.addEventListener('click', () => mudarAba('clientes'));
 tabBtnPropostasAdmin.addEventListener('click', () => mudarAba('propostasAdmin'));
 
@@ -2300,6 +2502,7 @@ async function carregarStatusWhatsapp() {
   }
 }
 
+rastrearAlteracoes(waAdminSalvar, [waAdminInput]);
 waAdminSalvar.addEventListener('click', async () => {
   const numero = waAdminInput.value.replace(/\D/g, '');
   if (!numero) return;
@@ -2313,6 +2516,7 @@ waAdminSalvar.addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
     addBubble('Numero autorizado do WhatsApp atualizado.', 'system');
+    marcarSalvo(waAdminSalvar, 'Número autorizado atualizado');
   } catch (err) {
     addBubble(`Erro salvando numero: ${err.message}`, 'system');
   } finally {
@@ -2378,6 +2582,35 @@ async function carregarInstanciasWhatsapp() {
 
       const acoes = document.createElement('div');
       acoes.className = 'wa-instancia-acoes';
+
+      if ((dataInstancias.operadores || []).length > 1) {
+        const opSel = document.createElement('select');
+        opSel.className = 'wa-operador-sel';
+        opSel.title = 'Operador responsável por este número: os leads dele entram direto com esse operador';
+        opSel.add(new Option('Operador: ninguém', ''));
+        for (const o of dataInstancias.operadores) opSel.add(new Option(`Operador: ${o.nome}`, String(o.id)));
+        opSel.value = inst.operadorId === null || inst.operadorId === undefined ? '' : String(inst.operadorId);
+        opSel.addEventListener('change', async () => {
+          opSel.disabled = true;
+          try {
+            const r = await fetch(`/api/whatsapp/instancias/${encodeURIComponent(inst.nome)}/operador`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+              body: JSON.stringify({ operadorId: opSel.value === '' ? null : Number(opSel.value) }),
+            });
+            const d = await r.json();
+            if (!r.ok) throw new Error(d.erro || 'erro');
+            mostrarAviso(d.entregues ? `Operador do número salvo · ${d.entregues} lead(s) sem operador foram entregues a ele` : 'Operador do número salvo', 'ok');
+            if (typeof carregarOperadoresCrm === 'function') carregarOperadoresCrm().catch(() => {});
+            if (typeof carregarCrm === 'function' && !tabCrm.hidden) carregarCrm();
+            // o cabecalho acompanha: numero e operador num lugar so
+            minhaVisao.operadoresPorNumero = { ...(minhaVisao.operadoresPorNumero || {}) };
+            if (opSel.value === '') delete minhaVisao.operadoresPorNumero[inst.nome]; else minhaVisao.operadoresPorNumero[inst.nome] = Number(opSel.value);
+          } catch (err) { mostrarAviso(err.message, 'erro'); }
+          opSel.disabled = false;
+        });
+        acoes.appendChild(opSel);
+      }
 
       if (inst.nome !== dataStatus.instanciaAtiva) {
         const usarBtn = document.createElement('button');
@@ -2518,6 +2751,19 @@ function crmCriarCard(contato) {
   numero.textContent = `${contato.numero} · ${contato.instancia}`;
   card.appendChild(numero);
 
+  // quem esta atendendo esse lead (visivel pra toda a equipe)
+  const operadorTag = document.createElement('div');
+  operadorTag.className = `crm-card-operador${contato.atendente_nome ? '' : ' livre'}`;
+  operadorTag.textContent = contato.atendente_nome ? `👤 ${contato.atendente_nome}` : 'Sem operador';
+  card.appendChild(operadorTag);
+  if (contato.origem_campanha) {
+    const origemTag = document.createElement('div');
+    origemTag.className = 'crm-card-origem';
+    origemTag.textContent = `📣 ${contato.origem_campanha}`;
+    origemTag.title = contato.origem_titulo ? `Anúncio: ${contato.origem_titulo}` : 'Origem do lead';
+    card.appendChild(origemTag);
+  }
+
   if (contato.retorno_hoje) card.classList.add('crm-card-retorno-hoje');
   if (contato.nao_lida) {
     const ponto = document.createElement('span');
@@ -2573,13 +2819,20 @@ async function carregarCrm() {
     const res = await fetch('/api/crm/contatos', { headers: { 'x-app-password': appPassword } });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
-    renderizarCrmBoard(data.etapas || [], data.contatos || []);
+    crmUltimosDados = data;
+    crmPreencherNumeros(data.contatos, null);
+    crmCarregarFuiClinicorp();
+    preencherSeletorEtapaConversa(data.etapas || []);
+    await carregarOperadoresCrm();
+    renderizarCrmBoard(data.etapas || [], crmFiltrarPorOperador(data.contatos || []));
     if (crmContatoAberto) {
       const atualizado = (data.contatos || []).find((c) => c.id === crmContatoAberto.id);
       if (atualizado) {
         crmContatoAberto = { ...crmContatoAberto, ...atualizado };
         crmAtualizarRetorno();
         crmAtualizarBotaoPausar();
+        crmAtualizarOperadorConversa();
+        crmAtualizarEtapaConversa();
       }
     }
   } catch (err) {
@@ -2668,6 +2921,7 @@ function conectarEventosCrm() {
     let data;
     try { data = JSON.parse(ev.data); } catch { return; }
     if (data.tipo === 'conta-inativa') { sairPorContaDesativada(); return; }
+    if (!tabConversas.hidden) { cvTratarEvento(data); atualizarSino(); return; }
     if (data.tipo === 'mensagem') {
       carregarCrm(); // preview/ordem dos cards muda a cada mensagem nova
       if (crmContatoAberto && data.numero === crmContatoAberto.numero && data.instancia === crmContatoAberto.instancia) {
@@ -2728,8 +2982,8 @@ function crmFormatarSeparadorData(iso) {
 // visual proposital diferente do chat principal da Lumia - bolhas verde/cinza no estilo
 // classico do WhatsApp (ver .crm-msg no CSS), com separador de data e timestamp+check em cada
 // mensagem, pra essa aba parecer "a conversa de verdade" em vez do tema dourado do resto do app
-function crmRenderizarMensagens(mensagens) {
-  crmConversaLog.textContent = '';
+function crmRenderizarMensagens(mensagens, log = crmConversaLog) {
+  log.textContent = '';
   let ultimaDataSeparador = null;
 
   for (const m of mensagens) {
@@ -2738,7 +2992,7 @@ function crmRenderizarMensagens(mensagens) {
       const sep = document.createElement('div');
       sep.className = 'crm-msg-data-separador';
       sep.textContent = separador;
-      crmConversaLog.appendChild(sep);
+      log.appendChild(sep);
       ultimaDataSeparador = separador;
     }
 
@@ -2795,9 +3049,9 @@ function crmRenderizarMensagens(mensagens) {
     }
     bubble.appendChild(meta);
 
-    crmConversaLog.appendChild(bubble);
+    log.appendChild(bubble);
   }
-  crmConversaLog.scrollTop = crmConversaLog.scrollHeight;
+  log.scrollTop = log.scrollHeight;
 }
 
 async function carregarMensagensCrm() {
@@ -2843,6 +3097,8 @@ function abrirConversaCrm(contato) {
   crmAtualizarBotaoPausar();
   crmAtualizarBotaoOcultar();
   crmAtualizarRetorno();
+  crmAtualizarOperadorConversa();
+  crmAtualizarEtapaConversa();
   crmRetornoPainel.hidden = true;
   crmMarcarLido(contato.id);
   carregarMensagensCrm();
@@ -2851,6 +3107,2239 @@ function abrirConversaCrm(contato) {
   // so uma rede de seguranca bem espacada, caso a conexao caia sem reconectar
   crmPollingConversa = setInterval(carregarMensagensCrm, 20000);
 }
+
+// ---------- Conversas (caixa de entrada estilo WhatsApp) ----------
+// mesma base do CRM (crm_contatos/crm_mensagens + tempo real via /api/crm/eventos), so que no
+// formato lista + conversa, pra atendente trabalhar o dia todo pelo app como no WhatsApp Web.
+// Tudo que sai daqui vai pelo mesmo numero (instancia) do contato, e o que o dono responde pelo
+// celular tambem aparece aqui (o webhook registra os "fromMe" como saida).
+const cvBusca = document.getElementById('cvBusca');
+const cvFiltros = document.getElementById('cvFiltros');
+const cvInstancia = document.getElementById('cvInstancia');
+const cvLista = document.getElementById('cvLista');
+const cvVazio = document.getElementById('cvVazio');
+const cvChatInner = document.getElementById('cvChatInner');
+const cvVoltar = document.getElementById('cvVoltar');
+const cvAvatar = document.getElementById('cvAvatar');
+const cvNome = document.getElementById('cvNome');
+const cvSub = document.getElementById('cvSub');
+const cvEtapa = document.getElementById('cvEtapa');
+const cvIaBtn = document.getElementById('cvIaBtn');
+const cvLog = document.getElementById('cvLog');
+const cvAnexoPreview = document.getElementById('cvAnexoPreview');
+const cvAnexoNome = document.getElementById('cvAnexoNome');
+const cvAnexoLegenda = document.getElementById('cvAnexoLegenda');
+const cvAnexoCancelar = document.getElementById('cvAnexoCancelar');
+const cvAnexoEnviar = document.getElementById('cvAnexoEnviar');
+const cvForm = document.getElementById('cvForm');
+const cvAnexarBtn = document.getElementById('cvAnexarBtn');
+const cvArquivo = document.getElementById('cvArquivo');
+const cvTexto = document.getElementById('cvTexto');
+const cvGravarBtn = document.getElementById('cvGravarBtn');
+const cvEnviarBtn = document.getElementById('cvEnviarBtn');
+const cvErro = document.getElementById('cvErro');
+
+let cvContatos = [];
+let cvEtapas = [];
+let cvAberto = null;
+let cvFiltro = 'todas';
+let cvAnexo = null; // { file, tipo }
+let cvGravador = null; // { recorder, partes, stream }
+
+const CV_LIMITE_ARQUIVO = 14 * 1024 * 1024; // em base64 vira ~19mb, dentro dos 20mb do servidor
+
+function cvHoraLista(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const rotulo = crmFormatarSeparadorData(iso);
+  if (rotulo === 'Hoje') return crmFormatarHora(iso);
+  if (rotulo === 'Ontem') return 'Ontem';
+  return d.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit' });
+}
+
+// contato do Instagram: "numero" e o id interno da pessoa no Instagram, nao um telefone
+const ehInstagram = (c) => String(c?.instancia || '').startsWith('ig:');
+const rotuloContato = (c) => (ehInstagram(c) ? 'Contato do Instagram' : `+${c.numero}`);
+
+function cvIniciais(c) {
+  const base = (c.nome || '').trim();
+  if (!base) return '#';
+  const partes = base.split(/\s+/);
+  return ((partes[0][0] || '') + (partes.length > 1 ? partes[partes.length - 1][0] : '')).toUpperCase();
+}
+
+function cvMostrarErro(msg) {
+  cvErro.textContent = msg;
+  cvErro.hidden = !msg;
+}
+
+function atualizarBadgeConversas(qtd) {
+  conversasBadge.textContent = qtd > 99 ? '99+' : String(qtd);
+  conversasBadge.hidden = !qtd;
+}
+
+async function carregarConversas() {
+  try {
+    const res = await fetch('/api/crm/contatos', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    cvContatos = data.contatos || [];
+    cvEtapas = data.etapas || [];
+
+    // mesmo numero escolhido no CRM/Contatos/Disparos (cada setor so ve o seu)
+    numeroPreencher(cvInstancia, cvContatos.map((c) => c.instancia), null);
+
+    if (cvAberto) {
+      const novo = cvContatos.find((c) => c.id === cvAberto.id);
+      if (novo) { cvAberto = { ...novo, nao_lida: false }; cvAtualizarTopo(); }
+    }
+    renderizarListaConversas();
+    atualizarBadgeConversas(cvContatos.filter((c) => c.nao_lida && c.id !== cvAberto?.id && (!cvInstancia.value || c.instancia === cvInstancia.value) && contatoNoOperador(c)).length);
+  } catch (err) {
+    cvLista.textContent = '';
+    const p = document.createElement('p');
+    p.className = 'agenda-vazia';
+    p.textContent = `Nao consegui carregar as conversas: ${err.message}`;
+    cvLista.appendChild(p);
+  }
+}
+
+function renderizarListaConversas() {
+  const termo = cvBusca.value.trim().toLowerCase();
+  const soDigitos = termo.replace(/\D/g, '');
+  const lista = cvContatos.filter((c) => {
+    if (cvInstancia.value && c.instancia !== cvInstancia.value) return false;
+    if (!contatoNoOperador(c)) return false;
+    if (cvFiltro === 'naoLidas' && !(c.nao_lida && c.id !== cvAberto?.id)) return false;
+    if (cvFiltro === 'ia' && c.auto_pausado) return false;
+    if (cvFiltro === 'humano' && !c.auto_pausado) return false;
+    if (!termo) return true;
+    return (c.nome || '').toLowerCase().includes(termo)
+      || (soDigitos && c.numero.includes(soDigitos))
+      || (c.ultima_mensagem || '').toLowerCase().includes(termo)
+      || cvIdsComNota.has(c.id);
+  });
+
+  cvLista.textContent = '';
+  if (!lista.length) {
+    const vazio = document.createElement('div');
+    vazio.className = 'cv-lista-vazia';
+    vazio.textContent = cvContatos.length ? 'Nenhuma conversa com esse filtro.' : 'Nenhuma conversa ainda. Quando alguém mandar mensagem no WhatsApp conectado, aparece aqui.';
+    cvLista.appendChild(vazio);
+    return;
+  }
+
+  const nomeEtapa = Object.fromEntries(cvEtapas.map((e) => [e.id, e.nome]));
+  for (const c of lista) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'cv-item';
+    const naoLida = !!c.nao_lida && c.id !== cvAberto?.id;
+    item.classList.toggle('ativo', c.id === cvAberto?.id);
+    item.classList.toggle('nao-lida', naoLida);
+
+    const avatar = document.createElement('div');
+    avatar.className = 'cv-avatar';
+    avatar.textContent = cvIniciais(c);
+
+    const meio = document.createElement('div');
+    meio.className = 'cv-item-meio';
+    const linha1 = document.createElement('div');
+    linha1.className = 'cv-item-linha';
+    const nome = document.createElement('strong');
+    nome.textContent = c.nome || rotuloContato(c);
+    const hora = document.createElement('span');
+    hora.className = 'cv-item-hora';
+    hora.textContent = cvHoraLista(c.ultima_mensagem_em);
+    linha1.append(nome, hora);
+
+    const linha2 = document.createElement('div');
+    linha2.className = 'cv-item-linha';
+    const preview = document.createElement('span');
+    preview.className = 'cv-item-preview';
+    preview.textContent = c.ultima_mensagem || '';
+    linha2.appendChild(preview);
+    if (naoLida) {
+      const ponto = document.createElement('span');
+      ponto.className = 'cv-item-badge';
+      ponto.textContent = '●';
+      linha2.appendChild(ponto);
+    }
+
+    const tags = document.createElement('div');
+    tags.className = 'cv-item-tags';
+    const etapa = document.createElement('span');
+    etapa.className = 'cv-tag';
+    etapa.textContent = nomeEtapa[c.etapa] || c.etapa;
+    tags.appendChild(etapa);
+    if (c.auto_pausado) {
+      const ia = document.createElement('span');
+      ia.className = 'cv-tag cv-tag-humano';
+      ia.textContent = 'IA pausada';
+      tags.appendChild(ia);
+    }
+    if (c.retorno_hoje) {
+      const ret = document.createElement('span');
+      ret.className = 'cv-tag cv-tag-alerta';
+      ret.textContent = 'Retorno hoje';
+      tags.appendChild(ret);
+    }
+
+    meio.append(linha1, linha2, tags);
+    item.append(avatar, meio);
+    item.addEventListener('click', () => abrirConversa(c));
+    cvLista.appendChild(item);
+  }
+}
+
+function cvAtualizarTopo() {
+  const c = cvAberto;
+  if (!c) return;
+  cvAvatar.textContent = cvIniciais(c);
+  cvNome.textContent = c.nome || rotuloContato(c);
+  cvSub.textContent = ehInstagram(c) ? `Instagram · @${c.instancia.slice(3)}` : `+${c.numero} · ${c.instancia}`;
+  // Instagram: resposta pela Lumia so em texto por enquanto
+  cvAnexarBtn.hidden = ehInstagram(c);
+  cvGravarBtn.hidden = ehInstagram(c);
+  cvEtapa.textContent = '';
+  for (const e of cvEtapas) cvEtapa.appendChild(new Option(e.nome, e.id));
+  cvEtapa.value = c.etapa;
+  cvIaBtn.textContent = c.auto_pausado ? 'IA pausada' : 'IA atendendo';
+  cvIaBtn.classList.toggle('pausada', !!c.auto_pausado);
+  cvIaBtn.title = c.auto_pausado
+    ? 'A IA não responde esta conversa - clique para ela voltar a atender'
+    : 'A IA está respondendo esta conversa - clique para pausar e atender você mesmo';
+}
+
+function abrirConversa(contato) {
+  const trocou = cvAberto?.id !== contato.id;
+  cvAberto = { ...contato, nao_lida: false };
+  cvVazio.hidden = true;
+  cvChatInner.hidden = false;
+  tabConversas.classList.add('cv-com-chat');
+  cvMostrarErro('');
+  cvAtualizarTopo();
+  if (trocou) {
+    cvLog.textContent = '';
+    cvCancelarAnexo();
+  }
+  crmMarcarLido(contato.id);
+  const local = cvContatos.find((c) => c.id === contato.id);
+  if (local) local.nao_lida = false;
+  renderizarListaConversas();
+  atualizarBadgeConversas(cvContatos.filter((c) => c.nao_lida && c.id !== cvAberto.id).length);
+  carregarMensagensConversa();
+  if (window.matchMedia('(min-width: 900px)').matches) cvTexto.focus();
+}
+
+function fecharConversa() {
+  cvAberto = null;
+  cvChatInner.hidden = true;
+  cvVazio.hidden = false;
+  tabConversas.classList.remove('cv-com-chat');
+  renderizarListaConversas();
+}
+
+async function carregarMensagensConversa() {
+  if (!cvAberto) return;
+  const pedido = cvAberto.id;
+  try {
+    const params = new URLSearchParams({ numero: cvAberto.numero, instancia: cvAberto.instancia });
+    const res = await fetch(`/api/crm/mensagens?${params}`, { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    if (cvAberto?.id !== pedido) return; // trocou de conversa enquanto carregava
+    crmRenderizarMensagens(data.mensagens || [], cvLog);
+  } catch (err) {
+    cvMostrarErro(`Nao consegui carregar a conversa: ${err.message}`);
+  }
+}
+
+// tempo real: chamado pelo SSE do CRM (conectarEventosCrm) enquanto a aba Conversas esta aberta
+function cvTratarEvento(data) {
+  if (data.tipo === 'mensagem') {
+    if (cvAberto && data.numero === cvAberto.numero && data.instancia === cvAberto.instancia) {
+      carregarMensagensConversa();
+      crmMarcarLido(cvAberto.id);
+    }
+    carregarConversas();
+  } else if (data.tipo === 'contato-atualizado') {
+    if (data.apagado && cvAberto?.id === data.contatoId) fecharConversa();
+    carregarConversas();
+  }
+}
+
+cvBusca.addEventListener('input', renderizarListaConversas);
+cvInstancia.addEventListener('change', () => {
+  numeroSalvar(cvInstancia.value);
+  renderizarListaConversas();
+  atualizarBadgeConversas(cvContatos.filter((c) => c.nao_lida && c.id !== cvAberto?.id && (!cvInstancia.value || c.instancia === cvInstancia.value) && contatoNoOperador(c)).length);
+});
+cvFiltros.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('.cv-filtro');
+  if (!btn) return;
+  cvFiltro = btn.dataset.filtro;
+  for (const b of cvFiltros.querySelectorAll('.cv-filtro')) b.classList.toggle('ativo', b === btn);
+  renderizarListaConversas();
+});
+cvVoltar.addEventListener('click', fecharConversa);
+
+cvEtapa.addEventListener('change', async () => {
+  if (!cvAberto) return;
+  const etapa = cvEtapa.value;
+  try {
+    const res = await fetch(`/api/crm/contatos/${cvAberto.id}/etapa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ etapa }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    cvAberto.etapa = etapa;
+    mostrarAviso(`Movido para "${cvEtapa.selectedOptions[0]?.textContent || etapa}"`);
+    carregarConversas();
+  } catch (err) {
+    cvEtapa.value = cvAberto.etapa;
+    mostrarAviso(`Não consegui mudar a etapa: ${err.message}`, 'erro');
+  }
+});
+
+cvIaBtn.addEventListener('click', async () => {
+  if (!cvAberto) return;
+  const pausado = !cvAberto.auto_pausado;
+  cvIaBtn.disabled = true;
+  try {
+    const res = await fetch(`/api/crm/contatos/${cvAberto.id}/auto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ pausado }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    cvAberto.auto_pausado = pausado;
+    cvAtualizarTopo();
+    mostrarAviso(pausado ? 'IA pausada nesta conversa - agora é com você' : 'IA voltou a atender esta conversa');
+    carregarConversas();
+  } catch (err) {
+    mostrarAviso(`Não consegui mudar: ${err.message}`, 'erro');
+  } finally {
+    cvIaBtn.disabled = false;
+  }
+});
+
+// texto: Enter envia, Shift+Enter quebra linha (igual WhatsApp Web); a caixa cresce ate ~6 linhas
+function cvAjustarAltura() {
+  cvTexto.style.height = 'auto';
+  cvTexto.style.height = `${Math.min(cvTexto.scrollHeight, 140)}px`;
+}
+cvTexto.addEventListener('input', cvAjustarAltura);
+cvTexto.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
+    ev.preventDefault();
+    cvForm.requestSubmit();
+  }
+});
+
+cvForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (!cvAberto) return;
+  const texto = cvTexto.value.trim();
+  if (!texto) return;
+  cvMostrarErro('');
+  cvEnviarBtn.disabled = true;
+  try {
+    const res = await fetch('/api/crm/mensagens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ numero: cvAberto.numero, instancia: cvAberto.instancia, texto }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    cvTexto.value = '';
+    cvAjustarAltura();
+    carregarMensagensConversa();
+  } catch (err) {
+    cvMostrarErro(`Não enviou: ${err.message}`);
+  } finally {
+    cvEnviarBtn.disabled = false;
+    cvTexto.focus();
+  }
+});
+
+// anexo: foto/video/documento -> barra de confirmacao com legenda antes de mandar
+function cvTipoDoArquivo(file) {
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type.startsWith('video/')) return 'video';
+  if (file.type.startsWith('audio/')) return 'audio';
+  return 'document';
+}
+function cvCancelarAnexo() {
+  cvAnexo = null;
+  cvAnexoPreview.hidden = true;
+  cvAnexoLegenda.value = '';
+}
+cvAnexarBtn.addEventListener('click', () => cvArquivo.click());
+cvArquivo.addEventListener('change', () => {
+  const file = cvArquivo.files?.[0];
+  cvArquivo.value = '';
+  if (!file) return;
+  if (file.size > CV_LIMITE_ARQUIVO) {
+    cvMostrarErro('Arquivo grande demais (máximo 14 MB).');
+    return;
+  }
+  cvMostrarErro('');
+  cvAnexo = { file, tipo: cvTipoDoArquivo(file) };
+  const icone = { image: '🖼️', video: '🎥', audio: '🎵', document: '📄' }[cvAnexo.tipo];
+  cvAnexoNome.textContent = `${icone} ${file.name}`;
+  cvAnexoLegenda.hidden = cvAnexo.tipo === 'audio';
+  cvAnexoPreview.hidden = false;
+  if (!cvAnexoLegenda.hidden) cvAnexoLegenda.focus();
+});
+cvAnexoCancelar.addEventListener('click', cvCancelarAnexo);
+cvAnexoLegenda.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') { ev.preventDefault(); cvAnexoEnviar.click(); }
+});
+
+async function cvEnviarMidia({ tipo, base64, mimetype, fileName, legenda }) {
+  const res = await fetch('/api/crm/mensagens/midia', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+    body: JSON.stringify({ numero: cvAberto.numero, instancia: cvAberto.instancia, tipo, base64, mimetype, fileName, legenda }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+  carregarMensagensConversa();
+}
+
+cvAnexoEnviar.addEventListener('click', async () => {
+  if (!cvAnexo || !cvAberto) return;
+  cvAnexoEnviar.disabled = true;
+  cvAnexoEnviar.textContent = 'Enviando...';
+  cvMostrarErro('');
+  try {
+    const { file, tipo } = cvAnexo;
+    const base64 = await arquivoParaBase64(file);
+    await cvEnviarMidia({ tipo, base64, mimetype: file.type || 'application/octet-stream', fileName: file.name, legenda: cvAnexoLegenda.value.trim() });
+    cvCancelarAnexo();
+  } catch (err) {
+    cvMostrarErro(`Não enviou o arquivo: ${err.message}`);
+  } finally {
+    cvAnexoEnviar.disabled = false;
+    cvAnexoEnviar.textContent = 'Enviar';
+  }
+});
+
+// audio: 1o clique comeca a gravar (botao fica vermelho), 2o clique para e manda como nota de voz
+// (o Evolution converte pro formato do WhatsApp)
+cvGravarBtn.addEventListener('click', async () => {
+  if (!cvAberto) return;
+  if (cvGravador) { cvGravador.recorder.stop(); return; }
+  cvMostrarErro('');
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    cvMostrarErro(`Não consegui usar o microfone: ${err.message}`);
+    return;
+  }
+  const tipoPreferido = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm'].find((t) => window.MediaRecorder?.isTypeSupported?.(t));
+  const recorder = new MediaRecorder(stream, tipoPreferido ? { mimeType: tipoPreferido } : undefined);
+  const partes = [];
+  cvGravador = { recorder, partes, stream };
+  recorder.addEventListener('dataavailable', (e) => { if (e.data.size) partes.push(e.data); });
+  recorder.addEventListener('stop', async () => {
+    stream.getTracks().forEach((t) => t.stop());
+    cvGravador = null;
+    cvGravarBtn.classList.remove('gravando');
+    cvGravarBtn.textContent = '🎤';
+    cvGravarBtn.title = 'Gravar áudio';
+    const blob = new Blob(partes, { type: recorder.mimeType || 'audio/webm' });
+    if (blob.size < 1500) return; // clique sem querer, nada gravado
+    cvGravarBtn.disabled = true;
+    try {
+      const base64 = await arquivoParaBase64(blob);
+      await cvEnviarMidia({ tipo: 'audio', base64, mimetype: blob.type.split(';')[0], fileName: 'audio' });
+    } catch (err) {
+      cvMostrarErro(`Não enviou o áudio: ${err.message}`);
+    } finally {
+      cvGravarBtn.disabled = false;
+    }
+  });
+  recorder.start();
+  cvGravarBtn.classList.add('gravando');
+  cvGravarBtn.textContent = '⏹';
+  cvGravarBtn.title = 'Parar e enviar o áudio';
+});
+
+// ---------- Contatos (base de leads: lista, cadastro, importar e exportar planilha) ----------
+// mesma tabela de contatos do CRM - aqui aparecem tambem os importados/cadastrados que ainda nao
+// conversaram (esses ficam fora do funil e da aba Conversas ate a primeira mensagem)
+const ctBusca = document.getElementById('ctBusca');
+const ctEtapa = document.getElementById('ctEtapa');
+const ctEtiqueta = document.getElementById('ctEtiqueta');
+const ctOrigem = document.getElementById('ctOrigem');
+const ctFiltroNumero = document.getElementById('ctFiltroNumero');
+const ctResumo = document.getElementById('ctResumo');
+const ctCorpo = document.getElementById('ctCorpo');
+const ctMaisBtn = document.getElementById('ctMaisBtn');
+const ctModal = document.getElementById('ctModal');
+const ctForm = document.getElementById('ctForm');
+const ctModalTitulo = document.getElementById('ctModalTitulo');
+const ctNome = document.getElementById('ctNome');
+const ctCampoNovo = document.getElementById('ctCampoNovo');
+const ctNumero = document.getElementById('ctNumero');
+const ctInstanciaCad = document.getElementById('ctInstanciaCad');
+const ctInstanciaCadLabel = document.getElementById('ctInstanciaCadLabel');
+const ctInfoNumero = document.getElementById('ctInfoNumero');
+const ctEmail = document.getElementById('ctEmail');
+const ctEtiquetas = document.getElementById('ctEtiquetas');
+const ctObs = document.getElementById('ctObs');
+const ctModalErro = document.getElementById('ctModalErro');
+const ctApagarBtn = document.getElementById('ctApagarBtn');
+const ctConversarBtn = document.getElementById('ctConversarBtn');
+const ctSalvarBtn = document.getElementById('ctSalvarBtn');
+const ctImpModal = document.getElementById('ctImpModal');
+const ctImpArquivo = document.getElementById('ctImpArquivo');
+const ctImpPasso1 = document.getElementById('ctImpPasso1');
+const ctImpPasso2 = document.getElementById('ctImpPasso2');
+const ctImpInfo = document.getElementById('ctImpInfo');
+const ctImpMapa = document.getElementById('ctImpMapa');
+const ctImpInstancia = document.getElementById('ctImpInstancia');
+const ctImpEtiquetaExtra = document.getElementById('ctImpEtiquetaExtra');
+const ctImpModo = document.getElementById('ctImpModo');
+const ctImpEtapa = document.getElementById('ctImpEtapa');
+const ctImpResumo = document.getElementById('ctImpResumo');
+const ctImpPrevia = document.getElementById('ctImpPrevia');
+const ctImpResultado = document.getElementById('ctImpResultado');
+const ctImpErro = document.getElementById('ctImpErro');
+const ctImpVoltar = document.getElementById('ctImpVoltar');
+const ctImpConfirmar = document.getElementById('ctImpConfirmar');
+const ctImpEspelhar = document.getElementById('ctImpEspelhar');
+const ctImpEspelharLabel = document.getElementById('ctImpEspelharLabel');
+let ctImpEspelharPendente = false; // veio do botao "Espelhar Follow Up do Clinicorp" do CRM
+
+const CT_POR_PAGINA = 200;
+const CT_ORIGENS = { whatsapp: 'WhatsApp', importado: 'Importado', manual: 'Cadastrado' };
+// campos que a importacao entende, com os nomes de coluna que costumam aparecer nas planilhas
+// (comparados sem acento/maiuscula) - o cabecalho da propria exportacao sempre bate
+const CT_CAMPOS_IMPORTACAO = [
+  { id: 'numero', nome: 'Telefone', obrigatorio: true, apelidos: ['telefone', 'celular', 'whatsapp', 'numero', 'fone', 'tel', 'phone', 'contato', 'telefone celular', 'numero do whatsapp'] },
+  { id: 'nome', nome: 'Nome', apelidos: ['nome', 'nome completo', 'cliente', 'paciente', 'lead', 'name'] },
+  { id: 'email', nome: 'E-mail', apelidos: ['email', 'e-mail', 'mail'] },
+  { id: 'etiquetas', nome: 'Etiquetas', apelidos: ['etiquetas', 'etiqueta', 'tags', 'tag', 'grupo', 'segmento'] },
+  { id: 'observacoes', nome: 'Observações', apelidos: ['observacoes', 'observacao', 'obs', 'notas', 'anotacoes', 'comentarios'] },
+  { id: 'etapa', nome: 'Etapa', apelidos: ['etapa', 'status', 'fase', 'estagio'] },
+];
+
+let ctContatos = [];
+let ctEtapas = [];
+let ctInstancias = [];
+let ctLimite = CT_POR_PAGINA;
+let ctEditando = null;
+let ctImpLinhas = []; // linhas da planilha (array de arrays, sem o cabecalho)
+let ctImpCabecalho = [];
+
+const ctSemAcento = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+function ctFormatarTelefone(numero, instancia) {
+  if (String(instancia || '').startsWith('ig:')) return `Instagram @${instancia.slice(3)}`;
+  const n = String(numero || '');
+  let m = n.match(/^55(\d{2})(\d{5})(\d{4})$/);
+  if (m) return `+55 (${m[1]}) ${m[2]}-${m[3]}`;
+  m = n.match(/^55(\d{2})(\d{4})(\d{4})$/);
+  if (m) return `+55 (${m[1]}) ${m[2]}-${m[3]}`;
+  return n ? `+${n}` : '';
+}
+
+// mesma regra do servidor (crm.normalizarTelefone) - aqui so pra previa e contagem
+function ctNormalizarTelefone(bruto) {
+  let d = String(bruto ?? '').replace(/\D/g, '').replace(/^0+/, '');
+  if (d.length === 10 || d.length === 11) d = `55${d}`;
+  return d.length >= 10 && d.length <= 15 ? d : null;
+}
+
+async function carregarContatos() {
+  try {
+    const res = await fetch('/api/crm/base-contatos', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    ctContatos = data.contatos || [];
+    ctEtapas = data.etapas || [];
+    ctInstancias = data.instancias || [];
+    numeroPreencher(ctFiltroNumero, [...ctInstancias, ...ctContatos.map((c) => c.instancia)], null);
+
+    const etapaAtual = ctEtapa.value;
+    ctEtapa.textContent = '';
+    ctEtapa.appendChild(new Option('Todas as etapas', ''));
+    for (const e of ctEtapas) ctEtapa.appendChild(new Option(e.nome, e.id));
+    ctEtapa.value = etapaAtual;
+
+    const etiquetas = new Map();
+    for (const c of ctContatos) for (const t of c.etiquetas || []) if (!etiquetas.has(t.toLowerCase())) etiquetas.set(t.toLowerCase(), t);
+    const etiquetaAtual = ctEtiqueta.value;
+    ctEtiqueta.textContent = '';
+    ctEtiqueta.appendChild(new Option('Todas as etiquetas', ''));
+    for (const t of [...etiquetas.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'))) ctEtiqueta.appendChild(new Option(t, t));
+    ctEtiqueta.value = [...etiquetas.values()].includes(etiquetaAtual) ? etiquetaAtual : '';
+    ctEtiqueta.hidden = !etiquetas.size;
+
+    renderizarContatos();
+  } catch (err) {
+    ctCorpo.textContent = '';
+    ctResumo.textContent = `Não consegui carregar os contatos: ${err.message}`;
+  }
+}
+
+function ctFiltrados() {
+  const termo = ctSemAcento(ctBusca.value);
+  const digitos = termo.replace(/\D/g, '');
+  return ctContatos.filter((c) => {
+    if (ctFiltroNumero.value && c.instancia !== ctFiltroNumero.value) return false;
+    if (ctEtapa.value && c.etapa !== ctEtapa.value) return false;
+    if (ctOrigem.value && c.origem !== ctOrigem.value) return false;
+    if (ctEtiqueta.value && !(c.etiquetas || []).includes(ctEtiqueta.value)) return false;
+    if (!termo) return true;
+    return ctSemAcento(c.nome).includes(termo)
+      || ctSemAcento(c.email).includes(termo)
+      || (c.etiquetas || []).some((t) => ctSemAcento(t).includes(termo))
+      || (digitos.length >= 3 && c.numero.includes(digitos));
+  });
+}
+
+function renderizarContatos() {
+  const lista = ctFiltrados();
+  const nomeEtapa = Object.fromEntries(ctEtapas.map((e) => [e.id, e.nome]));
+  const total = ctContatos.filter((c) => !ctFiltroNumero.value || c.instancia === ctFiltroNumero.value).length;
+  ctResumo.textContent = !total
+    ? 'Nenhum contato ainda. Eles aparecem aqui sozinhos quando alguém conversa no WhatsApp, ou você pode cadastrar e importar uma planilha.'
+    : lista.length === total
+      ? `${total} ${total === 1 ? 'contato' : 'contatos'}`
+      : `${lista.length} de ${total} contatos com esse filtro`;
+
+  ctCorpo.textContent = '';
+  for (const c of lista.slice(0, ctLimite)) {
+    const tr = document.createElement('tr');
+    tr.tabIndex = 0;
+    tr.addEventListener('click', () => abrirModalContato(c));
+    tr.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') abrirModalContato(c); });
+
+    const celula = (texto, classe) => {
+      const td = document.createElement('td');
+      if (classe) td.className = classe;
+      td.textContent = texto;
+      tr.appendChild(td);
+      return td;
+    };
+    const tdNome = celula(c.nome || 'Sem nome', c.nome ? 'ct-nome' : 'ct-nome ct-vazio');
+    tdNome.dataset.rotulo = 'Nome';
+    if (c.qtd_notas) { const q = document.createElement('span'); q.className = 'ct-notas-qtd'; q.textContent = `📝 ${c.qtd_notas}`; q.title = `${c.qtd_notas} anotação(ões)`; tdNome.appendChild(q); }
+    celula(ctFormatarTelefone(c.numero, c.instancia), 'ct-tel').dataset.rotulo = 'WhatsApp';
+    celula(c.email || '', 'ct-email').dataset.rotulo = 'E-mail';
+    const tdTags = celula('', 'ct-tags');
+    tdTags.dataset.rotulo = 'Etiquetas';
+    for (const t of c.etiquetas || []) {
+      const chip = document.createElement('span');
+      chip.className = 'ct-chip';
+      chip.textContent = t;
+      tdTags.appendChild(chip);
+    }
+    celula(nomeEtapa[c.etapa] || c.etapa, 'ct-etapa').dataset.rotulo = 'Etapa';
+    celula(c.ultima_mensagem_em ? crmFormatarQuando(c.ultima_mensagem_em) : 'Sem conversa', c.ultima_mensagem_em ? '' : 'ct-vazio').dataset.rotulo = 'Última conversa';
+    celula(CT_ORIGENS[c.origem] || c.origem, 'ct-origem').dataset.rotulo = 'Origem';
+    ctCorpo.appendChild(tr);
+  }
+  ctMaisBtn.hidden = lista.length <= ctLimite;
+  if (!ctMaisBtn.hidden) ctMaisBtn.textContent = `Mostrar mais (${lista.length - ctLimite} restantes)`;
+}
+
+ctFiltroNumero.addEventListener('change', () => numeroSalvar(ctFiltroNumero.value));
+for (const el of [ctFiltroNumero, ctEtapa, ctEtiqueta, ctOrigem]) el.addEventListener('change', () => { ctLimite = CT_POR_PAGINA; renderizarContatos(); });
+ctBusca.addEventListener('input', () => { ctLimite = CT_POR_PAGINA; renderizarContatos(); });
+ctMaisBtn.addEventListener('click', () => { ctLimite += CT_POR_PAGINA; renderizarContatos(); });
+
+function ctPreencherInstancias(select) {
+  select.textContent = '';
+  for (const i of ctInstancias) select.appendChild(new Option(i, i));
+}
+
+function ctFecharModal(modal) {
+  modal.hidden = true;
+  if (modal === ctModal) limparPendente(ctSalvarBtn);
+}
+for (const btn of document.querySelectorAll('.ct-fechar')) {
+  btn.addEventListener('click', () => ctFecharModal(document.getElementById(btn.dataset.fechar)));
+}
+for (const modal of [ctModal, ctImpModal]) {
+  modal.addEventListener('click', (ev) => { if (ev.target === modal) ctFecharModal(modal); });
+}
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Escape') return;
+  if (!ctModal.hidden) ctFecharModal(ctModal);
+  else if (!ctImpModal.hidden) ctFecharModal(ctImpModal);
+});
+
+function ctMostrarErroModal(msg) {
+  ctModalErro.textContent = msg || '';
+  ctModalErro.hidden = !msg;
+}
+
+function abrirModalContato(contato) {
+  ctEditando = contato || null;
+  ctMostrarErroModal('');
+  limparPendente(ctSalvarBtn);
+  ctModalTitulo.textContent = contato ? (contato.nome || ctFormatarTelefone(contato.numero)) : 'Novo contato';
+  ctNome.value = contato?.nome || '';
+  ctEmail.value = contato?.email || '';
+  ctEtiquetas.value = (contato?.etiquetas || []).join(', ');
+  ctObs.value = contato?.observacoes || '';
+  ctCampoNovo.hidden = !!contato;
+  ctInfoNumero.hidden = !contato;
+  ctApagarBtn.hidden = !contato;
+  ctConversarBtn.hidden = !contato;
+  if (contato) {
+    ctInfoNumero.textContent = `WhatsApp ${ctFormatarTelefone(contato.numero)} · atendido pelo número ${contato.instancia}`;
+  } else {
+    ctNumero.value = '';
+    ctPreencherInstancias(ctInstanciaCad);
+    ctInstanciaCadLabel.hidden = ctInstancias.length < 2;
+    if (!ctInstancias.length) ctMostrarErroModal('Conecte um número na aba WhatsApp antes de cadastrar contatos.');
+  }
+  ctNotasEl.hidden = !contato;
+  ctPainelNotas.definirContato(contato ? contato.id : null);
+  ctModal.hidden = false;
+  (contato ? ctNome : ctNumero).focus();
+}
+
+rastrearAlteracoes(ctSalvarBtn, [ctNome, ctNumero, ctInstanciaCad, ctEmail, ctEtiquetas, ctObs]);
+document.getElementById('ctNovoBtn').addEventListener('click', () => abrirModalContato(null));
+
+ctForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  ctMostrarErroModal('');
+  const dados = { nome: ctNome.value, email: ctEmail.value, etiquetas: ctEtiquetas.value, observacoes: ctObs.value };
+  if (!ctEditando) Object.assign(dados, { numero: ctNumero.value, instancia: ctInstanciaCad.value || ctInstancias[0] });
+  ctSalvarBtn.disabled = true;
+  try {
+    const res = await fetch(ctEditando ? `/api/crm/base-contatos/${ctEditando.id}` : '/api/crm/base-contatos', {
+      method: ctEditando ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify(dados),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    marcarSalvo(ctSalvarBtn, ctEditando ? 'Contato atualizado' : 'Contato cadastrado');
+    ctModal.hidden = true;
+    carregarContatos();
+  } catch (err) {
+    ctMostrarErroModal(err.message);
+  } finally {
+    ctSalvarBtn.disabled = false;
+  }
+});
+
+ctApagarBtn.addEventListener('click', async () => {
+  const c = ctEditando;
+  if (!c) return;
+  const quem = c.nome || ctFormatarTelefone(c.numero);
+  const aviso = c.ultima_mensagem_em
+    ? `Apagar ${quem}? Isso remove o contato, o card do CRM e todo o histórico de conversa - não dá pra desfazer.`
+    : `Apagar ${quem} da sua base de contatos?`;
+  if (!confirm(aviso)) return;
+  try {
+    const res = await fetch(`/api/crm/contatos/${c.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    ctFecharModal(ctModal);
+    mostrarAviso('Contato apagado');
+    carregarContatos();
+  } catch (err) {
+    ctMostrarErroModal(`Não consegui apagar: ${err.message}`);
+  }
+});
+
+// abre (ou comeca) a conversa desse contato na aba Conversas
+ctConversarBtn.addEventListener('click', () => {
+  const c = ctEditando;
+  if (!c) return;
+  ctFecharModal(ctModal);
+  mudarAba('conversas');
+  if (!cvEtapas.length) cvEtapas = ctEtapas;
+  abrirConversa({ ...c, nao_lida: false });
+});
+
+// ---------- exportar ----------
+
+function ctLinhasExportacao() {
+  const nomeEtapa = Object.fromEntries(ctEtapas.map((e) => [e.id, e.nome]));
+  const data = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Maceio' }) : '');
+  const cabecalho = ['Nome', 'Telefone', 'E-mail', 'Etiquetas', 'Etapa', 'Origem', 'Número de atendimento', 'Última conversa', 'Cadastrado em', 'Observações'];
+  const linhas = ctFiltrados().map((c) => [
+    c.nome || '', c.numero, c.email || '', (c.etiquetas || []).join(', '), nomeEtapa[c.etapa] || c.etapa,
+    CT_ORIGENS[c.origem] || c.origem, c.instancia, data(c.ultima_mensagem_em), data(c.criado_em), c.observacoes || '',
+  ]);
+  return [cabecalho, ...linhas];
+}
+
+function ctBaixar(blob, nome) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+const ctNomeArquivo = (ext) => `contatos-lumia-${new Date().toISOString().slice(0, 10)}.${ext}`;
+
+// CSV com ";" e BOM - e o formato que o Excel em portugues abre direto, com acento certo
+function ctGerarCsv(linhas) {
+  const campo = (v) => {
+    const t = String(v ?? '');
+    return /[";\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  return '﻿' + linhas.map((l) => l.map(campo).join(';')).join('\r\n');
+}
+
+async function ctGarantirSheetJs() {
+  if (!window.XLSX) await carregarScriptUmaVez('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  return window.XLSX;
+}
+
+document.getElementById('ctExportarCsvBtn').addEventListener('click', () => {
+  const linhas = ctLinhasExportacao();
+  if (linhas.length < 2) return mostrarAviso('Nenhum contato pra exportar com esse filtro', 'erro');
+  ctBaixar(new Blob([ctGerarCsv(linhas)], { type: 'text/csv;charset=utf-8' }), ctNomeArquivo('csv'));
+  mostrarAviso(`${linhas.length - 1} contatos exportados`);
+});
+
+document.getElementById('ctExportarXlsxBtn').addEventListener('click', async () => {
+  const linhas = ctLinhasExportacao();
+  if (linhas.length < 2) return mostrarAviso('Nenhum contato pra exportar com esse filtro', 'erro');
+  try {
+    const XLSX = await ctGarantirSheetJs();
+    const planilha = XLSX.utils.aoa_to_sheet(linhas);
+    planilha['!cols'] = [28, 16, 26, 22, 18, 12, 18, 18, 18, 40].map((wch) => ({ wch }));
+    const livro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(livro, planilha, 'Contatos');
+    XLSX.writeFile(livro, ctNomeArquivo('xlsx'));
+    mostrarAviso(`${linhas.length - 1} contatos exportados`);
+  } catch (err) {
+    mostrarAviso(`Não consegui gerar o Excel: ${err.message}`, 'erro');
+  }
+});
+
+// ---------- importar ----------
+
+function ctMostrarErroImp(msg) {
+  ctImpErro.textContent = msg || '';
+  ctImpErro.hidden = !msg;
+}
+
+function ctImpPasso(n) {
+  ctImpPasso1.hidden = n !== 1;
+  ctImpPasso2.hidden = n !== 2;
+  ctImpVoltar.hidden = n !== 2;
+  ctImpConfirmar.hidden = n !== 2;
+  ctImpConfirmar.disabled = false;
+  if (n === 1) ctImpArquivo.value = '';
+}
+
+document.getElementById('ctImportarBtn').addEventListener('click', () => {
+  ctMostrarErroImp('');
+  ctImpResultado.hidden = true;
+  ctImpPasso(1);
+  if (!ctInstancias.length) ctMostrarErroImp('Conecte um número na aba WhatsApp antes de importar contatos.');
+  ctImpModal.hidden = false;
+});
+ctImpVoltar.addEventListener('click', () => { ctImpVoltar.textContent = 'Trocar planilha'; ctImpResultado.hidden = true; ctMostrarErroImp(''); ctImpPasso(1); });
+
+document.getElementById('ctModeloBtn').addEventListener('click', () => {
+  const modelo = [
+    ['Nome', 'Telefone', 'E-mail', 'Etiquetas', 'Observações'],
+    ['Maria Souza', '82 99999-0000', 'maria@exemplo.com', 'implante, indicação', 'Prefere atendimento à tarde'],
+  ];
+  ctBaixar(new Blob([ctGerarCsv(modelo)], { type: 'text/csv;charset=utf-8' }), 'modelo-contatos-lumia.csv');
+});
+
+// CSV simples com aspas - detecta o separador (";" do Excel brasileiro, "," ou tab) pela 1a linha
+function ctLerCsv(texto) {
+  const primeira = texto.split(/\r?\n/, 1)[0] || '';
+  const sep = [';', ',', '\t'].map((s) => [s, primeira.split(s).length]).sort((a, b) => b[1] - a[1])[0][0];
+  const linhas = [];
+  let linha = [];
+  let campo = '';
+  let aspas = false;
+  for (let i = 0; i < texto.length; i++) {
+    const ch = texto[i];
+    if (aspas) {
+      if (ch === '"' && texto[i + 1] === '"') { campo += '"'; i++; }
+      else if (ch === '"') aspas = false;
+      else campo += ch;
+    } else if (ch === '"') aspas = true;
+    else if (ch === sep) { linha.push(campo); campo = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && texto[i + 1] === '\n') i++;
+      linha.push(campo); linhas.push(linha); linha = []; campo = '';
+    } else campo += ch;
+  }
+  if (campo || linha.length) { linha.push(campo); linhas.push(linha); }
+  return linhas;
+}
+
+// planilha salva pelo Excel antigo vem em Windows-1252 - se nao for UTF-8 valido, le nesse formato
+function ctDecodificarTexto(buffer) {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer).replace(/^﻿/, '');
+  } catch {
+    return new TextDecoder('windows-1252').decode(buffer);
+  }
+}
+
+ctImpArquivo.addEventListener('change', async () => {
+  const arquivo = ctImpArquivo.files?.[0];
+  if (!arquivo) return;
+  ctMostrarErroImp('');
+  ctImpResultado.hidden = true;
+  try {
+    const buffer = await arquivo.arrayBuffer();
+    let linhas;
+    if (/\.(xlsx|xls)$/i.test(arquivo.name)) {
+      const XLSX = await ctGarantirSheetJs();
+      const livro = XLSX.read(buffer, { type: 'array' });
+      const planilha = livro.Sheets[livro.SheetNames[0]];
+      linhas = XLSX.utils.sheet_to_json(planilha, { header: 1, raw: false, defval: '' });
+    } else {
+      linhas = ctLerCsv(ctDecodificarTexto(buffer));
+    }
+    linhas = linhas.map((l) => l.map((v) => String(v ?? '').trim())).filter((l) => l.some(Boolean));
+    if (linhas.length < 2) throw new Error('A planilha precisa ter uma linha de cabeçalho e pelo menos um contato.');
+    ctImpCabecalho = linhas[0];
+    ctImpLinhas = linhas.slice(1);
+    ctMontarMapa();
+    ctImpPasso(2);
+    ctImpInfo.textContent = `${arquivo.name}: ${ctImpLinhas.length} ${ctImpLinhas.length === 1 ? 'linha' : 'linhas'}. Confira qual coluna é cada informação:`;
+    ctPreencherInstancias(ctImpInstancia);
+    ctImpInstancia.closest('label').hidden = ctInstancias.length < 2;
+    ctImpEtiquetaExtra.value = '';
+    // coluna do funil (inclui Follow Up: a lista so entra na coluna, sem disparar a cadencia automatica)
+    ctImpEtapa.textContent = '';
+    ctImpEtapa.appendChild(new Option('Nenhuma (só na aba Contatos)', ''));
+    for (const e of ctEtapas) ctImpEtapa.appendChild(new Option(e.nome, e.id));
+    ctImpEspelhar.checked = false;
+    if (ctImpEspelharPendente) { ctImpEtapa.value = 'follow_up'; ctImpEspelhar.checked = true; ctImpModo.value = 'atualizar'; }
+    ctImpEspelharPendente = false;
+    ctAtualizarEspelhar();
+    ctAtualizarPreviaImp();
+  } catch (err) {
+    ctMostrarErroImp(`Não consegui ler a planilha: ${err.message}`);
+    ctImpArquivo.value = '';
+  }
+});
+
+// um select por campo, ja escolhendo sozinho a coluna cujo nome bate com algum apelido
+function ctMontarMapa() {
+  ctImpMapa.textContent = '';
+  const usadas = new Set();
+  for (const campo of CT_CAMPOS_IMPORTACAO) {
+    const label = document.createElement('label');
+    label.className = 'ct-campo';
+    label.textContent = campo.nome + (campo.obrigatorio ? ' *' : '');
+    const sel = document.createElement('select');
+    sel.dataset.campo = campo.id;
+    sel.appendChild(new Option(campo.obrigatorio ? 'Escolha a coluna' : 'Não importar', ''));
+    ctImpCabecalho.forEach((titulo, i) => sel.appendChild(new Option(titulo || `Coluna ${i + 1}`, String(i))));
+    const achada = ctImpCabecalho.findIndex((t, i) => !usadas.has(i) && campo.apelidos.includes(ctSemAcento(t)));
+    if (achada >= 0) { sel.value = String(achada); usadas.add(achada); }
+    sel.addEventListener('change', ctAtualizarPreviaImp);
+    label.appendChild(sel);
+    ctImpMapa.appendChild(label);
+  }
+}
+
+function ctMapaAtual() {
+  const mapa = {};
+  for (const sel of ctImpMapa.querySelectorAll('select')) if (sel.value !== '') mapa[sel.dataset.campo] = Number(sel.value);
+  return mapa;
+}
+
+// etapa da planilha pode vir pelo nome ("Em atendimento") ou pelo id interno
+function ctEtapaDaPlanilha(valor) {
+  const v = ctSemAcento(valor);
+  if (!v) return '';
+  const achada = ctEtapas.find((e) => e.id === v || ctSemAcento(e.nome) === v);
+  return achada ? achada.id : '';
+}
+
+function ctMontarLinhasImp() {
+  const mapa = ctMapaAtual();
+  const extra = ctImpEtiquetaExtra.value.trim();
+  const pega = (linha, campo) => (mapa[campo] === undefined ? '' : linha[mapa[campo]] || '');
+  const vistos = new Set();
+  const validas = [];
+  let semTelefone = 0;
+  let repetidas = 0;
+  for (const linha of ctImpLinhas) {
+    const numero = ctNormalizarTelefone(pega(linha, 'numero'));
+    if (!numero) { semTelefone++; continue; }
+    if (vistos.has(numero)) { repetidas++; continue; }
+    vistos.add(numero);
+    const etiquetas = pega(linha, 'etiquetas');
+    validas.push({
+      numero,
+      nome: pega(linha, 'nome'),
+      email: pega(linha, 'email'),
+      etiquetas: [etiquetas, extra].filter(Boolean).join(','),
+      observacoes: pega(linha, 'observacoes'),
+      etapa: ctEtapaDaPlanilha(pega(linha, 'etapa')),
+    });
+  }
+  return { validas, semTelefone, repetidas, temTelefone: mapa.numero !== undefined };
+}
+
+function ctAtualizarPreviaImp() {
+  const { validas, semTelefone, repetidas, temTelefone } = ctMontarLinhasImp();
+  ctImpConfirmar.disabled = !temTelefone || !validas.length;
+  if (!temTelefone) {
+    ctImpResumo.textContent = 'Escolha qual coluna tem o telefone pra continuar.';
+  } else {
+    const partes = [`${validas.length} ${validas.length === 1 ? 'contato pronto' : 'contatos prontos'} pra importar`];
+    if (semTelefone) partes.push(`${semTelefone} sem telefone válido (ficam de fora)`);
+    if (repetidas) partes.push(`${repetidas} repetidos na planilha`);
+    ctImpResumo.textContent = partes.join(' · ');
+  }
+  ctImpConfirmar.textContent = validas.length ? `Importar ${validas.length}` : 'Importar';
+
+  ctImpPrevia.textContent = '';
+  const cab = document.createElement('tr');
+  for (const t of ['Nome', 'Telefone', 'E-mail', 'Etiquetas']) {
+    const th = document.createElement('th');
+    th.textContent = t;
+    cab.appendChild(th);
+  }
+  const thead = document.createElement('thead');
+  thead.appendChild(cab);
+  const tbody = document.createElement('tbody');
+  for (const l of validas.slice(0, 8)) {
+    const tr = document.createElement('tr');
+    for (const v of [l.nome || '—', ctFormatarTelefone(l.numero), l.email, l.etiquetas.split(',').filter(Boolean).join(', ')]) {
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  ctImpPrevia.append(thead, tbody);
+}
+ctImpEtiquetaExtra.addEventListener('input', ctAtualizarPreviaImp);
+
+function ctAtualizarEspelhar() {
+  ctImpEspelharLabel.hidden = ctImpEtapa.value !== 'follow_up';
+  if (ctImpEspelharLabel.hidden) ctImpEspelhar.checked = false;
+}
+ctImpEtapa.addEventListener('change', ctAtualizarEspelhar);
+
+ctImpConfirmar.addEventListener('click', async () => {
+  const { validas } = ctMontarLinhasImp();
+  if (!validas.length) return;
+  ctMostrarErroImp('');
+  ctImpConfirmar.disabled = true;
+  if (ctImpEspelhar.checked && ctImpEtapa.value === 'follow_up') {
+    try {
+      if (validas.length > 2000) throw new Error('A lista tem mais de 2000 pacientes - divida em duas.');
+      ctImpConfirmar.textContent = 'Espelhando...';
+      const res = await fetch('/api/crm/follow-up/espelhar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ instancia: ctImpInstancia.value || ctInstancias[0], linhas: validas }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      const partes = [`${d.naLista} pacientes na lista`, `${d.novos} cartões novos`, `${d.movidos} já existiam em outra etapa e foram movidos (sem duplicar)`, `${d.jaEstavam} já estavam na coluna`, `${d.entraramNoFunil} entraram no Dia 0 do funil`];
+      if (d.jaNoFunil) partes.push(`${d.jaNoFunil} já estavam no funil e não repetiram`);
+      if (d.repetidosNaLista) partes.push(`${d.repetidosNaLista} repetidos dentro da própria planilha ignorados`);
+      if (d.outroNumero) partes.push(`${d.outroNumero} já eram contatos de outro número da conta e foram reaproveitados`);
+      if (d.apagados + d.retirados) partes.push(`${d.apagados + d.retirados} saíram (não estão mais no Clinicorp)`);
+      if (d.pessoais) partes.push(`${d.pessoais} são contatos pessoais e foram ignorados`);
+      if (d.invalidos) partes.push(`${d.invalidos} com telefone inválido`);
+      ctImpResultado.textContent = `Follow Up espelhado: ${partes.join(', ')}.`;
+      ctImpResultado.hidden = false;
+      ctImpPasso(0);
+      ctImpVoltar.hidden = false;
+      ctImpVoltar.textContent = 'Espelhar outra lista';
+      mostrarAviso('Follow Up espelhado');
+      carregarContatos();
+    } catch (err) {
+      ctMostrarErroImp(`Não consegui espelhar: ${err.message}`);
+      ctImpConfirmar.disabled = false;
+      ctAtualizarPreviaImp();
+    }
+    return;
+  }
+  const total = { novos: 0, atualizados: 0, ignorados: 0, invalidos: 0, noFunil: 0 };
+  try {
+    for (let i = 0; i < validas.length; i += 500) {
+      ctImpConfirmar.textContent = `Importando ${Math.min(i + 500, validas.length)} de ${validas.length}...`;
+      const res = await fetch('/api/crm/base-contatos/importar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ instancia: ctImpInstancia.value || ctInstancias[0], modo: ctImpModo.value, etapa: ctImpEtapa.value || null, linhas: validas.slice(i, i + 500) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+      for (const k of Object.keys(total)) total[k] += data[k] || 0;
+    }
+    const partes = [`${total.novos} ${total.novos === 1 ? 'contato novo' : 'contatos novos'}`];
+    if (total.noFunil) partes.push(`${total.noFunil} no funil (coluna ${ctImpEtapa.selectedOptions[0]?.textContent || 'da planilha'})`);
+    if (total.atualizados) partes.push(`${total.atualizados} atualizados`);
+    if (total.ignorados) partes.push(`${total.ignorados} já existiam e ficaram como estavam`);
+    if (total.invalidos) partes.push(`${total.invalidos} com telefone inválido`);
+    ctImpResultado.textContent = `Importação concluída: ${partes.join(', ')}.`;
+    ctImpResultado.hidden = false;
+    ctImpPasso(0);
+    ctImpVoltar.hidden = false;
+    ctImpVoltar.textContent = 'Importar outra planilha';
+    mostrarAviso('Contatos importados');
+    carregarContatos();
+  } catch (err) {
+    // cada lote e uma transacao no servidor: o que ja foi confirmado fica, o lote que falhou nao entra
+    ctMostrarErroImp(`A importação parou: ${err.message}${total.novos + total.atualizados ? ` (${total.novos} novos e ${total.atualizados} atualizados já tinham entrado)` : ''}`);
+    ctImpConfirmar.disabled = false;
+    ctAtualizarPreviaImp();
+  }
+});
+
+// ---------- Resultados (indicadores do atendimento por periodo) ----------
+const rsPeriodos = document.getElementById('rsPeriodos');
+const rsCustom = document.getElementById('rsCustom');
+const rsDe = document.getElementById('rsDe');
+const rsAte = document.getElementById('rsAte');
+const rsInstancia = document.getElementById('rsInstancia');
+const rsErro = document.getElementById('rsErro');
+const rsResumo = document.getElementById('rsResumo');
+const rsKpis = document.getElementById('rsKpis');
+const rsGraficoDias = document.getElementById('rsGraficoDias');
+const rsGraficoHoras = document.getElementById('rsGraficoHoras');
+const rsTabelaDias = document.getElementById('rsTabelaDias');
+const rsTabelaBtn = document.getElementById('rsTabelaBtn');
+const rsAutores = document.getElementById('rsAutores');
+const rsFunil = document.getElementById('rsFunil');
+const rsTooltip = document.getElementById('rsTooltip');
+
+let rsDias = 30; // 'custom' = usa rsDe/rsAte
+let rsDados = null;
+let rsPedido = 0;
+
+const rsHojeMaceio = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Maceio' });
+function rsSomarDias(iso, n) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+const rsDataCurta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const rsNum = (n) => Number(n || 0).toLocaleString('pt-BR');
+
+function rsIntervalo() {
+  if (rsDias === 'custom') return { de: rsDe.value, ate: rsAte.value };
+  const ate = rsHojeMaceio();
+  return { de: rsSomarDias(ate, -(rsDias - 1)), ate };
+}
+
+function rsNomePeriodo() {
+  if (rsDias === 1) return 'Hoje';
+  if (rsDias === 'custom') {
+    const { de, ate } = rsIntervalo();
+    return de === ate ? `Em ${rsDataCurta(de)}` : `De ${rsDataCurta(de)} a ${rsDataCurta(ate)}`;
+  }
+  return `Nos últimos ${rsDias} dias`;
+}
+
+function rsFormatarTempo(seg) {
+  if (seg == null) return '—';
+  if (seg < 60) return `${seg}s`;
+  const min = Math.round(seg / 60);
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const resto = min % 60;
+  if (h < 24) return resto ? `${h}h ${resto}min` : `${h}h`;
+  return `${Math.round(h / 24)} dias`;
+}
+
+async function carregarResultados() {
+  const { de, ate } = rsIntervalo();
+  if (!de || !ate || de > ate) {
+    rsMostrarErro('Escolha uma data inicial antes da final.');
+    return;
+  }
+  rsMostrarErro('');
+  const pedido = ++rsPedido;
+  rsResumo.classList.add('carregando');
+  try {
+    const params = new URLSearchParams({ de, ate });
+    if (rsInstancia.value) params.set('instancia', rsInstancia.value);
+    const res = await fetch(`/api/crm/resultados?${params}`, { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    if (pedido !== rsPedido) return; // trocou o filtro enquanto carregava
+    rsDados = data;
+    const atual = rsInstancia.value;
+    rsInstancia.textContent = '';
+    rsInstancia.appendChild(new Option('Todos os números', ''));
+    for (const i of data.instancias || []) rsInstancia.appendChild(new Option(i, i));
+    rsInstancia.value = (data.instancias || []).includes(atual) ? atual : '';
+    rsInstancia.hidden = (data.instancias || []).length < 2;
+    renderizarResultados();
+  } catch (err) {
+    if (pedido === rsPedido) rsMostrarErro(`Não consegui carregar os resultados: ${err.message}`);
+  } finally {
+    if (pedido === rsPedido) rsResumo.classList.remove('carregando');
+  }
+}
+
+function rsMostrarErro(msg) {
+  rsErro.textContent = msg || '';
+  rsErro.hidden = !msg;
+}
+
+// variacao contra o periodo anterior de mesmo tamanho. menorMelhor = tempo de resposta
+function rsVariacao(atual, anterior, menorMelhor = false) {
+  if (atual == null || anterior == null) return null;
+  if (!anterior) return atual ? { texto: 'novo no período', classe: '' } : null;
+  const pct = Math.round(((atual - anterior) / anterior) * 100);
+  if (pct === 0) return { texto: '= igual ao período anterior', classe: '' };
+  const subiu = pct > 0;
+  const bom = menorMelhor ? !subiu : subiu;
+  return { texto: `${subiu ? '▲' : '▼'} ${Math.abs(pct)}% vs período anterior`, classe: bom ? 'bom' : 'ruim' };
+}
+
+function renderizarResultados() {
+  const d = rsDados;
+  if (!d) return;
+  const a = d.atual;
+  const b = d.anterior;
+  const inicioPeriodo = new Date(d.periodo.inicio);
+  const etapasDesde = d.registroDesde?.etapas ? new Date(d.registroDesde.etapas) : null;
+  const autorDesde = d.registroDesde?.autor ? new Date(d.registroDesde.autor) : null;
+  const dataBR = (dt) => dt.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit' });
+  const avisoEtapas = !etapasDesde ? 'contando a partir de agora' : etapasDesde > inicioPeriodo ? `contando desde ${dataBR(etapasDesde)}` : '';
+  const avisoAutor = !autorDesde ? 'registrando a partir de agora' : autorDesde > inicioPeriodo ? `registrado desde ${dataBR(autorDesde)}` : '';
+  const pctIa = a.enviadas ? Math.round((a.enviadas_ia / a.enviadas) * 100) : null;
+  const pct5 = a.contatos_iniciados ? Math.round((a.em_5min / a.contatos_iniciados) * 100) : null;
+  // a comparacao so vale quando o registro ja existia no periodo anterior inteiro
+  const comparaEtapas = etapasDesde && etapasDesde <= new Date(d.periodo.anteriorInicio);
+
+  const tiles = [
+    { rotulo: 'Novos contatos', valor: rsNum(a.novos), sub: 'chegaram pelo WhatsApp', variacao: rsVariacao(a.novos, b.novos) },
+    { rotulo: 'Conversas com movimento', valor: rsNum(a.conversas), sub: `${rsNum(a.recebidas)} recebidas · ${rsNum(a.enviadas)} enviadas`, variacao: rsVariacao(a.conversas, b.conversas) },
+    { rotulo: 'Mensagens recebidas', valor: rsNum(a.recebidas), sub: 'dos contatos', variacao: rsVariacao(a.recebidas, b.recebidas) },
+    {
+      rotulo: 'Tempo de 1ª resposta', valor: rsFormatarTempo(a.mediana_seg),
+      sub: pct5 == null ? 'sem conversas iniciadas' : `mediana · ${pct5}% respondidos em até 5 min`,
+      variacao: rsVariacao(a.mediana_seg, b.mediana_seg, true),
+    },
+    {
+      rotulo: 'Agendamentos', valor: rsNum(a.agendamentos),
+      sub: [a.pre_agendamentos ? `+ ${rsNum(a.pre_agendamentos)} pré-agendamentos` : '', avisoEtapas].filter(Boolean).join(' · ') || 'contatos que foram para Agendado',
+      variacao: comparaEtapas ? rsVariacao(a.agendamentos, b.agendamentos) : null,
+    },
+    {
+      rotulo: 'Respondido pela IA', valor: pctIa == null ? '—' : `${pctIa}%`,
+      sub: [a.enviadas ? `${rsNum(a.enviadas_ia)} de ${rsNum(a.enviadas)} enviadas` : 'nenhuma mensagem enviada', avisoAutor].filter(Boolean).join(' · '),
+      variacao: null,
+    },
+  ];
+  rsKpis.textContent = '';
+  for (const t of tiles) {
+    const el = document.createElement('div');
+    el.className = 'rs-kpi';
+    const rot = document.createElement('span');
+    rot.className = 'rs-kpi-rotulo';
+    rot.textContent = t.rotulo;
+    const val = document.createElement('strong');
+    val.className = 'rs-kpi-valor';
+    val.textContent = t.valor;
+    const sub = document.createElement('span');
+    sub.className = 'rs-kpi-sub';
+    sub.textContent = t.sub;
+    el.append(rot, val, sub);
+    if (t.variacao) {
+      const v = document.createElement('span');
+      v.className = `rs-kpi-var ${t.variacao.classe}`;
+      v.textContent = t.variacao.texto;
+      el.appendChild(v);
+    }
+    rsKpis.appendChild(el);
+  }
+
+  rsResumo.textContent = rsMontarResumo(d, pct5);
+  rsDesenharGraficos();
+  rsRenderizarBarras(rsAutores, [
+    { nome: 'IA (auto atendimento)', total: a.enviadas_ia },
+    { nome: 'Follow Up automático', total: a.enviadas_followup },
+    { nome: 'Equipe', total: a.enviadas_humano },
+    { nome: 'Sem registro de autor', total: Math.max(0, a.enviadas - a.enviadas_ia - a.enviadas_followup - a.enviadas_humano) },
+  ].filter((x) => x.total || x.nome !== 'Sem registro de autor'), a.enviadas, 'Nenhuma mensagem enviada no período.');
+  const totalFunil = d.funil.reduce((s, f) => s + f.total, 0);
+  rsRenderizarBarras(rsFunil, d.funil, totalFunil, 'Nenhum contato novo com conversa no período.');
+  rsRenderizarTabelaDias();
+}
+
+// resumo escrito com os proprios numeros (sem IA - nao gasta credito e nunca inventa)
+function rsMontarResumo(d, pct5) {
+  const a = d.atual;
+  if (!a.recebidas && !a.enviadas && !a.novos) return `${rsNomePeriodo()} não houve conversa no WhatsApp${rsInstancia.value ? ' nesse número' : ''}.`;
+  const frases = [];
+  const varNovos = rsVariacao(a.novos, d.anterior.novos);
+  const comparacao = varNovos && varNovos.classe ? ` (${varNovos.texto.replace(' vs período anterior', '').replace('▲', 'alta de').replace('▼', 'queda de')} em relação ao período anterior)` : '';
+  frases.push(`${rsNomePeriodo()}, chegaram ${rsNum(a.novos)} ${a.novos === 1 ? 'contato novo' : 'contatos novos'}${comparacao} e ${rsNum(a.conversas)} ${a.conversas === 1 ? 'conversa teve' : 'conversas tiveram'} movimento.`);
+  if (a.mediana_seg != null) {
+    frases.push(`A primeira resposta saiu em ${rsFormatarTempo(a.mediana_seg)} (mediana)${pct5 != null ? `, e ${pct5}% dos contatos foram respondidos em até 5 minutos` : ''}.`);
+  }
+  if (a.contatos_iniciados > a.respondidos) {
+    const sem = a.contatos_iniciados - a.respondidos;
+    frases.push(`${rsNum(sem)} ${sem === 1 ? 'contato ficou' : 'contatos ficaram'} sem resposta até agora.`);
+  }
+  const pico = d.porHora.reduce((m, h) => (h.recebidas > m.recebidas ? h : m), { hora: -1, recebidas: 0 });
+  if (pico.recebidas) frases.push(`O horário de mais movimento é das ${pico.hora}h às ${(pico.hora + 1) % 24}h.`);
+  if (d.porDia.length > 1) {
+    const diaTop = d.porDia.reduce((m, x) => (x.recebidas > m.recebidas ? x : m), d.porDia[0]);
+    if (diaTop.recebidas) frases.push(`O dia mais cheio foi ${rsDataCurta(diaTop.dia)}, com ${rsNum(diaTop.recebidas)} mensagens recebidas.`);
+  }
+  const totalFunil = d.funil.reduce((s, f) => s + f.total, 0);
+  const convertidos = d.funil.filter((f) => f.id === 'agendado' || f.id === 'compareceu' || f.id === 'comprou').reduce((s, f) => s + f.total, 0);
+  if (totalFunil) frases.push(`Dos contatos que chegaram no período, ${rsNum(convertidos)} (${Math.round((convertidos / totalFunil) * 100)}%) já estão agendados, compareceram ou compraram.`);
+  return frases.join(' ');
+}
+
+function rsRenderizarBarras(container, itens, total, vazio) {
+  container.textContent = '';
+  if (!total) {
+    const p = document.createElement('p');
+    p.className = 'rs-vazio';
+    p.textContent = vazio;
+    container.appendChild(p);
+    return;
+  }
+  const maior = Math.max(...itens.map((i) => i.total), 1);
+  for (const item of itens) {
+    const linha = document.createElement('div');
+    linha.className = 'rs-barra-linha';
+    const nome = document.createElement('span');
+    nome.className = 'rs-barra-nome';
+    nome.textContent = item.nome;
+    const trilho = document.createElement('div');
+    trilho.className = 'rs-barra-trilho';
+    const barra = document.createElement('div');
+    barra.className = 'rs-barra';
+    barra.style.width = item.total ? `max(4px, ${(item.total / maior) * 100}%)` : '0';
+    trilho.appendChild(barra);
+    const valor = document.createElement('span');
+    valor.className = 'rs-barra-valor';
+    valor.textContent = `${rsNum(item.total)} · ${Math.round((item.total / total) * 100)}%`;
+    linha.append(nome, trilho, valor);
+    container.appendChild(linha);
+  }
+}
+
+// grafico de colunas em SVG (uma serie so, cor da marca), com dica ao passar o mouse/tocar
+function rsGraficoColunas(container, pontos, { rotuloX, dica, altura = 200 }) {
+  container.textContent = '';
+  const largura = Math.max(container.clientWidth, 260);
+  const margem = { topo: 12, dir: 8, base: 26, esq: 34 };
+  const w = largura - margem.esq - margem.dir;
+  const h = altura - margem.topo - margem.base;
+  const maior = Math.max(...pontos.map((p) => p.valor), 0);
+  // escala "redonda" pro eixo (1, 2, 5, 10, 20, 50...)
+  const passoBruto = Math.max(maior, 1) / 4;
+  const mag = 10 ** Math.floor(Math.log10(passoBruto));
+  const passo = Math.max(1, [1, 2, 5, 10].map((m) => m * mag).find((v) => v >= passoBruto));
+  const topoEixo = Math.max(passo, Math.ceil(maior / passo) * passo);
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', largura);
+  svg.setAttribute('height', altura);
+  svg.setAttribute('role', 'img');
+  svg.classList.add('rs-svg');
+  const el = (tag, attrs, pai = svg) => {
+    const n = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    pai.appendChild(n);
+    return n;
+  };
+
+  for (let v = 0; v <= topoEixo; v += passo) {
+    const y = margem.topo + h - (v / topoEixo) * h;
+    el('line', { x1: margem.esq, x2: margem.esq + w, y1: y, y2: y, class: v === 0 ? 'rs-eixo' : 'rs-grade' });
+    el('text', { x: margem.esq - 6, y: y + 4, 'text-anchor': 'end', class: 'rs-rotulo' }).textContent = rsNum(v);
+  }
+
+  const faixa = w / pontos.length;
+  const largBarra = Math.max(2, Math.min(28, faixa - 2));
+  const cadaQuantos = Math.ceil(pontos.length / Math.max(1, Math.floor(w / 46)));
+  pontos.forEach((p, i) => {
+    const x = margem.esq + i * faixa + (faixa - largBarra) / 2;
+    const alt = topoEixo ? (p.valor / topoEixo) * h : 0;
+    const yBase = margem.topo + h;
+    if (alt > 0) {
+      const r = Math.min(4, largBarra / 2, alt);
+      // topo arredondado, base reta no eixo
+      el('path', {
+        class: 'rs-coluna',
+        d: `M${x},${yBase} V${yBase - alt + r} Q${x},${yBase - alt} ${x + r},${yBase - alt} H${x + largBarra - r} Q${x + largBarra},${yBase - alt} ${x + largBarra},${yBase - alt + r} V${yBase} Z`,
+      });
+    }
+    if (i % cadaQuantos === 0) {
+      el('text', { x: x + largBarra / 2, y: altura - 8, 'text-anchor': 'middle', class: 'rs-rotulo' }).textContent = rotuloX(p);
+    }
+    // area de toque maior que a coluna (a faixa inteira)
+    const alvo = el('rect', { x: margem.esq + i * faixa, y: margem.topo, width: faixa, height: h, class: 'rs-alvo', tabindex: 0 });
+    const mostrar = () => {
+      for (const c of svg.querySelectorAll('.rs-alvo.ativo')) c.classList.remove('ativo');
+      alvo.classList.add('ativo');
+      rsTooltip.textContent = '';
+      for (const [j, linha] of dica(p).entries()) {
+        const div = document.createElement('div');
+        if (j === 0) div.className = 'rs-tooltip-titulo';
+        div.textContent = linha;
+        rsTooltip.appendChild(div);
+      }
+      rsTooltip.hidden = false;
+      const caixa = alvo.getBoundingClientRect();
+      const tw = rsTooltip.offsetWidth;
+      const left = Math.min(Math.max(8, caixa.left + caixa.width / 2 - tw / 2), window.innerWidth - tw - 8);
+      rsTooltip.style.left = `${left}px`;
+      rsTooltip.style.top = `${Math.max(8, caixa.top - rsTooltip.offsetHeight - 8 + (h - alt))}px`;
+    };
+    const esconder = () => { alvo.classList.remove('ativo'); rsTooltip.hidden = true; };
+    alvo.addEventListener('mouseenter', mostrar);
+    alvo.addEventListener('focus', mostrar);
+    alvo.addEventListener('click', mostrar);
+    alvo.addEventListener('mouseleave', esconder);
+    alvo.addEventListener('blur', esconder);
+  });
+  svg.setAttribute('aria-label', pontos.map((p) => `${rotuloX(p)}: ${p.valor}`).join(', '));
+  container.appendChild(svg);
+}
+
+const RS_DIAS_SEMANA = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+function rsDesenharGraficos() {
+  const d = rsDados;
+  if (!d || tabResultados.hidden) return;
+  rsGraficoColunas(rsGraficoDias, d.porDia.map((x) => ({ ...x, valor: x.recebidas })), {
+    rotuloX: (p) => rsDataCurta(p.dia),
+    dica: (p) => [
+      `${RS_DIAS_SEMANA[new Date(`${p.dia}T12:00:00Z`).getUTCDay()]}, ${rsDataCurta(p.dia)}`,
+      `${rsNum(p.recebidas)} recebidas`,
+      `${rsNum(p.enviadas)} enviadas`,
+      `${rsNum(p.novos)} ${p.novos === 1 ? 'contato novo' : 'contatos novos'}`,
+    ],
+  });
+  rsGraficoColunas(rsGraficoHoras, d.porHora.map((x) => ({ ...x, valor: x.recebidas })), {
+    rotuloX: (p) => `${p.hora}h`,
+    dica: (p) => [`Das ${p.hora}h às ${(p.hora + 1) % 24}h`, `${rsNum(p.recebidas)} mensagens recebidas`],
+    altura: 180,
+  });
+}
+
+function rsRenderizarTabelaDias() {
+  rsTabelaDias.textContent = '';
+  const tabela = document.createElement('table');
+  tabela.className = 'ct-tabela';
+  const cab = document.createElement('tr');
+  for (const t of ['Dia', 'Recebidas', 'Enviadas', 'Contatos novos']) {
+    const th = document.createElement('th');
+    th.textContent = t;
+    cab.appendChild(th);
+  }
+  const thead = document.createElement('thead');
+  thead.appendChild(cab);
+  const tbody = document.createElement('tbody');
+  for (const p of [...rsDados.porDia].reverse()) {
+    const tr = document.createElement('tr');
+    for (const v of [rsDataCurta(p.dia), rsNum(p.recebidas), rsNum(p.enviadas), rsNum(p.novos)]) {
+      const td = document.createElement('td');
+      td.textContent = v;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  tabela.append(thead, tbody);
+  rsTabelaDias.appendChild(tabela);
+}
+
+rsTabelaBtn.addEventListener('click', () => {
+  rsTabelaDias.hidden = !rsTabelaDias.hidden;
+  rsGraficoDias.hidden = !rsTabelaDias.hidden;
+  rsTabelaBtn.textContent = rsTabelaDias.hidden ? 'Ver em tabela' : 'Ver gráfico';
+  if (rsTabelaDias.hidden) rsDesenharGraficos();
+});
+
+rsPeriodos.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button[data-dias]');
+  if (!btn) return;
+  for (const b of rsPeriodos.querySelectorAll('button')) b.classList.toggle('ativo', b === btn);
+  if (btn.dataset.dias === 'custom') {
+    if (!rsDe.value) {
+      const { de, ate } = rsIntervalo();
+      rsDe.value = de;
+      rsAte.value = ate;
+    }
+    rsDias = 'custom';
+    rsCustom.hidden = false;
+    return;
+  }
+  rsCustom.hidden = true;
+  rsDias = Number(btn.dataset.dias);
+  carregarResultados();
+});
+document.getElementById('rsAplicar').addEventListener('click', carregarResultados);
+rsInstancia.addEventListener('change', carregarResultados);
+
+// redesenha os graficos quando a largura muda (gaveta, rotacao do celular, janela)
+let rsRedesenhoTimer = null;
+new ResizeObserver(() => {
+  clearTimeout(rsRedesenhoTimer);
+  rsRedesenhoTimer = setTimeout(rsDesenharGraficos, 120);
+}).observe(rsGraficoDias);
+document.addEventListener('scroll', () => { rsTooltip.hidden = true; }, true);
+
+// ---------- Lumien (assistente flutuante: conversa com a Lumia e executa acoes no app) ----------
+// usa o mesmo /api/chat da Lumia com uma sessao propria ("lumien:...") - o servidor reconhece esse
+// prefixo, tira o controle do PC e devolve acoesTela (telas pra abrir) e aguardandoConfirmacao
+const lumienBtn = document.getElementById('lumienBtn');
+const lumienPainel = document.getElementById('lumienPainel');
+const lumienLog = document.getElementById('lumienLog');
+const lumienSugestoes = document.getElementById('lumienSugestoes');
+const lumienForm = document.getElementById('lumienForm');
+const lumienTexto = document.getElementById('lumienTexto');
+const lumienEnviar = document.getElementById('lumienEnviar');
+const lumienSub = document.getElementById('lumienSub');
+
+const LUMIEN_CHAVE_SESSAO = 'lumien_session_id';
+let lumienSessao = null;
+let lumienOcupado = false;
+let lumienPollTimer = null;
+
+function lumienNovaSessao() {
+  lumienSessao = `lumien:${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+  try { localStorage.setItem(LUMIEN_CHAVE_SESSAO, lumienSessao); } catch { /* sem storage: vale so nesta aba */ }
+}
+try { lumienSessao = localStorage.getItem(LUMIEN_CHAVE_SESSAO); } catch { lumienSessao = null; }
+if (!lumienSessao) lumienNovaSessao();
+
+// chamado pelo mudarAba/mostrarApp - le os elementos direto do DOM porque pode rodar antes deste
+// trecho do arquivo ter sido executado
+function lumienAoMudarAba(aba) {
+  const btn = document.getElementById('lumienBtn');
+  const painel = document.getElementById('lumienPainel');
+  if (!btn || !painel) return;
+  const noInicio = aba === 'painel'; // o Inicio ja e a conversa com a Lumia
+  btn.hidden = noInicio || !painel.hidden;
+  if (noInicio) painel.hidden = true;
+  document.body.classList.toggle('lumien-em-conversas', aba === 'conversas');
+  if (!painel.hidden && typeof lumienAtualizarSugestoes === 'function') lumienAtualizarSugestoes();
+}
+
+function lumienAbaAtual() {
+  return document.querySelector('.nav-btn.active')?.dataset.tab || 'painel';
+}
+
+// o que o usuario esta vendo agora - vai junto de cada mensagem pra "essa conversa", "esse
+// contato" funcionarem sem ele repetir o nome
+function lumienContexto() {
+  const aba = lumienAbaAtual();
+  const nome = CABECALHOS_ABA[aba]?.[1] || aba;
+  const partes = [`aba ${nome}`];
+  if (aba === 'conversas' && cvAberto) partes.push(`conversa aberta com ${cvAberto.nome || `+${cvAberto.numero}`} (contatoId ${cvAberto.id})`);
+  if (aba === 'contatos' && !ctModal.hidden && ctEditando) partes.push(`ficha aberta de ${ctEditando.nome || `+${ctEditando.numero}`} (contatoId ${ctEditando.id})`);
+  if (aba === 'crm' && typeof crmContatoAberto !== 'undefined' && crmContatoAberto) partes.push(`conversa aberta com ${crmContatoAberto.nome || `+${crmContatoAberto.numero}`} (contatoId ${crmContatoAberto.id})`);
+  return `[Tela atual: ${partes.join(' · ')}]`;
+}
+
+function lumienSugestoesDaTela() {
+  const aba = lumienAbaAtual();
+  if (aba === 'conversas' && cvAberto) return ['Resuma esta conversa', 'Sugira uma resposta', cvAberto.auto_pausado ? 'Volte a IA nesta conversa' : 'Pause a IA nesta conversa'];
+  if (aba === 'resultados') return ['Como foi o atendimento esta semana?', 'O que posso melhorar?'];
+  if (aba === 'contatos') return ['Quem está esperando resposta?', 'Cadastre um contato'];
+  return ['Quem está esperando resposta?', 'Como foi o atendimento hoje?'];
+}
+
+function lumienAtualizarSugestoes() {
+  lumienSugestoes.textContent = '';
+  if (lumienOcupado) return;
+  for (const texto of lumienSugestoesDaTela()) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = texto;
+    b.addEventListener('click', () => lumienMandar(texto));
+    lumienSugestoes.appendChild(b);
+  }
+}
+
+function lumienBolha(texto, tipo) {
+  const div = document.createElement('div');
+  div.className = `lumien-msg ${tipo}`;
+  div.textContent = texto;
+  lumienLog.appendChild(div);
+  lumienLog.scrollTop = lumienLog.scrollHeight;
+  return div;
+}
+
+function lumienBoasVindas() {
+  if (lumienLog.childElementCount) return;
+  lumienBolha('Oi! Sou o Lumien. Posso achar contatos, resumir conversas, mover etapas, pausar a IA, cadastrar leads, mostrar resultados e abrir telas pra você. Mensagem pra paciente eu só envio depois que você confirmar.', 'lumien');
+}
+
+function lumienAbrir() {
+  lumienPainel.hidden = false;
+  lumienBtn.hidden = true;
+  lumienBoasVindas();
+  lumienAtualizarSugestoes();
+  if (window.matchMedia('(min-width: 900px)').matches) lumienTexto.focus();
+}
+function lumienFechar() {
+  lumienPainel.hidden = true;
+  lumienBtn.hidden = lumienAbaAtual() === 'painel';
+}
+lumienBtn.addEventListener('click', lumienAbrir);
+document.getElementById('lumienFechar').addEventListener('click', lumienFechar);
+document.getElementById('lumienNova').addEventListener('click', () => {
+  if (lumienOcupado) return;
+  lumienNovaSessao();
+  lumienLog.textContent = '';
+  lumienBoasVindas();
+  lumienAtualizarSugestoes();
+});
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && !lumienPainel.hidden && ctModal.hidden && ctImpModal.hidden) lumienFechar();
+});
+
+function lumienAjustarAltura() {
+  lumienTexto.style.height = 'auto';
+  lumienTexto.style.height = `${Math.min(lumienTexto.scrollHeight, 120)}px`;
+}
+lumienTexto.addEventListener('input', lumienAjustarAltura);
+lumienTexto.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter' && !ev.shiftKey) {
+    ev.preventDefault();
+    lumienForm.requestSubmit();
+  }
+});
+lumienForm.addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const texto = lumienTexto.value.trim();
+  if (!texto) return;
+  lumienTexto.value = '';
+  lumienAjustarAltura();
+  lumienMandar(texto);
+});
+
+function lumienPararPolling() {
+  clearInterval(lumienPollTimer);
+  lumienPollTimer = null;
+}
+
+async function lumienMandar(texto) {
+  if (lumienOcupado) return;
+  lumienOcupado = true;
+  lumienEnviar.disabled = true;
+  lumienSugestoes.textContent = '';
+  for (const b of lumienLog.querySelectorAll('.lumien-confirmar')) b.remove();
+  lumienBolha(texto, 'usuario');
+  const pensando = lumienBolha('Pensando...', 'lumien pensando');
+  lumienPollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/chat/status?sessionId=${encodeURIComponent(lumienSessao)}`, { headers: { 'x-app-password': appPassword } });
+      const data = res.ok ? await res.json() : null;
+      if (data?.detalhe) pensando.textContent = data.detalhe;
+    } catch { /* so indicador visual */ }
+  }, 900);
+
+  try {
+    // confirmacao ("sim"/"nao") vai sem prefixo - o servidor confere o comeco da mensagem
+    const ehResposta = /^\s*(sim|s|n[aã]o|n)\s*[.!]?\s*$/i.test(texto);
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ message: ehResposta ? texto : `${lumienContexto()}\n${texto}`, sessionId: lumienSessao }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    lumienPararPolling();
+    pensando.remove();
+    const bolha = lumienBolha(data.reply || 'Feito.', 'lumien');
+    if (data.arquivo) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'lumien-baixar';
+      btn.textContent = `⬇ Baixar ${data.arquivo.nomeArquivo}`;
+      btn.addEventListener('click', () => baixarArquivo(data.arquivo.id, data.arquivo.nomeArquivo, btn));
+      bolha.appendChild(btn);
+    }
+    if (data.aguardandoConfirmacao) lumienBotoesConfirmar();
+    if (data.acoesTela?.length) await lumienExecutarTelas(data.acoesTela);
+    lumienRecarregarTela();
+  } catch (err) {
+    lumienPararPolling();
+    pensando.remove();
+    lumienBolha(`Não consegui: ${err.message}`, 'lumien erro');
+  } finally {
+    lumienOcupado = false;
+    lumienEnviar.disabled = false;
+    if (!lumienLog.querySelector('.lumien-confirmar')) lumienAtualizarSugestoes();
+  }
+}
+
+function lumienBotoesConfirmar() {
+  const linha = document.createElement('div');
+  linha.className = 'lumien-confirmar';
+  const sim = document.createElement('button');
+  sim.type = 'button';
+  sim.className = 'sim';
+  sim.textContent = 'Sim, pode fazer';
+  sim.addEventListener('click', () => lumienMandar('sim'));
+  const nao = document.createElement('button');
+  nao.type = 'button';
+  nao.textContent = 'Não';
+  nao.addEventListener('click', () => lumienMandar('não'));
+  linha.append(sim, nao);
+  lumienLog.appendChild(linha);
+  lumienLog.scrollTop = lumienLog.scrollHeight;
+}
+
+// abre as telas que o Lumien pediu (app_abrir_tela)
+async function lumienExecutarTelas(acoes) {
+  for (const { tela, contatoId } of acoes) {
+    const btn = document.querySelector(`.nav-btn[data-tab="${tela}"]`);
+    if (!btn || btn.hidden) continue;
+    mudarAba(tela);
+    if (!contatoId) continue;
+    if (tela === 'conversas') {
+      await carregarConversas();
+      let c = cvContatos.find((x) => x.id === contatoId);
+      if (!c) {
+        // contato que ainda nao conversou nao aparece na lista - busca na base
+        await carregarContatos();
+        c = ctContatos.find((x) => x.id === contatoId);
+        if (!cvEtapas.length) cvEtapas = ctEtapas;
+      }
+      if (c) abrirConversa(c);
+    } else if (tela === 'contatos') {
+      await carregarContatos();
+      const c = ctContatos.find((x) => x.id === contatoId);
+      if (c) abrirModalContato(c);
+    }
+  }
+}
+
+// depois de uma acao, recarrega os dados da tela visivel (as que nao tem tempo real proprio)
+function lumienRecarregarTela() {
+  const aba = lumienAbaAtual();
+  if (aba === 'contatos' && ctModal.hidden) carregarContatos();
+  else if (aba === 'resultados') carregarResultados();
+  else if (aba === 'conversas') carregarConversas();
+  else if (aba === 'crm') carregarCrm();
+}
+
+// ---------- Instagram (conexao, publicacoes, respostas a comentario e direct) ----------
+const igConta = document.getElementById('igConta');
+const igConectadoBloco = document.getElementById('igConectadoBloco');
+const igTipos = document.getElementById('igTipos');
+const igTipoDica = document.getElementById('igTipoDica');
+const igArquivos = document.getElementById('igArquivos');
+const igArquivosTexto = document.getElementById('igArquivosTexto');
+const igPrevias = document.getElementById('igPrevias');
+const igLegendaCampo = document.getElementById('igLegendaCampo');
+const igLegenda = document.getElementById('igLegenda');
+const igLegendaConta = document.getElementById('igLegendaConta');
+const igAgendarPara = document.getElementById('igAgendarPara');
+const igPostErro = document.getElementById('igPostErro');
+const igPublicarBtn = document.getElementById('igPublicarBtn');
+const igPosts = document.getElementById('igPosts');
+const igRegraTitulo = document.getElementById('igRegraTitulo');
+const igRegraPalavras = document.getElementById('igRegraPalavras');
+const igRegraPost = document.getElementById('igRegraPost');
+const igRegraPublica = document.getElementById('igRegraPublica');
+const igRegraDm = document.getElementById('igRegraDm');
+const igRegraErro = document.getElementById('igRegraErro');
+const igRegraSalvar = document.getElementById('igRegraSalvar');
+const igRegraCancelar = document.getElementById('igRegraCancelar');
+const igRegras = document.getElementById('igRegras');
+const igDmIa = document.getElementById('igDmIa');
+const igDmIaLabel = document.getElementById('igDmIaLabel');
+
+const IG_TIPOS = {
+  feed: { nome: 'Foto no feed', aceita: 'image/*', varios: false, dica: 'Uma foto. A Lumia ajusta pra proporção aceita pelo feed (entre 4:5 em pé e 1,91:1 deitada).', botao: 'Escolher foto' },
+  carrossel: { nome: 'Carrossel', aceita: 'image/*,video/mp4,video/quicktime', varios: true, dica: 'De 2 a 10 fotos ou vídeos, na ordem em que você escolher.', botao: 'Escolher fotos e vídeos' },
+  reels: { nome: 'Reels', aceita: 'video/mp4,video/quicktime', varios: false, dica: 'Um vídeo MP4 ou MOV em pé (9:16), de 3 segundos a 15 minutos, até 100 MB.', botao: 'Escolher vídeo' },
+  story: { nome: 'Story', aceita: 'image/*,video/mp4,video/quicktime', varios: false, dica: 'Uma foto ou um vídeo em pé (9:16). Story não tem legenda pela API do Instagram.', botao: 'Escolher foto ou vídeo' },
+};
+const IG_STATUS = { agendado: 'Agendado', processando: 'Publicando...', publicado: 'Publicado', erro: 'Erro', cancelado: 'Cancelado' };
+
+let igStatus = null;
+let igTipo = 'feed';
+let igSelecionados = []; // File[]
+let igRegrasLista = [];
+let igRegraEditando = null;
+let igPollTimer = null;
+
+async function igApi(caminho, opcoes = {}) {
+  const res = await fetch(caminho, {
+    ...opcoes,
+    headers: { 'x-app-password': appPassword, ...(opcoes.body && typeof opcoes.body === 'string' ? { 'Content-Type': 'application/json' } : {}), ...(opcoes.headers || {}) },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.erro || `erro ${res.status}`);
+  return data;
+}
+
+async function carregarInstagram() {
+  clearInterval(igPollTimer);
+  try {
+    igStatus = await igApi('/api/instagram/status');
+  } catch (err) {
+    igConta.textContent = '';
+    igConta.appendChild(Object.assign(document.createElement('p'), { className: 'rs-sub', textContent: `Não consegui carregar: ${err.message}` }));
+    return;
+  }
+  igRenderizarConta();
+  igConectadoBloco.hidden = !igStatus.conectado;
+  if (!igStatus.conectado) return;
+  igDmIa.checked = !!igStatus.conta.dmIaAtiva;
+  igAtualizarRotuloDm();
+  igAtualizarTipo();
+  carregarPostsInstagram();
+  carregarRegrasInstagram();
+  carregarPublicacoesInstagram();
+  igPollTimer = setInterval(() => { if (!tabInstagram.hidden) carregarPostsInstagram(); else clearInterval(igPollTimer); }, 30000);
+}
+
+function igRenderizarConta() {
+  igConta.textContent = '';
+  const s = igStatus;
+  const linha = document.createElement('div');
+  linha.className = 'ig-conta-linha';
+  const info = document.createElement('div');
+  info.className = 'ig-conta-info';
+  const titulo = document.createElement('h3');
+  const sub = document.createElement('p');
+  sub.className = 'rs-sub';
+  if (!s.configurado) {
+    titulo.textContent = 'Instagram: aguardando liberação da Meta';
+    sub.textContent = 'A integração já está pronta aqui na Lumia. Falta a Meta aprovar o app que dá acesso às DMs, comentários e publicações. Assim que for aprovado, o botão de conectar aparece aqui.';
+    info.append(titulo, sub);
+    linha.appendChild(info);
+  } else if (!s.conectado) {
+    titulo.textContent = 'Conecte o Instagram da sua empresa';
+    sub.textContent = 'Precisa ser uma conta profissional (comercial ou criador de conteúdo). Você entra com o login do Instagram e autoriza a Lumia a ler e responder as mensagens e comentários e a publicar.';
+    info.append(titulo, sub);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'relatorio-config-enviar';
+    btn.textContent = 'Conectar Instagram';
+    btn.addEventListener('click', () => { window.location.href = `/api/instagram/conectar?token=${encodeURIComponent(appPassword)}`; });
+    linha.append(info, btn);
+  } else {
+    const c = s.conta;
+    if (c.fotoUrl) {
+      const img = document.createElement('img');
+      img.className = 'ig-foto';
+      img.src = c.fotoUrl;
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      linha.appendChild(img);
+    }
+    titulo.textContent = `@${c.username}${c.nome ? ` · ${c.nome}` : ''}`;
+    sub.textContent = `Conectado desde ${new Date(c.conectadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Maceio' })}. O acesso renova sozinho.`;
+    info.append(titulo, sub);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'crm-btn-secundario';
+    btn.textContent = 'Desconectar';
+    btn.addEventListener('click', async () => {
+      if (!confirm(`Desconectar @${c.username}? As DMs e comentários param de chegar e as publicações agendadas não saem até conectar de novo.`)) return;
+      try {
+        await igApi('/api/instagram/desconectar', { method: 'POST' });
+        mostrarAviso('Instagram desconectado');
+        carregarInstagram();
+      } catch (err) {
+        mostrarAviso(`Não consegui desconectar: ${err.message}`, 'erro');
+      }
+    });
+    linha.append(info, btn);
+  }
+  igConta.appendChild(linha);
+}
+
+// sub-abas (Publicar / Respostas a comentarios / Direct)
+document.querySelector('.ig-abas').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button[data-ig-sec]');
+  if (!btn) return;
+  for (const b of document.querySelectorAll('.ig-abas button')) b.classList.toggle('ativo', b === btn);
+  for (const p of document.querySelectorAll('[data-ig-painel]')) p.hidden = p.dataset.igPainel !== btn.dataset.igSec;
+});
+
+// ---------- publicar ----------
+
+function igAtualizarTipo() {
+  const t = IG_TIPOS[igTipo];
+  for (const b of igTipos.querySelectorAll('button')) b.classList.toggle('ativo', b.dataset.tipo === igTipo);
+  igTipoDica.textContent = t.dica;
+  igArquivos.accept = t.aceita;
+  igArquivos.multiple = t.varios;
+  igArquivosTexto.textContent = t.botao;
+  igLegendaCampo.hidden = igTipo === 'story';
+  igSelecionados = [];
+  igRenderizarPrevias();
+}
+igTipos.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('button[data-tipo]');
+  if (!btn) return;
+  igTipo = btn.dataset.tipo;
+  igAtualizarTipo();
+});
+
+igArquivos.addEventListener('change', () => {
+  const novos = [...(igArquivos.files || [])];
+  igSelecionados = IG_TIPOS[igTipo].varios ? [...igSelecionados, ...novos].slice(0, 10) : novos.slice(0, 1);
+  igArquivos.value = '';
+  igRenderizarPrevias();
+});
+
+function igRenderizarPrevias() {
+  for (const url of igPrevias.querySelectorAll('[data-url]')) URL.revokeObjectURL(url.dataset.url);
+  igPrevias.textContent = '';
+  igSelecionados.forEach((arq, i) => {
+    const item = document.createElement('div');
+    item.className = 'ig-previa';
+    const url = URL.createObjectURL(arq);
+    item.dataset.url = url;
+    const midia = document.createElement(arq.type.startsWith('video/') ? 'video' : 'img');
+    midia.src = url;
+    if (midia.tagName === 'VIDEO') { midia.muted = true; midia.playsInline = true; }
+    const remover = document.createElement('button');
+    remover.type = 'button';
+    remover.textContent = '✕';
+    remover.title = 'Tirar';
+    remover.addEventListener('click', () => { igSelecionados.splice(i, 1); igRenderizarPrevias(); });
+    item.append(midia, remover);
+    if (igSelecionados.length > 1) {
+      const n = document.createElement('span');
+      n.className = 'ig-previa-n';
+      n.textContent = String(i + 1);
+      item.appendChild(n);
+    }
+    igPrevias.appendChild(item);
+  });
+}
+
+igLegenda.addEventListener('input', () => { igLegendaConta.textContent = `${igLegenda.value.length} / 2200`; });
+for (const r of document.querySelectorAll('input[name="igQuando"]')) {
+  r.addEventListener('change', () => {
+    const agendar = document.querySelector('input[name="igQuando"]:checked').value === 'agendar';
+    igAgendarPara.hidden = !agendar;
+    igPublicarBtn.textContent = agendar ? 'Agendar publicação' : 'Publicar agora';
+    if (agendar && !igAgendarPara.value) {
+      const d = new Date(Date.now() + 60 * 60 * 1000);
+      d.setMinutes(0, 0, 0);
+      igAgendarPara.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    }
+  });
+}
+
+// o Instagram so publica foto em JPEG e recusa proporcao fora de 4:5..1,91:1 no feed - converte
+// e corta pelo centro aqui no navegador, antes de subir
+async function igPrepararFoto(arquivo, tipo) {
+  const bitmap = await createImageBitmap(arquivo);
+  let { width: w, height: h } = bitmap;
+  let sx = 0;
+  let sy = 0;
+  if (tipo !== 'story') {
+    const r = w / h;
+    if (r < 0.8) { const nh = Math.round(w / 0.8); sy = Math.round((h - nh) / 2); h = nh; }
+    else if (r > 1.91) { const nw = Math.round(h * 1.91); sx = Math.round((w - nw) / 2); w = nw; }
+  }
+  const escala = Math.min(1, 1440 / w);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(w * escala);
+  canvas.height = Math.round(h * escala);
+  canvas.getContext('2d').drawImage(bitmap, sx, sy, w, h, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('não consegui converter a foto'))), 'image/jpeg', 0.9));
+}
+
+function igMostrarErroPost(msg) {
+  igPostErro.textContent = msg || '';
+  igPostErro.hidden = !msg;
+}
+
+igPublicarBtn.addEventListener('click', async () => {
+  igMostrarErroPost('');
+  if (!igSelecionados.length) return igMostrarErroPost('Escolha o arquivo da publicação.');
+  if (igTipo === 'carrossel' && igSelecionados.length < 2) return igMostrarErroPost('Carrossel precisa de pelo menos 2 arquivos.');
+  const agendar = document.querySelector('input[name="igQuando"]:checked').value === 'agendar';
+  if (agendar && (!igAgendarPara.value || new Date(igAgendarPara.value) <= new Date())) return igMostrarErroPost('Escolha uma data e hora no futuro.');
+  const textoBotao = igPublicarBtn.textContent;
+  igPublicarBtn.disabled = true;
+  try {
+    const tokens = [];
+    for (const [i, arq] of igSelecionados.entries()) {
+      igPublicarBtn.textContent = `Enviando arquivo ${i + 1} de ${igSelecionados.length}...`;
+      let corpo = arq;
+      let tipoMime = arq.type;
+      if (arq.type.startsWith('image/')) {
+        corpo = await igPrepararFoto(arq, igTipo);
+        tipoMime = 'image/jpeg';
+      } else if (!/^video\/(mp4|quicktime)$/.test(arq.type)) {
+        throw new Error(`"${arq.name}" não é foto nem vídeo MP4/MOV.`);
+      } else if (arq.size > 100 * 1024 * 1024) {
+        throw new Error(`"${arq.name}" passa de 100 MB.`);
+      }
+      const r = await igApi('/api/instagram/midias', { method: 'POST', body: corpo, headers: { 'Content-Type': tipoMime, 'x-nome-arquivo': encodeURIComponent(arq.name) } });
+      tokens.push(r.token);
+    }
+    igPublicarBtn.textContent = agendar ? 'Agendando...' : 'Publicando...';
+    await igApi('/api/instagram/posts', {
+      method: 'POST',
+      body: JSON.stringify({ tipo: igTipo, legenda: igLegenda.value, midias: tokens, agendadoPara: agendar ? new Date(igAgendarPara.value).toISOString() : null }),
+    });
+    mostrarAviso(agendar ? 'Publicação agendada' : 'Publicando no Instagram - em instantes aparece como publicada');
+    igSelecionados = [];
+    igRenderizarPrevias();
+    igLegenda.value = '';
+    igLegendaConta.textContent = '0 / 2200';
+    carregarPostsInstagram();
+  } catch (err) {
+    igMostrarErroPost(err.message);
+  } finally {
+    igPublicarBtn.disabled = false;
+    igPublicarBtn.textContent = textoBotao;
+  }
+});
+
+async function carregarPostsInstagram() {
+  try {
+    const { posts } = await igApi('/api/instagram/posts');
+    igPosts.textContent = '';
+    if (!posts.length) {
+      igPosts.appendChild(Object.assign(document.createElement('p'), { className: 'rs-vazio', textContent: 'Nenhuma publicação feita pela Lumia ainda.' }));
+      return;
+    }
+    const quando = (iso) => new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    for (const p of posts) {
+      const item = document.createElement('div');
+      item.className = 'ig-item';
+      const topo = document.createElement('div');
+      topo.className = 'ig-item-topo';
+      const nome = document.createElement('strong');
+      nome.textContent = `${IG_TIPOS[p.tipo]?.nome || p.tipo}${p.midias.length > 1 ? ` · ${p.midias.length} arquivos` : ''}`;
+      const chip = document.createElement('span');
+      chip.className = `ig-status ${p.status}`;
+      chip.textContent = p.status === 'agendado' ? `Agendado · ${quando(p.agendado_para)}`
+        : p.status === 'publicado' ? `Publicado · ${quando(p.publicado_em)}` : IG_STATUS[p.status] || p.status;
+      topo.append(nome, chip);
+      item.appendChild(topo);
+      if (p.legenda) item.appendChild(Object.assign(document.createElement('p'), { className: 'ig-item-texto', textContent: p.legenda.length > 160 ? `${p.legenda.slice(0, 160)}…` : p.legenda }));
+      if (p.erro) item.appendChild(Object.assign(document.createElement('p'), { className: 'ig-item-erro', textContent: p.erro }));
+      const acoes = document.createElement('div');
+      acoes.className = 'ig-item-acoes';
+      if (p.permalink) {
+        const a = document.createElement('a');
+        a.href = p.permalink;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = 'Ver no Instagram';
+        acoes.appendChild(a);
+      }
+      if (p.status === 'agendado') {
+        const cancelar = document.createElement('button');
+        cancelar.type = 'button';
+        cancelar.className = 'ct-link';
+        cancelar.textContent = 'Cancelar';
+        cancelar.addEventListener('click', async () => {
+          if (!confirm('Cancelar essa publicação agendada?')) return;
+          try {
+            await igApi(`/api/instagram/posts/${p.id}/cancelar`, { method: 'POST' });
+            carregarPostsInstagram();
+          } catch (err) {
+            mostrarAviso(err.message, 'erro');
+          }
+        });
+        acoes.appendChild(cancelar);
+      }
+      if (acoes.childElementCount) item.appendChild(acoes);
+      igPosts.appendChild(item);
+    }
+  } catch (err) {
+    igPosts.textContent = `Não consegui carregar as publicações: ${err.message}`;
+  }
+}
+document.getElementById('igPostsAtualizar').addEventListener('click', carregarPostsInstagram);
+
+// ---------- respostas a comentarios ----------
+
+async function carregarPublicacoesInstagram() {
+  try {
+    const { publicacoes } = await igApi('/api/instagram/publicacoes');
+    const atual = igRegraPost.value;
+    igRegraPost.textContent = '';
+    igRegraPost.appendChild(new Option('Todas as publicações', ''));
+    for (const p of publicacoes) {
+      const data = new Date(p.em).toLocaleDateString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit' });
+      igRegraPost.appendChild(new Option(`${data} · ${p.legenda || '(sem legenda)'}`.slice(0, 80), p.id));
+    }
+    igRegraPost.value = [...igRegraPost.options].some((o) => o.value === atual) ? atual : '';
+  } catch { /* fica so "Todas as publicacoes" */ }
+}
+
+function igMostrarErroRegra(msg) {
+  igRegraErro.textContent = msg || '';
+  igRegraErro.hidden = !msg;
+}
+
+function igEditarRegra(regra) {
+  igRegraEditando = regra;
+  igRegraTitulo.textContent = regra ? 'Editar resposta automática' : 'Nova resposta automática';
+  igRegraPalavras.value = regra ? regra.palavras.join(', ') : '';
+  if (regra?.media_id && ![...igRegraPost.options].some((o) => o.value === regra.media_id)) {
+    igRegraPost.appendChild(new Option(regra.media_legenda || 'Publicação escolhida', regra.media_id));
+  }
+  igRegraPost.value = regra?.media_id || '';
+  igRegraPublica.value = regra?.resposta_publica || '';
+  igRegraDm.value = regra?.resposta_dm || '';
+  igRegraCancelar.hidden = !regra;
+  igMostrarErroRegra('');
+  limparPendente(igRegraSalvar);
+  if (regra) igRegraPalavras.focus();
+}
+igRegraCancelar.addEventListener('click', () => igEditarRegra(null));
+rastrearAlteracoes(igRegraSalvar, [igRegraPalavras, igRegraPost, igRegraPublica, igRegraDm]);
+
+igRegraSalvar.addEventListener('click', async () => {
+  igMostrarErroRegra('');
+  igRegraSalvar.disabled = true;
+  try {
+    const opcao = igRegraPost.selectedOptions[0];
+    await igApi('/api/instagram/regras', {
+      method: 'POST',
+      body: JSON.stringify({
+        id: igRegraEditando?.id || null,
+        palavras: igRegraPalavras.value,
+        mediaId: igRegraPost.value || null,
+        mediaLegenda: igRegraPost.value ? opcao?.textContent : null,
+        respostaPublica: igRegraPublica.value,
+        respostaDm: igRegraDm.value,
+      }),
+    });
+    marcarSalvo(igRegraSalvar, igRegraEditando ? 'Resposta atualizada' : 'Resposta automática criada');
+    igEditarRegra(null);
+    carregarRegrasInstagram();
+  } catch (err) {
+    igMostrarErroRegra(err.message);
+  } finally {
+    igRegraSalvar.disabled = false;
+  }
+});
+
+async function carregarRegrasInstagram() {
+  try {
+    const { regras } = await igApi('/api/instagram/regras');
+    igRegrasLista = regras;
+    igRegras.textContent = '';
+    if (!regras.length) {
+      igRegras.appendChild(Object.assign(document.createElement('p'), { className: 'rs-vazio', textContent: 'Nenhuma resposta automática ainda.' }));
+      return;
+    }
+    for (const r of regras) {
+      const item = document.createElement('div');
+      item.className = `ig-item${r.ativo ? '' : ' inativo'}`;
+      const topo = document.createElement('div');
+      topo.className = 'ig-item-topo';
+      const chips = document.createElement('div');
+      chips.className = 'ig-chips';
+      for (const p of r.palavras) chips.appendChild(Object.assign(document.createElement('span'), { className: 'ct-chip', textContent: p }));
+      const chave = document.createElement('label');
+      chave.className = 'auto-switch ig-switch';
+      chave.title = r.ativo ? 'Ligada - clique para pausar' : 'Pausada - clique para ligar';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = r.ativo;
+      cb.addEventListener('change', async () => {
+        try {
+          await igApi(`/api/instagram/regras/${r.id}/ativo`, { method: 'POST', body: JSON.stringify({ ativo: cb.checked }) });
+          carregarRegrasInstagram();
+        } catch (err) {
+          mostrarAviso(err.message, 'erro');
+          cb.checked = !cb.checked;
+        }
+      });
+      const trilho = document.createElement('span');
+      trilho.className = 'auto-switch-track';
+      trilho.appendChild(Object.assign(document.createElement('span'), { className: 'auto-switch-thumb' }));
+      chave.append(cb, trilho);
+      topo.append(chips, chave);
+      item.appendChild(topo);
+      item.appendChild(Object.assign(document.createElement('p'), { className: 'rs-sub', textContent: `${r.media_id ? `Só em: ${r.media_legenda || 'uma publicação'}` : 'Todas as publicações'} · respondeu ${r.disparos} ${r.disparos === 1 ? 'vez' : 'vezes'}` }));
+      if (r.resposta_publica) item.appendChild(Object.assign(document.createElement('p'), { className: 'ig-item-texto', textContent: `Comentário: ${r.resposta_publica}` }));
+      if (r.resposta_dm) item.appendChild(Object.assign(document.createElement('p'), { className: 'ig-item-texto', textContent: `Direct: ${r.resposta_dm}` }));
+      const acoes = document.createElement('div');
+      acoes.className = 'ig-item-acoes';
+      const editar = Object.assign(document.createElement('button'), { type: 'button', className: 'ct-link', textContent: 'Editar' });
+      editar.addEventListener('click', () => { igEditarRegra(r); igRegraPalavras.scrollIntoView({ block: 'center' }); });
+      const apagar = Object.assign(document.createElement('button'), { type: 'button', className: 'ct-link ig-perigo', textContent: 'Apagar' });
+      apagar.addEventListener('click', async () => {
+        if (!confirm(`Apagar a resposta automática para "${r.palavras.join(', ')}"?`)) return;
+        try {
+          await igApi(`/api/instagram/regras/${r.id}`, { method: 'DELETE' });
+          if (igRegraEditando?.id === r.id) igEditarRegra(null);
+          carregarRegrasInstagram();
+        } catch (err) {
+          mostrarAviso(err.message, 'erro');
+        }
+      });
+      acoes.append(editar, apagar);
+      item.appendChild(acoes);
+      igRegras.appendChild(item);
+    }
+  } catch (err) {
+    igRegras.textContent = `Não consegui carregar as respostas: ${err.message}`;
+  }
+}
+
+// ---------- direct ----------
+
+function igAtualizarRotuloDm() {
+  igDmIaLabel.textContent = igDmIa.checked ? 'IA respondendo o direct' : 'IA desligada no direct';
+}
+igDmIa.addEventListener('change', async () => {
+  igAtualizarRotuloDm();
+  try {
+    await igApi('/api/instagram/dm-ia', { method: 'POST', body: JSON.stringify({ ativa: igDmIa.checked }) });
+    mostrarAviso(igDmIa.checked ? 'A IA passa a responder o direct' : 'IA desligada no direct');
+  } catch (err) {
+    igDmIa.checked = !igDmIa.checked;
+    igAtualizarRotuloDm();
+    mostrarAviso(err.message, 'erro');
+  }
+});
+
+// volta do login do Instagram (?instagram=conectado|erro)
+(function tratarRetornoInstagram() {
+  const params = new URLSearchParams(window.location.search);
+  const resultado = params.get('instagram');
+  if (!resultado) return;
+  const msg = params.get('msg');
+  params.delete('instagram');
+  params.delete('msg');
+  window.history.replaceState({}, '', window.location.pathname + (params.toString() ? `?${params}` : ''));
+  setTimeout(() => {
+    if (resultado === 'conectado') mostrarAviso('Instagram conectado');
+    else mostrarAviso(`Não consegui conectar o Instagram: ${msg || 'erro desconhecido'}`, 'erro');
+    if (appPassword) mudarAba('instagram');
+  }, 600);
+})();
 
 // ---------- Alerta de retorno (conversa do CRM) ----------
 const crmConversaRetorno = document.getElementById('crmConversaRetorno');
@@ -2930,6 +5419,7 @@ crmRetornoSalvar.addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
     crmRetornoPainel.hidden = true;
+    marcarSalvo(crmRetornoSalvar, 'Alerta de retorno salvo');
     await carregarCrm();
     atualizarSino();
   } catch (err) {
@@ -2995,12 +5485,13 @@ function sinoItem(titulo, detalhe, classe, aoClicar, recarregar) {
 
 async function sinoAbrirContato(id) {
   sinoPainel.hidden = true;
-  mudarAba('crm');
+  const emConversas = !tabBtnConversas.hidden;
+  mudarAba(emConversas ? 'conversas' : 'crm');
   try {
     const res = await fetch('/api/crm/contatos', { headers: { 'x-app-password': appPassword } });
     const data = await res.json();
     const contato = (data.contatos || []).find((c) => c.id === id);
-    if (contato) abrirConversaCrm(contato);
+    if (contato) (emConversas ? abrirConversa : abrirConversaCrm)(contato);
   } catch { /* o board ja carrega sozinho ao entrar na aba */ }
 }
 
@@ -3011,6 +5502,7 @@ async function atualizarSino() {
     if (!res.ok) return;
     const d = await res.json();
     sinoBadge.hidden = !d.total;
+    if (tabConversas.hidden) atualizarBadgeConversas(d.naoLidas?.length || 0);
     sinoTotal.textContent = d.total ? `${d.total} pendente(s)` : '';
     sinoLista.textContent = '';
     if (!d.total) {
@@ -3074,6 +5566,11 @@ const saldoLimite = document.getElementById('saldoLimite');
 const saldoSalvar = document.getElementById('saldoSalvar');
 const saldoMsg = document.getElementById('saldoMsg');
 const saldoUso = document.getElementById('saldoUso');
+const saldoMovValor = document.getElementById('saldoMovValor');
+const saldoMovDesc = document.getElementById('saldoMovDesc');
+const saldoRecarga = document.getElementById('saldoRecarga');
+const saldoGastoExterno = document.getElementById('saldoGastoExterno');
+const saldoHistorico = document.getElementById('saldoHistorico');
 let saldoIniciado = false;
 
 const usd = (v) => `US$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -3107,8 +5604,26 @@ function renderSaldo(d) {
     saldoUso.appendChild(l);
   };
   if (d.cachePct !== null && d.cachePct !== undefined) linha('Entrada vinda do cache (7 dias)', `${d.cachePct}%`);
-  const NOMES_MODULO = { 'auto-atendimento': 'Auto Atendimento', lumia: 'Lumia', 'follow-up': 'Follow Up', aniversariantes: 'Aniversariantes', 'gerador-relatorios': 'Gerador de Relatórios' };
+  // diferenca entre o que o app achava e o que o Console mostrava na ultima conferencia
+  if (d.ultimaConferencia) {
+    const c = d.ultimaConferencia;
+    linha(`Última conferência (${new Date(c.em).toLocaleDateString('pt-BR')}): app achava ${usd(c.estimadoUsd)}, real ${usd(c.realUsd)}`, c.diferencaUsd > 0 ? `−${usd(c.diferencaUsd)} fora do app` : 'sem diferença');
+  }
+  if (d.foraDoApp30diasUsd > 0) linha('Gasto fora do app (30 dias)', usd(d.foraDoApp30diasUsd));
+  const NOMES_MODULO = { 'auto-atendimento': 'Auto Atendimento', lumia: 'Lumia', 'follow-up': 'Follow Up', aniversariantes: 'Aniversariantes', 'follow-up-inteligente': 'Follow Up Inteligente', externo: 'Gasto externo', 'gerador-relatorios': 'Gerador de Relatórios' };
   for (const r of d.porCliente || []) linha(`${r.nome} · ${NOMES_MODULO[r.modulo] || r.modulo || 'outros'}`, usd(r.custoUsd));
+  saldoHistorico.textContent = '';
+  const ROTULO_AJUSTE = { conferencia: 'Conferência', recarga: 'Recarga', gasto_externo: 'Gasto externo' };
+  for (const a of d.ajustes || []) {
+    const l = document.createElement('div');
+    l.className = 'linha';
+    const x = document.createElement('span');
+    x.textContent = `${new Date(a.em).toLocaleDateString('pt-BR')} · ${ROTULO_AJUSTE[a.tipo] || a.tipo}${a.descricao && a.tipo === 'gasto_externo' ? ` (${a.descricao})` : ''}`;
+    const y = document.createElement('strong');
+    y.textContent = a.tipo === 'recarga' ? `+${usd(a.valorUsd)}` : a.tipo === 'gasto_externo' ? `−${usd(a.valorUsd)}` : (a.valorUsd > 0 ? `−${usd(a.valorUsd)}` : `+${usd(-a.valorUsd)}`);
+    l.append(x, y);
+    saldoHistorico.appendChild(l);
+  }
   if (document.activeElement !== saldoLimite) saldoLimite.value = String(d.limiteAlertaUsd).replace('.', ',');
 }
 
@@ -3142,11 +5657,38 @@ saldoSalvar.addEventListener('click', async () => {
     saldoInput.value = '';
     renderSaldo(d);
     saldoMsg.textContent = 'Salvo.';
+    marcarSalvo(saldoSalvar, 'Saldo da IA atualizado');
     atualizarSino();
   } catch (err) {
     saldoMsg.textContent = err.message;
   }
 });
+
+async function registrarMovimentoSaldo(rota, corpo, botao, aviso) {
+  saldoMsg.textContent = 'Salvando...';
+  botao.disabled = true;
+  try {
+    const res = await fetch(`/api/saldo-ia/${rota}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify(corpo),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro ao salvar');
+    saldoMovValor.value = '';
+    saldoMovDesc.value = '';
+    renderSaldo(d);
+    saldoMsg.textContent = 'Salvo.';
+    marcarSalvo(botao, aviso);
+    atualizarSino();
+  } catch (err) {
+    saldoMsg.textContent = err.message;
+  } finally {
+    botao.disabled = false;
+  }
+}
+saldoRecarga.addEventListener('click', () => registrarMovimentoSaldo('recarga', { valorUsd: saldoMovValor.value.trim() }, saldoRecarga, 'Recarga registrada'));
+saldoGastoExterno.addEventListener('click', () => registrarMovimentoSaldo('gasto-externo', { valorUsd: saldoMovValor.value.trim(), descricao: saldoMovDesc.value.trim() }, saldoGastoExterno, 'Gasto externo registrado'));
 
 function iniciarSino() {
   atualizarSino();
@@ -3454,9 +5996,7 @@ autoAgendamentoDireto.addEventListener('change', () => {
 // tem alteracao pendente) e volta pro dourado (com um "pulso" rapido) so depois de salvar de
 // verdade com sucesso - assim fica visivelmente claro quando ainda falta salvar
 function marcarAlteracoesNaoSalvas() {
-  autoSalvar.classList.add('nao-salvo');
-  autoSalvar.classList.remove('salvo-pulso');
-  autoSalvar.textContent = 'Salvar Configurações *';
+  marcarPendente(autoSalvar);
 }
 [autoAtivo, autoInstancia, autoPrompt, autoFrequenciaAudio, autoAudioSeReceberAudio, autoEsperaSegundos, autoHoraInicio, autoHoraFim, autoAgendarInterna, autoAgendarClinicorp, autoAgendamentoDireto, autoReiniciarValor, autoReiniciarUnidade]
   .forEach((el) => {
@@ -3519,8 +6059,7 @@ async function carregarConfigAutoAtendimento() {
     }
 
     // acabou de carregar do servidor - nao tem nada "nao salvo" ainda
-    autoSalvar.classList.remove('nao-salvo', 'salvo-pulso');
-    autoSalvar.textContent = 'Salvar Configurações';
+    limparPendente(autoSalvar);
   } catch (err) {
     autoErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
     autoErro.hidden = false;
@@ -3563,13 +6102,7 @@ autoSalvar.addEventListener('click', async () => {
 
     // salvou de verdade - tira o vermelho, volta pro dourado com um "pulso" rapido pra ficar
     // visivel que salvou agora mesmo (nao so que "nao ha mudanca pendente")
-    autoSalvar.classList.remove('nao-salvo');
-    autoSalvar.textContent = 'Salvo ✓';
-    autoSalvar.classList.add('salvo-pulso');
-    setTimeout(() => {
-      autoSalvar.classList.remove('salvo-pulso');
-      autoSalvar.textContent = 'Salvar Configurações';
-    }, 1200);
+    marcarSalvo(autoSalvar, 'Configurações do Auto Atendimento salvas e valendo');
 
     addBubble(`Configurações salvas e já valendo${ativo ? ` no numero "${instancia}"` : ' (desativado)'}.`, 'system');
   } catch (err) {
@@ -3741,6 +6274,7 @@ async function carregarFollowUp() {
     fuPromptGeral.value = config.promptGeral || '';
     fuHoraInicio.value = config.horaInicio || '08:00';
     fuHoraFim.value = config.horaFim || '20:00';
+    limparPendente(fuSalvar);
   } catch (err) {
     fuErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
     fuErro.hidden = false;
@@ -3748,6 +6282,7 @@ async function carregarFollowUp() {
   carregarEtapasFollowUp();
 }
 
+rastrearAlteracoes(fuSalvar, [fuAtivo, fuPromptGeral, fuHoraInicio, fuHoraFim]);
 fuSalvar.addEventListener('click', async () => {
   fuErro.hidden = true;
   const ativo = fuAtivo.checked;
@@ -3774,6 +6309,7 @@ fuSalvar.addEventListener('click', async () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
     addBubble(`Configurações do Follow Up salvas${ativo ? '' : ' (desativado)'}.`, 'system');
+    marcarSalvo(fuSalvar, 'Configurações do Follow Up salvas');
   } catch (err) {
     fuErro.textContent = err.message;
     fuErro.hidden = false;
@@ -4341,6 +6877,12 @@ const grTemaPreviewTexto = document.getElementById('grTemaPreviewTexto');
 const grTemaPreviewAccentBtn = document.getElementById('grTemaPreviewAccentBtn');
 const grClienteNome = document.getElementById('grClienteNome');
 const grInstrucoes = document.getElementById('grInstrucoes');
+const grInstrucoesContador = document.getElementById('grInstrucoesContador');
+const grPedidoInfo = document.getElementById('grPedidoInfo');
+const grAjusteTexto = document.getElementById('grAjusteTexto');
+const grAjustarBtn = document.getElementById('grAjustarBtn');
+const grAjusteErro = document.getElementById('grAjusteErro');
+let grIdAtual = null;
 const grGerarBtn = document.getElementById('grGerarBtn');
 const grErro = document.getElementById('grErro');
 const grHistoricoLista = document.getElementById('grHistoricoLista');
@@ -4391,9 +6933,11 @@ grMarcaLogoInput.addEventListener('change', async () => {
 
 grMarcaLogoRemover.addEventListener('click', () => {
   grLogoAtual = null;
+  marcarPendente(grMarcaSalvarBtn);
   grMarcaLogoPreview.hidden = true;
 });
 
+rastrearAlteracoes(grMarcaSalvarBtn, [grMarcaNome, grMarcaLogoInput]);
 grMarcaSalvarBtn.addEventListener('click', async () => {
   try {
     const r = await fetch('/api/gerador-relatorios/marca', {
@@ -4404,6 +6948,7 @@ grMarcaSalvarBtn.addEventListener('click', async () => {
     const d = await r.json();
     if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
     addBubble('Marca do relatorio salva.', 'system');
+    marcarSalvo(grMarcaSalvarBtn, 'Marca do relatório salva');
   } catch (err) {
     addBubble(`Erro salvando marca: ${err.message}`, 'system');
   }
@@ -4449,6 +6994,14 @@ function renderizarArquivosPendentesGerador() {
       grArquivosPendentes.splice(i, 1);
       renderizarArquivosPendentesGerador();
     });
+    // miniatura da imagem - da pra conferir que e o print certo antes de gastar a geracao
+    if (arq.mediaType.startsWith('image/')) {
+      const mini = document.createElement('img');
+      mini.className = 'gr-arquivo-mini';
+      mini.src = `data:${arq.mediaType};base64,${arq.base64}`;
+      mini.alt = '';
+      row.appendChild(mini);
+    }
     row.append(nome, remover);
     grArquivosLista.appendChild(row);
   });
@@ -4534,6 +7087,7 @@ grSalvarTemaBtn.addEventListener('click', async () => {
     grTemaPreviewWrap.hidden = true;
     await carregarTemasGerador();
     grTemaSelect.value = d.tema.id;
+    marcarSalvo(null, 'Tema salvo');
   } catch (err) {
     addBubble(`Erro salvando tema: ${err.message}`, 'system');
   }
@@ -4558,7 +7112,19 @@ async function carregarHistoricoGerador() {
       const card = document.createElement('div');
       card.className = 'auto-arquivo-item';
       const info = document.createElement('span');
+      info.className = 'gr-hist-info';
       info.textContent = `${rel.titulo || 'Relatorio'} - ${grFormatarData(rel.criado_em)}`;
+      // o que foi pedido pra IA fica visivel na propria lista
+      if (rel.instrucoes || Number(rel.qtd_ajustes) > 0) {
+        const pedido = document.createElement('small');
+        pedido.className = 'gr-hist-pedido';
+        const partes = [];
+        if (rel.instrucoes) partes.push(`Pedido: ${rel.instrucoes.length > 110 ? `${rel.instrucoes.slice(0, 110)}…` : rel.instrucoes}`);
+        if (Number(rel.qtd_ajustes) > 0) partes.push(`${rel.qtd_ajustes} ajuste(s)`);
+        pedido.textContent = partes.join(' · ');
+        pedido.title = rel.instrucoes || '';
+        info.appendChild(pedido);
+      }
       const abrir = document.createElement('button');
       abrir.type = 'button';
       abrir.textContent = 'Abrir';
@@ -4578,15 +7144,88 @@ async function carregarHistoricoGerador() {
   }
 }
 
+// mostra o relatorio na pre-visualizacao junto com o que foi pedido pra IA (pedido original,
+// ajustes feitos depois e o que ela avisou que nao conseguiu fazer)
+function mostrarRelatorioGerado(d) {
+  grIdAtual = d.id;
+  grHtmlAtual = d.html;
+  grTituloAtual = d.titulo;
+  grPreviewIframe.srcdoc = d.html;
+  grPreviewWrap.hidden = false;
+  grAjusteErro.hidden = true;
+  renderizarPedidoGerador(d);
+}
+
+function renderizarPedidoGerador(d) {
+  const ajustes = Array.isArray(d.ajustes) ? d.ajustes : [];
+  const avisos = Array.isArray(d.avisos) ? d.avisos : [];
+  grPedidoInfo.innerHTML = '';
+  const titulo = document.createElement('div');
+  titulo.className = 'gr-pedido-titulo';
+  titulo.textContent = 'O que foi pedido pra IA';
+  grPedidoInfo.appendChild(titulo);
+  const item = (rotulo, textoItem, classe = '') => {
+    const el = document.createElement('div');
+    el.className = `gr-pedido-item ${classe}`;
+    const b = document.createElement('b');
+    b.textContent = rotulo;
+    const t = document.createElement('span');
+    t.textContent = textoItem;
+    el.append(b, t);
+    grPedidoInfo.appendChild(el);
+  };
+  item('Pedido inicial:', d.instrucoes || 'nenhum (relatório no padrão)');
+  ajustes.forEach((a, i) => item(`Ajuste ${i + 1}:`, a.pedido));
+  if (avisos.length) item('A IA avisou:', avisos.join(' · '), 'aviso');
+  grPedidoInfo.hidden = false;
+}
+
+grInstrucoes.addEventListener('input', () => {
+  grInstrucoesContador.textContent = `${grInstrucoes.value.length} / 4000`;
+});
+
+async function aplicarAjusteGerador() {
+  const pedido = grAjusteTexto.value.trim();
+  grAjusteErro.hidden = true;
+  if (!grIdAtual) return;
+  if (!pedido) {
+    grAjusteErro.textContent = 'Escreva o ajuste que você quer.';
+    grAjusteErro.hidden = false;
+    return;
+  }
+  grAjustarBtn.disabled = true;
+  grAjustarBtn.textContent = 'Aplicando ajuste...';
+  try {
+    const r = await fetch(`/api/gerador-relatorios/${grIdAtual}/ajustar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ pedido }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
+    mostrarRelatorioGerado(d);
+    grAjusteTexto.value = '';
+    carregarHistoricoGerador();
+    addBubble(d.avisos?.length ? `Ajuste aplicado, com aviso da IA: ${d.avisos.join(' · ')}` : 'Ajuste aplicado no relatório.', 'system');
+  } catch (err) {
+    grAjusteErro.textContent = err.message;
+    grAjusteErro.hidden = false;
+  } finally {
+    grAjustarBtn.disabled = false;
+    grAjustarBtn.textContent = 'Aplicar ajuste';
+  }
+}
+grAjustarBtn.addEventListener('click', aplicarAjusteGerador);
+grAjusteTexto.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); aplicarAjusteGerador(); }
+});
+
 async function abrirRelatorioGerado(id) {
   try {
     const r = await fetch(`/api/gerador-relatorios/${id}`, { headers: { 'x-app-password': appPassword } });
     const d = await r.json();
     if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
-    grHtmlAtual = d.html;
-    grTituloAtual = d.titulo;
-    grPreviewIframe.srcdoc = d.html;
-    grPreviewWrap.hidden = false;
+    mostrarRelatorioGerado(d);
   } catch (err) {
     addBubble(`Erro abrindo relatorio: ${err.message}`, 'system');
   }
@@ -4626,10 +7265,7 @@ grGerarBtn.addEventListener('click', async () => {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
-    grHtmlAtual = d.html;
-    grTituloAtual = d.titulo;
-    grPreviewIframe.srcdoc = d.html;
-    grPreviewWrap.hidden = false;
+    mostrarRelatorioGerado(d);
     grArquivosPendentes = [];
     renderizarArquivosPendentesGerador();
     carregarHistoricoGerador();
@@ -4639,7 +7275,7 @@ grGerarBtn.addEventListener('click', async () => {
     grErro.hidden = false;
   } finally {
     grGerarBtn.disabled = false;
-    grGerarBtn.textContent = 'Gerar Relatorio';
+    grGerarBtn.textContent = 'Gerar Relatório';
   }
 });
 
@@ -5819,7 +8455,7 @@ async function selecionarCliente(id, nome, username) {
   tabsAviso.textContent = 'Nenhuma marcada = tudo liberado (padrão). Marque só pra restringir.';
   clienteIntegracoesPainel.appendChild(tabsAviso);
 
-  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', aniversariantes: 'Aniversariantes', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações' };
+  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', aniversariantes: 'Aniversariantes', followUpInteligente: 'Follow Up Inteligente', funilFollowUp: 'Funil Follow Up', disparos: 'Disparos', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
   const tabsForm = document.createElement('div');
   tabsForm.className = 'cliente-form';
   const tabsCheckboxes = {};
@@ -5952,42 +8588,6 @@ async function selecionarCliente(id, nome, username) {
     } catch (e) {}
   })();
 
-  // ---- Editor de Video (recurso pago a parte - desligado ate liberar aqui) ----
-  const videoLabel = document.createElement('label'); videoLabel.className = 'auto-label'; videoLabel.textContent = 'Editor de Vídeo com IA (recurso pago)';
-  clienteIntegracoesPainel.appendChild(videoLabel);
-  const videoWrap = document.createElement('label');
-  videoWrap.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);margin-bottom:10px;cursor:pointer;';
-  const videoCb = document.createElement('input');
-  videoCb.type = 'checkbox';
-  videoCb.disabled = true;
-  videoWrap.appendChild(videoCb);
-  videoWrap.appendChild(document.createTextNode('Liberar a aba Editor de Vídeo pra esse cliente'));
-  clienteIntegracoesPainel.appendChild(videoWrap);
-  videoCb.addEventListener('change', async () => {
-    const liberado = videoCb.checked;
-    try {
-      const r = await fetch(`/api/admin/tenants/${id}/video`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-        body: JSON.stringify({ liberado }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.erro || 'erro desconhecido');
-      addBubble(`Editor de Vídeo ${liberado ? 'liberado' : 'bloqueado'} pra "${nome}".`, 'system');
-    } catch (err) {
-      videoCb.checked = !liberado;
-      addBubble(`Erro alterando o Editor de Vídeo: ${err.message}`, 'system');
-    }
-  });
-  (async () => {
-    try {
-      const r = await fetch(`/api/admin/tenants/${id}/video`, { headers: { 'x-app-password': appPassword } });
-      const d = await r.json();
-      videoCb.checked = !!d.liberado;
-      videoCb.disabled = false;
-    } catch (e) {}
-  })();
-
   // ---- Apagar cliente (marca pra exclusao - so apaga de verdade depois de 30 dias, da pra
   // restaurar ate la na propria lista) ----
   const apagarLabel = document.createElement('label'); apagarLabel.className = 'auto-label'; apagarLabel.textContent = 'Zona de risco';
@@ -6027,6 +8627,2122 @@ async function selecionarCliente(id, nome, username) {
   }));
 }
 
+// ---------- Follow Up Inteligente (cards de follow-up por etapa do funil) ----------
+
+const fuiAtivo = document.getElementById('fuiAtivo');
+const fuiAtivoLabel = document.getElementById('fuiAtivoLabel');
+const fuiHoraInicio = document.getElementById('fuiHoraInicio');
+const fuiHoraFim = document.getElementById('fuiHoraFim');
+const fuiPromptGeral = document.getElementById('fuiPromptGeral');
+const fuiSalvar = document.getElementById('fuiSalvar');
+const fuiErro = document.getElementById('fuiErro');
+const fuiLista = document.getElementById('fuiLista');
+const fuiCriar = document.getElementById('fuiCriar');
+let fuiEtapas = []; // etapas do funil que aceitam follow-up (vem da API)
+
+fuiAtivo.addEventListener('change', () => { fuiAtivoLabel.textContent = fuiAtivo.checked ? 'Ativado' : 'Desativado'; });
+
+async function carregarFollowUpInteligente() {
+  fuiErro.hidden = true;
+  try {
+    const res = await fetch('/api/fu-inteligente/config', { headers: { 'x-app-password': appPassword } });
+    const c = await res.json();
+    if (!res.ok) throw new Error(c.erro || 'erro desconhecido');
+    fuiAtivo.checked = !!c.ativo;
+    fuiAtivoLabel.textContent = c.ativo ? 'Ativado' : 'Desativado';
+    fuiHoraInicio.value = c.horaInicio || '08:00';
+    fuiHoraFim.value = c.horaFim || '20:00';
+    fuiPromptGeral.value = c.promptGeral || '';
+    limparPendente(fuiSalvar);
+  } catch (err) {
+    fuiErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
+    fuiErro.hidden = false;
+  }
+  carregarCardsFollowUpInteligente();
+}
+
+rastrearAlteracoes(fuiSalvar, [fuiAtivo, fuiHoraInicio, fuiHoraFim, fuiPromptGeral]);
+fuiSalvar.addEventListener('click', async () => {
+  fuiErro.hidden = true;
+  fuiSalvar.disabled = true;
+  try {
+    const res = await fetch('/api/fu-inteligente/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ ativo: fuiAtivo.checked, horaInicio: fuiHoraInicio.value, horaFim: fuiHoraFim.value, promptGeral: fuiPromptGeral.value.trim() }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    marcarSalvo(fuiSalvar, 'Configurações do Follow Up Inteligente salvas');
+  } catch (err) {
+    fuiErro.textContent = err.message;
+    fuiErro.hidden = false;
+  } finally {
+    fuiSalvar.disabled = false;
+  }
+});
+
+// reparte N mensagens ao longo de D dias (ex: 5 msgs em 5 dias = dias 1,2,3,4,5)
+function fuiDistribuirDias(qtd, duracao) {
+  const dias = [];
+  for (let k = 1; k <= qtd; k++) dias.push(Math.max(0, Math.round((k * duracao) / qtd)));
+  return dias;
+}
+
+async function carregarCardsFollowUpInteligente() {
+  fuiLista.textContent = '';
+  try {
+    const res = await fetch('/api/fu-inteligente/cards', { headers: { 'x-app-password': appPassword } });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+    fuiEtapas = data.etapas || [];
+    if (!data.cards.length) {
+      const vazio = document.createElement('p');
+      vazio.className = 'agenda-vazia';
+      vazio.id = 'fuiVazio';
+      vazio.textContent = 'Nenhum follow-up criado ainda. Clique em "+ Criar" pra começar.';
+      fuiLista.appendChild(vazio);
+    }
+    for (const card of data.cards) fuiLista.appendChild(criarCardFollowUpInteligente(card));
+  } catch (err) {
+    const erro = document.createElement('p');
+    erro.className = 'agenda-vazia';
+    erro.textContent = `Nao consegui carregar os follow-ups: ${err.message}`;
+    fuiLista.appendChild(erro);
+  }
+}
+
+fuiCriar.addEventListener('click', () => {
+  document.getElementById('fuiVazio')?.remove();
+  const novo = { id: null, etapas: [], diasEnvio: fuiDistribuirDias(5, 5), duracaoDias: 5, instrucoes: '', pararSeResponder: true, ativo: true, emAndamento: 0, enviadas: 0 };
+  const card = criarCardFollowUpInteligente(novo);
+  fuiLista.prepend(card);
+  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+function criarCardFollowUpInteligente(dados) {
+  const estado = {
+    id: dados.id, etapas: [...dados.etapas], diasEnvio: [...dados.diasEnvio], duracaoDias: dados.duracaoDias,
+    instrucoes: dados.instrucoes || '', pararSeResponder: dados.pararSeResponder, ativo: dados.ativo,
+    arquivos: [...(dados.arquivos || [])],
+  };
+  const nomeEtapa = (id) => fuiEtapas.find((e) => e.id === id)?.nome || id;
+
+  const card = document.createElement('div');
+  card.className = 'auto-aviso relatorio-config-card fui-card';
+
+  // ----- cabecalho: titulo (etapas escolhidas + resumo), liga/desliga e apagar -----
+  const cab = document.createElement('div');
+  cab.className = 'fui-cab';
+  const tituloWrap = document.createElement('div');
+  const titulo = document.createElement('div');
+  titulo.className = 'relatorio-config-titulo';
+  const resumo = document.createElement('div');
+  resumo.className = 'fui-resumo';
+  tituloWrap.appendChild(titulo);
+  tituloWrap.appendChild(resumo);
+  cab.appendChild(tituloWrap);
+
+  const acoes = document.createElement('div');
+  acoes.className = 'fui-acoes';
+  const switchLabel = document.createElement('label');
+  switchLabel.className = 'auto-switch';
+  const ativoCb = document.createElement('input');
+  ativoCb.type = 'checkbox';
+  ativoCb.checked = estado.ativo;
+  const track = document.createElement('span');
+  track.className = 'auto-switch-track';
+  const thumb = document.createElement('span');
+  thumb.className = 'auto-switch-thumb';
+  track.appendChild(thumb);
+  switchLabel.appendChild(ativoCb);
+  switchLabel.appendChild(track);
+  acoes.appendChild(switchLabel);
+  const lixo = document.createElement('button');
+  lixo.type = 'button';
+  lixo.className = 'fui-lixo';
+  lixo.title = 'Apagar follow-up';
+  lixo.textContent = '🗑';
+  acoes.appendChild(lixo);
+  cab.appendChild(acoes);
+  card.appendChild(cab);
+
+  const atualizarCabecalho = () => {
+    titulo.textContent = estado.etapas.length ? estado.etapas.map(nomeEtapa).join(', ') : 'Novo follow-up';
+    const partes = [`${estado.diasEnvio.length} msgs / ${estado.duracaoDias} dias`];
+    if (dados.id) partes.push(`${dados.emAndamento} lead(s) em andamento`, `${dados.enviadas} enviada(s)`);
+    resumo.textContent = partes.join(' · ');
+  };
+
+  // ----- etapas do funil alvo -----
+  const rotEtapas = document.createElement('label');
+  rotEtapas.className = 'auto-label';
+  rotEtapas.textContent = 'Etapas do funil alvo';
+  card.appendChild(rotEtapas);
+  const grade = document.createElement('div');
+  grade.className = 'fui-etapas';
+  for (const etapa of fuiEtapas) {
+    const item = document.createElement('label');
+    item.className = 'fui-etapa-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = estado.etapas.includes(etapa.id);
+    cb.addEventListener('change', () => {
+      estado.etapas = cb.checked ? [...estado.etapas, etapa.id] : estado.etapas.filter((e) => e !== etapa.id);
+      atualizarCabecalho();
+    });
+    item.appendChild(cb);
+    item.appendChild(document.createTextNode(etapa.nome));
+    grade.appendChild(item);
+  }
+  card.appendChild(grade);
+
+  // ----- quantidade de mensagens + duracao -----
+  const linha = document.createElement('div');
+  linha.className = 'auto-upload-row fui-numeros';
+  const colQtd = document.createElement('div');
+  const rotQtd = document.createElement('label');
+  rotQtd.className = 'auto-label';
+  rotQtd.textContent = 'Quantidade de mensagens';
+  const qtdInput = document.createElement('input');
+  qtdInput.type = 'number';
+  qtdInput.min = '1';
+  qtdInput.max = '30';
+  qtdInput.className = 'relatorio-config-select';
+  qtdInput.value = estado.diasEnvio.length;
+  colQtd.appendChild(rotQtd);
+  colQtd.appendChild(qtdInput);
+  const colDur = document.createElement('div');
+  const rotDur = document.createElement('label');
+  rotDur.className = 'auto-label';
+  rotDur.textContent = 'Duração (dias)';
+  const durInput = document.createElement('input');
+  durInput.type = 'number';
+  durInput.min = '1';
+  durInput.max = '365';
+  durInput.className = 'relatorio-config-select';
+  durInput.value = estado.duracaoDias;
+  colDur.appendChild(rotDur);
+  colDur.appendChild(durInput);
+  linha.appendChild(colQtd);
+  linha.appendChild(colDur);
+  card.appendChild(linha);
+
+  // ----- em que dia cada mensagem sai (editavel) -----
+  const rotDias = document.createElement('label');
+  rotDias.className = 'auto-label';
+  rotDias.textContent = 'Dia de envio de cada mensagem (contado a partir da entrada do lead na etapa) e anexos de cada uma';
+  card.appendChild(rotDias);
+  const diasWrap = document.createElement('div');
+  diasWrap.className = 'fui-dias';
+  card.appendChild(diasWrap);
+  const desenharDias = () => {
+    diasWrap.textContent = '';
+    estado.diasEnvio.forEach((dia, i) => {
+      const linhaMsg = document.createElement('div');
+      linhaMsg.className = 'fui-msg';
+
+      const chip = document.createElement('label');
+      chip.className = 'fui-dia';
+      chip.appendChild(document.createTextNode(`${i + 1}ª · dia `));
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.min = '0';
+      inp.max = '365';
+      inp.value = dia;
+      inp.addEventListener('input', () => { estado.diasEnvio[i] = Number(inp.value); });
+      chip.appendChild(inp);
+      linhaMsg.appendChild(chip);
+
+      // anexos dessa mensagem (audio, imagem, PDF ou video curto) - saem logo depois do texto
+      const anexos = document.createElement('div');
+      anexos.className = 'fui-anexos';
+      for (const arq of estado.arquivos.filter((a) => a.ordem === i)) {
+        const item = document.createElement('span');
+        item.className = 'fui-anexo';
+        const icone = arq.tipo.startsWith('audio/') ? '🎧' : arq.tipo.startsWith('image/') ? '🖼' : arq.tipo.startsWith('video/') ? '🎬' : '📄';
+        item.textContent = `${icone} ${arq.nome} (${formatarTamanho(arq.tamanho)}) `;
+        const x = document.createElement('button');
+        x.type = 'button';
+        x.textContent = '✕';
+        x.title = 'Remover anexo';
+        x.addEventListener('click', async () => {
+          try {
+            const res = await fetch(`/api/fu-inteligente/arquivos/${arq.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+            if (!res.ok) throw new Error((await res.json()).erro || 'erro desconhecido');
+            estado.arquivos = estado.arquivos.filter((a) => a.id !== arq.id);
+            desenharDias();
+          } catch (err) {
+            mostrarAviso(`Não consegui remover o anexo: ${err.message}`, 'erro');
+          }
+        });
+        item.appendChild(x);
+        anexos.appendChild(item);
+      }
+      const arquivoInput = document.createElement('input');
+      arquivoInput.type = 'file';
+      arquivoInput.accept = 'audio/*,image/*,video/*,application/pdf';
+      arquivoInput.hidden = true;
+      const anexarBtn = document.createElement('button');
+      anexarBtn.type = 'button';
+      anexarBtn.className = 'fui-anexar';
+      anexarBtn.textContent = '📎 Anexar';
+      anexarBtn.addEventListener('click', () => {
+        if (!estado.id) return mostrarAviso('Salve o follow-up primeiro pra anexar arquivos nas mensagens.', 'erro');
+        arquivoInput.click();
+      });
+      arquivoInput.addEventListener('change', async () => {
+        const file = arquivoInput.files[0];
+        arquivoInput.value = '';
+        if (!file) return;
+        if (file.size > 12 * 1024 * 1024) return mostrarAviso('Arquivo grande demais - o máximo é 12 MB.', 'erro');
+        anexarBtn.disabled = true;
+        anexarBtn.textContent = 'Enviando...';
+        try {
+          const base64 = await arquivoParaBase64(file);
+          const res = await fetch(`/api/fu-inteligente/cards/${estado.id}/arquivos`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+            body: JSON.stringify({ ordem: i, nomeArquivo: file.name, mediaType: file.type || 'application/octet-stream', base64 }),
+          });
+          const d = await res.json();
+          if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+          estado.arquivos.push(d.arquivo);
+          desenharDias();
+        } catch (err) {
+          mostrarAviso(`Não consegui anexar: ${err.message}`, 'erro');
+          anexarBtn.disabled = false;
+          anexarBtn.textContent = '📎 Anexar';
+        }
+      });
+      anexos.appendChild(arquivoInput);
+      anexos.appendChild(anexarBtn);
+      linhaMsg.appendChild(anexos);
+      diasWrap.appendChild(linhaMsg);
+    });
+  };
+  const redistribuir = () => {
+    const qtd = Math.min(30, Math.max(1, Math.round(Number(qtdInput.value) || 1)));
+    const dur = Math.min(365, Math.max(1, Math.round(Number(durInput.value) || 1)));
+    estado.duracaoDias = dur;
+    estado.diasEnvio = fuiDistribuirDias(qtd, dur);
+    desenharDias();
+    atualizarCabecalho();
+  };
+  qtdInput.addEventListener('change', redistribuir);
+  durInput.addEventListener('change', redistribuir);
+
+  // ----- instrucoes (+ gerar sugestao) -----
+  const instrCab = document.createElement('div');
+  instrCab.className = 'fui-topo';
+  const rotInstr = document.createElement('label');
+  rotInstr.className = 'auto-label';
+  rotInstr.textContent = 'Instruções de follow-up';
+  const sugBtn = document.createElement('button');
+  sugBtn.type = 'button';
+  sugBtn.textContent = '✨ Gerar Sugestão';
+  instrCab.appendChild(rotInstr);
+  instrCab.appendChild(sugBtn);
+  card.appendChild(instrCab);
+  const instr = document.createElement('textarea');
+  instr.style.minHeight = '120px';
+  instr.placeholder = 'Ex: 1 mensagem curta e natural (1-3 frases). Reforce a data agendada e o endereço. Nunca use o nome do paciente.';
+  instr.value = estado.instrucoes;
+  instr.addEventListener('input', () => { estado.instrucoes = instr.value; });
+  card.appendChild(instr);
+
+  const pararLabel = document.createElement('label');
+  pararLabel.className = 'fui-etapa-item';
+  const pararCb = document.createElement('input');
+  pararCb.type = 'checkbox';
+  pararCb.checked = estado.pararSeResponder;
+  pararCb.addEventListener('change', () => { estado.pararSeResponder = pararCb.checked; });
+  pararLabel.appendChild(pararCb);
+  pararLabel.appendChild(document.createTextNode('Parar os envios se o lead responder'));
+  card.appendChild(pararLabel);
+
+  const erro = document.createElement('p');
+  erro.className = 'agenda-erro';
+  erro.hidden = true;
+  card.appendChild(erro);
+  const salvar = document.createElement('button');
+  salvar.type = 'button';
+  salvar.textContent = dados.id ? 'Salvar follow-up' : 'Criar follow-up';
+  card.appendChild(salvar);
+
+  const mostrarErro = (msg) => { erro.textContent = msg; erro.hidden = false; };
+
+  ativoCb.addEventListener('change', () => { estado.ativo = ativoCb.checked; });
+
+  sugBtn.addEventListener('click', async () => {
+    erro.hidden = true;
+    if (!estado.etapas.length) return mostrarErro('Escolha pelo menos uma etapa antes de gerar a sugestão.');
+    sugBtn.disabled = true;
+    sugBtn.textContent = 'Gerando...';
+    try {
+      const res = await fetch('/api/fu-inteligente/sugestao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ etapas: estado.etapas, diasEnvio: estado.diasEnvio, duracaoDias: estado.duracaoDias }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      instr.value = d.texto;
+      estado.instrucoes = d.texto;
+    } catch (err) {
+      mostrarErro(`Não consegui gerar a sugestão: ${err.message}`);
+    } finally {
+      sugBtn.disabled = false;
+      sugBtn.textContent = '✨ Gerar Sugestão';
+    }
+  });
+
+  salvar.addEventListener('click', async () => {
+    erro.hidden = true;
+    salvar.disabled = true;
+    try {
+      const res = await fetch('/api/fu-inteligente/cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({
+          id: estado.id, etapas: estado.etapas, diasEnvio: estado.diasEnvio, duracaoDias: estado.duracaoDias,
+          instrucoes: estado.instrucoes, pararSeResponder: estado.pararSeResponder, ativo: estado.ativo,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      mostrarAviso(dados.id ? 'Follow-up salvo' : 'Follow-up criado', 'ok');
+      carregarCardsFollowUpInteligente();
+    } catch (err) {
+      mostrarErro(err.message);
+      salvar.disabled = false;
+    }
+  });
+
+  lixo.addEventListener('click', async () => {
+    if (!estado.id) { card.remove(); return; }
+    if (!confirm('Apagar esse follow-up? As mensagens que ainda não saíram não serão mais enviadas.')) return;
+    try {
+      const res = await fetch(`/api/fu-inteligente/cards/${estado.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      carregarCardsFollowUpInteligente();
+    } catch (err) {
+      mostrarErro(err.message);
+    }
+  });
+
+  atualizarCabecalho();
+  desenharDias();
+  return card;
+}
+
+// ---------- Operadores no CRM: quem atende cada lead + distribuicao ----------
+
+const crmFiltroOperador = document.getElementById('crmFiltroOperador');
+const crmConversaOperador = document.getElementById('crmConversaOperador');
+const crmConversaAssumir = document.getElementById('crmConversaAssumir');
+const crmDistribuicaoBtn = document.getElementById('crmDistribuicaoBtn');
+const crmDistribuicaoModal = document.getElementById('crmDistribuicaoModal');
+let crmUltimosDados = null;
+let crmOperadores = { lista: [], euId: 0 };
+// visao do operador (CRM e Conversas): '' todos | 'eu' | 'meuslivres' | 'livre' | 'op:ID' - guardada no navegador
+let visaoOp = (() => { try { return localStorage.getItem('crmOperador') || ''; } catch { return ''; } })();
+// a conta principal (dono) = visao completa (todas as conversas); cada operador filtra so o que e dele
+function opcoesOperador(lista, euId) {
+  const dono = lista.find((o) => o.id === 0);
+  return [['', `${dono ? dono.nome : 'Principal'} (principal · todas)${euId === 0 ? ' (eu)' : ''}`], ...lista.filter((o) => o.id !== 0).map((o) => [`op:${o.id}`, o.id === euId ? `${o.nome} (eu)` : o.nome])];
+}
+function contatoNoOperador(c) {
+  if (!visaoOp) return true;
+  const sem = c.atendente_id === null || c.atendente_id === undefined;
+  const eu = minhaVisao.euId || crmOperadores.euId;
+  if (visaoOp === 'livre') return sem;
+  const id = visaoOp === 'eu' ? eu : (visaoOp === 'meuslivres' ? eu : Number(visaoOp.slice(3)));
+  // lead sem operador pertence ao dono da conta (id 0, o "principal") - senao quase tudo sumia ao escolher o dono
+  if (id === 0 || visaoOp === 'meuslivres') return sem || c.atendente_id === id;
+  return c.atendente_id === id;
+}
+function aplicarVisaoOperador(v) {
+  visaoOp = v;
+  if (typeof tabFunilFu !== 'undefined' && !tabFunilFu.hidden) ffuDesenhar();
+  try { localStorage.setItem('crmOperador', v); } catch { /* sem storage */ }
+  crmFiltroOperador.value = v;
+  if (typeof visaoOperadorSel !== 'undefined') visaoOperadorSel.value = v;
+  if (crmUltimosDados) renderizarCrmBoard(crmUltimosDados.etapas || [], crmFiltrarPorOperador(crmUltimosDados.contatos || []));
+  if (cvContatos.length) { renderizarListaConversas(); atualizarBadgeConversas(cvContatos.filter((c) => c.nao_lida && c.id !== cvAberto?.id && (!cvInstancia.value || c.instancia === cvInstancia.value) && contatoNoOperador(c)).length); }
+}
+
+async function carregarOperadoresCrm() {
+  try {
+    const res = await fetch('/api/crm/operadores', { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok) return;
+    const mudou = JSON.stringify(d.operadores) !== JSON.stringify(crmOperadores.lista);
+    crmOperadores = { lista: d.operadores, euId: d.euId };
+    if (mudou || crmFiltroOperador.options.length <= 1) preencherSeletoresOperador();
+  } catch { /* segue sem a lista */ }
+}
+
+function preencherSeletoresOperador() {
+  const filtroAtual = crmFiltroOperador.value;
+  crmFiltroOperador.textContent = '';
+  const opcoes = opcoesOperador(crmOperadores.lista, minhaVisao.euId || crmOperadores.euId);
+  for (const [valor, texto] of opcoes) crmFiltroOperador.add(new Option(texto, valor));
+  crmFiltroOperador.value = visaoOp;
+  const atual = crmConversaOperador.value;
+  crmConversaOperador.textContent = '';
+  crmConversaOperador.add(new Option('Sem operador', ''));
+  for (const o of crmOperadores.lista) crmConversaOperador.add(new Option(o.nome, String(o.id)));
+  crmConversaOperador.value = atual;
+}
+
+function crmFiltrarPorOperador(contatos) {
+  if (crmFiltroNumero.value) contatos = contatos.filter((c) => c.instancia === crmFiltroNumero.value);
+  return visaoOp ? contatos.filter(contatoNoOperador) : contatos;
+}
+// ---- funil exclusivo por numero de WhatsApp (setores diferentes nao misturam leads) ----
+const crmFiltroNumero = document.getElementById('crmFiltroNumero');
+const crmFuiClinicorp = document.getElementById('crmFuiClinicorp');
+let crmFuiEstado = null;
+function numeroSalvo() { try { return localStorage.getItem('crmNumero'); } catch { return null; } }
+function numeroSalvar(v) { try { localStorage.setItem('crmNumero', v); } catch { /* sem storage */ } }
+// preenche um seletor de numero (CRM/Contatos/Disparos compartilham a escolha); com 2+ numeros abre num so
+function numeroPreencher(select, instancias, ativa) {
+  const lista = [...new Set(instancias.filter(Boolean))].sort();
+  const salvo = select.dataset.iniciado ? select.value : numeroSalvo();
+  select.textContent = '';
+  select.add(new Option('Todos os números', ''));
+  for (const i of lista) select.add(new Option(i.startsWith('ig:') ? `Instagram @${i.slice(3)}` : i, i));
+  let escolha = salvo === null ? (lista.length > 1 ? (ativa || lista[0]) : '') : salvo;
+  if (escolha && !lista.includes(escolha)) escolha = '';
+  select.value = escolha;
+  select.dataset.iniciado = '1';
+  select.hidden = lista.length < 2;
+}
+function crmLerNumeroSalvo() { try { return localStorage.getItem('crmNumero'); } catch { return null; } }
+
+function crmPreencherNumeros(contatos, instanciaAtiva) {
+  const instancias = [...new Set([...(contatos || []).map((c) => c.instancia), instanciaAtiva].filter(Boolean))].sort();
+  const salvo = crmFiltroNumero.dataset.iniciado ? crmFiltroNumero.value : crmLerNumeroSalvo();
+  crmFiltroNumero.textContent = '';
+  crmFiltroNumero.add(new Option('Todos os números', ''));
+  for (const i of instancias) crmFiltroNumero.add(new Option(i.startsWith('ig:') ? `Instagram @${i.slice(3)}` : i, i));
+  // com 2+ numeros o funil abre ja num numero so (o ultimo escolhido, ou o ativo) pra nao misturar leads
+  let escolha = salvo === null ? (instancias.length > 1 ? (instanciaAtiva || instancias[0]) : '') : salvo;
+  if (escolha && !instancias.includes(escolha)) escolha = '';
+  crmFiltroNumero.value = escolha;
+  crmFiltroNumero.dataset.iniciado = '1';
+  crmFiltroNumero.hidden = instancias.length < 2;
+}
+
+crmFiltroNumero.addEventListener('change', () => {
+  numeroSalvar(crmFiltroNumero.value);
+  if (crmUltimosDados) renderizarCrmBoard(crmUltimosDados.etapas || [], crmFiltrarPorOperador(crmUltimosDados.contatos || []));
+  crmCarregarFuiClinicorp();
+});
+
+// botao "Follow Up Inteligente": liga/desliga, por numero, a automacao Clinicorp -> coluna Follow Up
+async function crmCarregarFuiClinicorp() {
+  try {
+    const q = crmFiltroNumero.value ? `?instancia=${encodeURIComponent(crmFiltroNumero.value)}` : '';
+    const res = await fetch(`/api/crm/clinicorp-followup${q}`, { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok || !d.disponivel) { crmFuiClinicorp.hidden = true; return; }
+    crmFuiEstado = d;
+    crmFuiClinicorp.hidden = false;
+    crmFuiClinicorp.textContent = `Follow Up Inteligente: ${d.ativo ? 'Ligado' : 'Desligado'}`;
+    crmFuiClinicorp.classList.toggle('crm-btn-ligado', !!d.ativo);
+    crmFuiClinicorp.title = `Automação Clinicorp → Follow Up do CRM para o número ${d.instancia}. Clique pra ${d.ativo ? 'desligar' : 'ligar'}.`;
+  } catch { crmFuiClinicorp.hidden = true; }
+}
+crmFuiClinicorp.addEventListener('click', async () => {
+  if (!crmFuiEstado) return;
+  try {
+    const res = await fetch('/api/crm/clinicorp-followup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ instancia: crmFuiEstado.instancia, ativo: !crmFuiEstado.ativo }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro');
+  } catch (err) { alert(`Não consegui alterar: ${err.message}`); }
+  crmCarregarFuiClinicorp();
+});
+
+crmFiltroOperador.addEventListener('change', () => aplicarVisaoOperador(crmFiltroOperador.value));
+
+function crmAtualizarOperadorConversa() {
+  if (!crmContatoAberto) return;
+  const id = crmContatoAberto.atendente_id;
+  crmConversaOperador.value = id === null || id === undefined ? '' : String(id);
+  crmConversaAssumir.hidden = id === crmOperadores.euId && id !== null && id !== undefined;
+}
+
+async function crmDefinirOperador(operadorId) {
+  if (!crmContatoAberto) return;
+  try {
+    const res = await fetch(`/api/crm/contatos/${crmContatoAberto.id}/atendente`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ operadorId }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    const op = crmOperadores.lista.find((o) => o.id === operadorId);
+    crmContatoAberto.atendente_id = operadorId;
+    crmContatoAberto.atendente_nome = op ? op.nome : null;
+    crmAtualizarOperadorConversa();
+    carregarCrm();
+  } catch (err) {
+    crmConversaErro.textContent = err.message;
+    crmConversaErro.hidden = false;
+  }
+}
+crmConversaOperador.addEventListener('change', () => crmDefinirOperador(crmConversaOperador.value === '' ? null : Number(crmConversaOperador.value)));
+crmConversaAssumir.addEventListener('click', () => crmDefinirOperador(crmOperadores.euId));
+
+// ----- painel de distribuicao automatica -----
+const crmDistAtivo = document.getElementById('crmDistAtivo');
+const crmDistAtivoLabel = document.getElementById('crmDistAtivoLabel');
+const crmDistOperadores = document.getElementById('crmDistOperadores');
+const crmDistRegras = document.getElementById('crmDistRegras');
+const crmDistErro = document.getElementById('crmDistErro');
+crmDistAtivo.addEventListener('change', () => { crmDistAtivoLabel.textContent = crmDistAtivo.checked ? 'Ativada' : 'Desativada'; });
+
+function crmDistLinhaRegra(regra) {
+  const linha = document.createElement('div');
+  linha.className = 'crm-dist-regra';
+  const campanha = document.createElement('input');
+  campanha.type = 'text';
+  campanha.placeholder = 'Nome (ou parte) da campanha';
+  campanha.value = regra?.campanha || '';
+  const operador = document.createElement('select');
+  for (const o of crmOperadores.lista) operador.add(new Option(o.nome, String(o.id)));
+  if (regra) operador.value = String(regra.operadorId);
+  const x = document.createElement('button');
+  x.type = 'button';
+  x.textContent = '✕';
+  x.addEventListener('click', () => linha.remove());
+  linha.append(campanha, operador, x);
+  return linha;
+}
+
+crmDistribuicaoBtn.addEventListener('click', async () => {
+  crmDistErro.hidden = true;
+  await carregarOperadoresCrm();
+  try {
+    const res = await fetch('/api/crm/distribuicao', { headers: { 'x-app-password': appPassword } });
+    const cfg = await res.json();
+    if (!res.ok) throw new Error(cfg.erro || 'erro desconhecido');
+    crmDistAtivo.checked = !!cfg.ativo;
+    crmDistAtivoLabel.textContent = cfg.ativo ? 'Ativada' : 'Desativada';
+    crmDistOperadores.textContent = '';
+    for (const o of crmOperadores.lista) {
+      const item = document.createElement('label');
+      item.className = 'fui-etapa-item';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = String(o.id);
+      cb.checked = cfg.operadores.includes(o.id);
+      item.append(cb, document.createTextNode(o.nome));
+      crmDistOperadores.appendChild(item);
+    }
+    crmDistRegras.textContent = '';
+    for (const r of cfg.regras) crmDistRegras.appendChild(crmDistLinhaRegra(r));
+    crmDistribuicaoModal.hidden = false;
+  } catch (err) {
+    mostrarAviso(`Não consegui abrir a distribuição: ${err.message}`, 'erro');
+  }
+});
+document.getElementById('crmDistAddRegra').addEventListener('click', () => crmDistRegras.appendChild(crmDistLinhaRegra(null)));
+document.getElementById('crmDistribuicaoFechar').addEventListener('click', () => { crmDistribuicaoModal.hidden = true; });
+document.getElementById('crmDistSalvar').addEventListener('click', async () => {
+  crmDistErro.hidden = true;
+  const operadores = [...crmDistOperadores.querySelectorAll('input:checked')].map((i) => Number(i.value));
+  const regras = [...crmDistRegras.querySelectorAll('.crm-dist-regra')].map((l) => ({ campanha: l.querySelector('input').value.trim(), operadorId: Number(l.querySelector('select').value) })).filter((r) => r.campanha);
+  try {
+    const res = await fetch('/api/crm/distribuicao', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ ativo: crmDistAtivo.checked, operadores, regras }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    crmDistribuicaoModal.hidden = true;
+    mostrarAviso('Distribuição salva', 'ok');
+  } catch (err) {
+    crmDistErro.textContent = err.message;
+    crmDistErro.hidden = false;
+  }
+});
+
+// ---------- Origem dos leads (campanhas do Meta Ads) ----------
+
+const origemRegras = document.getElementById('origemRegras');
+const origemAddRegra = document.getElementById('origemAddRegra');
+const origemSalvar = document.getElementById('origemSalvar');
+const origemErro = document.getElementById('origemErro');
+const origemDe = document.getElementById('origemDe');
+const origemAte = document.getElementById('origemAte');
+const origemAtualizar = document.getElementById('origemAtualizar');
+const origemTabela = document.getElementById('origemTabela');
+const ROTULO_FONTE = { meta_ads: 'Anúncio (Meta Ads)', regra: 'Texto da mensagem', organico: 'Orgânico / direto', sem_origem: 'Sem origem' };
+
+function origemLinhaRegra(r) {
+  const linha = document.createElement('div');
+  linha.className = 'crm-dist-regra';
+  const texto = document.createElement('input');
+  texto.type = 'text';
+  texto.placeholder = 'Texto da 1ª mensagem (ex: Vim pelo anúncio do implante)';
+  texto.value = r?.texto || '';
+  const campanha = document.createElement('input');
+  campanha.type = 'text';
+  campanha.placeholder = 'Nome da campanha';
+  campanha.value = r?.campanha || '';
+  const x = document.createElement('button');
+  x.type = 'button';
+  x.textContent = '✕';
+  x.addEventListener('click', () => { linha.remove(); marcarPendente(origemSalvar); });
+  texto.addEventListener('input', () => marcarPendente(origemSalvar));
+  campanha.addEventListener('input', () => marcarPendente(origemSalvar));
+  linha.append(texto, campanha, x);
+  return linha;
+}
+
+async function carregarOrigem() {
+  origemErro.hidden = true;
+  if (!origemDe.value || !origemAte.value) {
+    const hoje = new Date(Date.now() - 3 * 3600000);
+    origemAte.value = hoje.toISOString().slice(0, 10);
+    origemDe.value = new Date(hoje.getTime() - 29 * 86400000).toISOString().slice(0, 10);
+  }
+  try {
+    const res = await fetch('/api/crm/origem/regras', { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    origemRegras.textContent = '';
+    for (const r of d.regras) origemRegras.appendChild(origemLinhaRegra(r));
+    limparPendente(origemSalvar);
+  } catch (err) {
+    origemErro.textContent = `Não consegui carregar as regras: ${err.message}`;
+    origemErro.hidden = false;
+  }
+  carregarRelatorioOrigem();
+}
+
+async function carregarRelatorioOrigem() {
+  origemTabela.textContent = 'Carregando...';
+  try {
+    const res = await fetch(`/api/crm/origem/relatorio?de=${origemDe.value}&ate=${origemAte.value}`, { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    origemTabela.textContent = '';
+    if (!d.linhas.length) {
+      origemTabela.textContent = 'Nenhum lead novo nesse período.';
+      return;
+    }
+    const tabela = document.createElement('table');
+    tabela.className = 'origem-tabela';
+    const cab = tabela.createTHead().insertRow();
+    for (const t of ['Campanha', 'Fonte', 'Leads', 'Agendaram', 'Compraram', 'Perdidos']) cab.insertCell().textContent = t;
+    const corpo = tabela.createTBody();
+    const soma = { leads: 0, agendados: 0, compraram: 0, perdidos: 0 };
+    for (const l of d.linhas) {
+      const tr = corpo.insertRow();
+      tr.insertCell().textContent = l.campanha;
+      tr.insertCell().textContent = ROTULO_FONTE[l.fonte] || l.fonte;
+      tr.insertCell().textContent = l.leads;
+      tr.insertCell().textContent = `${l.agendados} (${Math.round((l.agendados / l.leads) * 100)}%)`;
+      tr.insertCell().textContent = l.compraram;
+      tr.insertCell().textContent = l.perdidos;
+      for (const k of Object.keys(soma)) soma[k] += l[k];
+    }
+    const tr = corpo.insertRow();
+    tr.className = 'origem-total';
+    tr.insertCell().textContent = 'Total';
+    tr.insertCell().textContent = '';
+    tr.insertCell().textContent = soma.leads;
+    tr.insertCell().textContent = soma.agendados;
+    tr.insertCell().textContent = soma.compraram;
+    tr.insertCell().textContent = soma.perdidos;
+    origemTabela.appendChild(tabela);
+  } catch (err) {
+    origemTabela.textContent = `Não consegui carregar o relatório: ${err.message}`;
+  }
+}
+
+origemAddRegra.addEventListener('click', () => { origemRegras.appendChild(origemLinhaRegra(null)); marcarPendente(origemSalvar); });
+origemAtualizar.addEventListener('click', carregarRelatorioOrigem);
+origemSalvar.addEventListener('click', async () => {
+  origemErro.hidden = true;
+  const regras = [...origemRegras.querySelectorAll('.crm-dist-regra')].map((l) => { const [t, c] = l.querySelectorAll('input'); return { texto: t.value.trim(), campanha: c.value.trim() }; }).filter((r) => r.texto && r.campanha);
+  origemSalvar.disabled = true;
+  try {
+    const res = await fetch('/api/crm/origem/regras', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ regras }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    marcarSalvo(origemSalvar, 'Regras de origem salvas');
+  } catch (err) {
+    origemErro.textContent = err.message;
+    origemErro.hidden = false;
+  } finally {
+    origemSalvar.disabled = false;
+  }
+});
+
+// ---------- Ligações (monitoramento das chamadas do WhatsApp + registro manual) ----------
+
+const chamadasDe = document.getElementById('chamadasDe');
+const chamadasAte = document.getElementById('chamadasAte');
+const chamadasResumo = document.getElementById('chamadasResumo');
+const chamadasHoras = document.getElementById('chamadasHoras');
+const chamadasLista = document.getElementById('chamadasLista');
+const chamadasAtivarMsg = document.getElementById('chamadasAtivarMsg');
+const chamadaErro = document.getElementById('chamadaErro');
+
+function formatarDuracao(seg) {
+  if (!seg) return '0s';
+  const m = Math.floor(seg / 60);
+  const s = seg % 60;
+  return m ? `${m}min ${String(s).padStart(2, '0')}s` : `${s}s`;
+}
+
+async function carregarChamadas() {
+  if (!chamadasDe.value || !chamadasAte.value) {
+    const hoje = new Date(Date.now() - 3 * 3600000);
+    chamadasAte.value = hoje.toISOString().slice(0, 10);
+    chamadasDe.value = new Date(hoje.getTime() - 6 * 86400000).toISOString().slice(0, 10);
+  }
+  chamadasLista.textContent = 'Carregando...';
+  try {
+    const res = await fetch(`/api/chamadas?de=${chamadasDe.value}&ate=${chamadasAte.value}`, { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+
+    chamadasResumo.textContent = '';
+    const r = d.resumo;
+    for (const [valor, rotulo] of [
+      [r.total, 'ligações'], [r.recebidas, 'recebidas'], [r.feitas, 'feitas'], [r.atendidas, 'atendidas'],
+      [r.perdidas, 'perdidas (recebidas)'], [formatarDuracao(r.segundos_total), 'tempo total'], [formatarDuracao(r.segundos_medio), 'duração média'],
+    ]) {
+      const c = document.createElement('div');
+      c.className = 'cartao';
+      const forte = document.createElement('strong');
+      forte.textContent = valor;
+      const peq = document.createElement('span');
+      peq.textContent = rotulo;
+      c.append(forte, peq);
+      chamadasResumo.appendChild(c);
+    }
+
+    chamadasHoras.textContent = '';
+    const porHora = new Map(d.porHora.map((h) => [h.hora, h.total]));
+    const max = Math.max(1, ...d.porHora.map((h) => h.total));
+    for (let h = 6; h <= 22; h++) {
+      const b = document.createElement('div');
+      b.className = 'barra';
+      b.style.height = `${Math.max(3, ((porHora.get(h) || 0) / max) * 100)}%`;
+      b.title = `${h}h: ${porHora.get(h) || 0} ligação(ões)`;
+      const rot = document.createElement('span');
+      rot.textContent = h;
+      b.appendChild(rot);
+      chamadasHoras.appendChild(b);
+    }
+
+    chamadasLista.textContent = '';
+    if (!d.chamadas.length) {
+      chamadasLista.textContent = 'Nenhuma ligação nesse período. Se o número está conectado, clique em "Ativar monitoramento" ao lado.';
+      return;
+    }
+    const ROT_STATUS = { atendida: 'atendida', perdida: 'perdida', recusada: 'recusada', tocando: 'tocando' };
+    for (const c of d.chamadas) {
+      const linha = document.createElement('div');
+      linha.className = 'chamada-linha';
+      const quem = document.createElement('div');
+      quem.className = 'quem';
+      const nome = document.createElement('div');
+      nome.textContent = `${c.direcao === 'feita' ? '↗' : '↙'} ${c.nome || c.numero}${c.video ? ' 🎥' : ''}`;
+      const sub = document.createElement('div');
+      sub.className = 'sub';
+      const quando = new Date(c.inicio).toLocaleString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      sub.textContent = `${quando} · ${c.origem === 'manual' ? 'registro manual' : 'WhatsApp'}${c.operador_nome ? ` · ${c.operador_nome}` : ''}${c.obs ? ` · ${c.obs}` : ''}`;
+      quem.append(nome, sub);
+      const direita = document.createElement('div');
+      direita.textContent = c.status === 'atendida' ? `${ROT_STATUS.atendida} · ${formatarDuracao(c.duracao_seg)}` : ROT_STATUS[c.status] || c.status;
+      if (c.status === 'perdida' || c.status === 'recusada') direita.className = 'perdida';
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.textContent = '✕';
+      x.title = 'Apagar registro';
+      x.addEventListener('click', async () => {
+        if (!confirm('Apagar esse registro de ligação?')) return;
+        await fetch(`/api/chamadas/${c.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+        carregarChamadas();
+      });
+      const fim = document.createElement('div');
+      fim.style.display = 'flex';
+      fim.style.gap = '8px';
+      fim.append(direita, x);
+      linha.append(quem, fim);
+      chamadasLista.appendChild(linha);
+    }
+  } catch (err) {
+    chamadasLista.textContent = `Não consegui carregar as ligações: ${err.message}`;
+  }
+}
+
+document.getElementById('chamadasAtualizar').addEventListener('click', carregarChamadas);
+
+document.getElementById('chamadasAtivar').addEventListener('click', async () => {
+  chamadasAtivarMsg.textContent = 'Ativando...';
+  try {
+    const res = await fetch('/api/chamadas/ativar', { method: 'POST', headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    chamadasAtivarMsg.textContent = d.resultado.length
+      ? d.resultado.map((r) => `${r.instancia}: ${r.ok ? (r.jaTinha ? 'já estava ativo' : 'ativado') : `erro (${r.erro})`}`).join(' · ')
+      : 'Nenhum número conectado agora.';
+  } catch (err) {
+    chamadasAtivarMsg.textContent = err.message;
+  }
+});
+
+document.getElementById('chamadaSalvar').addEventListener('click', async () => {
+  chamadaErro.hidden = true;
+  const quando = document.getElementById('chamadaQuando').value;
+  try {
+    const res = await fetch('/api/chamadas/manual', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({
+        numero: document.getElementById('chamadaNumero').value,
+        nome: document.getElementById('chamadaNome').value,
+        direcao: document.getElementById('chamadaDirecao').value,
+        status: document.getElementById('chamadaStatus').value,
+        quando: quando ? new Date(quando).toISOString() : null,
+        duracaoSeg: Number(document.getElementById('chamadaDuracao').value || 0) * 60,
+        obs: document.getElementById('chamadaObs').value,
+      }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    for (const id of ['chamadaNumero', 'chamadaNome', 'chamadaQuando', 'chamadaDuracao', 'chamadaObs']) document.getElementById(id).value = '';
+    mostrarAviso('Ligação registrada', 'ok');
+    carregarChamadas();
+  } catch (err) {
+    chamadaErro.textContent = err.message;
+    chamadaErro.hidden = false;
+  }
+});
+
+
+// ---------- Mover o lead de etapa de dentro da conversa (alternativa a arrastar o card) ----------
+
+const crmConversaEtapa = document.getElementById('crmConversaEtapa');
+
+function preencherSeletorEtapaConversa(etapas) {
+  const atual = crmConversaEtapa.value;
+  crmConversaEtapa.textContent = '';
+  for (const e of etapas) crmConversaEtapa.add(new Option(`Etapa: ${e.nome}`, e.id));
+  crmConversaEtapa.value = atual;
+  crmAtualizarEtapaConversa();
+}
+
+function crmAtualizarEtapaConversa() {
+  if (crmContatoAberto?.etapa) crmConversaEtapa.value = crmContatoAberto.etapa;
+}
+
+crmConversaEtapa.addEventListener('change', async () => {
+  if (!crmContatoAberto) return;
+  const etapa = crmConversaEtapa.value;
+  if (etapa === crmContatoAberto.etapa) return;
+  crmConversaErro.hidden = true;
+  try {
+    const res = await fetch(`/api/crm/contatos/${crmContatoAberto.id}/etapa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ etapa }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    crmContatoAberto.etapa = etapa;
+    mostrarAviso(`Movido para "${crmConversaEtapa.selectedOptions[0]?.textContent.replace('Etapa: ', '') || etapa}"`, 'ok');
+    carregarCrm();
+  } catch (err) {
+    crmConversaEtapa.value = crmContatoAberto.etapa;
+    crmConversaErro.textContent = err.message;
+    crmConversaErro.hidden = false;
+  }
+});
+
+// ---------- Disparos (campanhas de mensagens em massa) ----------
+
+const dispLista = document.getElementById('dispLista');
+const dispDetalhe = document.getElementById('dispDetalhe');
+const dispNova = document.getElementById('dispNova');
+const dispNumero = document.getElementById('dispNumero');
+let dispInstancias = [];
+let dispAbertoId = null;
+let dispPolling = null;
+let dispStaged = []; // lista montada ANTES de criar a campanha (planilha/colados/CRM)
+let dispStagedArq = []; // anexos escolhidos ANTES de criar a campanha: [{ nome, tipo, tamanho, base64 }]
+// alguns navegadores nao informam o tipo de .opus/.m4a/.mp4... - deduz pela extensao
+function dispTipoDoArquivo(f) {
+  if (f.type && f.type !== 'application/octet-stream') return f.type;
+  const ext = (f.name.split('.').pop() || '').toLowerCase();
+  const mapa = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif',
+    mp3: 'audio/mpeg', ogg: 'audio/ogg', opus: 'audio/ogg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', amr: 'audio/amr', oga: 'audio/ogg',
+    mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', '3gp': 'video/3gpp', mkv: 'video/x-matroska' };
+  return mapa[ext] || 'application/octet-stream';
+}
+const DISP_STATUS = { rascunho: 'Rascunho', agendada: 'Agendada', enviando: 'Enviando', pausada: 'Pausada', concluida: 'Concluída', cancelada: 'Cancelada' };
+const DEST_STATUS = { pendente: 'Na fila', enviando: 'Enviando', enviado: 'Enviado', falha: 'Falhou', ignorado: 'Ignorado', optout: 'Pediu pra sair' };
+
+function dispEl(tag, props = {}, ...filhos) {
+  const e = document.createElement(tag);
+  Object.assign(e, props);
+  for (const f of filhos) e.append(f);
+  return e;
+}
+
+async function carregarDisparos() {
+  try {
+    const res = await fetch('/api/disparos', { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    dispInstancias = d.instancias || [];
+    numeroPreencher(dispNumero, [...dispInstancias, ...d.campanhas.map((c) => c.instancia)], null);
+    const campanhas = d.campanhas.filter((c) => !dispNumero.value || c.instancia === dispNumero.value);
+    dispLista.textContent = '';
+    if (!campanhas.length) dispLista.appendChild(dispEl('p', { className: 'agenda-vazia', textContent: 'Nenhuma campanha ainda. Clique em "+ Nova campanha".' }));
+    for (const c of campanhas) {
+      const card = dispEl('div', { className: `disp-card${c.id === dispAbertoId ? ' ativo' : ''}` });
+      card.append(
+        dispEl('div', { className: 'disp-card-topo' }, dispEl('strong', { textContent: c.nome }), dispEl('span', { className: `disp-status ${c.status}`, textContent: DISP_STATUS[c.status] || c.status })),
+        dispEl('div', { className: 'disp-card-sub', textContent: `${c.enviados}/${c.total} enviadas · ${c.respostas} respostas · ${c.falhas} falhas` }),
+      );
+      const barra = dispEl('div', { className: 'disp-barra' }, dispEl('div', { style: `width:${c.total ? Math.round((c.enviados / c.total) * 100) : 0}%` }));
+      card.appendChild(barra);
+      card.addEventListener('click', () => abrirCampanhaDisparo(c.id));
+      dispLista.appendChild(card);
+    }
+  } catch (err) {
+    dispLista.textContent = `Não consegui carregar as campanhas: ${err.message}`;
+  }
+}
+
+dispNumero.addEventListener('change', () => { numeroSalvar(dispNumero.value); carregarDisparos(); });
+dispNova.addEventListener('click', () => { dispAbertoId = null; dispStaged = []; dispStagedArq = []; renderizarEditorDisparo(null); carregarDisparos(); });
+
+async function abrirCampanhaDisparo(id) {
+  dispAbertoId = id;
+  try {
+    const res = await fetch(`/api/disparos/${id}`, { headers: { 'x-app-password': appPassword } });
+    const c = await res.json();
+    if (!res.ok) throw new Error(c.erro || 'erro desconhecido');
+    renderizarEditorDisparo(c);
+    carregarDisparos();
+  } catch (err) {
+    mostrarAviso(`Não consegui abrir a campanha: ${err.message}`, 'erro');
+  }
+}
+
+function dispCampo(rotulo, input) {
+  const l = dispEl('label', { className: 'auto-label', textContent: rotulo });
+  const w = dispEl('div', { className: 'disp-campo' }, l, input);
+  return w;
+}
+const dispData = (iso) => { if (!iso) return ''; const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+
+function renderizarEditorDisparo(c) {
+  clearInterval(dispPolling);
+  dispDetalhe.textContent = '';
+  const editavel = !c || ['rascunho', 'pausada', 'agendada'].includes(c.status);
+  const erro = dispEl('p', { className: 'agenda-erro', hidden: true });
+  const mostrarErro = (m) => { erro.textContent = m; erro.hidden = false; };
+
+  // ---------- dados da campanha ----------
+  const nome = dispEl('input', { type: 'text', value: c?.nome || '', placeholder: 'Ex: Promoção de novembro', disabled: !editavel });
+  const instancia = dispEl('select', { disabled: !editavel });
+  for (const i of dispInstancias) instancia.add(new Option(i, i));
+  if (c?.instancia) instancia.value = c.instancia;
+  else if (dispNumero.value && dispInstancias.includes(dispNumero.value)) instancia.value = dispNumero.value;
+  const mensagem = dispEl('textarea', { rows: 6, value: c?.mensagem || '', disabled: !editavel, placeholder: '{Oi|Olá|E aí} {nome}, tudo bem? Passando pra avisar que...' });
+  mensagem.style.minHeight = '130px';
+  const dica = dispEl('p', { className: 'agenda-vazia', textContent: 'Variáveis: {nome} (primeiro nome), {nome_completo} e qualquer coluna da sua planilha, ex {cidade}. Variações: {oi|olá|e aí} sorteia uma opção por mensagem. Mensagens diferentes entre si reduzem o risco de bloqueio.' });
+  const usarIa = dispEl('input', { type: 'checkbox', checked: !!c?.usarIa, disabled: !editavel });
+  const iaInstr = dispEl('textarea', { rows: 2, value: c?.iaInstrucoes || '', disabled: !editavel, placeholder: 'Instruções pra IA (opcional): ex. tom mais descontraído, não usar emoji...' });
+  const optout = dispEl('input', { type: 'checkbox', checked: c ? c.optoutRodape : true, disabled: !editavel });
+  const agendar = dispEl('input', { type: 'datetime-local', value: dispData(c?.agendarEm), disabled: !editavel });
+  const hi = dispEl('input', { type: 'time', value: c?.horaInicio || '08:00', disabled: !editavel });
+  const hf = dispEl('input', { type: 'time', value: c?.horaFim || '20:00', disabled: !editavel });
+  const imin = dispEl('input', { type: 'number', min: 10, value: c?.intervaloMin ?? 20, disabled: !editavel });
+  const imax = dispEl('input', { type: 'number', min: 10, value: c?.intervaloMax ?? 60, disabled: !editavel });
+  const limite = dispEl('input', { type: 'number', min: 1, max: 1000, value: c?.limiteDiario ?? 150, disabled: !editavel });
+
+  dispDetalhe.append(
+    dispEl('div', { className: 'disp-titulo', textContent: c ? `Campanha: ${c.nome}` : 'Nova campanha' }),
+    dispCampo('Nome da campanha', nome),
+    dispCampo('Enviar pelo número', instancia),
+    dispCampo('Mensagem', mensagem), dica,
+    dispEl('label', { className: 'fui-etapa-item' }, usarIa, document.createTextNode('IA reescreve a mensagem pra cada contato (texto diferente em cada envio)')),
+    iaInstr,
+    dispEl('label', { className: 'fui-etapa-item' }, optout, document.createTextNode('Incluir "responda SAIR para não receber mais" no fim (recomendado)')),
+    dispCampo('Começar em (vazio = ao clicar em Iniciar)', agendar),
+    dispEl('div', { className: 'auto-upload-row' }, dispCampo('Envia a partir de', hi), dispCampo('Até', hf)),
+    dispEl('div', { className: 'auto-upload-row' }, dispCampo('Intervalo mín. (seg)', imin), dispCampo('Intervalo máx. (seg)', imax), dispCampo('Limite por dia', limite)),
+    dispEl('p', { className: 'agenda-vazia', textContent: 'Ritmo humano: a Lumia espera um tempo aleatório entre o mínimo e o máximo entre uma mensagem e outra, só envia dentro do horário e para no limite do dia. Quanto mais devagar, mais seguro pro seu número.' }),
+  );
+
+  if (c?.motivoPausa && c.status === 'pausada') dispDetalhe.appendChild(dispEl('p', { className: 'agenda-erro', textContent: c.motivoPausa }));
+
+  const botoes = dispEl('div', { className: 'disp-botoes' });
+  if (editavel) {
+    const salvar = dispEl('button', { type: 'button', textContent: c ? 'Salvar alterações' : 'Criar campanha' });
+    salvar.addEventListener('click', async () => {
+      erro.hidden = true;
+      salvar.disabled = true;
+      try {
+        const res = await fetch('/api/disparos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+          body: JSON.stringify({
+            id: c?.id, nome: nome.value, instancia: instancia.value, mensagem: mensagem.value, usarIa: usarIa.checked, iaInstrucoes: iaInstr.value,
+            optoutRodape: optout.checked, agendarEm: agendar.value ? new Date(agendar.value).toISOString() : null,
+            horaInicio: hi.value, horaFim: hf.value, intervaloMin: imin.value, intervaloMax: imax.value, limiteDiario: limite.value,
+          }),
+        });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+        let aviso = c ? 'Campanha salva' : 'Campanha criada';
+        if (!c && dispStaged.length) {
+          let add = 0;
+          for (const op of dispStaged) {
+            const r = op.tipo === 'crm'
+              ? await fetch(`/api/disparos/${d.id}/destinatarios/crm`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ etapa: op.etapa, etiqueta: op.etiqueta }) })
+              : await fetch(`/api/disparos/${d.id}/destinatarios`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ lista: op.lista }) });
+            const rj = await r.json().catch(() => ({}));
+            add += rj.adicionados || 0;
+          }
+          dispStaged = [];
+          aviso += ` com ${add} destinatário(s) na lista`;
+        } else if (!c) aviso += ' - agora adicione os destinatários';
+        if (!c && dispStagedArq.length) {
+          let ok = 0;
+          for (const a of dispStagedArq) {
+            const r = await fetch(`/api/disparos/${d.id}/arquivos`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ nomeArquivo: a.nome, mediaType: a.tipo, base64: a.base64 }) });
+            if (r.ok) ok++; else mostrarAviso(`Anexo "${a.nome}" não foi: ${(await r.json().catch(() => ({}))).erro || 'erro'}`, 'erro');
+          }
+          dispStagedArq = [];
+          aviso += `, ${ok} anexo(s)`;
+        }
+        mostrarAviso(aviso, 'ok');
+        abrirCampanhaDisparo(d.id);
+      } catch (err) {
+        mostrarErro(err.message);
+        salvar.disabled = false;
+      }
+    });
+    botoes.appendChild(salvar);
+    const previa = dispEl('button', { type: 'button', className: 'crm-btn-secundario', textContent: 'Pré-visualizar' });
+    previa.addEventListener('click', async () => {
+      const res = await fetch('/api/disparos/previa', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ mensagem: mensagem.value, nome: 'Maria Souza' }) });
+      const d = await res.json();
+      alert(`Como chega pra "Maria Souza":\n\n${d.texto}${optout.checked ? '\n\nPara não receber mais mensagens, responda SAIR.' : ''}${usarIa.checked ? '\n\n(com a IA ligada o texto muda um pouco em cada envio)' : ''}`);
+    });
+    botoes.appendChild(previa);
+  }
+  if (!c) {
+    dispDetalhe.appendChild(dispEl('div', { className: 'disp-secao', textContent: 'Lista de quem vai receber' }));
+    montarDestinatariosDisparo(null);
+    dispDetalhe.appendChild(dispEl('div', { className: 'disp-secao', textContent: 'Anexos (saem junto de cada mensagem) - imagem, áudio, PDF ou vídeo curto' }));
+    montarAnexosNovaCampanha();
+  }
+  dispDetalhe.append(botoes, erro);
+  if (!c) return;
+
+  // ---------- destinatarios ----------
+  dispDetalhe.appendChild(dispEl('div', { className: 'disp-secao', textContent: `Destinatários (${c.resumo.total})` }));
+  if (editavel) montarDestinatariosDisparo(c);
+
+  // ---------- anexos ----------
+  dispDetalhe.appendChild(dispEl('div', { className: 'disp-secao', textContent: 'Anexos (saem junto de cada mensagem)' }));
+  montarAnexosDisparo(c, editavel);
+
+  // ---------- acoes ----------
+  const acoes = dispEl('div', { className: 'disp-botoes' });
+  const acao = (rotulo, nomeAcao, classe = '', confirmar = null) => {
+    const b = dispEl('button', { type: 'button', textContent: rotulo, className: classe });
+    b.addEventListener('click', async () => {
+      if (confirmar && !confirm(confirmar)) return;
+      try {
+        const res = await fetch(`/api/disparos/${c.id}/acao`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ acao: nomeAcao }) });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+        abrirCampanhaDisparo(nomeAcao === 'duplicar' ? d.id : c.id);
+      } catch (err) {
+        mostrarAviso(err.message, 'erro');
+      }
+    });
+    acoes.appendChild(b);
+  };
+  if (['rascunho', 'pausada'].includes(c.status)) acao(c.status === 'pausada' ? 'Retomar envio' : 'Iniciar campanha', c.status === 'pausada' ? 'retomar' : 'iniciar', '', 'Iniciar o envio? As mensagens vão sair no ritmo e no horário configurados.');
+  if (['enviando', 'agendada'].includes(c.status)) acao('Pausar', 'pausar', 'crm-btn-secundario');
+  if (!['concluida', 'cancelada'].includes(c.status)) acao('Cancelar campanha', 'cancelar', 'crm-btn-perigo', 'Cancelar a campanha? O que ainda não foi enviado não será mais enviado.');
+  acao('Duplicar', 'duplicar', 'crm-btn-secundario');
+  if (c.status !== 'enviando') {
+    const apagar = dispEl('button', { type: 'button', className: 'crm-btn-perigo', textContent: 'Apagar' });
+    apagar.addEventListener('click', async () => {
+      if (!confirm('Apagar essa campanha e o histórico dela?')) return;
+      const res = await fetch(`/api/disparos/${c.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+      if (!res.ok) return mostrarAviso((await res.json()).erro, 'erro');
+      dispAbertoId = null;
+      dispDetalhe.textContent = '';
+      carregarDisparos();
+    });
+    acoes.appendChild(apagar);
+  }
+  dispDetalhe.append(dispEl('div', { className: 'disp-secao', textContent: 'Ações' }), acoes);
+
+  // ---------- relatorio ----------
+  dispDetalhe.appendChild(dispEl('div', { className: 'disp-secao', textContent: 'Relatório' }));
+  const r = c.resumo;
+  const cartoes = dispEl('div', { className: 'chamadas-resumo' });
+  for (const [v, t] of [[r.total, 'na lista'], [r.enviados, 'enviadas'], [r.pendentes, 'na fila'], [r.respostas, 'responderam'], [r.falhas, 'falhas'], [r.optouts, 'pediram pra sair'], [r.ignorados, 'ignoradas'], [r.rastreados ? `${r.entregues}/${r.rastreados}` : '-', 'entregues'], [r.rastreados ? `${r.lidos}/${r.rastreados}` : '-', 'lidas'], [r.nao_entregues, 'não entregues (possível bloqueio)']]) {
+    cartoes.appendChild(dispEl('div', { className: 'cartao' }, dispEl('strong', { textContent: v }), dispEl('span', { textContent: t })));
+  }
+  dispDetalhe.appendChild(cartoes);
+  if (r.enviados) dispDetalhe.appendChild(dispEl('p', { className: 'agenda-vazia', textContent: `Taxa de resposta: ${Math.round((r.respostas / r.enviados) * 100)}%` }));
+  if (c.porHora?.length) {
+    const max = Math.max(...c.porHora.map((h) => h.total));
+    const grafico = dispEl('div', { className: 'chamadas-horas' });
+    for (const h of c.porHora) {
+      const b = dispEl('div', { className: 'barra', title: `${h.hora}: ${h.total} enviadas` });
+      b.style.height = `${Math.max(4, (h.total / max) * 100)}%`;
+      grafico.appendChild(b);
+    }
+    dispDetalhe.append(dispEl('p', { className: 'agenda-vazia', textContent: 'Envios por hora' }), grafico);
+  }
+  const filtro = dispEl('select');
+  for (const [v, t] of [['', 'Todos'], ['enviado', 'Enviados'], ['respondeu', 'Responderam'], ['pendente', 'Na fila'], ['falha', 'Falhas'], ['optout', 'Pediram pra sair'], ['ignorado', 'Ignorados']]) filtro.add(new Option(t, v));
+  const tabela = dispEl('div', { className: 'disp-dest-tabela' });
+  const carregarTabela = async () => {
+    const res = await fetch(`/api/disparos/${c.id}/destinatarios?status=${filtro.value}`, { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    tabela.textContent = '';
+    if (!d.destinatarios?.length) tabela.textContent = 'Nada por aqui.';
+    for (const x of d.destinatarios || []) {
+      const quando = x.enviado_em ? new Date(x.enviado_em).toLocaleString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+      const linha = dispEl('div', { className: 'chamada-linha' });
+      const quem = dispEl('div', { className: 'quem' }, dispEl('div', { textContent: `${x.nome || ''} ${x.numero}`.trim() }), dispEl('div', { className: 'sub', textContent: x.erro || x.texto_enviado || '' }));
+      const estado = dispEl('div', { className: x.status === 'falha' ? 'perdida' : '', textContent: `${x.respondeu_em ? '💬 respondeu · ' : ''}${DEST_STATUS[x.status] || x.status}${quando ? ` · ${quando}` : ''}` });
+      linha.append(quem, estado);
+      if (x.status === 'pendente' && editavel) {
+        const rm = dispEl('button', { type: 'button', textContent: '✕', title: 'Tirar da lista' });
+        rm.addEventListener('click', async () => {
+          await fetch(`/api/disparos/${c.id}/destinatarios/${x.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+          carregarTabela();
+        });
+        linha.appendChild(rm);
+      }
+      tabela.appendChild(linha);
+    }
+  };
+  filtro.addEventListener('change', carregarTabela);
+  dispDetalhe.append(dispEl('div', { className: 'auto-upload-row' }, dispEl('span', { textContent: 'Mostrar:' }), filtro), tabela);
+  carregarTabela();
+  if (['enviando', 'agendada'].includes(c.status)) dispPolling = setInterval(() => { if (dispAbertoId === c.id && !tabDisparos.hidden) abrirCampanhaDisparo(c.id); else clearInterval(dispPolling); }, 10000);
+}
+
+function montarDestinatariosDisparo(c) {
+  const msg = dispEl('p', { className: 'agenda-vazia' });
+  const previa = dispEl('div', { className: 'disp-previa' });
+  const emRascunho = !c; // campanha ainda nao criada: a lista fica guardada aqui e vai junto quando criar
+  const resumoStaged = dispEl('p', { className: 'agenda-vazia' });
+  const atualizarStaged = () => {
+    const n = dispStaged.reduce((s, op) => s + (op.tipo === 'lista' ? op.lista.length : 0), 0);
+    const crmOps = dispStaged.filter((op) => op.tipo === 'crm').length;
+    resumoStaged.textContent = dispStaged.length ? `Na lista pra enviar quando criar a campanha: ${n} contato(s) de arquivo/colados${crmOps ? ` + ${crmOps} seleção(ões) do CRM` : ''}.` : '';
+  };
+
+  const enviarLista = async (lista, origem) => {
+    previa.textContent = '';
+    if (emRascunho) {
+      dispStaged.push({ tipo: 'lista', lista, origem });
+      atualizarStaged();
+      msg.textContent = `${origem}: ${lista.length} linha(s) guardadas - os telefones inválidos e repetidos são filtrados quando você criar a campanha.`;
+      return;
+    }
+    msg.textContent = 'Adicionando...';
+    try {
+      const res = await fetch(`/api/disparos/${c.id}/destinatarios`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ lista }) });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      mostrarResultadoDest(d, origem);
+    } catch (err) { msg.textContent = err.message; }
+  };
+  const mostrarResultadoDest = (d, origem) => {
+    msg.textContent = `${origem}: ${d.adicionados} adicionados · ${d.duplicados} repetidos · ${d.invalidos} telefones inválidos · ${d.optout} pediram pra sair${d.limite ? ' · limite da campanha atingido' : ''}.`;
+    abrirCampanhaDisparo(c.id);
+  };
+
+  // confere a lista ANTES de adicionar: mostra quantos, as colunas achadas e as primeiras linhas
+  const mostrarPrevia = (lista, origem) => {
+    previa.textContent = '';
+    if (!lista.length) { msg.textContent = 'Não encontrei nenhum contato nesse arquivo.'; return; }
+    const comNome = lista.filter((x) => x.nome).length;
+    const vars = [...new Set(lista.flatMap((x) => Object.keys(x.vars || {})))];
+    previa.append(dispEl('p', { textContent: `${origem}: ${lista.length} contato(s) · ${comNome} com nome${vars.length ? ` · variáveis disponíveis: ${vars.map((v) => `{${v}}`).join(' ')}` : ''}` }));
+    const tab = dispEl('table', { className: 'origem-tabela' });
+    const cab = tab.createTHead().insertRow();
+    for (const t of ['Telefone', 'Nome', ...vars.slice(0, 3)]) cab.insertCell().textContent = t;
+    const corpo = tab.createTBody();
+    for (const x of lista.slice(0, 5)) {
+      const tr = corpo.insertRow();
+      tr.insertCell().textContent = x.numero;
+      tr.insertCell().textContent = x.nome || '';
+      for (const v of vars.slice(0, 3)) tr.insertCell().textContent = (x.vars || {})[v] || '';
+    }
+    const ok = dispEl('button', { type: 'button', textContent: `Adicionar ${lista.length} contatos` });
+    ok.addEventListener('click', () => enviarLista(lista, origem));
+    const cancelar = dispEl('button', { type: 'button', className: 'crm-btn-secundario', textContent: 'Cancelar' });
+    cancelar.addEventListener('click', () => { previa.textContent = ''; });
+    previa.append(tab, dispEl('div', { className: 'disp-botoes' }, ok, cancelar));
+  };
+
+  // planilha
+  const arq = dispEl('input', { type: 'file', accept: '.csv,.xlsx,.xls,.txt', hidden: true });
+  const escolher = dispEl('button', { type: 'button', className: 'crm-btn-secundario', textContent: '📄 Subir planilha (CSV/Excel)' });
+  escolher.addEventListener('click', () => arq.click());
+  arq.addEventListener('change', async () => {
+    const f = arq.files[0];
+    arq.value = '';
+    if (!f) return;
+    try {
+      const buffer = await f.arrayBuffer();
+      let linhas;
+      if (/\.(xlsx|xls)$/i.test(f.name)) {
+        const XLSX = await ctGarantirSheetJs();
+        const livro = XLSX.read(buffer, { type: 'array' });
+        linhas = XLSX.utils.sheet_to_json(livro.Sheets[livro.SheetNames[0]], { header: 1, raw: false, defval: '' });
+      } else {
+        linhas = ctLerCsv(ctDecodificarTexto(buffer));
+      }
+      linhas = linhas.map((l) => l.map((v) => String(v ?? '').trim())).filter((l) => l.some(Boolean));
+      mostrarPrevia(dispLinhasParaLista(linhas), f.name);
+    } catch (err) { msg.textContent = `Não consegui ler a planilha: ${err.message}`; }
+  });
+
+  // colar
+  const colar = dispEl('textarea', { rows: 3, placeholder: 'Ou cole aqui, um por linha: telefone;nome   (ex: 82 99999-0000;Maria)' });
+  const addColar = dispEl('button', { type: 'button', className: 'crm-btn-secundario', textContent: 'Conferir os colados' });
+  addColar.addEventListener('click', () => {
+    const linhas = colar.value.split('\n').map((l) => l.split(/[;\t,]/).map((v) => v.trim())).filter((l) => l.some(Boolean));
+    colar.value = '';
+    mostrarPrevia(dispLinhasParaLista(linhas), 'Lista colada');
+  });
+
+  // CRM
+  const etapaSel = dispEl('select');
+  etapaSel.add(new Option('Etapa do CRM...', ''));
+  fetch('/api/crm/etapas', { headers: { 'x-app-password': appPassword } }).then((r) => r.json()).then((d) => { for (const e of d.etapas || []) if (e.id !== 'contatos_pessoais') etapaSel.add(new Option(e.nome, e.id)); }).catch(() => {});
+  const etiqueta = dispEl('input', { type: 'text', placeholder: 'ou etiqueta (ex: implante)' });
+  const addCrm = dispEl('button', { type: 'button', className: 'crm-btn-secundario', textContent: 'Adicionar do CRM' });
+  addCrm.addEventListener('click', async () => {
+    if (!etapaSel.value && !etiqueta.value.trim()) { msg.textContent = 'Escolha uma etapa ou digite uma etiqueta do CRM.'; return; }
+    if (emRascunho) {
+      dispStaged.push({ tipo: 'crm', etapa: etapaSel.value || null, etiqueta: etiqueta.value.trim() || null });
+      atualizarStaged();
+      msg.textContent = 'Seleção do CRM guardada - entra quando você criar a campanha.';
+      return;
+    }
+    msg.textContent = 'Adicionando...';
+    try {
+      const res = await fetch(`/api/disparos/${c.id}/destinatarios/crm`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ etapa: etapaSel.value || null, etiqueta: etiqueta.value.trim() || null }) });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      mostrarResultadoDest(d, 'CRM');
+    } catch (err) { msg.textContent = err.message; }
+  });
+
+  const limpar = dispEl('button', { type: 'button', className: 'crm-btn-perigo', textContent: emRascunho ? 'Descartar lista' : 'Limpar a fila' });
+  limpar.addEventListener('click', async () => {
+    if (emRascunho) { dispStaged = []; atualizarStaged(); msg.textContent = ''; previa.textContent = ''; return; }
+    if (!confirm('Remover todos que ainda estão na fila (não enviados)?')) return;
+    await fetch(`/api/disparos/${c.id}/destinatarios`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+    abrirCampanhaDisparo(c.id);
+  });
+  atualizarStaged();
+  dispDetalhe.append(
+    dispEl('div', { className: 'disp-botoes' }, arq, escolher, limpar),
+    colar, addColar,
+    dispEl('div', { className: 'auto-upload-row' }, etapaSel, etiqueta, addCrm),
+    previa, resumoStaged, msg,
+  );
+}
+
+// planilha -> [{numero, nome, vars}] - acha sozinho a coluna do telefone e a do nome; as outras viram variaveis
+function dispLinhasParaLista(linhas) {
+  if (!linhas.length) return [];
+  const sa = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  const cab = linhas[0].map(sa);
+  const temCabecalho = cab.some((h) => /^(telefone|celular|whatsapp|fone|numero|phone|tel)$/.test(h) || /^(nome|name|cliente|paciente)$/.test(h));
+  const iTel = temCabecalho ? Math.max(0, cab.findIndex((h) => /telefone|celular|whatsapp|fone|numero|phone|^tel$/.test(h))) : 0;
+  let iNome = temCabecalho ? cab.findIndex((h) => /^(nome|name|cliente|paciente)/.test(h)) : 1;
+  if (iNome === iTel) iNome = -1;
+  const dados = temCabecalho ? linhas.slice(1) : linhas;
+  return dados.map((l) => {
+    const vars = {};
+    if (temCabecalho) cab.forEach((h, i) => { if (i !== iTel && i !== iNome && h && l[i]) vars[h] = l[i]; });
+    return { numero: l[iTel], nome: iNome >= 0 ? l[iNome] : '', vars };
+  });
+}
+
+// anexos escolhidos na tela "Nova campanha" (so sobem depois que a campanha e criada)
+function montarAnexosNovaCampanha() {
+  const lista = dispEl('div', { className: 'disp-anexos' });
+  const pintar = () => {
+    lista.textContent = '';
+    for (const a of dispStagedArq) {
+      const icone = a.tipo.startsWith('audio/') ? '🎧' : a.tipo.startsWith('image/') ? '🖼' : a.tipo.startsWith('video/') ? '🎬' : '📄';
+      const item = dispEl('span', { className: 'fui-anexo', textContent: `${icone} ${a.nome} (${formatarTamanho(a.tamanho)}) ` });
+      const x = dispEl('button', { type: 'button', textContent: '✕', title: 'Remover' });
+      x.addEventListener('click', () => { dispStagedArq = dispStagedArq.filter((y) => y !== a); pintar(); });
+      item.appendChild(x);
+      lista.appendChild(item);
+    }
+    if (!dispStagedArq.length) lista.textContent = 'Nenhum anexo.';
+  };
+  pintar();
+  const input = dispEl('input', { type: 'file', accept: 'audio/*,image/*,video/*,application/pdf,.opus,.m4a,.pdf', multiple: true, hidden: true });
+  const botao = dispEl('button', { type: 'button', className: 'fui-anexar', textContent: '📎 Anexar arquivo' });
+  botao.addEventListener('click', () => input.click());
+  input.addEventListener('change', async () => {
+    const arquivos = [...input.files];
+    input.value = '';
+    botao.disabled = true;
+    for (const f of arquivos) {
+      if (dispStagedArq.length >= 5) { mostrarAviso('No máximo 5 anexos por campanha.', 'erro'); break; }
+      if (f.size > 12 * 1024 * 1024) { mostrarAviso(`"${f.name}" é grande demais - o máximo é 12 MB.`, 'erro'); continue; }
+      const tipo = dispTipoDoArquivo(f);
+      if (!/^(image|audio|video)\//.test(tipo) && tipo !== 'application/pdf') { mostrarAviso(`"${f.name}": use imagem, áudio, PDF ou vídeo.`, 'erro'); continue; }
+      try { dispStagedArq.push({ nome: f.name, tipo, tamanho: f.size, base64: await arquivoParaBase64(f) }); } catch { mostrarAviso(`Não consegui ler "${f.name}".`, 'erro'); }
+    }
+    botao.disabled = false;
+    pintar();
+  });
+  dispDetalhe.append(lista, input, botao);
+}
+
+function montarAnexosDisparo(c, editavel) {
+  const lista = dispEl('div', { className: 'disp-anexos' });
+  const pintar = () => {
+    lista.textContent = '';
+    for (const a of c.arquivos) {
+      const icone = a.tipo.startsWith('audio/') ? '🎧' : a.tipo.startsWith('image/') ? '🖼' : a.tipo.startsWith('video/') ? '🎬' : '📄';
+      const item = dispEl('span', { className: 'fui-anexo', textContent: `${icone} ${a.nome} (${formatarTamanho(a.tamanho)}) ` });
+      if (editavel) {
+        const x = dispEl('button', { type: 'button', textContent: '✕', title: 'Remover' });
+        x.addEventListener('click', async () => {
+          await fetch(`/api/disparos/arquivos/${a.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+          c.arquivos = c.arquivos.filter((y) => y.id !== a.id);
+          pintar();
+        });
+        item.appendChild(x);
+      }
+      lista.appendChild(item);
+    }
+    if (!c.arquivos.length) lista.textContent = 'Nenhum anexo.';
+  };
+  pintar();
+  dispDetalhe.appendChild(lista);
+  if (!editavel) return;
+  const input = dispEl('input', { type: 'file', accept: 'audio/*,image/*,video/*,application/pdf,.opus,.m4a,.pdf', hidden: true });
+  const botao = dispEl('button', { type: 'button', className: 'fui-anexar', textContent: '📎 Anexar arquivo' });
+  botao.addEventListener('click', () => input.click());
+  input.addEventListener('change', async () => {
+    const f = input.files[0];
+    input.value = '';
+    if (!f) return;
+    if (f.size > 12 * 1024 * 1024) return mostrarAviso('Arquivo grande demais - o máximo é 12 MB.', 'erro');
+    botao.disabled = true;
+    try {
+      const base64 = await arquivoParaBase64(f);
+      const res = await fetch(`/api/disparos/${c.id}/arquivos`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ nomeArquivo: f.name, mediaType: dispTipoDoArquivo(f), base64 }) });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      c.arquivos.push(d.arquivo);
+      pintar();
+    } catch (err) { mostrarAviso(`Não consegui anexar: ${err.message}`, 'erro'); }
+    botao.disabled = false;
+  });
+  dispDetalhe.append(input, botao);
+}
+
+// ---------- Painel geral dos disparos (tela personalizada: enviadas, fila, falhas, entrega, bloqueio provavel) ----------
+
+const dispPainelBtn = document.getElementById('dispPainel');
+let dispPainelPeriodo = { de: '', ate: '' };
+
+function dispCartao(valor, rotulo, destaque = '') {
+  return dispEl('div', { className: `cartao ${destaque}` }, dispEl('strong', { textContent: valor }), dispEl('span', { textContent: rotulo }));
+}
+
+async function abrirPainelDisparos() {
+  dispAbertoId = null;
+  clearInterval(dispPolling);
+  if (!dispPainelPeriodo.de) {
+    const hoje = new Date(Date.now() - 3 * 3600000);
+    dispPainelPeriodo = { de: new Date(hoje.getTime() - 29 * 86400000).toISOString().slice(0, 10), ate: hoje.toISOString().slice(0, 10) };
+  }
+  dispDetalhe.textContent = 'Carregando...';
+  try {
+    const res = await fetch(`/api/disparos/painel?de=${dispPainelPeriodo.de}&ate=${dispPainelPeriodo.ate}${dispNumero.value ? `&instancia=${encodeURIComponent(dispNumero.value)}` : ''}`, { headers: { 'x-app-password': appPassword } });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    const r = d.resumo;
+    dispDetalhe.textContent = '';
+    const de = dispEl('input', { type: 'date', value: dispPainelPeriodo.de });
+    const ate = dispEl('input', { type: 'date', value: dispPainelPeriodo.ate });
+    const atualizar = dispEl('button', { type: 'button', textContent: 'Atualizar' });
+    atualizar.addEventListener('click', () => { dispPainelPeriodo = { de: de.value, ate: ate.value }; abrirPainelDisparos(); });
+    dispDetalhe.append(dispEl('div', { className: 'fui-topo' }, dispEl('div', { className: 'disp-titulo', textContent: 'Painel dos disparos' }), dispEl('div', { className: 'auto-upload-row' }, de, ate, atualizar)));
+
+    const cartoes = dispEl('div', { className: 'chamadas-resumo' });
+    const pct = (a, b) => (b ? ` (${Math.round((a / b) * 100)}%)` : '');
+    cartoes.append(
+      dispCartao(r.enviadas, 'enviadas'),
+      dispCartao(r.pendentes, 'pendentes (na fila)'),
+      dispCartao(r.falhas, 'falhas', r.falhas ? 'alerta' : ''),
+      dispCartao(`${r.entregues}${pct(r.entregues, r.rastreadas)}`, 'entregues'),
+      dispCartao(`${r.lidas}${pct(r.lidas, r.rastreadas)}`, 'lidas'),
+      dispCartao(`${r.respostas}${pct(r.respostas, r.enviadas)}`, 'responderam'),
+      dispCartao(r.optouts, 'pediram pra sair'),
+      dispCartao(r.nao_entregues, 'não entregues (possível bloqueio)', r.nao_entregues ? 'alerta' : ''),
+    );
+    dispDetalhe.appendChild(cartoes);
+    dispDetalhe.appendChild(dispEl('p', { className: 'agenda-vazia', textContent: 'Sobre bloqueios e denúncias: o WhatsApp NÃO avisa quando alguém bloqueia ou denuncia. O que dá pra ver é uma pista: mensagem enviada que continua sem chegar ao aparelho depois de 6 horas ("não entregues") pode ser bloqueio, mas também celular desligado ou número sem WhatsApp. Se esse número subir muito, ou se as respostas "SAIR" aumentarem, reduza o ritmo. Entregues e lidas só são contadas pra mensagens enviadas depois que o rastreio foi ativado.' }));
+
+    if (d.porDia.length) {
+      const max = Math.max(...d.porDia.map((x) => x.enviadas));
+      const grafico = dispEl('div', { className: 'chamadas-horas' });
+      for (const x of d.porDia) {
+        const b = dispEl('div', { className: 'barra', title: `${x.dia}: ${x.enviadas} enviadas · ${x.respostas} respostas` });
+        b.style.height = `${Math.max(4, (x.enviadas / max) * 100)}%`;
+        grafico.appendChild(b);
+      }
+      dispDetalhe.append(dispEl('p', { className: 'agenda-vazia', textContent: `Envios por dia (${d.porDia[0].dia} a ${d.porDia[d.porDia.length - 1].dia})` }), grafico);
+    }
+
+    dispDetalhe.appendChild(dispEl('div', { className: 'disp-secao', textContent: 'Por campanha' }));
+    if (!d.campanhas.length) dispDetalhe.appendChild(dispEl('p', { className: 'agenda-vazia', textContent: 'Nenhuma campanha ainda.' }));
+    else {
+      const tab = dispEl('table', { className: 'origem-tabela' });
+      const cab = tab.createTHead().insertRow();
+      for (const t of ['Campanha', 'Status', 'Enviadas', 'Entregues', 'Responderam', 'Falhas', 'Não entregues']) cab.insertCell().textContent = t;
+      const corpo = tab.createTBody();
+      for (const c of d.campanhas) {
+        const tr = corpo.insertRow();
+        tr.style.cursor = 'pointer';
+        tr.addEventListener('click', () => abrirCampanhaDisparo(c.id));
+        for (const v of [c.nome, DISP_STATUS[c.status] || c.status, c.enviadas, c.entregues, c.respostas, c.falhas, c.nao_entregues]) tr.insertCell().textContent = v;
+      }
+      dispDetalhe.appendChild(tab);
+    }
+  } catch (err) {
+    dispDetalhe.textContent = `Não consegui carregar o painel: ${err.message}`;
+  }
+}
+dispPainelBtn.addEventListener('click', abrirPainelDisparos);
+
+
+// ---------- Perfil de quem esta logado (topo da janela) + visao por numero/operador ----------
+// O topo mostra quem esta logado (foto, nome, papel), deixa editar nome/foto e, em contas com mais de
+// um numero de WhatsApp ou mais de um operador, escolher qual numero/operador acompanhar. A escolha
+// vale pra CRM, Conversas, Contatos e Disparos (mesmo seletor de cada aba, sempre sincronizados).
+const perfilBtn = document.getElementById('perfilBtn');
+const perfilMenu = document.getElementById('perfilMenu');
+const perfilAvatarEl = document.getElementById('perfilAvatar');
+const perfilNomeEl = document.getElementById('perfilNome');
+const perfilPapelEl = document.getElementById('perfilPapel');
+const visaoNumeroSel = document.getElementById('visaoNumero');
+const visaoOperadorSel = document.getElementById('visaoOperador');
+const perfilModal = document.getElementById('perfilModal');
+const PAPEIS = { admin: 'Administrador', dono: 'Dono da conta', operador: 'Operador' };
+let meuPerfil = null;
+let minhaVisao = { instancias: [], operadores: [], euId: 0, instanciaAtiva: null };
+let perfilFotoNova; // undefined = nao mexe, null = remover, string = nova foto (data URL)
+
+function perfilIniciais(nome) {
+  const p = String(nome || '?').trim().split(/\s+/).filter(Boolean);
+  return ((p[0]?.[0] || '?') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase();
+}
+
+function perfilPintarAvatar(el, foto, nome) {
+  el.textContent = '';
+  el.style.backgroundImage = '';
+  if (foto) { el.style.backgroundImage = `url("${foto}")`; el.classList.add('com-foto'); } else { el.classList.remove('com-foto'); el.textContent = perfilIniciais(nome); }
+}
+
+function renderizarPerfilTopo() {
+  if (!meuPerfil) return;
+  perfilPintarAvatar(perfilAvatarEl, meuPerfil.foto, meuPerfil.nome);
+  perfilNomeEl.textContent = meuPerfil.nome;
+  perfilPapelEl.textContent = `${PAPEIS[meuPerfil.papel] || 'Usuário'}${meuPerfil.empresa && meuPerfil.papel !== 'dono' ? ` · ${meuPerfil.empresa}` : ''}`;
+  perfilBtn.hidden = false;
+}
+
+function preencherVisaoNumero() {
+  const lista = minhaVisao.instancias;
+  visaoNumeroSel.textContent = '';
+  visaoNumeroSel.add(new Option('Todos os números', ''));
+  for (const i of lista) visaoNumeroSel.add(new Option(`Número: ${i}`, i));
+  visaoNumeroSel.value = lista.includes(numeroSalvo()) ? numeroSalvo() : '';
+  visaoNumeroSel.hidden = lista.length < 2;
+}
+
+function preencherVisaoOperador() {
+  visaoOperadorSel.textContent = '';
+  const opcoes = opcoesOperador(minhaVisao.operadores, minhaVisao.euId);
+  for (const [v, t] of opcoes) visaoOperadorSel.add(new Option(t, v));
+  visaoOperadorSel.value = visaoOp;
+  visaoOperadorSel.hidden = minhaVisao.operadores.length < 2;
+}
+
+// chamado no login (mostrarApp) com o que /api/me devolveu
+function iniciarPerfilTopo(dados) {
+  meuPerfil = dados.perfil || null;
+  minhaVisao = { instancias: (dados.instancias || []).filter((i) => !String(i).startsWith('ig:')), operadores: dados.operadores || [], operadoresPorNumero: dados.operadoresPorNumero || {}, euId: dados.euId || 0, instanciaAtiva: dados.instanciaAtiva || null };
+  // 1o acesso com 2+ numeros: abre no numero ativo (cada setor ve so o seu)
+  if (numeroSalvo() && !minhaVisao.instancias.includes(numeroSalvo())) numeroSalvar(''); // numero guardado de outra conta
+  if (minhaVisao.instancias.length > 1 && (numeroSalvo() === null || numeroSalvo() === '')) numeroSalvar(minhaVisao.instancias.includes(minhaVisao.instanciaAtiva) ? minhaVisao.instanciaAtiva : minhaVisao.instancias[0]);
+  // o navegador pode ter guardado a escolha de OUTRA conta: so vale operador que existe nesta conta
+  let opSalvo = null;
+  try { opSalvo = localStorage.getItem('crmOperador'); } catch { /* sem storage */ }
+  const idsDaConta = new Set(minhaVisao.operadores.filter((o) => o.id !== 0).map((o) => `op:${o.id}`));
+  if (opSalvo === 'eu' || opSalvo === 'op:0') opSalvo = minhaVisao.euId > 0 ? `op:${minhaVisao.euId}` : '';
+  if (opSalvo !== null && opSalvo !== '' && !idsDaConta.has(opSalvo)) opSalvo = null;
+  // operador (colaborador) comeca vendo os proprios leads; dono/admin, todos
+  visaoOp = opSalvo !== null ? opSalvo : (minhaVisao.euId > 0 && idsDaConta.has(`op:${minhaVisao.euId}`) ? `op:${minhaVisao.euId}` : '');
+  try { localStorage.setItem('crmOperador', visaoOp); } catch { /* sem storage */ }
+  renderizarPerfilTopo();
+  preencherVisaoNumero();
+  preencherVisaoOperador();
+}
+
+visaoNumeroSel.addEventListener('change', () => {
+  numeroSalvar(visaoNumeroSel.value);
+  const opDoNumero = (minhaVisao.operadoresPorNumero || {})[visaoNumeroSel.value];
+  if (opDoNumero !== undefined && opDoNumero !== null && opDoNumero > 0 && [...visaoOperadorSel.options].some((o) => o.value === `op:${opDoNumero}`)) aplicarVisaoOperador(`op:${opDoNumero}`);
+  else if (opDoNumero === 0) aplicarVisaoOperador('');
+  for (const sel of [crmFiltroNumero, ctFiltroNumero, dispNumero, cvInstancia]) {
+    if (![...sel.options].some((o) => o.value === visaoNumeroSel.value)) continue;
+    sel.value = visaoNumeroSel.value;
+    sel.dispatchEvent(new Event('change'));
+  }
+});
+// mexeu no seletor de uma aba: o do topo acompanha
+for (const sel of [crmFiltroNumero, ctFiltroNumero, dispNumero, cvInstancia]) sel.addEventListener('change', () => { if ([...visaoNumeroSel.options].some((o) => o.value === sel.value)) visaoNumeroSel.value = sel.value; });
+visaoOperadorSel.addEventListener('change', () => aplicarVisaoOperador(visaoOperadorSel.value));
+
+// ---- menu do perfil ----
+perfilBtn.addEventListener('click', (e) => { e.stopPropagation(); perfilMenu.hidden = !perfilMenu.hidden; });
+document.addEventListener('click', (e) => { if (!perfilMenu.hidden && !perfilMenu.contains(e.target)) perfilMenu.hidden = true; });
+document.getElementById('perfilSair').addEventListener('click', () => { perfilMenu.hidden = true; sair(); });
+document.getElementById('perfilEditar').addEventListener('click', () => { perfilMenu.hidden = true; abrirPerfilModal(); });
+
+const perfilNomeInput = document.getElementById('perfilNomeInput');
+const perfilFotoPrev = document.getElementById('perfilFotoPrev');
+const perfilFotoArq = document.getElementById('perfilFotoArq');
+const perfilErro = document.getElementById('perfilErro');
+
+function abrirPerfilModal() {
+  if (!meuPerfil) return;
+  perfilFotoNova = undefined;
+  perfilNomeInput.value = meuPerfil.nome;
+  perfilPintarAvatar(perfilFotoPrev, meuPerfil.foto, meuPerfil.nome);
+  perfilErro.hidden = true;
+  perfilFotoArq.value = '';
+  perfilModal.hidden = false;
+  perfilNomeInput.focus();
+}
+perfilModal.addEventListener('click', (e) => { if (e.target === perfilModal || e.target.closest('[data-fechar="perfilModal"]')) perfilModal.hidden = true; });
+
+// reduz a foto pra 256x256 (recorte central) em JPEG - fica leve (~20KB) e carrega junto do login
+function perfilReduzirFoto(arquivo) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(arquivo);
+    const img = new Image();
+    img.onload = () => {
+      const lado = Math.min(img.width, img.height);
+      const c = document.createElement('canvas');
+      c.width = c.height = 256;
+      c.getContext('2d').drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, 256, 256);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Não consegui abrir essa imagem.')); };
+    img.src = url;
+  });
+}
+perfilFotoArq.addEventListener('change', async () => {
+  const arq = perfilFotoArq.files?.[0];
+  if (!arq) return;
+  try {
+    perfilFotoNova = await perfilReduzirFoto(arq);
+    perfilPintarAvatar(perfilFotoPrev, perfilFotoNova, perfilNomeInput.value);
+    perfilErro.hidden = true;
+  } catch (err) { perfilErro.textContent = err.message; perfilErro.hidden = false; }
+});
+document.getElementById('perfilFotoRemover').addEventListener('click', () => {
+  perfilFotoNova = null;
+  perfilFotoArq.value = '';
+  perfilPintarAvatar(perfilFotoPrev, null, perfilNomeInput.value);
+});
+document.getElementById('perfilSalvar').addEventListener('click', async (e) => {
+  const nome = perfilNomeInput.value.trim();
+  if (!nome) { perfilErro.textContent = 'Informe o nome.'; perfilErro.hidden = false; return; }
+  e.target.disabled = true;
+  try {
+    const corpo = { nome };
+    if (perfilFotoNova !== undefined) corpo.foto = perfilFotoNova;
+    const res = await fetch('/api/perfil', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify(corpo) });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+    meuPerfil = d.perfil;
+    renderizarPerfilTopo();
+    perfilModal.hidden = true;
+    mostrarAviso('Perfil atualizado');
+    carregarOperadoresCrm().catch(() => {});
+  } catch (err) { perfilErro.textContent = err.message; perfilErro.hidden = false; }
+  e.target.disabled = false;
+});
+
+
+// ---------- Anotacoes sobre o paciente (Conversas e CRM) ----------
+// historico do que a equipe esta tratando/resolvendo com cada paciente, pra consultar e lembrar depois.
+// Mesmo painel nos dois lugares; as anotacoes sao do contato (aparecem igual em Conversas e no CRM).
+function criarPainelNotas(raiz, aoMudarContagem, { fixo = false } = {}) {
+  let contatoId = null;
+  const topo = document.createElement('div');
+  topo.className = 'notas-topo';
+  const titulo = document.createElement('span');
+  titulo.textContent = 'Anotações sobre este paciente';
+  const fechar = document.createElement('button');
+  fechar.type = 'button'; fechar.className = 'crm-btn-secundario'; fechar.textContent = 'Fechar';
+  fechar.addEventListener('click', () => { raiz.hidden = true; });
+  if (fixo) topo.append(titulo); else topo.append(titulo, fechar);
+  const form = document.createElement('div');
+  form.className = 'notas-form';
+  const area = document.createElement('textarea');
+  area.maxLength = 4000;
+  area.placeholder = 'O que está tratando/resolvendo com este paciente? (ex.: pediu orçamento de implante, aguarda retorno na sexta, prefere atendimento à tarde)';
+  const acoes = document.createElement('div');
+  acoes.className = 'notas-form-acoes';
+  const dica = document.createElement('span');
+  dica.textContent = 'Ctrl+Enter salva';
+  const salvar = document.createElement('button');
+  salvar.type = 'button'; salvar.className = 'relatorio-config-enviar'; salvar.textContent = 'Salvar anotação';
+  acoes.append(dica, salvar);
+  form.append(area, acoes);
+  const lista = document.createElement('div');
+  lista.className = 'notas-lista';
+  raiz.append(topo, form, lista);
+
+  const quando = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+  async function carregar() {
+    if (!contatoId) return;
+    const pedido = contatoId;
+    try {
+      const res = await fetch(`/api/crm/contatos/${pedido}/notas`, { headers: { 'x-app-password': appPassword } });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro');
+      if (pedido !== contatoId) return;
+      lista.textContent = '';
+      if (!d.notas.length) { const p = document.createElement('p'); p.className = 'notas-vazia'; p.textContent = 'Nenhuma anotação ainda.'; lista.appendChild(p); }
+      for (const n of d.notas) {
+        const item = document.createElement('div');
+        item.className = 'nota-item';
+        const cab = document.createElement('div');
+        cab.className = 'nota-cab';
+        const quem = document.createElement('span');
+        const b = document.createElement('b');
+        b.textContent = n.autor_nome || 'Equipe';
+        quem.append(b, ` · ${quando(n.criado_em)}`);
+        cab.appendChild(quem);
+        if (d.euId === 0 || n.autor_id === d.euId) {
+          const x = document.createElement('button');
+          x.type = 'button'; x.textContent = '✕'; x.title = 'Apagar anotação';
+          x.addEventListener('click', async () => {
+            if (!confirm('Apagar esta anotação?')) return;
+            await fetch(`/api/crm/notas/${n.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+            await carregar();
+          });
+          cab.appendChild(x);
+        }
+        const txt = document.createElement('div');
+        txt.className = 'nota-txt';
+        txt.textContent = n.texto;
+        item.append(cab, txt);
+        lista.appendChild(item);
+      }
+      aoMudarContagem?.(pedido, d.notas.length);
+    } catch (err) { lista.textContent = `Não consegui carregar: ${err.message}`; }
+  }
+  async function enviar() {
+    const texto = area.value.trim();
+    if (!texto || !contatoId) return;
+    salvar.disabled = true;
+    try {
+      const res = await fetch(`/api/crm/contatos/${contatoId}/notas`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ texto }) });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro');
+      area.value = '';
+      await carregar();
+    } catch (err) { mostrarAviso(`Não consegui salvar: ${err.message}`, 'erro'); }
+    salvar.disabled = false;
+  }
+  salvar.addEventListener('click', enviar);
+  area.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); enviar(); } });
+  return {
+    definirContato(id) { contatoId = id; area.value = ''; lista.textContent = ''; if (!raiz.hidden) carregar(); },
+    alternar() { raiz.hidden = !raiz.hidden; if (!raiz.hidden) { carregar(); area.focus(); } },
+    esconder() { raiz.hidden = true; },
+  };
+}
+
+// Conversas
+const cvNotasBtn = document.getElementById('cvNotasBtn');
+const cvPainelNotas = criarPainelNotas(document.getElementById('cvNotas'), (id, n) => {
+  const c = cvContatos.find((x) => x.id === id);
+  if (c) c.qtd_notas = n;
+  if (cvAberto?.id === id) { cvAberto.qtd_notas = n; cvAtualizarBotaoNotas(); }
+});
+function cvAtualizarBotaoNotas() {
+  const n = cvAberto?.qtd_notas || 0;
+  cvNotasBtn.textContent = n ? `📝 Anotações (${n})` : '📝 Anotações';
+  cvNotasBtn.classList.toggle('tem-notas', n > 0);
+}
+cvNotasBtn.addEventListener('click', () => cvPainelNotas.alternar());
+// troca de conversa: o painel acompanha o contato aberto
+let cvNotasContatoAtual = null;
+setInterval(() => {
+  const id = cvAberto?.id ?? null;
+  if (id === cvNotasContatoAtual) return;
+  cvNotasContatoAtual = id;
+  cvPainelNotas.definirContato(id);
+  if (!id) cvPainelNotas.esconder();
+  cvAtualizarBotaoNotas();
+}, 300);
+
+// CRM (modal da conversa)
+const crmNotasBtn = document.getElementById('crmConversaNotasBtn');
+const crmPainelNotas = criarPainelNotas(document.getElementById('crmNotas'), (id, n) => {
+  if (crmContatoAberto?.id === id) { crmContatoAberto.qtd_notas = n; crmNotasBtn.textContent = n ? `📝 Anotações (${n})` : '📝 Anotações'; }
+});
+crmNotasBtn.addEventListener('click', () => crmPainelNotas.alternar());
+let crmNotasContatoAtual = null;
+setInterval(() => {
+  const id = crmContatoAberto?.id ?? null;
+  if (id === crmNotasContatoAtual) return;
+  crmNotasContatoAtual = id;
+  crmPainelNotas.definirContato(id);
+  if (!id) crmPainelNotas.esconder();
+  crmNotasBtn.textContent = crmContatoAberto?.qtd_notas ? `📝 Anotações (${crmContatoAberto.qtd_notas})` : '📝 Anotações';
+}, 300);
+
+// Contatos (modal do contato): painel sempre aberto quando o contato ja existe
+const ctNotasEl = document.getElementById('ctNotas');
+const ctPainelNotas = criarPainelNotas(ctNotasEl, (id, n) => { const c = ctContatos.find((x) => x.id === id); if (c) c.qtd_notas = n; }, { fixo: true });
+
+// a busca de Conversas tambem acha pelo texto das anotacoes
+let cvIdsComNota = new Set();
+let cvBuscaNotaTimer = null;
+cvBusca.addEventListener('input', () => {
+  clearTimeout(cvBuscaNotaTimer);
+  const q = cvBusca.value.trim();
+  if (q.length < 2) { if (cvIdsComNota.size) { cvIdsComNota = new Set(); renderizarListaConversas(); } return; }
+  cvBuscaNotaTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/crm/notas/buscar?q=${encodeURIComponent(q)}`, { headers: { 'x-app-password': appPassword } });
+      const d = await res.json();
+      if (res.ok && cvBusca.value.trim() === q) { cvIdsComNota = new Set(d.contatoIds || []); renderizarListaConversas(); }
+    } catch { /* busca normal segue valendo */ }
+  }, 350);
+});
+
+// ---------- Funil Follow Up (Dia 0 a Dia 5) ----------
+// Cada lead tem tarefa por dia e data/hora programada pra ir pro dia seguinte; so avanca depois de
+// "Tarefa executada" (a regra e do servidor - aqui so mostra e chama)
+const ffuBoard = document.getElementById('ffuBoard');
+const ffuModal = document.getElementById('ffuModal');
+const ffuTarefasModal = document.getElementById('ffuTarefasModal');
+const ffuFiltroNumero = document.getElementById('ffuFiltroNumero');
+let ffuDados = { dias: [0, 1, 2, 3, 4, 5], tarefas: {}, leads: [], instancias: [] };
+let ffuTimer = null;
+let ffuEditandoId = null;
+let ffuContatoId = null;
+let ffuContatos = [];
+const ffuHeaders = () => ({ 'x-app-password': appPassword, 'Content-Type': 'application/json' });
+const ffuDH = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+function ffuParaInput(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function ffuAgendaPadrao() {
+  return [1, 2, 3, 4, 5].map((n) => { const d = new Date(); d.setDate(d.getDate() + n); d.setHours(9, 0, 0, 0); return ffuParaInput(d); });
+}
+
+function ffuCriarCard(l) {
+  const card = document.createElement('div');
+  card.className = 'crm-card ffu-card' + (l.atrasado ? ' ffu-atrasado' : '') + (l.tarefaFeita ? ' ffu-feito' : '');
+  const nome = document.createElement('div');
+  nome.className = 'crm-card-nome';
+  nome.textContent = l.nome || l.numero || 'Sem nome';
+  card.appendChild(nome);
+  if (l.numero) { const n = document.createElement('div'); n.className = 'crm-card-numero'; n.textContent = l.numero; card.appendChild(n); }
+  const op = document.createElement('div'); op.className = 'crm-card-operador' + (l.atendenteNome ? '' : ' livre'); op.textContent = l.atendenteNome ? `Operador: ${l.atendenteNome}` : 'Sem operador'; card.appendChild(op);
+  const tarefa = document.createElement('div');
+  tarefa.className = 'ffu-tarefa';
+  tarefa.textContent = `Tarefa do Dia ${l.dia}: ${ffuDados.tarefas[l.dia] || ''}`;
+  card.appendChild(tarefa);
+  const selo = document.createElement('div');
+  if (l.concluidoEm) {
+    selo.className = 'ffu-selo ok'; selo.textContent = '✔ Funil concluído';
+  } else if (l.tarefaFeita) {
+    selo.className = 'ffu-selo ok';
+    selo.textContent = `✔ Tarefa executada${l.tarefaFeitaPor ? ` por ${l.tarefaFeitaPor}` : ''}`;
+  } else {
+    selo.className = 'ffu-selo pend';
+    selo.textContent = l.atrasado ? `⚠ Pendente de execução: já passou da data do Dia ${l.proximoDia}, só avança depois de executar` : '⚠ Pendente de execução da tarefa';
+  }
+  card.appendChild(selo);
+  if (!l.concluidoEm && l.proximoEm) {
+    const q = document.createElement('div'); q.className = 'ffu-quando';
+    q.textContent = `Vai pro Dia ${l.proximoDia} em ${ffuDH(l.proximoEm)}`;
+    card.appendChild(q);
+  }
+  const acoes = document.createElement('div');
+  acoes.className = 'ffu-acoes';
+  if (!l.concluidoEm && !l.tarefaFeita) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'ffu-exec'; b.textContent = 'Tarefa executada';
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try {
+        const res = await fetch(`/api/funil-fu/leads/${l.id}/executar`, { method: 'POST', headers: ffuHeaders() });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.erro || 'erro');
+        mostrarAviso(l.dia === 5 ? 'Funil concluído' : 'Tarefa executada', 'ok');
+        carregarFunilFu();
+      } catch (err) { b.disabled = false; mostrarAviso(err.message, 'erro'); }
+    });
+    acoes.appendChild(b);
+  }
+  if (!l.concluidoEm && l.dia < 5) {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Reprogramar';
+    b.addEventListener('click', () => ffuAbrirModal(l));
+    acoes.appendChild(b);
+  }
+  const rm = document.createElement('button'); rm.type = 'button'; rm.textContent = 'Remover';
+  rm.addEventListener('click', async () => {
+    if (!confirm(`Remover ${l.nome || l.numero || 'este lead'} do Funil Follow Up?`)) return;
+    await fetch(`/api/funil-fu/leads/${l.id}`, { method: 'DELETE', headers: ffuHeaders() });
+    carregarFunilFu();
+  });
+  acoes.appendChild(rm);
+  card.appendChild(acoes);
+  return card;
+}
+
+function ffuDesenhar() {
+  ffuBoard.textContent = '';
+  for (const dia of ffuDados.dias) {
+    const col = document.createElement('div');
+    col.className = 'crm-coluna';
+    const leads = ffuDados.leads.filter((l) => l.dia === dia && (!visaoOp || contatoNoOperador({ atendente_id: l.atendenteId })));
+    const head = document.createElement('div');
+    head.className = 'crm-coluna-header';
+    const t = document.createElement('span'); t.textContent = `Dia ${dia}`;
+    const c = document.createElement('span'); c.className = 'crm-coluna-contagem'; c.textContent = leads.length;
+    head.append(t, c);
+    col.appendChild(head);
+    const cards = document.createElement('div');
+    cards.className = 'crm-coluna-cards';
+    if (!leads.length) { const v = document.createElement('div'); v.className = 'crm-coluna-vazia'; v.textContent = 'Nenhum lead'; cards.appendChild(v); }
+    leads.sort((a, b) => (Number(b.atrasado) - Number(a.atrasado)) || (Number(b.pendente) - Number(a.pendente)));
+    for (const l of leads) cards.appendChild(ffuCriarCard(l));
+    col.appendChild(cards);
+    ffuBoard.appendChild(col);
+  }
+}
+
+async function carregarFunilFu() {
+  clearInterval(ffuTimer);
+  ffuTimer = setInterval(() => { if (tabFunilFu.hidden) clearInterval(ffuTimer); else carregarFunilFu(); }, 30000);
+  try {
+    const q = ffuFiltroNumero.value ? `?instancia=${encodeURIComponent(ffuFiltroNumero.value)}` : '';
+    const res = await fetch(`/api/funil-fu${q}`, { headers: ffuHeaders() });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro');
+    ffuDados = d;
+    const atual = ffuFiltroNumero.value;
+    ffuFiltroNumero.length = 1;
+    for (const i of d.instancias || []) ffuFiltroNumero.add(new Option(i, i));
+    ffuFiltroNumero.value = atual;
+    ffuFiltroNumero.hidden = (d.instancias || []).length < 2;
+    ffuDesenhar();
+  } catch (err) {
+    ffuBoard.textContent = '';
+    const p = document.createElement('p'); p.className = 'agenda-vazia'; p.textContent = `Não consegui carregar o funil: ${err.message}`;
+    ffuBoard.appendChild(p);
+  }
+}
+ffuFiltroNumero.addEventListener('change', carregarFunilFu);
+document.getElementById('ffuRefresh').addEventListener('click', carregarFunilFu);
+
+function ffuMontarAgenda(valores, bloquearAteDia) {
+  const box = document.getElementById('ffuAgendaCampos');
+  box.textContent = '';
+  for (let i = 0; i < 5; i++) {
+    const dia = i + 1;
+    const lab = document.createElement('label');
+    lab.className = 'ct-campo';
+    lab.textContent = `Passa para o Dia ${dia} em`;
+    const inp = document.createElement('input');
+    inp.type = 'datetime-local';
+    inp.dataset.dia = dia;
+    inp.value = valores[i];
+    if (dia <= bloquearAteDia) inp.disabled = true;
+    lab.appendChild(inp);
+    box.appendChild(lab);
+  }
+}
+
+async function ffuAbrirModal(lead) {
+  ffuEditandoId = lead ? lead.id : null;
+  ffuContatoId = null;
+  document.getElementById('ffuModalErro').hidden = true;
+  document.getElementById('ffuModalTitulo').textContent = lead ? `Reprogramar: ${lead.nome || lead.numero}` : 'Adicionar lead ao Dia 0';
+  document.getElementById('ffuCamposLead').hidden = !!lead;
+  if (lead) {
+    ffuMontarAgenda(lead.agenda.map((a) => ffuParaInput(new Date(a.programadoEm))), lead.dia);
+  } else {
+    document.getElementById('ffuBuscaContato').value = '';
+    document.getElementById('ffuNome').value = '';
+    document.getElementById('ffuNumero').value = '';
+    const sel = document.getElementById('ffuInstancia');
+    sel.textContent = '';
+    for (const i of ffuDados.instancias || []) sel.add(new Option(i, i));
+    if (ffuFiltroNumero.value) sel.value = ffuFiltroNumero.value;
+    document.getElementById('ffuInstanciaLabel').hidden = (ffuDados.instancias || []).length < 2;
+    ffuMontarAgenda(ffuAgendaPadrao(), 0);
+    try {
+      const res = await fetch('/api/crm/base-contatos', { headers: ffuHeaders() });
+      const d = await res.json();
+      ffuContatos = d.contatos || [];
+      const dl = document.getElementById('ffuContatosLista');
+      dl.textContent = '';
+      for (const c of ffuContatos.slice(0, 2000)) dl.appendChild(new Option(`${c.nome || 'Sem nome'} - ${c.numero}`, `${c.nome || 'Sem nome'} - ${c.numero}`));
+    } catch { /* sem lista: digita na mao */ }
+  }
+  document.getElementById('ffuSalvarBtn').classList.remove('pendente', 'salvo');
+  ffuModal.hidden = false;
+}
+document.getElementById('ffuNovo').addEventListener('click', () => ffuAbrirModal(null));
+document.getElementById('ffuBuscaContato').addEventListener('change', (e) => {
+  const c = ffuContatos.find((x) => `${x.nome || 'Sem nome'} - ${x.numero}` === e.target.value);
+  if (!c) return;
+  ffuContatoId = c.id;
+  document.getElementById('ffuNome').value = c.nome || '';
+  document.getElementById('ffuNumero').value = c.numero || '';
+  if (c.instancia && (ffuDados.instancias || []).includes(c.instancia)) document.getElementById('ffuInstancia').value = c.instancia;
+});
+ffuModal.addEventListener('click', (e) => { if (e.target === ffuModal || e.target.closest('[data-fechar="ffuModal"]')) ffuModal.hidden = true; });
+document.getElementById('ffuForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = document.getElementById('ffuModalErro');
+  erro.hidden = true;
+  const agenda = [...document.querySelectorAll('#ffuAgendaCampos input')].map((i) => (i.value ? new Date(i.value).toISOString() : ''));
+  const btn = document.getElementById('ffuSalvarBtn');
+  btn.disabled = true;
+  try {
+    let res;
+    if (ffuEditandoId) {
+      res = await fetch(`/api/funil-fu/leads/${ffuEditandoId}/agenda`, { method: 'PUT', headers: ffuHeaders(), body: JSON.stringify({ agenda }) });
+    } else {
+      res = await fetch('/api/funil-fu/leads', {
+        method: 'POST', headers: ffuHeaders(),
+        body: JSON.stringify({ contatoId: ffuContatoId, nome: document.getElementById('ffuNome').value, numero: document.getElementById('ffuNumero').value, instancia: document.getElementById('ffuInstancia').value || null, agenda }),
+      });
+    }
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, ffuEditandoId ? 'Alerta de retorno atualizado' : 'Lead adicionado ao Dia 0');
+    setTimeout(() => { ffuModal.hidden = true; }, 600);
+    carregarFunilFu();
+  } catch (err) {
+    erro.textContent = err.message; erro.hidden = false;
+  } finally { btn.disabled = false; }
+});
+
+document.getElementById('ffuTarefasBtn').addEventListener('click', () => {
+  const box = document.getElementById('ffuTarefasCampos');
+  box.textContent = '';
+  for (const d of ffuDados.dias) {
+    const lab = document.createElement('label'); lab.className = 'ct-campo'; lab.textContent = `Tarefa do Dia ${d}`;
+    const ta = document.createElement('textarea'); ta.dataset.dia = d; ta.maxLength = 500; ta.value = ffuDados.tarefas[d] || '';
+    lab.appendChild(ta); box.appendChild(lab);
+  }
+  document.getElementById('ffuTarefasSalvar').classList.remove('pendente', 'salvo');
+  document.getElementById('ffuTarefasErro').hidden = true;
+  ffuTarefasModal.hidden = false;
+});
+ffuTarefasModal.addEventListener('click', (e) => { if (e.target === ffuTarefasModal || e.target.closest('[data-fechar="ffuTarefasModal"]')) ffuTarefasModal.hidden = true; });
+document.getElementById('ffuTarefasForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const tarefas = {};
+  for (const ta of document.querySelectorAll('#ffuTarefasCampos textarea')) tarefas[ta.dataset.dia] = ta.value;
+  const btn = document.getElementById('ffuTarefasSalvar');
+  try {
+    const res = await fetch('/api/funil-fu/tarefas', { method: 'PUT', headers: ffuHeaders(), body: JSON.stringify({ tarefas }) });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, 'Tarefas dos dias salvas');
+    setTimeout(() => { ffuTarefasModal.hidden = true; }, 600);
+    carregarFunilFu();
+  } catch (err) {
+    const er = document.getElementById('ffuTarefasErro'); er.textContent = err.message; er.hidden = false;
+  }
+});
+
+// botao "+ Funil Follow Up" nas conversas (Conversas e CRM): coloca o lead no Dia 0 do funil
+async function adicionarAoFunilFu(contato, botao) {
+  if (!contato?.id) return;
+  botao.disabled = true;
+  try {
+    const res = await fetch('/api/funil-fu/do-crm', { method: 'POST', headers: { 'x-app-password': appPassword, 'Content-Type': 'application/json' }, body: JSON.stringify({ contatoId: contato.id }) });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro');
+    mostrarAviso(d.jaEstava ? 'Esse lead já está no Funil Follow Up' : 'Lead adicionado ao Dia 0 do Funil Follow Up', d.jaEstava ? 'erro' : 'ok');
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  finally { botao.disabled = false; }
+}
+const cvFunilFuBtn = document.getElementById('cvFunilFuBtn');
+const crmFunilFuBtn = document.getElementById('crmConversaFunilFu');
+cvFunilFuBtn.addEventListener('click', () => adicionarAoFunilFu(cvAberto, cvFunilFuBtn));
+crmFunilFuBtn.addEventListener('click', () => adicionarAoFunilFu(crmContatoAberto, crmFunilFuBtn));
+
+// botao do CRM: leva pra importacao ja no modo "Espelhar" (coluna Follow Up)
+document.getElementById('crmEspelharBtn').addEventListener('click', () => {
+  ctImpEspelharPendente = true;
+  mudarAba('contatos');
+  setTimeout(() => document.getElementById('ctImportarBtn').click(), 150);
+});
 
 // ---------- Aniversariantes do mes (integrado ao Clinicorp) ----------
 
