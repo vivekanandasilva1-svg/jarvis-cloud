@@ -1156,12 +1156,15 @@ export async function mesclarRepetidos(tenantId = null) {
         const obs = [m.observacoes, o.observacoes].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join('\n');
         await cliente.query(
           `UPDATE crm_contatos SET nome = COALESCE(nome, $2), email = COALESCE(email, $3), observacoes = $4, etiquetas = $5,
-             atendente_id = COALESCE(atendente_id, $6), atendente_nome = COALESCE(atendente_nome, $7) WHERE id = $1`,
-          [manterId, o.nome, o.email, obs || null, etiquetas, o.atendente_id, o.atendente_nome],
+             atendente_id = COALESCE(atendente_id, $6), atendente_nome = COALESCE(atendente_nome, $7),
+             etapa = CASE WHEN etapa = 'novo_lead' THEN $8 ELSE etapa END WHERE id = $1`,
+          [manterId, o.nome, o.email, obs || null, etiquetas, o.atendente_id, o.atendente_nome, o.etapa],
         );
         await cliente.query(`DELETE FROM crm_contatos WHERE id = $1`, [outroId]);
         await cliente.query('COMMIT');
         mesclados++;
+        // o repetido estava numa etapa mais avancada que o card que ficou ("Novo lead"): o card herda a etapa
+        if (m.etapa === 'novo_lead' && o.etapa !== 'novo_lead') await registrarEventoEtapa(g.tenant_id, manterId, g.instancia, o.etapa);
         eventosCrm.emit('contato-atualizado', { tenantId: g.tenant_id, contatoId: manterId });
       } catch (err) {
         await cliente.query('ROLLBACK').catch(() => {});
