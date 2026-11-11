@@ -14,6 +14,7 @@ import * as clinicorp from './clinicorp.js';
 import { pool } from './db.js';
 import * as evolutionApi from './evolutionApi.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
+import { classificarPacientes, IDS_PERFIL, passaNoFiltro } from './aniversariantesPerfil.js';
 import * as whatsappInstances from './whatsappInstances.js';
 
 const MODEL = 'claude-sonnet-5';
@@ -70,6 +71,11 @@ async function garantirTabelas() {
   // quais campos a API devolveu) - o formato da API nao e documentado publicamente, entao a tela
   // mostra isso pra ficar facil de ver se algum campo veio com outro nome
   await pool.query(`ALTER TABLE aniversariantes_config ADD COLUMN IF NOT EXISTS ultima_sync JSONB;`);
+  // filtro de perfil: perfis_filtro = lista dos perfis que RECEBEM a mensagem (NULL = todos); meses_ativo = janela do perfil "ativo"
+  await pool.query(`ALTER TABLE aniversariantes_config ADD COLUMN IF NOT EXISTS perfis_filtro JSONB;`);
+  await pool.query(`ALTER TABLE aniversariantes_config ADD COLUMN IF NOT EXISTS meses_ativo INT NOT NULL DEFAULT 12;`);
+  // perfis do paciente na ultima sincronizacao (ver aniversariantesPerfil.js); NULL = ainda nao classificado
+  await pool.query(`ALTER TABLE aniversariantes_envios ADD COLUMN IF NOT EXISTS perfis JSONB;`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas dos Aniversariantes:', err.message);
@@ -89,29 +95,39 @@ const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- configuracao ----------
 
-const CONFIG_VAZIA = { ativo: false, horaEnvio: '09:00', mensagem: MENSAGEM_PADRAO, usarIa: false, instrucoesIa: '', ultimaSync: null };
+const CONFIG_VAZIA = { ativo: false, horaEnvio: '09:00', mensagem: MENSAGEM_PADRAO, usarIa: false, instrucoesIa: '', ultimaSync: null, perfisFiltro: null, mesesAtivo: 12 };
 
 export async function obterConfig(tenantId) {
   if (!pool) return CONFIG_VAZIA;
   await tabelasProntas;
-  const { rows } = await pool.query(`SELECT ativo, hora_envio, mensagem, usar_ia, instrucoes_ia, ultima_sync FROM aniversariantes_config WHERE tenant_id = $1`, [tenantId]);
+  const { rows } = await pool.query(`SELECT ativo, hora_envio, mensagem, usar_ia, instrucoes_ia, ultima_sync, perfis_filtro, meses_ativo FROM aniversariantes_config WHERE tenant_id = $1`, [tenantId]);
   if (!rows.length) return CONFIG_VAZIA;
   const r = rows[0];
-  return { ativo: !!r.ativo, horaEnvio: r.hora_envio || '09:00', mensagem: r.mensagem || MENSAGEM_PADRAO, usarIa: !!r.usar_ia, instrucoesIa: r.instrucoes_ia || '', ultimaSync: r.ultima_sync || null };
+  return { ativo: !!r.ativo, horaEnvio: r.hora_envio || '09:00', mensagem: r.mensagem || MENSAGEM_PADRAO, usarIa: !!r.usar_ia, instrucoesIa: r.instrucoes_ia || '', ultimaSync: r.ultima_sync || null, perfisFiltro: Array.isArray(r.perfis_filtro) && r.perfis_filtro.length ? r.perfis_filtro : null, mesesAtivo: r.meses_ativo || 12 };
 }
 
-export async function salvarConfig(tenantId, { ativo, horaEnvio, mensagem, usarIa, instrucoesIa }) {
+export async function salvarConfig(tenantId, { ativo, horaEnvio, mensagem, usarIa, instrucoesIa, perfisFiltro, mesesAtivo }) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   const hora = horaEnvio || '09:00';
   if (!HORA_RE.test(hora)) throw new Error('Horario invalido (use o formato HH:MM).');
   const texto = String(mensagem || '').trim();
   if (!texto) throw new Error('Escreva a mensagem de aniversario.');
   if (texto.length > 1500) throw new Error('A mensagem passou de 1500 caracteres.');
+  // perfis: undefined/null = todos; lista = so esses. Todos marcados vira NULL ("sem filtro"), que tambem inclui quem ficou "indefinido"
+  let filtro = null;
+  if (perfisFiltro !== undefined && perfisFiltro !== null) {
+    if (!Array.isArray(perfisFiltro) || perfisFiltro.some((p) => !IDS_PERFIL.includes(p))) throw new Error('Perfil invalido.');
+    const unicos = [...new Set(perfisFiltro)];
+    if (!unicos.length) throw new Error('Marque pelo menos um perfil de paciente pra receber a mensagem.');
+    filtro = unicos.length === IDS_PERFIL.length ? null : unicos;
+  }
+  const meses = mesesAtivo === undefined || mesesAtivo === null ? 12 : Number(mesesAtivo);
+  if (!Number.isInteger(meses) || meses < 1 || meses > 60) throw new Error('Meses do perfil "ativo" precisa ser entre 1 e 60.');
   await tabelasProntas;
   await pool.query(
-    `INSERT INTO aniversariantes_config (tenant_id, ativo, hora_envio, mensagem, usar_ia, instrucoes_ia, atualizado_em) VALUES ($1,$2,$3,$4,$5,$6, now())
-     ON CONFLICT (tenant_id) DO UPDATE SET ativo = $2, hora_envio = $3, mensagem = $4, usar_ia = $5, instrucoes_ia = $6, atualizado_em = now()`,
-    [tenantId, !!ativo, hora, texto, !!usarIa, String(instrucoesIa || '').slice(0, 800)],
+    `INSERT INTO aniversariantes_config (tenant_id, ativo, hora_envio, mensagem, usar_ia, instrucoes_ia, perfis_filtro, meses_ativo, atualizado_em) VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now())
+     ON CONFLICT (tenant_id) DO UPDATE SET ativo = $2, hora_envio = $3, mensagem = $4, usar_ia = $5, instrucoes_ia = $6, perfis_filtro = $7, meses_ativo = $8, atualizado_em = now()`,
+    [tenantId, !!ativo, hora, texto, !!usarIa, String(instrucoesIa || '').slice(0, 800), filtro ? JSON.stringify(filtro) : null, meses],
   );
 }
 
@@ -193,7 +209,7 @@ const CAMPOS_TELEFONE = ['MobilePhone', 'CellPhone', 'Cellphone', 'Mobile', 'Wha
 function normalizarPaciente(item) {
   const nome = String(pick(item, ['Name', 'PatientName', 'FullName', 'Nome']) || '').trim();
   if (!nome) return null;
-  const id = pick(item, ['PatientId', 'Patient_Id', 'Id', 'Patient']);
+  const id = pick(item, ['PatientId', 'Patient_Id', 'PersonId', 'Id', 'Patient']);
   let telefone = '';
   for (const campo of CAMPOS_TELEFONE) { telefone = normalizarTelefone(pick(item, [campo])); if (telefone) break; }
   return {
@@ -265,19 +281,29 @@ export async function sincronizarMes(tenantId, ano, mes) {
   let completados = 0;
   for (const p of pacientes) {
     if (!p.telefone && completados < 60) { completados++; await completarTelefone(tenantId, p); await pausa(150); }
+  }
+  // perfil de cada paciente (agendado/ativo/em tratamento/finalizado/inativo) - nunca derruba a sincronizacao
+  let perfil = { mapa: new Map(), avisos: [], contagem: null };
+  try {
+    perfil = await classificarPacientes(tenantId, pacientes, { mesesAtivo: (await obterConfig(tenantId)).mesesAtivo });
+  } catch (err) {
+    perfil.avisos.push(`Não consegui classificar os perfis (${err.message}).`);
+  }
+  for (const p of pacientes) {
+    const perfis = perfil.mapa.get(p.chave);
     await pool.query(
-      `INSERT INTO aniversariantes_envios (tenant_id, paciente_chave, nome, telefone, data_envio, status)
-       VALUES ($1,$2,$3,$4,$5,$6)
+      `INSERT INTO aniversariantes_envios (tenant_id, paciente_chave, nome, telefone, data_envio, status, perfis)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT (tenant_id, paciente_chave, data_envio) DO UPDATE SET
-         nome = EXCLUDED.nome, telefone = EXCLUDED.telefone,
+         nome = EXCLUDED.nome, telefone = EXCLUDED.telefone, perfis = COALESCE(EXCLUDED.perfis, aniversariantes_envios.perfis),
          status = CASE WHEN EXCLUDED.telefone <> '' AND aniversariantes_envios.status = 'sem_telefone' THEN 'pendente'
                        WHEN EXCLUDED.telefone = '' AND aniversariantes_envios.status = 'pendente' THEN 'sem_telefone'
                        ELSE aniversariantes_envios.status END
        WHERE aniversariantes_envios.status IN ('pendente','sem_telefone')`,
-      [tenantId, p.chave, p.nome, p.telefone, `${ano}-${doisDig(mes)}-${doisDig(p.dia)}`, p.telefone ? 'pendente' : 'sem_telefone'],
+      [tenantId, p.chave, p.nome, p.telefone, `${ano}-${doisDig(mes)}-${doisDig(p.dia)}`, p.telefone ? 'pendente' : 'sem_telefone', perfis ? JSON.stringify(perfis) : null],
     );
   }
-  const resumo = { quando: new Date().toISOString(), ano, mes, total: pacientes.length, semTelefone: pacientes.filter((p) => !p.telefone).length, camposVistos, falhas, modoMes };
+  const resumo = { quando: new Date().toISOString(), ano, mes, total: pacientes.length, semTelefone: pacientes.filter((p) => !p.telefone).length, camposVistos, falhas, modoMes, perfis: perfil.contagem, avisosPerfil: perfil.avisos };
   await pool.query(
     `INSERT INTO aniversariantes_config (tenant_id, ultima_sync) VALUES ($1, $2)
      ON CONFLICT (tenant_id) DO UPDATE SET ultima_sync = $2`,
@@ -293,7 +319,7 @@ export async function listarMes(tenantId, ano, mes) {
   await tabelasProntas;
   const ini = `${ano}-${doisDig(mes)}-01`;
   const { rows } = await pool.query(
-    `SELECT id, nome, telefone, to_char(data_envio, 'YYYY-MM-DD') AS data_envio, mensagem, status, erro, enviado_em
+    `SELECT id, nome, telefone, to_char(data_envio, 'YYYY-MM-DD') AS data_envio, mensagem, status, erro, enviado_em, perfis
      FROM aniversariantes_envios
      WHERE tenant_id = $1 AND data_envio >= $2::date AND data_envio < ($2::date + interval '1 month')
      ORDER BY data_envio, nome`,
@@ -433,10 +459,43 @@ export async function enviarTeste(tenantId, numero) {
 
 let rodando = false;
 
-// a cada 5min, pra cada clinica com a automacao ligada: se ainda nao puxou os aniversariantes de
-// hoje, puxa do Clinicorp (assim funciona mesmo sem apertar "Sincronizar"); depois, a partir da
-// hora configurada, manda os pendentes de hoje. Quem ficou pendente (ex: WhatsApp fora do ar)
-// e retomado no mesmo dia; nunca manda aniversario de dia passado.
+// 1 clinica: se ainda nao puxou os aniversariantes de hoje, puxa do Clinicorp (assim funciona mesmo
+// sem apertar "Sincronizar"); depois, a partir da hora configurada, manda os pendentes de hoje que
+// passam no filtro de perfil. Quem ficou pendente (ex: WhatsApp fora do ar) e retomado no mesmo dia;
+// nunca manda aniversario de dia passado. pausaMs so existe pra o teste nao esperar 20-45s por paciente.
+export async function processarTenant(tenantId, { pausaMs } = {}) {
+  const config = await obterConfig(tenantId);
+  if (!config.ativo || horaAgoraMaceio() < config.horaEnvio) return { enviados: 0, foraDoFiltro: 0 };
+  const hoje = hojeMaceio();
+
+  const sync = config.ultimaSync;
+  const jaSincHoje = sync?.quando && sync.ano === hoje.ano && sync.mes === hoje.mes
+    && new Date(sync.quando).toLocaleDateString('en-CA', { timeZone: 'America/Maceio' }) === hoje.iso;
+  if (!jaSincHoje) {
+    try { await sincronizarMes(tenantId, hoje.ano, hoje.mes); } catch (err) { console.error(`Aniversariantes: sincronizacao do tenant ${tenantId} falhou:`, err.message); }
+  }
+
+  const { rows: pendentes } = await pool.query(
+    `SELECT id, perfis FROM aniversariantes_envios WHERE tenant_id = $1 AND data_envio = $2::date AND status = 'pendente' AND telefone <> '' ORDER BY id`,
+    [tenantId, hoje.iso],
+  );
+  let enviados = 0;
+  let foraDoFiltro = 0;
+  for (const { id, perfis } of pendentes) {
+    if (!passaNoFiltro(perfis, config.perfisFiltro)) { foraDoFiltro++; continue; }
+    try {
+      await enviarEnvio(tenantId, id);
+      enviados++;
+    } catch (err) {
+      console.error(`Aniversariantes: envio ${id} (tenant ${tenantId}) falhou:`, err.message);
+      if (err.codigo === 'CONTA_INATIVA' || /Nenhum WhatsApp conectado/.test(err.message)) break;
+    }
+    await pausa(pausaMs ?? 20000 + Math.random() * 25000); // 20-45s entre pacientes: nao parece disparo em massa
+  }
+  return { enviados, foraDoFiltro };
+}
+
+// a cada 5min, pra cada clinica com a automacao ligada
 export function iniciarSchedulerAniversariantes() {
   const checar = async () => {
     if (rodando || !pool) return;
@@ -448,30 +507,7 @@ export function iniciarSchedulerAniversariantes() {
       );
       for (const { tenant_id: tenantId } of tenantsAtivos) {
         try {
-          const config = await obterConfig(tenantId);
-          if (!config.ativo || horaAgoraMaceio() < config.horaEnvio) continue;
-          const hoje = hojeMaceio();
-
-          const sync = config.ultimaSync;
-          const jaSincHoje = sync?.quando && sync.ano === hoje.ano && sync.mes === hoje.mes
-            && new Date(sync.quando).toLocaleDateString('en-CA', { timeZone: 'America/Maceio' }) === hoje.iso;
-          if (!jaSincHoje) {
-            try { await sincronizarMes(tenantId, hoje.ano, hoje.mes); } catch (err) { console.error(`Aniversariantes: sincronizacao do tenant ${tenantId} falhou:`, err.message); }
-          }
-
-          const { rows: pendentes } = await pool.query(
-            `SELECT id FROM aniversariantes_envios WHERE tenant_id = $1 AND data_envio = $2::date AND status = 'pendente' AND telefone <> '' ORDER BY id`,
-            [tenantId, hoje.iso],
-          );
-          for (const { id } of pendentes) {
-            try {
-              await enviarEnvio(tenantId, id);
-            } catch (err) {
-              console.error(`Aniversariantes: envio ${id} (tenant ${tenantId}) falhou:`, err.message);
-              if (err.codigo === 'CONTA_INATIVA' || /Nenhum WhatsApp conectado/.test(err.message)) break;
-            }
-            await pausa(20000 + Math.random() * 25000); // 20-45s entre pacientes: nao parece disparo em massa
-          }
+          await processarTenant(tenantId);
         } catch (err) {
           console.error(`Aniversariantes: erro no tenant ${tenantId}:`, err.message);
         }

@@ -260,6 +260,7 @@ export async function getEstimatesExecutionSummary(tenantId, { from, to, status,
     const total = procedimentos.length;
     todosOrcamentos.push({
       id: o.id,
+      pacienteId: o.PatientId ?? o.PersonId ?? null,
       paciente: o.PatientName,
       telefone: o.PatientMobilePhone,
       profissional: o.ProfessionalName,

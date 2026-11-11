@@ -423,6 +423,14 @@
     "conteudo": "Motor próprio (aniversariantes.js): sincroniza o mês dia a dia pelo endpoint de aniversariantes do Clinicorp, completa telefone pelo cadastro do paciente e grava 1 linha por paciente (editar texto, pular, enviar na hora). Agendador de 5 em 5 min manda os pendentes do dia a partir da hora configurada, com pausa de 20-45s entre pacientes; a linha é reservada antes do envio (nunca duplica) e a trava de conta desativada vale. Texto com {nome}, opcionalmente reescrito pela IA por paciente; até 5 arquivos (12 MB cada) vão junto. Não cria cartão no CRM de propósito. Pendente: o formato da resposta do endpoint do Clinicorp não é documentado (leitura tolerante + diagnóstico na tela) - confirmar no primeiro uso com dados reais."
   },
   {
+    "chave": "aniv:perfil",
+    "modulo": "aniversariantes",
+    "data": "2026-11-11",
+    "tipo": "fato",
+    "titulo": "Aniversariantes: filtro por perfil do paciente",
+    "conteudo": "A clínica escolhe pra quais perfis o parabéns sai (agendado, ativo, em tratamento, finalizado, inativo; vale ter pelo menos um dos marcados). Perfil calculado no Clinicorp: agenda do paciente (consulta futura = agendado; consulta sem falta nos últimos N meses = ativo, N configurável) e execução dos orçamentos APROVADOS dos últimos 24 meses (parcial/não iniciado = em tratamento; todos executados = finalizado). Se o Clinicorp falhar o paciente fica 'indefinido' e NÃO recebe quando há filtro (aviso na tela). Envio manual ignora o filtro. Pendente: confirmar com dados reais os campos de id do paciente nos orçamentos (o código tenta PatientId/PersonId e cai no nome)."
+  },
+  {
     "chave": "mod:clinicorp",
     "hub": true,
     "modulo": "clinicorp",

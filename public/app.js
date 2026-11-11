@@ -10874,6 +10874,9 @@ const anivSincronizar = document.getElementById('anivSincronizar');
 const anivDiag = document.getElementById('anivDiag');
 const anivListaErro = document.getElementById('anivListaErro');
 const anivLista = document.getElementById('anivLista');
+const anivPerfisBox = document.getElementById('anivPerfis');
+const anivMesesAtivo = document.getElementById('anivMesesAtivo');
+const anivVer = document.getElementById('anivVer');
 
 const ANIV_MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 const ANIV_STATUS = { pendente: 'Agendado', enviando: 'Enviando...', enviado: 'Enviado ✓', falhou: 'Falhou', pulado: 'Pulado', sem_telefone: 'Sem telefone' };
@@ -10881,6 +10884,16 @@ const anivHoje = new Date(new Date().toLocaleString('en-US', { timeZone: 'Americ
 let anivAno = anivHoje.getFullYear();
 let anivMes = anivHoje.getMonth() + 1;
 let anivArquivoSelecionado = null;
+let anivFiltro = null; // perfis que recebem a mensagem (null = todos)
+let anivItens = []; // programacao do mes mostrada na tela
+const ANIV_PERFIS = [
+  { id: 'agendado', rotulo: 'Agendado', descricao: 'tem consulta marcada daqui pra frente' },
+  { id: 'ativo', rotulo: 'Ativo', descricao: 'veio, ou tem consulta, nos últimos meses (defina abaixo)' },
+  { id: 'em_tratamento', rotulo: 'Em tratamento', descricao: 'orçamento aprovado ainda não concluído' },
+  { id: 'finalizado', rotulo: 'Finalizado', descricao: 'orçamentos aprovados todos concluídos' },
+  { id: 'inativo', rotulo: 'Inativo', descricao: 'sem consulta, agendamento ou tratamento recentes' },
+];
+const ANIV_ROTULO_PERFIL = { ...Object.fromEntries(ANIV_PERFIS.map((p) => [p.id, p.rotulo])), indefinido: 'Não identificado' };
 
 function anivHeaders(json = true) {
   return json ? { 'Content-Type': 'application/json', 'x-app-password': appPassword } : { 'x-app-password': appPassword };
@@ -10909,6 +10922,7 @@ async function carregarAniversariantes() {
     anivUsarIa.checked = !!config.usarIa;
     anivUsarIaLabel.textContent = config.usarIa ? 'IA reescreve a mensagem pra cada paciente' : 'IA nao reescreve (todos recebem o texto acima)';
     anivInstrucoesIa.value = config.instrucoesIa || '';
+    anivAplicarConfigPerfis(config);
     mostrarDiagnosticoAniv(config.ultimaSync);
   } catch (err) {
     anivErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
@@ -10925,6 +10939,11 @@ function mostrarDiagnosticoAniv(sync) {
   if (sync.semTelefone) txt += `, ${sync.semTelefone} sem telefone`;
   if (sync.falhas) txt += `, ${sync.falhas} dia(s) com erro no Clinicorp`;
   txt += '.';
+  if (sync.perfis) {
+    const partes = Object.entries(sync.perfis).filter(([, n]) => n > 0).map(([id, n]) => `${n} ${(ANIV_ROTULO_PERFIL[id] || id).toLowerCase()}`);
+    if (partes.length) txt += ` Perfis: ${partes.join(', ')}.`;
+  }
+  if (sync.avisosPerfil?.length) txt += ` Atenção: ${sync.avisosPerfil.join(' ')}`;
   if (!sync.total && sync.camposVistos?.length === 0) txt += ' O Clinicorp nao devolveu nenhum paciente - se tem aniversariantes nesse mes, avise o suporte.';
   anivDiag.textContent = txt;
   anivDiag.hidden = false;
@@ -10937,8 +10956,10 @@ anivSalvar.addEventListener('click', async () => {
   try {
     await anivChamar('/api/aniversariantes/config', {
       method: 'POST',
-      body: JSON.stringify({ ativo: anivAtivo.checked, horaEnvio: anivHora.value, mensagem: anivMensagem.value.trim(), usarIa: anivUsarIa.checked, instrucoesIa: anivInstrucoesIa.value.trim() }),
+      body: JSON.stringify(anivPayloadConfig()),
     });
+    anivFiltro = anivLerPerfis();
+    desenharListaAniv();
     addBubble(`Configurações dos Aniversariantes salvas${anivAtivo.checked ? '' : ' (desativado)'}.`, 'system');
   } catch (err) {
     anivErro.textContent = err.message;
@@ -11028,7 +11049,7 @@ anivTesteEnviar.addEventListener('click', async () => {
     // salva antes, pra o teste usar exatamente o texto/arquivos que estao na tela
     await anivChamar('/api/aniversariantes/config', {
       method: 'POST',
-      body: JSON.stringify({ ativo: anivAtivo.checked, horaEnvio: anivHora.value, mensagem: anivMensagem.value.trim(), usarIa: anivUsarIa.checked, instrucoesIa: anivInstrucoesIa.value.trim() }),
+      body: JSON.stringify(anivPayloadConfig()),
     });
     await anivChamar('/api/aniversariantes/teste', { method: 'POST', body: JSON.stringify({ numero: anivTesteNumero.value.trim() }) });
     anivTesteMsg.textContent = 'Teste enviado! Confira o seu WhatsApp.';
@@ -11068,6 +11089,7 @@ async function carregarListaAniv() {
   anivLista.textContent = '';
   try {
     const { itens } = await anivChamar(`/api/aniversariantes/mes?ano=${anivAno}&mes=${anivMes}`);
+    anivItens = itens;
     if (!itens.length) {
       const vazio = document.createElement('p');
       vazio.className = 'agenda-vazia';
@@ -11075,7 +11097,7 @@ async function carregarListaAniv() {
       anivLista.appendChild(vazio);
       return;
     }
-    for (const it of itens) anivLista.appendChild(criarItemAniv(it));
+    desenharListaAniv();
   } catch (err) {
     anivListaErro.textContent = `Nao consegui carregar a programacao: ${err.message}`;
     anivListaErro.hidden = false;
@@ -11085,7 +11107,8 @@ async function carregarListaAniv() {
 function criarItemAniv(it) {
   const hojeIso = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Maceio' });
   const card = document.createElement('div');
-  card.className = `aniv-item${it.data_envio === hojeIso ? ' hoje' : ''}`;
+  const fora = it.status === 'pendente' && !anivPassa(it.perfis);
+  card.className = `aniv-item${it.data_envio === hojeIso ? ' hoje' : ''}${fora ? ' fora' : ''}`;
 
   const dia = document.createElement('div');
   dia.className = 'aniv-dia';
@@ -11109,7 +11132,27 @@ function criarItemAniv(it) {
   if (it.enviado_em) partes.push(`enviado ${new Date(it.enviado_em).toLocaleString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`);
   if (it.erro) partes.push(it.erro);
   detalhe.textContent = partes.join(' · ');
-  info.append(nome, detalhe);
+  const tags = document.createElement('div');
+  tags.className = 'aniv-tags';
+  for (const p of it.perfis || []) {
+    const t = document.createElement('span');
+    t.className = 'aniv-tag';
+    t.textContent = ANIV_ROTULO_PERFIL[p] || p;
+    tags.appendChild(t);
+  }
+  if (!(it.perfis || []).length) {
+    const t = document.createElement('span');
+    t.className = 'aniv-tag';
+    t.textContent = 'Perfil não identificado - sincronize';
+    tags.appendChild(t);
+  }
+  if (fora) {
+    const t = document.createElement('span');
+    t.className = 'aniv-tag aviso';
+    t.textContent = 'Fora do filtro - não será enviado';
+    tags.appendChild(t);
+  }
+  info.append(nome, detalhe, tags);
 
   const acoes = document.createElement('div');
   acoes.className = 'aniv-acoes';
@@ -11145,7 +11188,7 @@ function criarItemAniv(it) {
 
   if (['pendente', 'falhou'].includes(it.status) && it.telefone) {
     botao('Enviar agora', async () => {
-      if (!confirm(`Enviar agora a mensagem de aniversário para ${it.nome}?`)) return;
+      if (!confirm(`Enviar agora a mensagem de aniversário para ${it.nome}?${fora ? '\n\nAtenção: esse paciente está FORA do filtro de perfis, mas o envio manual ignora o filtro.' : ''}`)) return;
       await anivChamar(`/api/aniversariantes/envios/${it.id}/enviar`, { method: 'POST' });
       await carregarListaAniv();
     });
@@ -11157,3 +11200,70 @@ function criarItemAniv(it) {
   card.append(dia, info, acoes, editor);
   return card;
 }
+
+// ----- filtro por perfil -----
+
+function anivMontarPerfis() {
+  if (anivPerfisBox.childElementCount) return;
+  for (const p of ANIV_PERFIS) {
+    const label = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = p.id;
+    cb.checked = true;
+    const texto = document.createElement('span');
+    texto.textContent = p.rotulo;
+    const dica = document.createElement('small');
+    dica.textContent = p.descricao;
+    texto.appendChild(dica);
+    label.append(cb, texto);
+    anivPerfisBox.appendChild(label);
+  }
+}
+
+// null = todos os perfis marcados (sem filtro)
+function anivLerPerfis() {
+  const marcados = [...anivPerfisBox.querySelectorAll('input:checked')].map((i) => i.value);
+  return marcados.length === ANIV_PERFIS.length ? null : marcados;
+}
+
+function anivAplicarConfigPerfis(config) {
+  anivMontarPerfis();
+  anivFiltro = Array.isArray(config.perfisFiltro) && config.perfisFiltro.length ? config.perfisFiltro : null;
+  for (const cb of anivPerfisBox.querySelectorAll('input')) cb.checked = !anivFiltro || anivFiltro.includes(cb.value);
+  anivMesesAtivo.value = config.mesesAtivo || 12;
+}
+
+function anivPayloadConfig() {
+  return {
+    ativo: anivAtivo.checked,
+    horaEnvio: anivHora.value,
+    mensagem: anivMensagem.value.trim(),
+    usarIa: anivUsarIa.checked,
+    instrucoesIa: anivInstrucoesIa.value.trim(),
+    perfisFiltro: anivLerPerfis(),
+    mesesAtivo: Number(anivMesesAtivo.value) || 12,
+  };
+}
+
+// o paciente recebe se tiver pelo menos um dos perfis marcados (sem filtro = todos, inclusive nao identificados)
+function anivPassa(perfis) {
+  if (!anivFiltro) return true;
+  return Array.isArray(perfis) && perfis.some((p) => anivFiltro.includes(p));
+}
+
+function desenharListaAniv() {
+  anivLista.textContent = '';
+  const ver = anivVer.value;
+  const itens = anivItens.filter((it) => (ver === 'todos' ? true : ver === 'fora' ? it.status === 'pendente' && !anivPassa(it.perfis) : (it.perfis || []).includes(ver)));
+  if (anivItens.length && !itens.length) {
+    const vazio = document.createElement('p');
+    vazio.className = 'agenda-vazia';
+    vazio.textContent = 'Nenhum aniversariante nesse filtro.';
+    anivLista.appendChild(vazio);
+    return;
+  }
+  for (const it of itens) anivLista.appendChild(criarItemAniv(it));
+}
+
+anivVer.addEventListener('change', desenharListaAniv);

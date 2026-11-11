@@ -1352,7 +1352,8 @@
           mensagem de parabens no dia de cada um, no horario abaixo - com imagem, audio, video curto
           ou PDF junto, se voce subir. Clique em "Sincronizar com o Clinicorp" pra ver e revisar a
           programacao do mes inteiro antes; da pra editar o texto de um paciente, pular ou mandar na
-          hora. Quem nao tem telefone cadastrado fica de fora.
+          hora. Quem nao tem telefone cadastrado fica de fora. Voce tambem escolhe pra quais perfis de paciente
+          (agendado, ativo, em tratamento, finalizado, inativo) a mensagem vai sair.
         </div>
 
         <div class="auto-toggle-row">
@@ -1377,6 +1378,11 @@
           <span id="anivUsarIaLabel">IA nao reescreve (todos recebem o texto acima)</span>
         </div>
         <textarea id="anivInstrucoesIa" maxlength="800" placeholder="Opcional - instrucoes pra IA ao reescrever. Ex: tom acolhedor e descontraido, sempre mencionar o cuidado com o sorriso."></textarea>
+
+        <label class="auto-label">Quais pacientes recebem os parabéns (marque os perfis)</label>
+        <div class="aniv-perfis" id="anivPerfis"></div>
+        <label class="auto-label">Considerar "ativo" quem teve consulta nos últimos (meses)</label>
+        <input type="number" id="anivMesesAtivo" min="1" max="60" value="12" />
 
         <button type="button" id="anivSalvar">Salvar Configurações</button>
         <p class="agenda-erro" id="anivErro" hidden></p>
@@ -1406,6 +1412,16 @@
           <strong id="anivMesLabel"></strong>
           <button type="button" id="anivMesProx" title="Proximo mes">›</button>
           <button type="button" id="anivSincronizar">Sincronizar com o Clinicorp</button>
+          <select id="anivVer" title="Filtrar a lista por perfil">
+            <option value="todos">Ver: todos</option>
+            <option value="agendado">Agendados</option>
+            <option value="ativo">Ativos</option>
+            <option value="em_tratamento">Em tratamento</option>
+            <option value="finalizado">Finalizados</option>
+            <option value="inativo">Inativos</option>
+            <option value="indefinido">Não identificados</option>
+            <option value="fora">Fora do filtro de envio</option>
+          </select>
         </div>
         <p class="agenda-vazia" id="anivDiag" hidden></p>
         <p class="agenda-erro" id="anivListaErro" hidden></p>
