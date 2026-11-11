@@ -4148,7 +4148,10 @@ ctImpConfirmar.addEventListener('click', async () => {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
-      const partes = [`${d.naLista} na lista`, `${d.novos} novos`, `${d.movidos} movidos pra coluna`, `${d.jaEstavam} já estavam`];
+      const partes = [`${d.naLista} pacientes na lista`, `${d.novos} cartões novos`, `${d.movidos} já existiam em outra etapa e foram movidos (sem duplicar)`, `${d.jaEstavam} já estavam na coluna`, `${d.entraramNoFunil} entraram no Dia 0 do funil`];
+      if (d.jaNoFunil) partes.push(`${d.jaNoFunil} já estavam no funil e não repetiram`);
+      if (d.repetidosNaLista) partes.push(`${d.repetidosNaLista} repetidos dentro da própria planilha ignorados`);
+      if (d.outroNumero) partes.push(`${d.outroNumero} já eram contatos de outro número da conta e foram reaproveitados`);
       if (d.apagados + d.retirados) partes.push(`${d.apagados + d.retirados} saíram (não estão mais no Clinicorp)`);
       if (d.pessoais) partes.push(`${d.pessoais} são contatos pessoais e foram ignorados`);
       if (d.invalidos) partes.push(`${d.invalidos} com telefone inválido`);

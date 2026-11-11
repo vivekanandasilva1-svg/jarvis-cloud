@@ -1195,14 +1195,15 @@ export function iniciarVarreduraRepetidos() {
 export async function espelharFollowUp(tenantId, instancia, linhas) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
-  const r = { naLista: 0, novos: 0, movidos: 0, jaEstavam: 0, pessoais: 0, invalidos: 0, retirados: 0, apagados: 0 };
+  const r = { naLista: 0, novos: 0, movidos: 0, jaEstavam: 0, pessoais: 0, invalidos: 0, retirados: 0, apagados: 0, repetidosNaLista: 0, outroNumero: 0, entraramNoFunil: 0, jaNoFunil: 0 };
   const opNumero = (await operadoresPorNumero(tenantId))[instancia];
   const naLista = new Set();
   const vistos = new Set();
   for (const linha of linhas.slice(0, 2000)) {
     const numero = normalizarTelefone(linha?.numero);
     if (!numero) { r.invalidos++; continue; }
-    if (vistos.has(numero)) continue;
+    const chaveDup = varianteNonoDigito(numero) && /^55\d{2}9/.test(numero) ? varianteNonoDigito(numero) : numero;
+    if (vistos.has(numero) || vistos.has(chaveDup)) { r.repetidosNaLista++; continue; }
     vistos.add(numero);
     r.naLista++;
     const nome = textoOuNull(linha.nome, 120);
@@ -1211,6 +1212,7 @@ export async function espelharFollowUp(tenantId, instancia, linhas) {
     if (existente) {
       if (existente.etapa === 'contatos_pessoais') { r.pessoais++; continue; }
       id = existente.id;
+      if (existente.instancia !== instancia) r.outroNumero++;
       if (existente.etapa === 'follow_up') { r.jaEstavam++; }
       else {
         await moverEtapa(tenantId, id, 'follow_up');
@@ -1223,6 +1225,9 @@ export async function espelharFollowUp(tenantId, instancia, linhas) {
       r.novos++;
     }
     naLista.add(id);
+    // funil Follow Up (Dia 0 a 5): quem ja esta em andamento nele nao entra de novo
+    const noFunil = await funilFU.adicionarDoCrm(tenantId, id).catch(() => null);
+    if (noFunil) { if (noFunil.jaEstava) r.jaNoFunil++; else r.entraramNoFunil++; }
     if (opNumero !== undefined) await atribuirSeLivre(tenantId, id, opNumero).catch(() => {});
   }
   if (!naLista.size) return r;
