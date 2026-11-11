@@ -3676,3 +3676,6 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 #tabAniversariantes .auto-coluna-esq > * { flex-shrink: 0; }
 #anivMensagem { min-height: 110px; }
 #anivInstrucoesIa { min-height: 64px; }
+
+.login-lembrar { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-dim); cursor: pointer; text-align: left; }
+.login-lembrar input { width: auto; margin: 0; }

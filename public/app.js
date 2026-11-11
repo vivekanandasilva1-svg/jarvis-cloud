@@ -478,6 +478,13 @@ if (appPassword) {
   });
 }
 
+// usuario vem VAZIO por padrao; so preenche se a pessoa marcou "Lembrar meu usuario" (guarda so o usuario, nunca a senha)
+const lembrarUsuarioEl = document.getElementById('lembrarUsuario');
+try {
+  const salvo = localStorage.getItem('lumia_usuario_salvo');
+  if (salvo) { usernameInput.value = salvo; lembrarUsuarioEl.checked = true; passwordInput.focus(); }
+} catch { /* sem storage: segue vazio */ }
+
 loginForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const usuario = usernameInput.value;
@@ -496,6 +503,7 @@ loginForm.addEventListener('submit', async (e) => {
     loginError.textContent = 'Usuario ou senha incorretos.';
     return;
   }
+  try { if (lembrarUsuarioEl.checked) localStorage.setItem('lumia_usuario_salvo', usuario.trim()); else localStorage.removeItem('lumia_usuario_salvo'); } catch { /* sem storage */ }
   appPassword = token;
   sessionStorage.setItem('jarvis_password', token);
   await tokenValido(); // so pra popular souSuperAdmin antes de decidir mostrar a aba "Clientes"
