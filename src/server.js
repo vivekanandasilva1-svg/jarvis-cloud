@@ -142,6 +142,13 @@ app.use(async (req, res, next) => {
     if (!(await tenants.estaAtivo(tenantId))) {
       return res.status(401).json({ erro: 'Sua conta foi desativada. Fale com o suporte para reativar o acesso.', contaInativa: true });
     }
+    // so o acesso principal (dono) gerencia a equipe e as regras de distribuicao - colaborador nunca
+    if (req.operadorId > 0) {
+      const soDono = req.path.startsWith('/api/colaboradores')
+        || (req.method !== 'GET' && (req.path.startsWith('/api/crm/distribuicao') || req.path.startsWith('/api/crm/clinicorp-followup')))
+        || (req.method !== 'GET' && /^\/api\/whatsapp\/instancias\/[^/]+\/operador$/.test(req.path));
+      if (soDono) return res.status(403).json({ erro: 'so o acesso principal da conta pode fazer isso' });
+    }
     const abaProtegida = Object.entries(TAB_ROTA_PREFIXO).find(([, prefixo]) => req.path.startsWith(prefixo));
     // Cerebro e recurso pago a parte: desligado por padrao pra todo cliente, so o admin liga
     // (tenant_config.cerebro_liberado) - por isso nao segue a regra de tabs_habilitadas, onde
@@ -164,6 +171,13 @@ app.use(async (req, res, next) => {
           const habilitadas = await tenantConfig.obterTabsHabilitadas(tenantId);
           if (habilitadas && !habilitadas.includes(aba)) {
             return res.status(403).json({ erro: 'seu acesso nao inclui esse recurso' });
+          }
+        }
+        // colaborador: so as ferramentas que o dono liberou pra ele
+        if (req.operadorId > 0) {
+          const tabsColab = await tenants.obterTabsColaborador(tenantId, req.operadorId);
+          if (tabsColab && !tabsColab.includes(aba)) {
+            return res.status(403).json({ erro: 'o acesso principal nao liberou esse recurso pra voce' });
           }
         }
       } catch (err) {
@@ -207,7 +221,20 @@ app.get('/api/me', async (req, res) => {
       crm.listarOperadores(tenant.id).catch(() => []),
     ]);
     const instanciaAtiva = (await whatsappInstances.obterConfig(tenant.id).catch(() => ({}))).instanciaAtiva || null;
-    res.json({ perfil, instancias, operadores, operadoresPorNumero: await tenants.operadoresPorNumero(tenant.id).catch(() => ({})), instanciaAtiva, euId: req.operadorId || 0, operador, tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas, permiteColaboradores: !!tenant.permite_colaboradores, cerebroLiberado });
+    const ehDono = !(req.operadorId > 0);
+    let tabsEfetivas = tabsHabilitadas;
+    let operadoresVisiveis = operadores;
+    if (ehDono) {
+      // o dono enxerga as ferramentas de cada colaborador (pra "acompanhar" no formato dele)
+      const colabs = await tenants.listarColaboradores(tenant.id).catch(() => []);
+      const tabsDe = new Map(colabs.map((c) => [c.id, c.tabs || null]));
+      operadoresVisiveis = operadores.map((o) => (o.id > 0 ? { ...o, tabs: tabsDe.get(o.id) || null } : o));
+    } else {
+      const tabsColab = await tenants.obterTabsColaborador(tenant.id, req.operadorId);
+      if (tabsColab) tabsEfetivas = (tabsHabilitadas && tabsHabilitadas.length ? tabsColab.filter((t) => tabsHabilitadas.includes(t)) : tabsColab);
+      operadoresVisiveis = operadores.filter((o) => o.id === req.operadorId);
+    }
+    res.json({ ehDono, tabsValidas: tenantConfig.TABS_VALIDAS, perfil, instancias, operadores: operadoresVisiveis, operadoresPorNumero: await tenants.operadoresPorNumero(tenant.id).catch(() => ({})), instanciaAtiva, euId: req.operadorId || 0, operador, tenantId: tenant.id, nome: tenant.nome, slug: tenant.slug, superAdmin: !!tenant.super_admin, tabsHabilitadas: tabsEfetivas, permiteColaboradores: !!tenant.permite_colaboradores, cerebroLiberado });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -240,6 +267,24 @@ app.post('/api/colaboradores', async (req, res) => {
   try {
     const id = await tenants.criarColaborador(req.tenantId, { nome, username, senha });
     res.json({ ok: true, id });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.put('/api/colaboradores/:id/tabs', async (req, res) => {
+  try {
+    let tabs = req.body?.tabs;
+    if (tabs !== null && tabs !== undefined) {
+      if (!Array.isArray(tabs) || !tabs.length) return res.status(400).json({ erro: 'Marque pelo menos uma ferramenta.' });
+      const daConta = await tenantConfig.obterTabsHabilitadas(req.tenantId);
+      const permitidas = new Set(daConta && daConta.length ? daConta : tenantConfig.TABS_VALIDAS);
+      tabs = [...new Set(tabs.map(String))];
+      const invalida = tabs.find((t) => !permitidas.has(t));
+      if (invalida) return res.status(400).json({ erro: `A ferramenta "${invalida}" nao faz parte do pacote da sua conta.` });
+    } else tabs = null;
+    await tenants.definirTabsColaborador(req.tenantId, Number(req.params.id), tabs);
+    res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });
   }
@@ -1589,7 +1634,7 @@ app.get('/api/funil-fu', async (req, res) => {
       funilFU.obterTarefas(req.tenantId),
       tenants.listarInstanciasDoTenant(req.tenantId),
     ]);
-    res.json({ dias: funilFU.DIAS, tarefas, leads, instancias });
+    res.json({ dias: funilFU.DIAS, tarefas, leads: req.operadorId > 0 ? leads.filter((l) => l.atendenteId === req.operadorId) : leads, instancias });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -2013,7 +2058,9 @@ app.post('/api/gerador-relatorios/gerar', async (req, res) => {
 
 app.get('/api/crm/contatos', async (req, res) => {
   try {
-    res.json({ etapas: crm.ETAPAS, contatos: await crm.listarContatos(req.tenantId) });
+    let contatos = await crm.listarContatos(req.tenantId);
+    if (req.operadorId > 0) contatos = contatos.filter((c) => c.atendente_id === req.operadorId); // colaborador: so os leads dele
+    res.json({ etapas: crm.ETAPAS, contatos });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -2140,10 +2187,11 @@ app.get('/api/crm/resultados', async (req, res) => {
 
 app.get('/api/crm/base-contatos', async (req, res) => {
   try {
-    const [contatos, instancias] = await Promise.all([
+    const [contatosTodos, instancias] = await Promise.all([
       crm.listarBaseContatos(req.tenantId),
       tenants.listarInstanciasDoTenant(req.tenantId),
     ]);
+    const contatos = req.operadorId > 0 ? contatosTodos.filter((c) => c.atendente_id === req.operadorId) : contatosTodos;
     res.json({ etapas: crm.ETAPAS, instancias, contatos });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -2197,10 +2245,20 @@ app.post('/api/crm/follow-up/espelhar', async (req, res) => {
   }
 });
 
+// colaborador so abre/responde conversa de lead que e dele (ou ainda sem dono, se for pra assumir ao responder)
+async function operadorPodeVer(req, numero, instancia, permitirSemDono = false) {
+  if (!(req.operadorId > 0)) return true;
+  const { existe, atendenteId } = await crm.atendenteDoContato(req.tenantId, numero, instancia);
+  if (!existe) return permitirSemDono;
+  if (atendenteId === req.operadorId) return true;
+  return permitirSemDono && (atendenteId === null || atendenteId === undefined);
+}
+
 app.get('/api/crm/mensagens', async (req, res) => {
   const { numero, instancia } = req.query;
   if (!numero || !instancia) return res.status(400).json({ erro: 'numero e instancia sao obrigatorios' });
   try {
+    if (!(await operadorPodeVer(req, String(numero), String(instancia)))) return res.status(403).json({ erro: 'essa conversa nao e sua' });
     res.json({ mensagens: await crm.listarMensagens(req.tenantId, String(numero), String(instancia)) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -2211,6 +2269,7 @@ app.post('/api/crm/mensagens', async (req, res) => {
   const { numero, instancia, texto } = req.body || {};
   if (!numero || !instancia || !texto) return res.status(400).json({ erro: 'numero, instancia e texto sao obrigatorios' });
   try {
+    if (!(await operadorPodeVer(req, String(numero), String(instancia), true))) return res.status(403).json({ erro: 'essa conversa nao e sua' });
     lembrarEnviada(await crm.enviarMensagem(req.tenantId, numero, instancia, texto));
     crm.assumirSeLivre(req.tenantId, numero, instancia, req.operadorId || 0).catch(() => {}); // quem responde primeiro vira o operador
     res.json({ ok: true });

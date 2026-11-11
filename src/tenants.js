@@ -84,6 +84,8 @@ async function garantirTabelas() {
   await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS nome_perfil TEXT;`);
   await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS foto_perfil TEXT;`);
   await pool.query(`ALTER TABLE tenant_colaboradores ADD COLUMN IF NOT EXISTS foto_perfil TEXT;`);
+  // ferramentas (abas) que o dono liberou pra esse colaborador; NULL = todas as que a conta tem (comportamento de sempre)
+  await pool.query(`ALTER TABLE tenant_colaboradores ADD COLUMN IF NOT EXISTS tabs TEXT[];`);
 }
 // exportado pra outros modulos poderem esperar a tabela "tenants" existir antes de criar as
 // PROPRIAS tabelas (que tem REFERENCES tenants(id)) - sem isso, como cada modulo cria sua
@@ -491,7 +493,7 @@ export async function listarColaboradores(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    'SELECT id, nome, username, ativo, criado_em FROM tenant_colaboradores WHERE tenant_id = $1 ORDER BY criado_em ASC',
+    'SELECT id, nome, username, ativo, criado_em, tabs FROM tenant_colaboradores WHERE tenant_id = $1 ORDER BY criado_em ASC',
     [tenantId],
   );
   return rows;
@@ -514,6 +516,29 @@ export async function criarColaborador(tenantId, { nome, username, senha }) {
     [tenantId, nome, username, hashSenha(senha), encrypt(senha)],
   );
   return rows[0].id;
+}
+
+// null = herda tudo que a conta tem; array = so essas ferramentas (o chamador ja validou contra as da conta)
+export async function definirTabsColaborador(tenantId, colaboradorId, tabs) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const lista = Array.isArray(tabs) ? tabs.map(String) : null;
+  const { rowCount } = await pool.query('UPDATE tenant_colaboradores SET tabs = $1 WHERE id = $2 AND tenant_id = $3', [lista, colaboradorId, tenantId]);
+  if (!rowCount) throw new Error('Colaborador nao encontrado.');
+  _cacheTabsColab.clear();
+}
+
+const _cacheTabsColab = new Map(); // "tenant:colab" -> { tabs, ate }
+export async function obterTabsColaborador(tenantId, colaboradorId) {
+  if (!pool || !colaboradorId) return null;
+  const chave = `${tenantId}:${colaboradorId}`;
+  const c = _cacheTabsColab.get(chave);
+  if (c && c.ate > Date.now()) return c.tabs;
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT tabs FROM tenant_colaboradores WHERE id = $1 AND tenant_id = $2', [colaboradorId, tenantId]);
+  const tabs = rows[0]?.tabs || null;
+  _cacheTabsColab.set(chave, { tabs, ate: Date.now() + 20000 });
+  return tabs;
 }
 
 export async function alternarColaboradorAtivo(tenantId, colaboradorId, ativo) {

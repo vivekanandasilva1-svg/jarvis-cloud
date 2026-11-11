@@ -972,5 +972,13 @@
     "tipo": "melhoria",
     "titulo": "Anti-repetidos: mesmo paciente (com/sem o 9) nunca vira dois cards",
     "conteudo": "Auditoria em produção: 0 repetidos. Reforços: (1) chegada de mensagem no outro formato do telefone entra no card que já existe no mesmo número de WhatsApp (antes só reaproveitava card sem conversa e podia abrir um segundo); (2) crm.mesclarRepetidos roda no boot e a cada 1h: junta cards do mesmo telefone (DDD + 8 últimos dígitos) no MESMO número, ficando com o de conversa mais recente e levando mensagens, notas, histórico, funil, etiquetas, e-mail e operador; (3) Funil Follow Up não aceita o mesmo paciente (ou contato) duas vezes, com/sem o 9. Decisão: o mesmo telefone em NÚMEROS de WhatsApp diferentes continua separado (cada número tem seu funil). Já existiam: índice único (conta, número, instância), dedupe na importação, no Clinicorp e no cadastro manual."
+  },
+  {
+    "chave": "plataforma:versao-por-colaborador",
+    "modulo": "plataforma",
+    "data": "2026-11-11",
+    "tipo": "funcao",
+    "titulo": "Versão do app por colaborador: ferramentas escolhidas pelo acesso principal e dados isolados",
+    "conteudo": "Cada colaborador (login criado pelo cliente) ganha sua própria versão do app: o dono escolhe as ferramentas dele (botão 'Ferramentas' em Integrações > Colaboradores; coluna tenant_colaboradores.tabs, NULL = tudo que a conta tem; só pode marcar o que o pacote da conta inclui). Aplicado no servidor (middleware: 403 em ferramenta não liberada) e no menu. Isolamento: colaborador só vê/abre/responde os leads atribuídos a ele (contatos, base de contatos, mensagens, funil follow up). Rotas só do dono (403 para colaborador): /api/colaboradores*, distribuição, clinicorp-followup (POST) e operador por número. Só o acesso principal tem o seletor de operador e, ao acompanhar um colaborador, o menu vira o formato das ferramentas dele. Corrigido: antes qualquer colaborador podia listar/criar colaboradores e ver senhas. Pendente: ocultar/apagar/etapa/notas por id ainda não conferem o dono do lead; leads sem operador ficam invisíveis ao colaborador (a distribuição/operador do número cuida)."
   }
 ]

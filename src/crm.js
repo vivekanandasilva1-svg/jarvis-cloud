@@ -1262,6 +1262,14 @@ export async function espelharFollowUp(tenantId, instancia, linhas) {
   return r;
 }
 
+// de quem e o lead (usado pra limitar o que um colaborador enxerga): { existe, atendenteId }
+export async function atendenteDoContato(tenantId, numero, instancia) {
+  if (!pool) return { existe: false, atendenteId: null };
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT atendente_id FROM crm_contatos WHERE tenant_id = $1 AND numero = $2 AND instancia = $3', [tenantId, numero, instancia]);
+  return { existe: !!rows[0], atendenteId: rows[0]?.atendente_id ?? null };
+}
+
 // entrega o lead a um operador so se ele ainda estiver sem dono
 export async function atribuirSeLivre(tenantId, contatoId, operadorId) {
   if (!pool) return;
