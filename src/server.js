@@ -139,6 +139,7 @@ app.use(async (req, res, next) => {
   if (tenantId) {
     req.tenantId = tenantId;
     req.operadorId = infoToken.colaboradorId; // 0 = o proprio dono da conta
+    if (!(await tenants.sessaoValida(infoToken))) return res.status(401).json({ erro: 'sessao invalida - faca login de novo' });
     // conta desativada pelo admin: derruba a sessao NA HORA (o token continua "valido" por 30 dias, entao
     // so a assinatura nao basta) - o navegador do cliente entende `contaInativa` e desloga sozinho
     if (!(await tenants.estaAtivo(tenantId))) {
@@ -2899,7 +2900,7 @@ app.get('/api/crm/contatos-ocultos', async (req, res) => {
 app.get('/api/crm/midia/:mensagemId', async (req, res) => {
   const info = tenants.verificarTokenInfo(req.query.senha);
   const tenantId = info?.tenantId || null;
-  if (!tenantId) return res.status(401).end();
+  if (!tenantId || !(await tenants.sessaoValida(info))) return res.status(401).end();
   try {
     if (info.colaboradorId > 0) {
       const d = await crm.atendenteDaMensagem(tenantId, Number(req.params.mensagemId));
@@ -2948,7 +2949,7 @@ app.get('/api/crm/eventos', async (req, res) => {
   const infoSse = tenants.verificarTokenInfo(req.query.senha);
   const tenantId = infoSse?.tenantId || null;
   const colabSse = infoSse?.colaboradorId || 0;
-  if (!tenantId) return res.status(401).end();
+  if (!tenantId || !(await tenants.sessaoValida(infoSse))) return res.status(401).end();
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
