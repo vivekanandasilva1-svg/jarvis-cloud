@@ -1012,5 +1012,13 @@
     "tipo": "melhoria",
     "titulo": "Colaborador: posse do lead em todas as ações + fila de leads sem operador",
     "conteudo": "Fecha os pendentes da versão por colaborador. (1) Middleware único no servidor confere o dono do lead em toda ação por id (etapa, retorno, lido, auto, ocultar, apagar, notas, edição na base, mídia, funil follow up) e nas rotas por número; colaborador só mexe no que é dele. Relatórios gerenciais (Resultados, Origem, Ocultas) só do acesso principal. Mídia por id e eventos em tempo real (SSE) também filtrados. (2) FILA: lead sem operador aparece para o colaborador, que pode ler a conversa e ASSUMIR (POST atendente com o próprio id; atômico: quem pegar primeiro fica, o segundo recebe 409); só depois age no lead. Passar lead da fila para outro é negado; passar o próprio lead para outro é permitido. (3) Lista importada num número com operador responsável já nasce com ele (crm.aplicarOperadorDoNumero). Pendente: Ligações/Disparos liberados a colaborador ainda mostram dados da conta toda."
+  },
+  {
+    "chave": "plataforma:vitaly-acessos-por-numero",
+    "modulo": "plataforma",
+    "data": "2026-11-11",
+    "tipo": "decisao",
+    "titulo": "Conta Vitaly: acesso principal ADM + um acesso por número",
+    "conteudo": "Estrutura aplicada na conta Vitaly (tenant 10): acesso principal administrador 'admvitaly' (nome no topo ADM Vitaly); o login antigo do cliente virou o colaborador LabArtis (mesmo usuário e mesma senha de antes), responsável pelo número Lu LabArts (558293684781) e dono dos 394 contatos que estavam com o dono/sem operador nesse número; Follow Up Vânia (renomeada) continua responsável pelo 558281666045 (instância 82981666045). Cada número = um acesso/operador, com leads isolados; só o ADM troca de visão e gerencia equipe/ferramentas. Para derrubar sessões antigas do dono criado tenants.dono_sessoes_desde (token do dono emitido antes da troca = 401; trocar a senha do dono pelo admin também derruba). Backup local do estado anterior em backups-lumia/ (não versionado). Pendente: acesso_expira_em da conta está em 30/10/2026 (vencido) embora a conta siga ativa."
   }
 ]

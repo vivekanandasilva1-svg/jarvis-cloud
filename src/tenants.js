@@ -28,6 +28,8 @@ async function garantirTabelas() {
   // periodo de contratacao do cliente (acesso geral a Lumia) - NULL = vitalicio. Mesmo modelo
   // do proposta_acesso_expira_em do Gerador de Propostas, so que pro produto principal.
   await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS acesso_expira_em TIMESTAMPTZ;`);
+  // sessoes do DONO emitidas antes dessa data deixam de valer (troca de credenciais / do dono da conta)
+  await pool.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS dono_sessoes_desde TIMESTAMPTZ;`);
   // quando o DONO ativou/desativou a conta na mao (aba Clientes) - o sweep de vencimento nunca
   // pode desfazer uma decisao manual mais nova que a data de vencimento (foi o que reverteu uma
   // reativacao a cada deploy: o vencimento antigo continuava no passado e o sweep do boot
@@ -152,10 +154,28 @@ export function verificarTokenInfo(token) {
   try {
     const { tenantId, colaboradorId, exp } = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
     if (!tenantId || !exp || Date.now() > exp) return null;
-    return { tenantId, colaboradorId: Number(colaboradorId) || 0 };
+    return { tenantId, colaboradorId: Number(colaboradorId) || 0, emitidoEm: exp - TOKEN_VALIDADE_MS };
   } catch {
     return null;
   }
+}
+
+// sessao do DONO emitida antes da ultima troca de credenciais/dono nao vale mais (colaborador nao e afetado)
+const _cacheDonoDesde = new Map();
+export async function sessaoValida(info) {
+  if (!info || !pool || info.colaboradorId > 0) return true;
+  const c = _cacheDonoDesde.get(info.tenantId);
+  let desde;
+  if (c && c.ate > Date.now()) desde = c.desde;
+  else {
+    try {
+      await tabelasProntas;
+      const { rows } = await pool.query('SELECT dono_sessoes_desde FROM tenants WHERE id = $1', [info.tenantId]);
+      desde = rows[0]?.dono_sessoes_desde ? new Date(rows[0].dono_sessoes_desde).getTime() : 0;
+      _cacheDonoDesde.set(info.tenantId, { desde, ate: Date.now() + 15000 });
+    } catch { return true; }
+  }
+  return !desde || info.emitidoEm >= desde;
 }
 
 // ---------- CRUD de tenant ----------
@@ -452,9 +472,10 @@ export async function redefinirSenha(tenantId, novaSenha) {
   if (!novaSenha) throw new Error('Nova senha obrigatoria.');
   await tabelasProntas;
   await pool.query(
-    'UPDATE tenants SET password_hash = $1, senha_visivel_enc = $2 WHERE id = $3',
+    'UPDATE tenants SET password_hash = $1, senha_visivel_enc = $2, dono_sessoes_desde = now() WHERE id = $3',
     [hashSenha(novaSenha), encrypt(novaSenha), tenantId],
   );
+  _cacheDonoDesde.delete(Number(tenantId)); // trocar a senha do dono derruba as sessoes antigas dele
 }
 
 // devolve a senha em texto legivel pro super_admin consultar - so funciona pra senha

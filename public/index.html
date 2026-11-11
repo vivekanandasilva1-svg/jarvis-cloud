@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261111b" />
+  <link rel="stylesheet" href="style.css?v=20261111c" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -40,8 +40,9 @@
       <h1>Lumia</h1>
       <p>Acesso restrito - entre com suas credenciais</p>
       <form id="loginForm">
-        <input type="text" id="usernameInput" placeholder="Usuario" autocomplete="username" value="Admin" />
+        <input type="text" id="usernameInput" placeholder="Usuario" autocomplete="username" autocapitalize="none" spellcheck="false" />
         <input type="password" id="passwordInput" placeholder="Senha" autocomplete="current-password" />
+        <label class="login-lembrar"><input type="checkbox" id="lembrarUsuario" /> Lembrar meu usuário neste computador</label>
         <button type="submit">Entrar</button>
       </form>
       <p class="login-error" id="loginError"></p>
@@ -1716,6 +1717,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261111b"></script>
+  <script src="app.js?v=20261111c"></script>
 </body>
 </html>
