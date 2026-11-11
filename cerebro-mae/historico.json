@@ -407,6 +407,22 @@
     "conteudo": "Motor próprio (followUp.js), substitui o Auto Atendimento enquanto o card está na coluna. Horário de funcionamento (padrão 08-20h Maceió): fora dele não manda tentativa nem responde, mas guarda a mensagem."
   },
   {
+    "chave": "mod:aniversariantes",
+    "hub": true,
+    "modulo": "aniversariantes",
+    "tipo": "contexto",
+    "titulo": "Módulo: Aniversariantes do mês (parabéns automático)",
+    "conteudo": "Aba que puxa do Clinicorp os pacientes que fazem aniversário em cada mês, monta a programação do mês inteiro e a Lumia manda sozinha a mensagem de parabéns no dia de cada um, com imagem, áudio, vídeo curto ou PDF junto. Desligado por padrão em cada clínica."
+  },
+  {
+    "chave": "aniv:base",
+    "modulo": "aniversariantes",
+    "data": "2026-11-11",
+    "tipo": "fato",
+    "titulo": "Aba Aniversariantes criada (Clinicorp + envio automático no dia)",
+    "conteudo": "Motor próprio (aniversariantes.js): sincroniza o mês dia a dia pelo endpoint de aniversariantes do Clinicorp, completa telefone pelo cadastro do paciente e grava 1 linha por paciente (editar texto, pular, enviar na hora). Agendador de 5 em 5 min manda os pendentes do dia a partir da hora configurada, com pausa de 20-45s entre pacientes; a linha é reservada antes do envio (nunca duplica) e a trava de conta desativada vale. Texto com {nome}, opcionalmente reescrito pela IA por paciente; até 5 arquivos (12 MB cada) vão junto. Não cria cartão no CRM de propósito. Pendente: o formato da resposta do endpoint do Clinicorp não é documentado (leitura tolerante + diagnóstico na tela) - confirmar no primeiro uso com dados reais."
+  },
+  {
     "chave": "mod:clinicorp",
     "hub": true,
     "modulo": "clinicorp",

@@ -28,6 +28,7 @@ import * as metaAds from './metaads.js';
 import * as propostas from './propostas.js';
 import * as relatorioGerador from './relatorioGerador.js';
 import * as followUp from './followUp.js';
+import * as aniversariantes from './aniversariantes.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
 import { iniciarCerebroMae } from './cerebroMae.js';
 import { ehErroDeCredito, creditoEsgotado, registrarFalhaCredito } from './alertaCreditos.js';
@@ -81,6 +82,7 @@ const TAB_ROTA_PREFIXO = {
   crm: '/api/crm',
   auto: '/api/auto-atendimento',
   followUp: '/api/follow-up',
+  aniversariantes: '/api/aniversariantes',
   relatorios: '/api/relatorios',
   geradorRelatorios: '/api/gerador-relatorios',
   integracoes: '/api/integracoes',
@@ -1598,6 +1600,106 @@ app.delete('/api/follow-up/etapas/:ordem/arquivos/:id', async (req, res) => {
   }
 });
 
+// ---------- Aniversariantes do mes (mensagem automatica de parabens, integrada ao Clinicorp) ----------
+
+const mesDaQuery = (q) => {
+  const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Maceio' }).split('-').map(Number);
+  return { ano: Number(q.ano) || hoje[0], mes: Number(q.mes) || hoje[1] };
+};
+
+app.get('/api/aniversariantes/config', async (req, res) => {
+  try {
+    res.json(await aniversariantes.obterConfig(req.tenantId));
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/aniversariantes/config', async (req, res) => {
+  try {
+    await aniversariantes.salvarConfig(req.tenantId, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/aniversariantes/mes', async (req, res) => {
+  try {
+    const { ano, mes } = mesDaQuery(req.query);
+    res.json({ ano, mes, itens: await aniversariantes.listarMes(req.tenantId, ano, mes) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/aniversariantes/sincronizar', async (req, res) => {
+  try {
+    const { ano, mes } = mesDaQuery(req.body || {});
+    res.json({ ok: true, resumo: await aniversariantes.sincronizarMes(req.tenantId, ano, mes) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.patch('/api/aniversariantes/envios/:id', async (req, res) => {
+  const { mensagem, status } = req.body || {};
+  try {
+    await aniversariantes.atualizarEnvio(req.tenantId, Number(req.params.id), { mensagem, status });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/aniversariantes/envios/:id/enviar', async (req, res) => {
+  try {
+    const r = await aniversariantes.enviarEnvio(req.tenantId, Number(req.params.id));
+    res.json({ ok: true, avisos: r.avisos });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/aniversariantes/teste', async (req, res) => {
+  try {
+    await aniversariantes.enviarTeste(req.tenantId, req.body?.numero);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.get('/api/aniversariantes/arquivos', async (req, res) => {
+  try {
+    res.json({ arquivos: await aniversariantes.listarArquivos(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/aniversariantes/arquivos', async (req, res) => {
+  const { nomeArquivo, mediaType, base64 } = req.body || {};
+  if (!nomeArquivo || !mediaType || !base64) {
+    return res.status(400).json({ erro: 'nomeArquivo, mediaType e base64 sao obrigatorios' });
+  }
+  try {
+    const id = await aniversariantes.salvarArquivo(req.tenantId, nomeArquivo, Buffer.from(base64, 'base64'), mediaType);
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/aniversariantes/arquivos/:id', async (req, res) => {
+  try {
+    await aniversariantes.apagarArquivo(req.tenantId, Number(req.params.id));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 // ---------- Relatorios programados (aba "Relatorios") ----------
 
 app.get('/api/relatorios/destinatarios', async (req, res) => {
@@ -2275,6 +2377,9 @@ relatoriosProgramados.iniciarSchedulerRelatoriosProgramados();
 // pra cada contato na coluna "follow_up" do CRM; por padrao vem desativado por tenant
 // (follow_up_config.ativo), entao reativar esse scheduler geral e seguro.
 followUp.iniciarSchedulerFollowUp();
+// Aniversariantes do mes: puxa do Clinicorp e manda a mensagem de parabens no dia, so pra clinicas
+// que ligaram a automacao (aniversariantes_config.ativo, desligada por padrao)
+aniversariantes.iniciarSchedulerAniversariantes();
 
 // bloqueia assinantes do Gerador de Propostas E clientes da Lumia cujo periodo contratado
 // (1-12 meses) venceu - roda no boot e depois a cada 30min; vitalicio (sem data de expiracao)

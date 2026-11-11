@@ -83,6 +83,10 @@
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-8z"/></svg>
           <span>Follow Up</span>
         </button>
+        <button type="button" class="nav-btn" id="tabBtnAniversariantes" data-tab="aniversariantes">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2c.8 1.2 1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 .7-1.8 1.5-3zM5 11h14a2 2 0 0 1 2 2v2.5c-.9 0-1.5-.5-2-1-.6.7-1.3 1-2 1s-1.4-.3-2-1c-.6.7-1.3 1-2 1s-1.4-.3-2-1c-.6.7-1.3 1-2 1s-1.4-.3-2-1c-.5.5-1.1 1-2 1V13a2 2 0 0 1 2-2zm-2 6.5c1 0 1.7-.4 2.3-1 .6.6 1.3 1 2.2 1s1.6-.4 2.3-1c.6.6 1.3 1 2.2 1s1.6-.4 2.3-1c.6.6 1.3 1 2.2 1s1.3-.4 2.5-1V21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3.5z"/></svg>
+          <span>Aniversariantes</span>
+        </button>
         <button type="button" class="nav-btn" id="tabBtnRelatorios" data-tab="relatorios">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 20V10h4v10H4zm6 0V4h4v16h-4zm6 0v-7h4v7h-4z"/></svg>
           <span>Relatórios</span>
@@ -702,6 +706,76 @@
       <div class="auto-coluna-dir">
         <label class="auto-label">Tentativas de reengajamento (cadencia + script + anexos de cada uma)</label>
         <div id="fuEtapasLista">
+          <p class="agenda-vazia">Carregando...</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="window-body tab-auto" id="tabAniversariantes" hidden>
+      <div class="auto-coluna-esq">
+        <div class="auto-aviso">
+          Puxa do Clinicorp os pacientes que fazem aniversario em cada mes e a Lumia manda sozinha a
+          mensagem de parabens no dia de cada um, no horario abaixo - com imagem, audio, video curto
+          ou PDF junto, se voce subir. Clique em "Sincronizar com o Clinicorp" pra ver e revisar a
+          programacao do mes inteiro antes; da pra editar o texto de um paciente, pular ou mandar na
+          hora. Quem nao tem telefone cadastrado fica de fora.
+        </div>
+
+        <div class="auto-toggle-row">
+          <label class="auto-switch">
+            <input type="checkbox" id="anivAtivo" />
+            <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+          </label>
+          <span id="anivAtivoLabel">Desativado</span>
+        </div>
+
+        <label class="auto-label">Horario de envio (todo dia, a partir dessa hora)</label>
+        <input type="time" id="anivHora" />
+
+        <label class="auto-label">Mensagem de aniversario (use {nome} pra colocar o primeiro nome do paciente)</label>
+        <textarea id="anivMensagem" maxlength="1500"></textarea>
+
+        <div class="auto-toggle-row">
+          <label class="auto-switch">
+            <input type="checkbox" id="anivUsarIa" />
+            <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+          </label>
+          <span id="anivUsarIaLabel">IA nao reescreve (todos recebem o texto acima)</span>
+        </div>
+        <textarea id="anivInstrucoesIa" maxlength="800" placeholder="Opcional - instrucoes pra IA ao reescrever. Ex: tom acolhedor e descontraido, sempre mencionar o cuidado com o sorriso."></textarea>
+
+        <button type="button" id="anivSalvar">Salvar Configurações</button>
+        <p class="agenda-erro" id="anivErro" hidden></p>
+
+        <div class="auto-arquivos-wrap">
+          <div class="auto-arquivos-header">Arquivos enviados junto (ate 5: imagem, audio, video curto ou PDF)</div>
+          <div class="auto-upload-row">
+            <input type="file" id="anivArquivoInput" accept="image/*,audio/*,video/*,application/pdf" hidden />
+            <button type="button" id="anivArquivoEscolher">Escolher arquivo</button>
+            <span id="anivArquivoNome">Nenhum arquivo escolhido</span>
+          </div>
+          <button type="button" id="anivArquivoEnviar">Enviar arquivo</button>
+          <div class="auto-arquivos-lista" id="anivArquivosLista"></div>
+        </div>
+
+        <label class="auto-label">Testar no seu proprio WhatsApp (manda so pra esse numero)</label>
+        <div class="auto-upload-row">
+          <input type="text" id="anivTesteNumero" placeholder="Ex: 82999998888" />
+          <button type="button" id="anivTesteEnviar">Enviar teste</button>
+        </div>
+        <p class="agenda-vazia" id="anivTesteMsg" hidden></p>
+      </div>
+
+      <div class="auto-coluna-dir">
+        <div class="aniv-nav">
+          <button type="button" id="anivMesAnt" title="Mes anterior">‹</button>
+          <strong id="anivMesLabel"></strong>
+          <button type="button" id="anivMesProx" title="Proximo mes">›</button>
+          <button type="button" id="anivSincronizar">Sincronizar com o Clinicorp</button>
+        </div>
+        <p class="agenda-vazia" id="anivDiag" hidden></p>
+        <p class="agenda-erro" id="anivListaErro" hidden></p>
+        <div id="anivLista">
           <p class="agenda-vazia">Carregando...</p>
         </div>
       </div>

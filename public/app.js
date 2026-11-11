@@ -69,6 +69,7 @@ const tabBtnWhatsapp = document.getElementById('tabBtnWhatsapp');
 const tabBtnCrm = document.getElementById('tabBtnCrm');
 const tabBtnAuto = document.getElementById('tabBtnAuto');
 const tabBtnFollowUp = document.getElementById('tabBtnFollowUp');
+const tabBtnAniversariantes = document.getElementById('tabBtnAniversariantes');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
 const tabBtnGeradorRelatorios = document.getElementById('tabBtnGeradorRelatorios');
 const tabBtnIntegracoes = document.getElementById('tabBtnIntegracoes');
@@ -82,6 +83,7 @@ const tabWhatsapp = document.getElementById('tabWhatsapp');
 const tabCrm = document.getElementById('tabCrm');
 const tabAuto = document.getElementById('tabAuto');
 const tabFollowUp = document.getElementById('tabFollowUp');
+const tabAniversariantes = document.getElementById('tabAniversariantes');
 const tabRelatorios = document.getElementById('tabRelatorios');
 const tabGeradorRelatorios = document.getElementById('tabGeradorRelatorios');
 const tabIntegracoes = document.getElementById('tabIntegracoes');
@@ -372,6 +374,7 @@ function mostrarApp() {
   tabBtnCrm.hidden = !abaLiberada('crm');
   tabBtnAuto.hidden = !abaLiberada('auto');
   tabBtnFollowUp.hidden = !abaLiberada('followUp');
+  tabBtnAniversariantes.hidden = !abaLiberada('aniversariantes');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
   tabBtnGeradorRelatorios.hidden = !abaLiberada('geradorRelatorios');
   tabBtnIntegracoes.hidden = !abaLiberada('integracoes');
@@ -382,7 +385,7 @@ function mostrarApp() {
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
     const primeiraLiberada = [
       ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm],
-      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
+      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['aniversariantes', tabBtnAniversariantes], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
     ].find(([, btn]) => !btn.hidden);
     if (primeiraLiberada) mudarAba(primeiraLiberada[0]);
   }
@@ -1868,6 +1871,7 @@ function mudarAba(aba) {
   tabCrm.hidden = aba !== 'crm';
   tabAuto.hidden = aba !== 'auto';
   tabFollowUp.hidden = aba !== 'followUp';
+  tabAniversariantes.hidden = aba !== 'aniversariantes';
   tabRelatorios.hidden = aba !== 'relatorios';
   tabGeradorRelatorios.hidden = aba !== 'geradorRelatorios';
   tabIntegracoes.hidden = aba !== 'integracoes';
@@ -1881,6 +1885,7 @@ function mudarAba(aba) {
   tabBtnCrm.classList.toggle('active', aba === 'crm');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   tabBtnFollowUp.classList.toggle('active', aba === 'followUp');
+  tabBtnAniversariantes.classList.toggle('active', aba === 'aniversariantes');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
   tabBtnGeradorRelatorios.classList.toggle('active', aba === 'geradorRelatorios');
   tabBtnIntegracoes.classList.toggle('active', aba === 'integracoes');
@@ -1900,6 +1905,8 @@ function mudarAba(aba) {
     carregarConfigAutoAtendimento();
   } else if (aba === 'followUp') {
     carregarFollowUp();
+  } else if (aba === 'aniversariantes') {
+    carregarAniversariantes();
   } else if (aba === 'relatorios') {
     carregarDestinatariosRelatorios();
     carregarConfigsRelatorios();
@@ -1982,6 +1989,7 @@ tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnGeradorRelatorios.addEventListener('click', () => mudarAba('geradorRelatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
 tabBtnFollowUp.addEventListener('click', () => mudarAba('followUp'));
+tabBtnAniversariantes.addEventListener('click', () => mudarAba('aniversariantes'));
 tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
 tabBtnCerebro.addEventListener('click', () => mudarAba('cerebro'));
 tabBtnVideo.addEventListener('click', () => mudarAba('video'));
@@ -3099,7 +3107,7 @@ function renderSaldo(d) {
     saldoUso.appendChild(l);
   };
   if (d.cachePct !== null && d.cachePct !== undefined) linha('Entrada vinda do cache (7 dias)', `${d.cachePct}%`);
-  const NOMES_MODULO = { 'auto-atendimento': 'Auto Atendimento', lumia: 'Lumia', 'follow-up': 'Follow Up', 'gerador-relatorios': 'Gerador de Relatórios' };
+  const NOMES_MODULO = { 'auto-atendimento': 'Auto Atendimento', lumia: 'Lumia', 'follow-up': 'Follow Up', aniversariantes: 'Aniversariantes', 'gerador-relatorios': 'Gerador de Relatórios' };
   for (const r of d.porCliente || []) linha(`${r.nome} · ${NOMES_MODULO[r.modulo] || r.modulo || 'outros'}`, usd(r.custoUsd));
   if (document.activeElement !== saldoLimite) saldoLimite.value = String(d.limiteAlertaUsd).replace('.', ',');
 }
@@ -5811,7 +5819,7 @@ async function selecionarCliente(id, nome, username) {
   tabsAviso.textContent = 'Nenhuma marcada = tudo liberado (padrão). Marque só pra restringir.';
   clienteIntegracoesPainel.appendChild(tabsAviso);
 
-  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações' };
+  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', aniversariantes: 'Aniversariantes', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações' };
   const tabsForm = document.createElement('div');
   tabsForm.className = 'cliente-form';
   const tabsCheckboxes = {};
@@ -6017,4 +6025,315 @@ async function selecionarCliente(id, nome, username) {
     clienteIntegracoesPainel.appendChild(msg);
     carregarClientes();
   }));
+}
+
+
+// ---------- Aniversariantes do mes (integrado ao Clinicorp) ----------
+
+const anivAtivo = document.getElementById('anivAtivo');
+const anivAtivoLabel = document.getElementById('anivAtivoLabel');
+const anivHora = document.getElementById('anivHora');
+const anivMensagem = document.getElementById('anivMensagem');
+const anivUsarIa = document.getElementById('anivUsarIa');
+const anivUsarIaLabel = document.getElementById('anivUsarIaLabel');
+const anivInstrucoesIa = document.getElementById('anivInstrucoesIa');
+const anivSalvar = document.getElementById('anivSalvar');
+const anivErro = document.getElementById('anivErro');
+const anivArquivoInput = document.getElementById('anivArquivoInput');
+const anivArquivoEscolher = document.getElementById('anivArquivoEscolher');
+const anivArquivoNome = document.getElementById('anivArquivoNome');
+const anivArquivoEnviar = document.getElementById('anivArquivoEnviar');
+const anivArquivosLista = document.getElementById('anivArquivosLista');
+const anivTesteNumero = document.getElementById('anivTesteNumero');
+const anivTesteEnviar = document.getElementById('anivTesteEnviar');
+const anivTesteMsg = document.getElementById('anivTesteMsg');
+const anivMesAnt = document.getElementById('anivMesAnt');
+const anivMesProx = document.getElementById('anivMesProx');
+const anivMesLabel = document.getElementById('anivMesLabel');
+const anivSincronizar = document.getElementById('anivSincronizar');
+const anivDiag = document.getElementById('anivDiag');
+const anivListaErro = document.getElementById('anivListaErro');
+const anivLista = document.getElementById('anivLista');
+
+const ANIV_MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+const ANIV_STATUS = { pendente: 'Agendado', enviando: 'Enviando...', enviado: 'Enviado ✓', falhou: 'Falhou', pulado: 'Pulado', sem_telefone: 'Sem telefone' };
+const anivHoje = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Maceio' }));
+let anivAno = anivHoje.getFullYear();
+let anivMes = anivHoje.getMonth() + 1;
+let anivArquivoSelecionado = null;
+
+function anivHeaders(json = true) {
+  return json ? { 'Content-Type': 'application/json', 'x-app-password': appPassword } : { 'x-app-password': appPassword };
+}
+
+async function anivChamar(url, opcoes = {}) {
+  const res = await fetch(url, { ...opcoes, headers: anivHeaders(!!opcoes.body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+  return data;
+}
+
+anivAtivo.addEventListener('change', () => { anivAtivoLabel.textContent = anivAtivo.checked ? 'Ativado' : 'Desativado'; });
+anivUsarIa.addEventListener('change', () => {
+  anivUsarIaLabel.textContent = anivUsarIa.checked ? 'IA reescreve a mensagem pra cada paciente' : 'IA nao reescreve (todos recebem o texto acima)';
+});
+
+async function carregarAniversariantes() {
+  anivErro.hidden = true;
+  try {
+    const config = await anivChamar('/api/aniversariantes/config');
+    anivAtivo.checked = !!config.ativo;
+    anivAtivoLabel.textContent = config.ativo ? 'Ativado' : 'Desativado';
+    anivHora.value = config.horaEnvio || '09:00';
+    anivMensagem.value = config.mensagem || '';
+    anivUsarIa.checked = !!config.usarIa;
+    anivUsarIaLabel.textContent = config.usarIa ? 'IA reescreve a mensagem pra cada paciente' : 'IA nao reescreve (todos recebem o texto acima)';
+    anivInstrucoesIa.value = config.instrucoesIa || '';
+    mostrarDiagnosticoAniv(config.ultimaSync);
+  } catch (err) {
+    anivErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
+    anivErro.hidden = false;
+  }
+  carregarArquivosAniv();
+  carregarListaAniv();
+}
+
+function mostrarDiagnosticoAniv(sync) {
+  if (!sync) { anivDiag.hidden = true; return; }
+  const quando = new Date(sync.quando).toLocaleString('pt-BR', { timeZone: 'America/Maceio' });
+  let txt = `Ultima sincronizacao (${ANIV_MESES[sync.mes - 1]}/${sync.ano}) em ${quando}: ${sync.total} aniversariante(s)`;
+  if (sync.semTelefone) txt += `, ${sync.semTelefone} sem telefone`;
+  if (sync.falhas) txt += `, ${sync.falhas} dia(s) com erro no Clinicorp`;
+  txt += '.';
+  if (!sync.total && sync.camposVistos?.length === 0) txt += ' O Clinicorp nao devolveu nenhum paciente - se tem aniversariantes nesse mes, avise o suporte.';
+  anivDiag.textContent = txt;
+  anivDiag.hidden = false;
+}
+
+anivSalvar.addEventListener('click', async () => {
+  anivErro.hidden = true;
+  if (!anivMensagem.value.trim()) { anivErro.textContent = 'Escreva a mensagem de aniversario.'; anivErro.hidden = false; return; }
+  anivSalvar.disabled = true;
+  try {
+    await anivChamar('/api/aniversariantes/config', {
+      method: 'POST',
+      body: JSON.stringify({ ativo: anivAtivo.checked, horaEnvio: anivHora.value, mensagem: anivMensagem.value.trim(), usarIa: anivUsarIa.checked, instrucoesIa: anivInstrucoesIa.value.trim() }),
+    });
+    addBubble(`Configurações dos Aniversariantes salvas${anivAtivo.checked ? '' : ' (desativado)'}.`, 'system');
+  } catch (err) {
+    anivErro.textContent = err.message;
+    anivErro.hidden = false;
+  } finally {
+    anivSalvar.disabled = false;
+  }
+});
+
+// ----- arquivos -----
+
+anivArquivoEscolher.addEventListener('click', () => anivArquivoInput.click());
+anivArquivoInput.addEventListener('change', () => {
+  anivArquivoSelecionado = anivArquivoInput.files[0] || null;
+  anivArquivoNome.textContent = anivArquivoSelecionado ? anivArquivoSelecionado.name : 'Nenhum arquivo escolhido';
+});
+
+anivArquivoEnviar.addEventListener('click', async () => {
+  if (!anivArquivoSelecionado) { addBubble('Escolhe um arquivo primeiro.', 'system'); return; }
+  if (anivArquivoSelecionado.size > 12 * 1024 * 1024) { addBubble('Arquivo acima de 12 MB - use um video mais curto ou comprimido.', 'system'); return; }
+  anivArquivoEnviar.disabled = true;
+  try {
+    const base64 = await arquivoParaBase64(anivArquivoSelecionado);
+    await anivChamar('/api/aniversariantes/arquivos', {
+      method: 'POST',
+      body: JSON.stringify({ nomeArquivo: anivArquivoSelecionado.name, mediaType: anivArquivoSelecionado.type || 'application/octet-stream', base64 }),
+    });
+    anivArquivoSelecionado = null;
+    anivArquivoInput.value = '';
+    anivArquivoNome.textContent = 'Nenhum arquivo escolhido';
+    carregarArquivosAniv();
+  } catch (err) {
+    addBubble(`Erro enviando arquivo: ${err.message}`, 'system');
+  } finally {
+    anivArquivoEnviar.disabled = false;
+  }
+});
+
+async function carregarArquivosAniv() {
+  anivArquivosLista.textContent = '';
+  try {
+    const { arquivos } = await anivChamar('/api/aniversariantes/arquivos');
+    if (!arquivos.length) {
+      const vazio = document.createElement('p');
+      vazio.className = 'agenda-vazia';
+      vazio.textContent = 'Nenhum arquivo cadastrado - vai so o texto.';
+      anivArquivosLista.appendChild(vazio);
+      return;
+    }
+    for (const arq of arquivos) {
+      const item = document.createElement('div');
+      item.className = 'auto-arquivo-item';
+      const info = document.createElement('div');
+      info.className = 'auto-arquivo-info';
+      const nome = document.createElement('div');
+      nome.className = 'auto-arquivo-nome';
+      nome.textContent = arq.nome_arquivo;
+      const detalhe = document.createElement('div');
+      detalhe.className = 'auto-arquivo-detalhe';
+      detalhe.textContent = `${arq.media_type} · ${formatarTamanho(Number(arq.tamanho))}`;
+      info.append(nome, detalhe);
+      const apagar = document.createElement('button');
+      apagar.type = 'button';
+      apagar.className = 'agenda-evento-cancelar';
+      apagar.textContent = '✕';
+      apagar.title = 'Apagar arquivo';
+      apagar.addEventListener('click', async () => {
+        if (!confirm(`Apagar "${arq.nome_arquivo}"?`)) return;
+        try { await anivChamar(`/api/aniversariantes/arquivos/${arq.id}`, { method: 'DELETE' }); carregarArquivosAniv(); } catch (err) { addBubble(`Erro apagando arquivo: ${err.message}`, 'system'); }
+      });
+      item.append(info, apagar);
+      anivArquivosLista.appendChild(item);
+    }
+  } catch (err) {
+    const erro = document.createElement('p');
+    erro.className = 'agenda-vazia';
+    erro.textContent = `Nao consegui carregar os arquivos: ${err.message}`;
+    anivArquivosLista.appendChild(erro);
+  }
+}
+
+anivTesteEnviar.addEventListener('click', async () => {
+  anivTesteMsg.hidden = true;
+  if (!anivTesteNumero.value.trim()) { anivTesteMsg.textContent = 'Informe o seu WhatsApp com DDD.'; anivTesteMsg.hidden = false; return; }
+  anivTesteEnviar.disabled = true;
+  try {
+    // salva antes, pra o teste usar exatamente o texto/arquivos que estao na tela
+    await anivChamar('/api/aniversariantes/config', {
+      method: 'POST',
+      body: JSON.stringify({ ativo: anivAtivo.checked, horaEnvio: anivHora.value, mensagem: anivMensagem.value.trim(), usarIa: anivUsarIa.checked, instrucoesIa: anivInstrucoesIa.value.trim() }),
+    });
+    await anivChamar('/api/aniversariantes/teste', { method: 'POST', body: JSON.stringify({ numero: anivTesteNumero.value.trim() }) });
+    anivTesteMsg.textContent = 'Teste enviado! Confira o seu WhatsApp.';
+  } catch (err) {
+    anivTesteMsg.textContent = `Nao enviou: ${err.message}`;
+  } finally {
+    anivTesteMsg.hidden = false;
+    anivTesteEnviar.disabled = false;
+  }
+});
+
+// ----- programacao do mes -----
+
+anivMesAnt.addEventListener('click', () => { anivMes -= 1; if (anivMes < 1) { anivMes = 12; anivAno -= 1; } carregarListaAniv(); });
+anivMesProx.addEventListener('click', () => { anivMes += 1; if (anivMes > 12) { anivMes = 1; anivAno += 1; } carregarListaAniv(); });
+
+anivSincronizar.addEventListener('click', async () => {
+  anivListaErro.hidden = true;
+  anivSincronizar.disabled = true;
+  anivSincronizar.textContent = 'Buscando no Clinicorp...';
+  try {
+    const { resumo } = await anivChamar('/api/aniversariantes/sincronizar', { method: 'POST', body: JSON.stringify({ ano: anivAno, mes: anivMes }) });
+    mostrarDiagnosticoAniv(resumo);
+    await carregarListaAniv();
+  } catch (err) {
+    anivListaErro.textContent = err.message;
+    anivListaErro.hidden = false;
+  } finally {
+    anivSincronizar.disabled = false;
+    anivSincronizar.textContent = 'Sincronizar com o Clinicorp';
+  }
+});
+
+async function carregarListaAniv() {
+  anivMesLabel.textContent = `${ANIV_MESES[anivMes - 1]} ${anivAno}`;
+  anivListaErro.hidden = true;
+  anivLista.textContent = '';
+  try {
+    const { itens } = await anivChamar(`/api/aniversariantes/mes?ano=${anivAno}&mes=${anivMes}`);
+    if (!itens.length) {
+      const vazio = document.createElement('p');
+      vazio.className = 'agenda-vazia';
+      vazio.textContent = 'Nenhum aniversariante programado nesse mes ainda - clique em "Sincronizar com o Clinicorp".';
+      anivLista.appendChild(vazio);
+      return;
+    }
+    for (const it of itens) anivLista.appendChild(criarItemAniv(it));
+  } catch (err) {
+    anivListaErro.textContent = `Nao consegui carregar a programacao: ${err.message}`;
+    anivListaErro.hidden = false;
+  }
+}
+
+function criarItemAniv(it) {
+  const hojeIso = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Maceio' });
+  const card = document.createElement('div');
+  card.className = `aniv-item${it.data_envio === hojeIso ? ' hoje' : ''}`;
+
+  const dia = document.createElement('div');
+  dia.className = 'aniv-dia';
+  dia.textContent = it.data_envio.slice(8, 10);
+  const mesPeq = document.createElement('small');
+  mesPeq.textContent = ANIV_MESES[Number(it.data_envio.slice(5, 7)) - 1].slice(0, 3);
+  dia.appendChild(mesPeq);
+
+  const info = document.createElement('div');
+  const nome = document.createElement('div');
+  nome.className = 'aniv-nome';
+  nome.textContent = it.nome;
+  const chip = document.createElement('span');
+  chip.className = `aniv-chip ${it.status}`;
+  chip.textContent = ANIV_STATUS[it.status] || it.status;
+  nome.appendChild(chip);
+  const detalhe = document.createElement('div');
+  detalhe.className = 'aniv-detalhe';
+  const partes = [it.telefone ? `+${it.telefone}` : 'sem telefone no Clinicorp'];
+  if (it.mensagem) partes.push('texto personalizado');
+  if (it.enviado_em) partes.push(`enviado ${new Date(it.enviado_em).toLocaleString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`);
+  if (it.erro) partes.push(it.erro);
+  detalhe.textContent = partes.join(' · ');
+  info.append(nome, detalhe);
+
+  const acoes = document.createElement('div');
+  acoes.className = 'aniv-acoes';
+  const botao = (rotulo, fn) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = rotulo;
+    b.addEventListener('click', async () => {
+      b.disabled = true;
+      try { await fn(); } catch (err) { anivListaErro.textContent = err.message; anivListaErro.hidden = false; } finally { b.disabled = false; }
+    });
+    acoes.appendChild(b);
+  };
+
+  const editavel = ['pendente', 'pulado', 'falhou', 'sem_telefone'].includes(it.status);
+  const editor = document.createElement('div');
+  editor.className = 'aniv-editor';
+  editor.hidden = true;
+  const ta = document.createElement('textarea');
+  ta.maxLength = 1500;
+  ta.value = it.mensagem || '';
+  ta.placeholder = 'Texto so desse paciente (use {nome}). Vazio = usa a mensagem padrao.';
+  const salvarTexto = document.createElement('button');
+  salvarTexto.type = 'button';
+  salvarTexto.textContent = 'Salvar texto';
+  salvarTexto.addEventListener('click', async () => {
+    try {
+      await anivChamar(`/api/aniversariantes/envios/${it.id}`, { method: 'PATCH', body: JSON.stringify({ mensagem: ta.value }) });
+      carregarListaAniv();
+    } catch (err) { anivListaErro.textContent = err.message; anivListaErro.hidden = false; }
+  });
+  editor.append(ta, salvarTexto);
+
+  if (['pendente', 'falhou'].includes(it.status) && it.telefone) {
+    botao('Enviar agora', async () => {
+      if (!confirm(`Enviar agora a mensagem de aniversário para ${it.nome}?`)) return;
+      await anivChamar(`/api/aniversariantes/envios/${it.id}/enviar`, { method: 'POST' });
+      await carregarListaAniv();
+    });
+  }
+  if (it.status === 'pendente') botao('Pular', async () => { await anivChamar(`/api/aniversariantes/envios/${it.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'pulado' }) }); await carregarListaAniv(); });
+  if (it.status === 'pulado' && it.telefone) botao('Reativar', async () => { await anivChamar(`/api/aniversariantes/envios/${it.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'pendente' }) }); await carregarListaAniv(); });
+  if (editavel) botao('Editar texto', async () => { editor.hidden = !editor.hidden; });
+
+  card.append(dia, info, acoes, editor);
+  return card;
 }

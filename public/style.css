@@ -2618,3 +2618,54 @@ html, body {
 .saldo-uso:empty { display: none; }
 .saldo-uso strong { color: var(--text); font-weight: 700; }
 .saldo-uso .linha { display: flex; justify-content: space-between; gap: 8px; }
+
+/* ---------- aba Aniversariantes ---------- */
+.aniv-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.aniv-nav strong { min-width: 130px; text-align: center; color: var(--gold-bright); font-size: 14px; }
+.aniv-nav button {
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  background: rgba(212, 175, 55, 0.14);
+  color: var(--gold-bright);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.aniv-nav button:disabled { opacity: 0.5; cursor: default; }
+.aniv-item {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 9px 12px;
+  margin-bottom: 8px;
+}
+.aniv-item.hoje { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.35); }
+.aniv-dia { text-align: center; font-weight: 700; color: var(--gold-bright); font-size: 15px; line-height: 1.1; }
+.aniv-dia small { display: block; font-size: 10px; font-weight: 500; color: var(--text-dim); }
+.aniv-nome { font-size: 13px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.aniv-detalhe { font-size: 11px; color: var(--text-dim); margin-top: 2px; overflow-wrap: anywhere; }
+.aniv-acoes { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; }
+.aniv-acoes button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 7px;
+  padding: 4px 9px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.aniv-acoes button:disabled { opacity: 0.5; cursor: default; }
+.aniv-chip { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 10.5px; font-weight: 600; margin-left: 6px; border: 1px solid var(--border); color: var(--text-dim); }
+.aniv-chip.enviado { color: #7fd39a; border-color: rgba(127, 211, 154, 0.5); }
+.aniv-chip.falhou { color: #ff8a80; border-color: rgba(255, 138, 128, 0.5); }
+.aniv-chip.pendente { color: var(--gold-bright); border-color: rgba(212, 175, 55, 0.5); }
+.aniv-editor { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
+.aniv-editor textarea { min-height: 80px; }
+#tabAniversariantes .auto-coluna-esq > * { flex-shrink: 0; }
+#anivMensagem { min-height: 110px; }
+#anivInstrucoesIa { min-height: 64px; }
