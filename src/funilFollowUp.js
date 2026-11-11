@@ -234,6 +234,13 @@ export async function reprogramar(tenantId, leadId, agenda) {
   await avancarDoTenant(tenantId);
 }
 
+// contato (CRM) de um lead do funil - usado pra conferir de quem e o lead
+export async function contatoDoLead(tenantId, leadId) {
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT contato_id FROM ffu_leads WHERE id = $1 AND tenant_id = $2', [Number(leadId), tenantId]);
+  return { existe: !!rows[0], contatoId: rows[0]?.contato_id ?? null };
+}
+
 export async function removerLead(tenantId, leadId) {
   await tabelasProntas;
   await pool.query('UPDATE ffu_leads SET removido_em = now() WHERE id = $1 AND tenant_id = $2', [Number(leadId), tenantId]);

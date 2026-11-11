@@ -193,6 +193,63 @@ app.use(async (req, res, next) => {
   next();
 });
 
+// ---------- colaborador: so mexe em lead que e dele (ou assume um da fila, sem operador) ----------
+const ROTAS_GERENCIAIS = [/^\/api\/crm\/resultados/, /^\/api\/crm\/origem/, /^\/api\/crm\/ocultas/, /^\/api\/crm\/contatos-ocultos/];
+app.use(async (req, res, next) => {
+  if (!(req.operadorId > 0) || !req.tenantId) return next();
+  const op = req.operadorId;
+  const nega = (msg = 'esse lead nao e seu') => res.status(403).json({ erro: msg });
+  try {
+    const p = req.path;
+    if (ROTAS_GERENCIAIS.some((r) => r.test(p))) return nega('esse relatorio e so do acesso principal');
+    let m = p.match(/^\/api\/crm\/contatos\/(\d+)(?:\/(\w+))?$/);
+    if (m) {
+      const acao = m[2] || '';
+      const { existe, atendenteId } = await crm.atendenteDoContatoId(req.tenantId, m[1]);
+      if (!existe) return res.status(404).json({ erro: 'contato nao encontrado' });
+      const meu = atendenteId === op;
+      const livre = atendenteId === null || atendenteId === undefined;
+      if (acao === 'atendente' && req.method === 'POST') {
+        if (livre) {
+          if (Number(req.body?.operadorId) !== op) return nega('so voce pode assumir um lead da fila');
+          return (await crm.assumirAtomico(req.tenantId, Number(m[1]), op)) ? res.json({ ok: true }) : res.status(409).json({ erro: 'outro operador acabou de assumir esse lead' });
+        }
+        return meu ? next() : nega();
+      }
+      return meu ? next() : nega(livre ? 'assuma esse lead primeiro' : undefined);
+    }
+    m = p.match(/^\/api\/crm\/notas\/(\d+)$/);
+    if (m && req.method === 'DELETE') {
+      const { existe, atendenteId } = await crm.atendenteDaNota(req.tenantId, m[1]);
+      return existe && atendenteId !== op ? nega() : next();
+    }
+    m = p.match(/^\/api\/crm\/base-contatos\/(\d+)$/);
+    if (m && req.method === 'PUT') {
+      const { existe, atendenteId } = await crm.atendenteDoContatoId(req.tenantId, m[1]);
+      return existe && atendenteId !== op ? nega() : next();
+    }
+    if (p === '/api/crm/mensagens/midia' && req.method === 'POST') {
+      return (await operadorPodeVer(req, String(req.body?.numero || ''), String(req.body?.instancia || ''), true)) ? next() : nega('essa conversa nao e sua');
+    }
+    m = p.match(/^\/api\/funil-fu\/leads\/(\d+)(?:\/|$)/);
+    if (m) {
+      const { existe, contatoId } = await funilFU.contatoDoLead(req.tenantId, m[1]);
+      if (!existe) return next();
+      const dono = contatoId ? await crm.atendenteDoContatoId(req.tenantId, contatoId) : { existe: false };
+      return dono.existe && dono.atendenteId === op ? next() : nega();
+    }
+    if ((p === '/api/funil-fu/leads' || p === '/api/funil-fu/do-crm') && req.method === 'POST') {
+      const contatoId = req.body?.contatoId;
+      if (!contatoId) return nega('escolha um dos seus contatos');
+      const dono = await crm.atendenteDoContatoId(req.tenantId, contatoId);
+      return dono.existe && dono.atendenteId === op ? next() : nega();
+    }
+    next();
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body || {};
   if (!process.env.SESSION_SECRET) return res.json({ ok: true });
@@ -2059,7 +2116,7 @@ app.post('/api/gerador-relatorios/gerar', async (req, res) => {
 app.get('/api/crm/contatos', async (req, res) => {
   try {
     let contatos = await crm.listarContatos(req.tenantId);
-    if (req.operadorId > 0) contatos = contatos.filter((c) => c.atendente_id === req.operadorId); // colaborador: so os leads dele
+    if (req.operadorId > 0) contatos = contatos.filter((c) => c.atendente_id === req.operadorId || c.atendente_id === null || c.atendente_id === undefined); // colaborador: os dele + a fila (sem operador)
     res.json({ etapas: crm.ETAPAS, contatos });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -2191,7 +2248,7 @@ app.get('/api/crm/base-contatos', async (req, res) => {
       crm.listarBaseContatos(req.tenantId),
       tenants.listarInstanciasDoTenant(req.tenantId),
     ]);
-    const contatos = req.operadorId > 0 ? contatosTodos.filter((c) => c.atendente_id === req.operadorId) : contatosTodos;
+    const contatos = req.operadorId > 0 ? contatosTodos.filter((c) => c.atendente_id === req.operadorId || c.atendente_id === null || c.atendente_id === undefined) : contatosTodos;
     res.json({ etapas: crm.ETAPAS, instancias, contatos });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -2226,7 +2283,9 @@ app.post('/api/crm/base-contatos/importar', async (req, res) => {
     if (!(await tenants.listarInstanciasDoTenant(req.tenantId)).includes(instancia)) {
       return res.status(400).json({ erro: 'Escolha um numero de WhatsApp dessa conta.' });
     }
-    res.json({ ok: true, ...(await crm.importarContatos(req.tenantId, instancia, linhas, modo === 'atualizar' ? 'atualizar' : 'pular', etapa || null)) });
+    const resultadoImp = await crm.importarContatos(req.tenantId, instancia, linhas, modo === 'atualizar' ? 'atualizar' : 'pular', etapa || null);
+    await crm.aplicarOperadorDoNumero(req.tenantId, instancia).catch(() => {}); // lista importada num numero com operador ja nasce dele
+    res.json({ ok: true, ...resultadoImp });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -2258,7 +2317,7 @@ app.get('/api/crm/mensagens', async (req, res) => {
   const { numero, instancia } = req.query;
   if (!numero || !instancia) return res.status(400).json({ erro: 'numero e instancia sao obrigatorios' });
   try {
-    if (!(await operadorPodeVer(req, String(numero), String(instancia)))) return res.status(403).json({ erro: 'essa conversa nao e sua' });
+    if (!(await operadorPodeVer(req, String(numero), String(instancia), true))) return res.status(403).json({ erro: 'essa conversa nao e sua' });
     res.json({ mensagens: await crm.listarMensagens(req.tenantId, String(numero), String(instancia)) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -2522,7 +2581,12 @@ app.get('/api/crm/origem/relatorio', async (req, res) => {
 // anotacoes sobre o paciente (historico do que esta sendo tratado/resolvido)
 app.get('/api/crm/notas/buscar', async (req, res) => {
   try {
-    res.json({ contatoIds: await crm.buscarNotas(req.tenantId, req.query.q) });
+    let ids = await crm.buscarNotas(req.tenantId, req.query.q);
+    if (req.operadorId > 0) {
+      const meus = new Set((await crm.listarContatos(req.tenantId)).filter((c) => c.atendente_id === req.operadorId).map((c) => c.id));
+      ids = ids.filter((id) => meus.has(id));
+    }
+    res.json({ contatoIds: ids });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -2731,9 +2795,14 @@ app.get('/api/crm/contatos-ocultos', async (req, res) => {
 // porque e usado direto em <img src>/<audio src>, que nao mandam header customizado. So essa
 // rota fica de fora do middleware geral (ver acima), entao valida o token aqui na mao.
 app.get('/api/crm/midia/:mensagemId', async (req, res) => {
-  const tenantId = tenants.verificarToken(req.query.senha);
+  const info = tenants.verificarTokenInfo(req.query.senha);
+  const tenantId = info?.tenantId || null;
   if (!tenantId) return res.status(401).end();
   try {
+    if (info.colaboradorId > 0) {
+      const d = await crm.atendenteDaMensagem(tenantId, Number(req.params.mensagemId));
+      if (d.existe && d.atendenteId !== null && d.atendenteId !== undefined && d.atendenteId !== info.colaboradorId) return res.status(403).end();
+    }
     const midia = await crm.obterMidiaMensagem(tenantId, Number(req.params.mensagemId));
     if (!midia) return res.status(404).end();
     res.set('Content-Type', midia.mimetype);
@@ -2774,7 +2843,9 @@ app.post('/api/crm/ocultas/senha', async (req, res) => {
 // todos os tenants no mesmo processo, entao o filtro por tenantId aqui e essencial, senao um
 // cliente veria em tempo real as conversas de outro.
 app.get('/api/crm/eventos', async (req, res) => {
-  const tenantId = tenants.verificarToken(req.query.senha);
+  const infoSse = tenants.verificarTokenInfo(req.query.senha);
+  const tenantId = infoSse?.tenantId || null;
+  const colabSse = infoSse?.colaboradorId || 0;
   if (!tenantId) return res.status(401).end();
 
   res.writeHead(200, {
@@ -2788,8 +2859,15 @@ app.get('/api/crm/eventos', async (req, res) => {
   const mandar = (tipo, payload) => res.write(`data: ${JSON.stringify({ tipo, ...payload })}\n\n`);
   // conta desativada: avisa o navegador (que desloga na hora) e fecha a conexao
   if (!(await tenants.estaAtivo(tenantId))) { mandar('conta-inativa', {}); return res.end(); }
-  const onMensagem = (payload) => { if (payload.tenantId === tenantId) mandar('mensagem', payload); };
-  const onContatoAtualizado = (payload) => { if (payload.tenantId === tenantId) mandar('contato-atualizado', payload); };
+  // colaborador: so recebe evento de lead dele ou da fila (sem operador)
+  const podeReceber = async (payload) => {
+    if (!colabSse) return true;
+    if (!payload.contatoId) return false;
+    const d = await crm.atendenteDoContatoId(tenantId, payload.contatoId).catch(() => ({ existe: false }));
+    return d.existe && (d.atendenteId === null || d.atendenteId === undefined || d.atendenteId === colabSse);
+  };
+  const onMensagem = async (payload) => { if (payload.tenantId === tenantId && await podeReceber(payload)) mandar('mensagem', payload); };
+  const onContatoAtualizado = async (payload) => { if (payload.tenantId === tenantId && await podeReceber(payload)) mandar('contato-atualizado', payload); };
   crm.eventosCrm.on('mensagem', onMensagem);
   crm.eventosCrm.on('contato-atualizado', onContatoAtualizado);
   // desativada ENQUANTO conectado: o evento chega na hora quando foi desativada por este processo (aba

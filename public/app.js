@@ -398,13 +398,13 @@ function aplicarMenuPermitido() {
   tabBtnCrm.hidden = !abaLiberada('crm');
   tabBtnConversas.hidden = !abaLiberada('crm'); // mesmas conversas do CRM, mesma permissao
   tabBtnContatos.hidden = !abaLiberada('crm'); // a base e a mesma tabela de contatos do CRM
-  tabBtnResultados.hidden = !abaLiberada('crm'); // indicadores calculados sobre as conversas do CRM
+  tabBtnResultados.hidden = !abaLiberada('crm') || !meuEhDono; // relatorios gerenciais: so o acesso principal // indicadores calculados sobre as conversas do CRM
   tabBtnInstagram.hidden = !abaLiberada('instagram');
   tabBtnAuto.hidden = !abaLiberada('auto');
   tabBtnFollowUp.hidden = !abaLiberada('followUp');
   tabBtnDisparos.hidden = !abaLiberada('disparos');
   tabBtnChamadas.hidden = !abaLiberada('whatsapp'); // ligacoes do numero conectado, mesma permissao do WhatsApp
-  tabBtnOrigem.hidden = !abaLiberada('crm'); // origem dos leads usa a base do CRM, mesma permissao
+  tabBtnOrigem.hidden = !abaLiberada('crm') || !meuEhDono; // origem dos leads usa a base do CRM, mesma permissao
   tabBtnFollowUpInteligente.hidden = !abaLiberada('followUpInteligente');
   tabBtnFunilFu.hidden = !abaLiberada('funilFollowUp');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
@@ -9077,6 +9077,7 @@ function opcoesOperador(lista, euId) {
 function contatoNoOperador(c) {
   if (!visaoOp) return true;
   const sem = c.atendente_id === null || c.atendente_id === undefined;
+  if (!meuEhDono && sem) return true; // colaborador: alem dos dele, a fila (leads sem operador) pra assumir
   const eu = minhaVisao.euId || crmOperadores.euId;
   if (visaoOp === 'livre') return sem;
   const id = visaoOp === 'eu' ? eu : (visaoOp === 'meuslivres' ? eu : Number(visaoOp.slice(3)));

@@ -1270,6 +1270,57 @@ export async function atendenteDoContato(tenantId, numero, instancia) {
   return { existe: !!rows[0], atendenteId: rows[0]?.atendente_id ?? null };
 }
 
+// ---- dono do lead, por id (checagens de colaborador) ----
+export async function atendenteDoContatoId(tenantId, id) {
+  if (!pool) return { existe: false, atendenteId: null };
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT atendente_id FROM crm_contatos WHERE tenant_id = $1 AND id = $2', [tenantId, Number(id)]);
+  return { existe: !!rows[0], atendenteId: rows[0]?.atendente_id ?? null };
+}
+export async function atendenteDaNota(tenantId, notaId) {
+  if (!pool) return { existe: false, atendenteId: null };
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT c.atendente_id FROM crm_notas n JOIN crm_contatos c ON c.id = n.contato_id WHERE n.tenant_id = $1 AND n.id = $2', [tenantId, Number(notaId)]);
+  return { existe: !!rows[0], atendenteId: rows[0]?.atendente_id ?? null };
+}
+export async function atendenteDaMensagem(tenantId, mensagemId) {
+  if (!pool) return { existe: false, atendenteId: null };
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT c.atendente_id FROM crm_mensagens m LEFT JOIN crm_contatos c ON c.tenant_id = m.tenant_id AND c.numero = m.numero AND c.instancia = m.instancia WHERE m.tenant_id = $1 AND m.id = $2`,
+    [tenantId, Number(mensagemId)],
+  );
+  return { existe: !!rows[0], atendenteId: rows[0]?.atendente_id ?? null };
+}
+
+// FILA: lead sem operador pode ser assumido por um colaborador; quem pegar primeiro fica (atomico: o segundo recebe false)
+export async function assumirAtomico(tenantId, contatoId, operadorId) {
+  if (!pool) return false;
+  await tabelasProntas;
+  const op = (await listarOperadores(tenantId)).find((o) => o.id === Number(operadorId));
+  if (!op) return false;
+  const { rowCount } = await pool.query(
+    `UPDATE crm_contatos SET atendente_id = $3, atendente_nome = $4, atendente_em = now() WHERE id = $1 AND tenant_id = $2 AND atendente_id IS NULL`,
+    [Number(contatoId), tenantId, op.id, op.nome],
+  );
+  if (rowCount) eventosCrm.emit('contato-atualizado', { tenantId, contatoId: Number(contatoId) });
+  return rowCount > 0;
+}
+
+// numero com operador responsavel: tudo que chegar sem dono nesse numero (importacao, cadastro...) vai pra ele
+export async function aplicarOperadorDoNumero(tenantId, instancia) {
+  if (!pool) return 0;
+  await tabelasProntas;
+  const op = (await operadoresPorNumero(tenantId))[instancia];
+  if (op === undefined) return 0;
+  const { rows } = await pool.query(
+    `SELECT id FROM crm_contatos WHERE tenant_id = $1 AND instancia = $2 AND atendente_id IS NULL AND oculto = false AND etapa <> 'contatos_pessoais'`,
+    [tenantId, instancia],
+  );
+  for (const r of rows) await definirAtendente(tenantId, r.id, op).catch(() => {});
+  return rows.length;
+}
+
 // entrega o lead a um operador so se ele ainda estiver sem dono
 export async function atribuirSeLivre(tenantId, contatoId, operadorId) {
   if (!pool) return;
