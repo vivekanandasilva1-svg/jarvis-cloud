@@ -347,6 +347,7 @@ async function tentarEntrar(usuario, senha) {
 // Preenchido por tokenValido()/mostrarApp() ao consultar /api/me.
 let souSuperAdmin = false;
 let minhasTabsHabilitadas = null; // null = tudo liberado (default); array = so essas abas
+let meuEhDono = true; // false = colaborador (so usa as ferramentas que o acesso principal liberou)
 let meuPermiteColaboradores = false; // beneficio liberado pelo super_admin (aba Clientes) - ver tenants.permite_colaboradores
 // Cerebro de IA e recurso pago a parte - false ate o admin liberar (super_admin sempre tem)
 let meuCerebroLiberado = false;
@@ -365,6 +366,7 @@ async function tokenValido() {
     const data = await res.json().catch(() => null);
     souSuperAdmin = !!data?.superAdmin;
     minhasTabsHabilitadas = Array.isArray(data?.tabsHabilitadas) && data.tabsHabilitadas.length ? data.tabsHabilitadas : null;
+    meuEhDono = data?.ehDono !== false;
     meuPermiteColaboradores = !!data?.permiteColaboradores;
     meuCerebroLiberado = !!data?.cerebroLiberado;
     meusDadosMe = data;
@@ -376,15 +378,22 @@ async function tokenValido() {
 
 // super_admin nunca fica restrito (evita o proprio dono se trancar fora sem querer) -
 // tabsHabilitadas null = tudo liberado, e o comportamento de sempre pra quem o admin nao mexeu
+// ferramentas do colaborador que o dono esta "acompanhando" no momento (null = todas, visao do proprio dono)
+function tabsDaVisao() {
+  try {
+    if (!meuEhDono || typeof visaoOp === 'undefined' || !visaoOp.startsWith('op:')) return null;
+    const op = (minhaVisao.operadores || []).find((o) => `op:${o.id}` === visaoOp);
+    return Array.isArray(op?.tabs) && op.tabs.length ? op.tabs : null;
+  } catch { return null; }
+}
 function abaLiberada(chave) {
+  const daVisao = tabsDaVisao();
+  if (daVisao && !daVisao.includes(chave)) return false;
   return souSuperAdmin || !minhasTabsHabilitadas || minhasTabsHabilitadas.includes(chave);
 }
 
-function mostrarApp() {
-  loginScreen.hidden = true;
-  appWindow.hidden = false;
-  tabBtnClientes.hidden = !souSuperAdmin;
-  tabBtnPropostasAdmin.hidden = !souSuperAdmin;
+// mostra so as ferramentas liberadas (pra conta, pro colaborador logado e, pro dono, pra visao do colaborador que ele acompanha)
+function aplicarMenuPermitido() {
   tabBtnPainel.hidden = !abaLiberada('painel');
   tabBtnAgenda.hidden = !abaLiberada('agenda');
   tabBtnWhatsapp.hidden = !abaLiberada('whatsapp');
@@ -406,6 +415,20 @@ function mostrarApp() {
   tabBtnIntegracoes.hidden = !abaLiberada('integracoes');
   tabBtnCerebro.hidden = !meuCerebroLiberado;
   atualizarGruposMenu();
+  // a aba aberta pode ter deixado de valer (trocou a visao): vai pra primeira liberada
+  const ativo = document.querySelector('.nav-btn.active');
+  if (ativo && ativo.hidden && typeof mudarAba === 'function') {
+    const primeira = [...document.querySelectorAll('.nav-btn[data-tab]')].find((b) => !b.hidden);
+    if (primeira) mudarAba(primeira.dataset.tab);
+  }
+}
+
+function mostrarApp() {
+  loginScreen.hidden = true;
+  appWindow.hidden = false;
+  tabBtnClientes.hidden = !souSuperAdmin;
+  tabBtnPropostasAdmin.hidden = !souSuperAdmin;
+  aplicarMenuPermitido();
   atualizarCabecalhoAba(document.querySelector('.nav-btn.active')?.dataset.tab || 'painel');
   lumienAoMudarAba(document.querySelector('.nav-btn.active')?.dataset.tab || 'painel');
   // se a aba visivel por padrao (Painel) foi restringida, pula pra primeira aba liberada em
@@ -7668,10 +7691,17 @@ async function carregarColaboradores() {
       infoNome.textContent = c.nome;
       const infoDetalhe = document.createElement('div');
       infoDetalhe.className = 'auto-arquivo-detalhe';
-      infoDetalhe.textContent = `usuário: ${c.username} - ${c.ativo ? 'ativo' : 'desativado'}`;
+      infoDetalhe.textContent = `usuário: ${c.username} - ${c.ativo ? 'ativo' : 'desativado'} - ${Array.isArray(c.tabs) ? `${c.tabs.length} ferramenta(s)` : 'todas as ferramentas'}`;
       info.appendChild(infoNome);
       info.appendChild(infoDetalhe);
       item.appendChild(info);
+
+      const ferrBtn = document.createElement('button');
+      ferrBtn.type = 'button'; ferrBtn.textContent = 'Ferramentas';
+      ferrBtn.title = 'Escolha quais ferramentas esse colaborador usa na versão dele do app';
+      ferrBtn.style.cssText = 'font-size:11px;padding:3px 8px;margin-left:6px;';
+      ferrBtn.addEventListener('click', () => abrirFerramentasColab(c));
+      item.appendChild(ferrBtn);
 
       const verSenhaBtn = document.createElement('button');
       verSenhaBtn.type = 'button'; verSenhaBtn.textContent = 'Ver senha';
@@ -9065,6 +9095,7 @@ function contatoNoOperador(c) {
 }
 function aplicarVisaoOperador(v) {
   visaoOp = v;
+  aplicarMenuPermitido();
   if (typeof tabFunilFu !== 'undefined' && !tabFunilFu.hidden) ffuDesenhar();
   try { localStorage.setItem('crmOperador', v); } catch { /* sem storage */ }
   crmFiltroOperador.value = v;
@@ -9085,6 +9116,7 @@ async function carregarOperadoresCrm() {
 }
 
 function preencherSeletoresOperador() {
+  crmFiltroOperador.hidden = !meuEhDono; // so o acesso principal troca de visao entre operadores
   const filtroAtual = crmFiltroOperador.value;
   crmFiltroOperador.textContent = '';
   const opcoes = opcoesOperador(crmOperadores.lista, minhaVisao.euId || crmOperadores.euId);
@@ -10218,6 +10250,7 @@ function preencherVisaoOperador() {
 function iniciarPerfilTopo(dados) {
   meuPerfil = dados.perfil || null;
   minhaVisao = { instancias: (dados.instancias || []).filter((i) => !String(i).startsWith('ig:')), operadores: dados.operadores || [], operadoresPorNumero: dados.operadoresPorNumero || {}, euId: dados.euId || 0, instanciaAtiva: dados.instanciaAtiva || null };
+  meuEhDono = dados.ehDono !== false;
   // 1o acesso com 2+ numeros: abre no numero ativo (cada setor ve so o seu)
   if (numeroSalvo() && !minhaVisao.instancias.includes(numeroSalvo())) numeroSalvar(''); // numero guardado de outra conta
   if (minhaVisao.instancias.length > 1 && (numeroSalvo() === null || numeroSalvo() === '')) numeroSalvar(minhaVisao.instancias.includes(minhaVisao.instanciaAtiva) ? minhaVisao.instanciaAtiva : minhaVisao.instancias[0]);
@@ -10238,7 +10271,8 @@ function iniciarPerfilTopo(dados) {
 visaoNumeroSel.addEventListener('change', () => {
   numeroSalvar(visaoNumeroSel.value);
   const opDoNumero = (minhaVisao.operadoresPorNumero || {})[visaoNumeroSel.value];
-  if (opDoNumero !== undefined && opDoNumero !== null && opDoNumero > 0 && [...visaoOperadorSel.options].some((o) => o.value === `op:${opDoNumero}`)) aplicarVisaoOperador(`op:${opDoNumero}`);
+  if (!meuEhDono) { /* colaborador fica sempre no proprio funil */ }
+  else if (opDoNumero !== undefined && opDoNumero !== null && opDoNumero > 0 && [...visaoOperadorSel.options].some((o) => o.value === `op:${opDoNumero}`)) aplicarVisaoOperador(`op:${opDoNumero}`);
   else if (opDoNumero === 0) aplicarVisaoOperador('');
   for (const sel of [crmFiltroNumero, ctFiltroNumero, dispNumero, cvInstancia]) {
     if (![...sel.options].some((o) => o.value === visaoNumeroSel.value)) continue;
@@ -10743,6 +10777,75 @@ document.getElementById('crmEspelharBtn').addEventListener('click', () => {
   mudarAba('contatos');
   setTimeout(() => document.getElementById('ctImportarBtn').click(), 150);
 });
+
+// ---------- Ferramentas de cada colaborador (so o acesso principal edita) ----------
+const FERRAMENTAS_COLAB = [
+  ['painel', 'Painel (Lumia/Chat)'], ['agenda', 'Agenda'], ['whatsapp', 'WhatsApp'], ['crm', 'CRM, Conversas, Contatos, Resultados e Origem dos leads'],
+  ['auto', 'Auto Atendimento'], ['followUp', 'Follow Up'], ['aniversariantes', 'Aniversariantes do mês'], ['followUpInteligente', 'Follow Up Inteligente'], ['funilFollowUp', 'Funil Follow Up'],
+  ['disparos', 'Disparos'], ['relatorios', 'Relatórios automáticos'], ['geradorRelatorios', 'Gerador de Relatórios'], ['integracoes', 'Integrações'], ['instagram', 'Instagram'],
+];
+function abrirFerramentasColab(c) {
+  const daConta = minhasTabsHabilitadas || meusDadosMe?.tabsValidas || FERRAMENTAS_COLAB.map(([k]) => k);
+  const disponiveis = FERRAMENTAS_COLAB.filter(([k]) => daConta.includes(k));
+  const atuais = Array.isArray(c.tabs) ? new Set(c.tabs) : new Set(disponiveis.map(([k]) => k));
+  const fundo = document.createElement('div');
+  fundo.className = 'ct-modal';
+  const caixa = document.createElement('div');
+  caixa.className = 'ct-caixa';
+  const topo = document.createElement('div');
+  topo.className = 'ct-caixa-topo';
+  const titulo = document.createElement('strong');
+  titulo.textContent = `Ferramentas de ${c.nome}`;
+  const fechar = document.createElement('button');
+  fechar.type = 'button'; fechar.className = 'ct-fechar'; fechar.textContent = '✕';
+  topo.append(titulo, fechar);
+  const info = document.createElement('p');
+  info.className = 'ct-info';
+  info.textContent = 'Marque o que esse colaborador pode usar. Ele terá uma versão do app só com essas ferramentas e verá apenas os leads dele. Só você, no acesso principal, pode trocar de visão para acompanhar o trabalho dele.';
+  caixa.append(topo, info);
+  const caixas = [];
+  for (const [chave, nome] of disponiveis) {
+    const lab = document.createElement('label');
+    lab.className = 'ct-campo';
+    lab.style.cssText = 'flex-direction:row;align-items:center;gap:8px;';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = atuais.has(chave); cb.dataset.chave = chave;
+    cb.style.width = 'auto';
+    lab.append(cb, document.createTextNode(nome));
+    caixa.appendChild(lab);
+    caixas.push(cb);
+  }
+  const erro = document.createElement('p');
+  erro.className = 'crm-conversa-erro'; erro.hidden = true;
+  const rodape = document.createElement('div');
+  rodape.className = 'ct-rodape';
+  const espaco = document.createElement('span'); espaco.className = 'ct-espaco';
+  const salvar = document.createElement('button');
+  salvar.type = 'button'; salvar.className = 'relatorio-config-enviar'; salvar.textContent = 'Salvar';
+  rodape.append(espaco, salvar);
+  caixa.append(erro, rodape);
+  fundo.appendChild(caixa);
+  document.body.appendChild(fundo);
+  const fecharModal = () => fundo.remove();
+  fechar.addEventListener('click', fecharModal);
+  fundo.addEventListener('click', (e) => { if (e.target === fundo) fecharModal(); });
+  salvar.addEventListener('click', async () => {
+    const tabs = caixas.filter((cb) => cb.checked).map((cb) => cb.dataset.chave);
+    if (!tabs.length) { erro.textContent = 'Marque pelo menos uma ferramenta.'; erro.hidden = false; return; }
+    salvar.disabled = true;
+    try {
+      // todas marcadas = volta ao padrao (herda tudo que a conta tem, inclusive o que for liberado depois)
+      const res = await fetch(`/api/colaboradores/${c.id}/tabs`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ tabs: tabs.length === disponiveis.length ? null : tabs }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
+      marcarSalvo(salvar, 'Ferramentas do colaborador salvas');
+      setTimeout(() => { fecharModal(); carregarColaboradores(); fetch('/api/me', { headers: { 'x-app-password': appPassword } }).then((r) => r.json()).then((m) => { minhaVisao.operadores = m.operadores || minhaVisao.operadores; aplicarMenuPermitido(); }).catch(() => {}); }, 500);
+    } catch (err) { erro.textContent = err.message; erro.hidden = false; salvar.disabled = false; }
+  });
+}
 
 // ---------- Aniversariantes do mes (integrado ao Clinicorp) ----------
 
