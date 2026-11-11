@@ -1113,7 +1113,8 @@ export async function definirAtendente(tenantId, contatoId, operadorId) {
 // Fica com o card de conversa mais recente, leva pra ele as mensagens, notas, historico e funil do(s) outro(s), completa os
 // campos vazios e apaga o(s) repetido(s). Contatos do MESMO telefone em NUMEROS de WhatsApp diferentes nao sao juntos
 // de proposito: cada numero (setor) tem o seu funil.
-const CHAVE_TELEFONE_SQL = `(substr(regexp_replace(numero, '\\D', '', 'g'), greatest(length(regexp_replace(numero, '\\D', '', 'g')) - 9, 1), 2) || right(regexp_replace(numero, '\\D', '', 'g'), 8))`;
+const DIGITOS_SQL = `regexp_replace(numero, '\D', '', 'g')`;
+const CHAVE_TELEFONE_SQL = `(CASE WHEN ${DIGITOS_SQL} LIKE '55%' AND length(${DIGITOS_SQL}) >= 12 THEN substr(${DIGITOS_SQL}, 3, 2) ELSE substr(${DIGITOS_SQL}, 1, 2) END || right(${DIGITOS_SQL}, 8))`;
 
 export async function mesclarRepetidos(tenantId = null) {
   if (!pool) return { grupos: 0, mesclados: 0 };
