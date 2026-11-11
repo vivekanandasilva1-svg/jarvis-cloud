@@ -10942,26 +10942,32 @@ async function carregarAniversariantes() {
   }
   carregarArquivosAniv();
   carregarListaAniv();
-  anivAtualizarHoje(true);
+  anivAtualizarHoje(true).then(anivSincronizarMesSeFaltar);
 }
 
 // Aniversariantes de hoje: 1 chamada ao Clinicorp (segundos), em vez do mes todo. Ao abrir a aba, se ainda
 // nao buscou hoje, faz sozinho em segundo plano e redesenha a lista.
 let anivBuscandoHoje = false;
+// depois dos de hoje (rapido), completa o mes todo em segundo plano - e o que alimenta a coluna "Em atraso"
+function anivSincronizarMesSeFaltar() {
+  const agora = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Maceio' });
+  const [ano, mes] = agora.split('-').map(Number);
+  const ult = anivUltimaSync;
+  const completoHoje = ult && !ult.soHoje && ult.ano === ano && ult.mes === mes && ult.quando && new Date(ult.quando).toLocaleDateString('en-CA', { timeZone: 'America/Maceio' }) === agora;
+  if (completoHoje || anivAno !== ano || anivMes !== mes) return;
+  anivSincronizarMes(true);
+}
+
 async function anivAtualizarHoje(silencioso) {
   const agora = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Maceio' });
   const [ano, mes] = agora.split('-').map(Number);
   if (anivBuscandoHoje) return;
-  if (silencioso) {
-    const ult = anivUltimaSync;
-    if (ult?.quando && new Date(ult.quando).toLocaleDateString('en-CA', { timeZone: 'America/Maceio' }) === agora && ult.ano === ano && ult.mes === mes) return;
-  }
   anivBuscandoHoje = true;
   anivBtnHoje.disabled = true;
   anivBtnHoje.textContent = 'Buscando hoje...';
   try {
     const { resumo } = await anivChamar('/api/aniversariantes/sincronizar', { method: 'POST', body: JSON.stringify({ ano, mes, soHoje: true }) });
-    anivUltimaSync = resumo;
+    if (!resumo.soHoje || !anivUltimaSync || anivUltimaSync.soHoje) anivUltimaSync = resumo;
     if (anivAno === ano && anivMes === mes) await carregarListaAniv();
     if (!silencioso) mostrarDiagnosticoAniv(resumo);
   } catch (err) {
@@ -11107,31 +11113,36 @@ anivTesteEnviar.addEventListener('click', async () => {
 anivMesAnt.addEventListener('click', () => { anivMes -= 1; if (anivMes < 1) { anivMes = 12; anivAno -= 1; } carregarListaAniv(); });
 anivMesProx.addEventListener('click', () => { anivMes += 1; if (anivMes > 12) { anivMes = 1; anivAno += 1; } carregarListaAniv(); });
 
-anivSincronizar.addEventListener('click', async () => {
-  anivListaErro.hidden = true;
+let anivSincMesRodando = false;
+async function anivSincronizarMes(silencioso) {
+  if (anivSincMesRodando) return;
+  anivSincMesRodando = true;
+  if (!silencioso) anivListaErro.hidden = true;
   anivSincronizar.disabled = true;
-  anivSincronizar.textContent = 'Buscando no Clinicorp...';
+  anivSincronizar.textContent = silencioso ? 'Atualizando o mês...' : 'Buscando no Clinicorp...';
   try {
     const { resumo } = await anivChamar('/api/aniversariantes/sincronizar', { method: 'POST', body: JSON.stringify({ ano: anivAno, mes: anivMes }) });
     anivUltimaSync = resumo;
     mostrarDiagnosticoAniv(resumo);
     await carregarListaAniv();
   } catch (err) {
-    anivListaErro.textContent = err.message;
-    anivListaErro.hidden = false;
+    if (!silencioso) { anivListaErro.textContent = err.message; anivListaErro.hidden = false; }
   } finally {
+    anivSincMesRodando = false;
     anivSincronizar.disabled = false;
     anivSincronizar.textContent = 'Sincronizar o mês todo';
   }
-});
+}
+anivSincronizar.addEventListener('click', () => anivSincronizarMes(false));
 
 async function carregarListaAniv() {
   anivMesLabel.textContent = `${ANIV_MESES[anivMes - 1]} ${anivAno}`;
   anivListaErro.hidden = true;
   anivLista.textContent = '';
   try {
-    const { itens } = await anivChamar(`/api/aniversariantes/mes?ano=${anivAno}&mes=${anivMes}`);
+    const { itens, totalAtraso } = await anivChamar(`/api/aniversariantes/mes?ano=${anivAno}&mes=${anivMes}`);
     anivItens = itens;
+    anivTotalAtraso = totalAtraso || 0;
     if (!itens.length) {
       const vazio = document.createElement('p');
       vazio.className = 'agenda-vazia';
@@ -11294,74 +11305,94 @@ function anivPassa(perfis) {
   return Array.isArray(perfis) && perfis.some((p) => anivFiltro.includes(p));
 }
 
-// "Do dia" / "Em atraso" / "Contato realizado", como o quadro CRC do Clinicorp
+// Quadro estilo CRC do Clinicorp: Do dia / Em atraso / Contato realizado (+ Proximos dias)
 function anivCategoria(it) {
   const hojeIso = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Maceio' });
   if (it.status === 'enviado') return 'realizado';
   if (it.data_envio === hojeIso) return 'hoje';
-  if (it.data_envio < hojeIso && (it.status === 'pendente' || it.status === 'falhou') && it.telefone) return 'atraso';
-  return '';
+  return it.data_envio < hojeIso ? 'atraso' : 'proximos';
 }
 
-const anivResumo = document.getElementById('anivResumo');
-const anivEnviarAtrasados = document.getElementById('anivEnviarAtrasados');
+const ANIV_COLUNAS = [
+  { id: 'hoje', titulo: 'Do dia', envio: 'hoje' },
+  { id: 'atraso', titulo: 'Em atraso', envio: 'atrasados' },
+  { id: 'realizado', titulo: 'Contato realizado', envio: null },
+  { id: 'proximos', titulo: 'Próximos dias', envio: null },
+];
 let anivPollTimer = null;
+let anivTotalAtraso = 0; // atrasados de todos os meses ja sincronizados
 
-function desenharResumoAniv() {
-  const cont = { hoje: 0, atraso: 0, realizado: 0 };
-  for (const it of anivItens) { const c = anivCategoria(it); if (c) cont[c]++; }
-  anivResumo.textContent = '';
-  for (const [id, rotulo] of [['hoje', 'Do dia'], ['atraso', 'Em atraso'], ['realizado', 'Contato realizado']]) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = `aniv-chip${anivVer.value === id ? ' ativo' : ''}`;
-    const n = document.createElement('strong');
-    n.textContent = String(cont[id]);
-    b.append(rotulo, n);
-    b.addEventListener('click', () => { anivVer.value = anivVer.value === id ? 'todos' : id; desenharListaAniv(); });
-    anivResumo.appendChild(b);
-  }
-  anivEnviarAtrasados.hidden = !cont.atraso;
-  anivEnviarAtrasados.textContent = `Enviar os ${cont.atraso} atrasados agora`;
-}
+// o que da pra enviar de verdade: pendente/falhou, com telefone e dentro do filtro de perfis
+const anivEnviavel = (it) => (it.status === 'pendente' || it.status === 'falhou') && !!it.telefone && anivPassa(it.perfis);
 
-anivEnviarAtrasados.addEventListener('click', async () => {
-  const n = anivItens.filter((it) => anivCategoria(it) === 'atraso' && anivPassa(it.perfis)).length;
-  if (!confirm(`Enviar a mensagem de aniversário atrasada para ${n} paciente(s) que passam no filtro de perfis?\n\nSai em segundo plano, com 20 a 45 segundos entre cada um.`)) return;
-  anivEnviarAtrasados.disabled = true;
+async function anivEnviarLote(itens, rotulo) {
+  const ids = itens.filter(anivEnviavel).map((it) => it.id);
+  if (!ids.length) { addBubble(`Ninguém ${rotulo} pode receber agora (sem telefone, já enviado ou fora do filtro de perfis).`, 'system'); return; }
+  if (!confirm(`Enviar a mensagem de aniversário para ${ids.length} paciente(s) (${rotulo})?\n\nSai em segundo plano, com 20 a 45 segundos entre cada um. Quem está fora do filtro de perfis não recebe.`)) return;
   anivListaErro.hidden = true;
   try {
-    const r = await anivChamar('/api/aniversariantes/enviar-atrasados', { method: 'POST', body: JSON.stringify({ ano: anivAno, mes: anivMes }) });
-    addBubble(r.total ? `Enviando ${r.total} mensagens atrasadas em segundo plano${r.foraDoFiltro ? ` (${r.foraDoFiltro} ficaram de fora pelo filtro)` : ''}.` : `Nenhum atrasado passa no filtro de perfis${r.foraDoFiltro ? ` (${r.foraDoFiltro} fora do filtro)` : ''}.`, 'system');
+    const r = await anivChamar('/api/aniversariantes/enviar-lote', { method: 'POST', body: JSON.stringify({ ids }) });
+    addBubble(r.total ? `Enviando ${r.total} mensagem(ns) em segundo plano${r.ignorados ? ` (${r.ignorados} ficaram de fora)` : ''}.` : 'Nenhum paciente pôde receber agora.', 'system');
     clearInterval(anivPollTimer);
     let voltas = 0;
-    if (r.total) anivPollTimer = setInterval(() => { carregarListaAniv(); if (++voltas >= 60) clearInterval(anivPollTimer); }, 30000);
+    if (r.total) anivPollTimer = setInterval(() => { carregarListaAniv(); if (++voltas >= 90) clearInterval(anivPollTimer); }, 20000);
   } catch (err) {
     anivListaErro.textContent = err.message;
     anivListaErro.hidden = false;
-  } finally {
-    anivEnviarAtrasados.disabled = false;
   }
-});
+}
 
 function desenharListaAniv() {
   anivLista.textContent = '';
-  desenharResumoAniv();
   const ver = anivVer.value;
-  const itens = anivItens.filter((it) => {
+  const filtrados = anivItens.filter((it) => {
     if (ver === 'todos') return true;
-    if (ver === 'hoje' || ver === 'atraso' || ver === 'realizado') return anivCategoria(it) === ver;
     if (ver === 'fora') return it.status === 'pendente' && !anivPassa(it.perfis);
     return (it.perfis || []).includes(ver);
   });
-  if (anivItens.length && !itens.length) {
-    const vazio = document.createElement('p');
-    vazio.className = 'agenda-vazia';
-    vazio.textContent = 'Nenhum aniversariante nesse filtro.';
-    anivLista.appendChild(vazio);
-    return;
+  const quadro = document.createElement('div');
+  quadro.className = 'aniv-kanban';
+  for (const col of ANIV_COLUNAS) {
+    const itens = filtrados.filter((it) => anivCategoria(it) === col.id);
+    const caixa = document.createElement('div');
+    caixa.className = 'aniv-col';
+    const titulo = document.createElement('h4');
+    titulo.textContent = col.titulo;
+    const qtd = document.createElement('div');
+    qtd.className = 'aniv-col-qtd';
+    const n = document.createElement('strong');
+    n.textContent = String(itens.length);
+    qtd.append('Quantidade', n);
+    caixa.append(titulo, qtd);
+    if (col.id === 'atraso') {
+      const tot = document.createElement('p');
+      tot.className = 'aniv-col-vazia';
+      tot.textContent = `Total em atraso (todos os meses sincronizados): ${anivTotalAtraso}`;
+      caixa.appendChild(tot);
+    }
+    if (col.envio) {
+      const enviaveis = itens.filter(anivEnviavel);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'aniv-col-envio';
+      b.textContent = enviaveis.length ? `Enviar para ${enviaveis.length === 1 ? '1 paciente' : `os ${enviaveis.length}`}` : 'Nada a enviar';
+      b.disabled = !enviaveis.length;
+      b.addEventListener('click', () => anivEnviarLote(itens, col.titulo.toLowerCase()));
+      caixa.appendChild(b);
+    }
+    const lista = document.createElement('div');
+    lista.className = 'aniv-col-lista';
+    if (!itens.length) {
+      const vazio = document.createElement('p');
+      vazio.className = 'aniv-col-vazia';
+      vazio.textContent = 'Ninguém aqui.';
+      lista.appendChild(vazio);
+    }
+    for (const it of itens) lista.appendChild(criarItemAniv(it));
+    caixa.appendChild(lista);
+    quadro.appendChild(caixa);
   }
-  for (const it of itens) anivLista.appendChild(criarItemAniv(it));
+  anivLista.appendChild(quadro);
 }
 
 anivVer.addEventListener('change', desenharListaAniv);

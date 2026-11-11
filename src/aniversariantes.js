@@ -305,11 +305,15 @@ export async function sincronizarMes(tenantId, ano, mes, { soHoje = false } = {}
     );
   }
   const resumo = { quando: new Date().toISOString(), ano, mes, soHoje, total: pacientes.length, semTelefone: pacientes.filter((p) => !p.telefone).length, camposVistos, falhas, modoMes, perfis: perfil.contagem, avisosPerfil: perfil.avisos };
-  await pool.query(
-    `INSERT INTO aniversariantes_config (tenant_id, ultima_sync) VALUES ($1, $2)
-     ON CONFLICT (tenant_id) DO UPDATE SET ultima_sync = $2`,
-    [tenantId, JSON.stringify(resumo)],
-  );
+  // o resumo "so hoje" nao apaga o do mes inteiro (que a tela usa pra saber se o mes ja foi sincronizado)
+  const anterior = soHoje ? (await obterConfig(tenantId)).ultimaSync : null;
+  if (!(anterior && !anterior.soHoje && anterior.ano === ano && anterior.mes === mes)) {
+    await pool.query(
+      `INSERT INTO aniversariantes_config (tenant_id, ultima_sync) VALUES ($1, $2)
+       ON CONFLICT (tenant_id) DO UPDATE SET ultima_sync = $2`,
+      [tenantId, JSON.stringify(resumo)],
+    );
+  }
   return resumo;
 }
 
@@ -327,6 +331,17 @@ export async function listarMes(tenantId, ano, mes) {
     [tenantId, ini],
   );
   return rows;
+}
+
+// total de aniversarios que ja passaram sem a mensagem sair, em TODOS os meses ja sincronizados (nao so o mes da tela)
+export async function totalAtrasados(tenantId) {
+  if (!pool) return 0;
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT count(*)::int AS n FROM aniversariantes_envios WHERE tenant_id = $1 AND data_envio < $2::date AND status IN ('pendente','falhou') AND telefone <> ''`,
+    [tenantId, hojeMaceio().iso],
+  );
+  return rows[0].n;
 }
 
 export async function atualizarEnvio(tenantId, id, { mensagem, status }) {
@@ -501,6 +516,38 @@ export async function processarTenant(tenantId, { pausaMs } = {}) {
 // do mes (que passam no filtro de perfil) em segundo plano, com a mesma pausa de 20-45s entre pacientes.
 const atrasadosRodando = new Set();
 export function atrasadosEmEnvio(tenantId) { return atrasadosRodando.has(tenantId); }
+
+// Envia uma lista de aniversariantes escolhida na tela (coluna Do dia / Em atraso...) em segundo plano.
+// So manda quem esta pendente/falhou, tem telefone e passa no filtro de perfis; 20-45s entre pacientes.
+export async function enviarLote(tenantId, ids, { pausaMs } = {}) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  const lista = [...new Set((Array.isArray(ids) ? ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 500);
+  if (!lista.length) throw new Error('Nenhum aniversariante escolhido.');
+  if (atrasadosRodando.has(tenantId)) throw new Error('Ja existe um envio em andamento - aguarde terminar.');
+  const config = await obterConfig(tenantId);
+  await instanciaDoTenant(tenantId);
+  const { rows } = await pool.query(
+    `SELECT id, perfis FROM aniversariantes_envios WHERE tenant_id = $1 AND id = ANY($2::int[]) AND status IN ('pendente','falhou') AND telefone <> '' ORDER BY data_envio DESC, id`,
+    [tenantId, lista],
+  );
+  const aEnviar = rows.filter((r) => passaNoFiltro(r.perfis, config.perfisFiltro)).map((r) => r.id);
+  const ignorados = lista.length - aEnviar.length;
+  if (!aEnviar.length) return { total: 0, ignorados };
+  atrasadosRodando.add(tenantId);
+  (async () => {
+    try {
+      for (const id of aEnviar) {
+        try { await enviarEnvio(tenantId, id); } catch (err) {
+          console.error(`Aniversariantes: lote ${id} (tenant ${tenantId}) falhou:`, err.message);
+          if (err.codigo === 'CONTA_INATIVA' || /Nenhum WhatsApp conectado/.test(err.message)) break;
+        }
+        await pausa(pausaMs ?? 20000 + Math.random() * 25000);
+      }
+    } finally { atrasadosRodando.delete(tenantId); }
+  })();
+  return { total: aEnviar.length, ignorados };
+}
 
 export async function enviarAtrasados(tenantId, ano, mes, { pausaMs } = {}) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');

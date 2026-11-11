@@ -447,6 +447,14 @@
     "conteudo": "Cliente reclamou de demora pra achar os aniversariantes do dia. Causa: a sincronização buscava o mês todo em fila (30 chamadas ao Clinicorp + 250ms de pausa cada, telefone por paciente, agenda por paciente e 24 janelas de orçamento, tudo 1 por vez). Correção: modo 'só hoje' (1 chamada; roda sozinho ao abrir a aba e no botão Atualizar hoje) e chamadas ao Clinicorp em paralelo (4 por vez, src/lotes.js) no mês todo. O botão virou 'Sincronizar o mês todo'. Pendente: se ainda houver lentidão com dados reais, medir latência do Clinicorp por endpoint."
   },
   {
+    "chave": "aniv:kanban",
+    "modulo": "aniversariantes",
+    "data": "2026-11-11",
+    "tipo": "fato",
+    "titulo": "Aniversariantes: quadro em colunas (Do dia, Em atraso, Contato realizado, Próximos dias)",
+    "conteudo": "A lista virou quadro estilo kanban do CRC do Clinicorp. Cada coluna tem a quantidade e, em Do dia e Em atraso, um botão que envia em lote (segundo plano, 20-45s entre pacientes, só quem tem telefone e passa no filtro de perfis; o filtro 'Ver' por perfil também recorta o que o botão envia). Em atraso mostra também o total acumulado de todos os meses já sincronizados. Ao abrir a aba: busca só hoje (rápido) e depois completa o mês todo em segundo plano, que alimenta a coluna de atrasados. O resumo do 'só hoje' não sobrescreve o do mês todo. Limite: atrasados só existem pros meses sincronizados (o Clinicorp mostra mais antigos); envio automático de atrasados não existe, é sempre ação do dono."
+  },
+  {
     "chave": "mod:clinicorp",
     "hub": true,
     "modulo": "clinicorp",

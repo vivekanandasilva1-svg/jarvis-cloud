@@ -1915,7 +1915,7 @@ app.post('/api/aniversariantes/config', async (req, res) => {
 app.get('/api/aniversariantes/mes', async (req, res) => {
   try {
     const { ano, mes } = mesDaQuery(req.query);
-    res.json({ ano, mes, itens: await aniversariantes.listarMes(req.tenantId, ano, mes) });
+    res.json({ ano, mes, itens: await aniversariantes.listarMes(req.tenantId, ano, mes), totalAtraso: await aniversariantes.totalAtrasados(req.tenantId) });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -1953,6 +1953,14 @@ app.post('/api/aniversariantes/enviar-atrasados', async (req, res) => {
   try {
     const { ano, mes } = mesDaQuery(req.body || {});
     res.json({ ok: true, ...(await aniversariantes.enviarAtrasados(req.tenantId, ano, mes)) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/aniversariantes/enviar-lote', async (req, res) => {
+  try {
+    res.json({ ok: true, ...(await aniversariantes.enviarLote(req.tenantId, req.body?.ids)) });
   } catch (err) {
     res.status(400).json({ erro: err.message });
   }
