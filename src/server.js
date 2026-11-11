@@ -1924,7 +1924,7 @@ app.get('/api/aniversariantes/mes', async (req, res) => {
 app.post('/api/aniversariantes/sincronizar', async (req, res) => {
   try {
     const { ano, mes } = mesDaQuery(req.body || {});
-    res.json({ ok: true, resumo: await aniversariantes.sincronizarMes(req.tenantId, ano, mes) });
+    res.json({ ok: true, resumo: await aniversariantes.sincronizarMes(req.tenantId, ano, mes, { soHoje: req.body?.soHoje === true }) });
   } catch (err) {
     res.status(400).json({ erro: err.message });
   }

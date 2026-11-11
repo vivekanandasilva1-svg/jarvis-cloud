@@ -10,6 +10,7 @@
 // Um paciente pode ter varios perfis ao mesmo tempo (ex: ativo + agendado + em tratamento); a mensagem
 // sai se ele tiver PELO MENOS UM dos perfis marcados.
 import * as clinicorp from './clinicorp.js';
+import { mapEmLotes } from './lotes.js';
 
 export const PERFIS = [
   { id: 'agendado', rotulo: 'Agendado', descricao: 'tem consulta marcada daqui pra frente' },
@@ -46,7 +47,7 @@ async function orcamentosRecentes(tenantId, hoje) {
 
 // pacientes: [{ chave, id, nome }] -> { mapa: Map(chave -> perfis[]), avisos: string[], contagem: { perfil: n } }
 // Nunca lanca: se um pedaco falhar, os pacientes afetados ficam "indefinido" e o motivo vai em "avisos".
-export async function classificarPacientes(tenantId, pacientes, { mesesAtivo = 12, pausaMs = 150 } = {}) {
+export async function classificarPacientes(tenantId, pacientes, { mesesAtivo = 12, pausaMs = 0 } = {}) {
   const avisos = [];
   const hoje = new Date(`${new Date().toLocaleDateString('en-CA', { timeZone: 'America/Maceio' })}T00:00:00Z`);
   const hojeIso = iso(hoje);
@@ -78,7 +79,8 @@ export async function classificarPacientes(tenantId, pacientes, { mesesAtivo = 1
   const contagem = Object.fromEntries([...IDS_PERFIL, 'indefinido'].map((id) => [id, 0]));
   let falhasAgenda = 0;
 
-  for (const p of pacientes) {
+  // agenda de cada paciente, 4 por vez
+  const agendas = await mapEmLotes(pacientes, 4, async (p) => {
     let agendaOk = false;
     let futuro = false;
     let recente = false;
@@ -94,9 +96,13 @@ export async function classificarPacientes(tenantId, pacientes, { mesesAtivo = 1
           else if (data >= from && !faltou.has(String(a.StatusId))) recente = true; // nao confia so no filtro de periodo da API
         }
       } catch { falhasAgenda++; }
-      await pausa(pausaMs);
+      if (pausaMs) await pausa(pausaMs);
     }
+    return { agendaOk, futuro, recente };
+  });
 
+  pacientes.forEach((p, i) => {
+    const { agendaOk, futuro, recente } = agendas[i];
     const orcs = (p.id && aprovadosPorId.get(String(p.id))) || aprovadosPorNome.get(norm(p.nome)) || [];
     const emTratamento = orcs.some((o) => o.situacaoClinica === 'em_andamento' || o.situacaoClinica === 'nao_iniciado');
     const finalizado = !emTratamento && orcs.length > 0 && orcs.every((o) => o.situacaoClinica === 'finalizado');
@@ -110,7 +116,7 @@ export async function classificarPacientes(tenantId, pacientes, { mesesAtivo = 1
 
     for (const id of perfis) contagem[id]++;
     mapa.set(p.chave, perfis);
-  }
+  });
   if (falhasAgenda) avisos.push(`Não consegui ler a agenda de ${falhasAgenda} paciente(s) - eles podem ter ficado como "indefinido".`);
   return { mapa, avisos, contagem };
 }

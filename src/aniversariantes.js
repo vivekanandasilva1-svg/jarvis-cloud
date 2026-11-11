@@ -14,6 +14,7 @@ import * as clinicorp from './clinicorp.js';
 import { pool } from './db.js';
 import * as evolutionApi from './evolutionApi.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
+import { mapEmLotes } from './lotes.js';
 import { classificarPacientes, IDS_PERFIL, passaNoFiltro } from './aniversariantesPerfil.js';
 import * as whatsappInstances from './whatsappInstances.js';
 
@@ -223,25 +224,25 @@ function normalizarPaciente(item) {
 
 const slug = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-// busca dia a dia (30 chamadas, com pausa curta). Se a API responder o mes inteiro de uma vez
-// (itens com dia de aniversario diferente do pedido), para na primeira chamada.
-async function buscarDoMes(tenantId, ano, mes) {
+// busca dia a dia, 4 dias por vez. O 1o dia vai sozinho: se a API responder o mes inteiro de uma vez
+// (itens com dia de aniversario diferente do pedido), para ali. "soDia" busca so aquele dia (rapido).
+async function buscarDoMes(tenantId, ano, mes, soDia = null) {
   const ultimo = ultimoDiaDoMes(ano, mes);
+  const dias = soDia ? [soDia] : Array.from({ length: ultimo }, (_, i) => i + 1);
   const achados = new Map();
   const camposVistos = new Set();
   let modoMes = false;
   let chamadas = 0;
   let falhas = 0;
   let ultimoErro = '';
-  for (let dia = 1; dia <= ultimo; dia++) {
+  const buscarDia = async (dia) => {
     let lista;
     try {
       lista = await clinicorp.getPatientBirthdays(tenantId, { date: `${ano}-${doisDig(mes)}-${doisDig(dia)}` });
     } catch (err) {
       if (/nao tem o Clinicorp conectado/.test(err.message)) throw err;
       falhas++; ultimoErro = err.message;
-      if (falhas >= 3 && chamadas === 0) break; // desiste cedo se nada funciona
-      continue;
+      return;
     }
     chamadas++;
     for (const bruto of Array.isArray(lista) ? lista : []) {
@@ -254,9 +255,9 @@ async function buscarDoMes(tenantId, ano, mes) {
       p.dia = Math.min(nasc.dia, ultimo);
       achados.set(p.id ? `id:${p.id}` : `nome:${slug(p.nome)}`, p);
     }
-    if (modoMes) break;
-    await pausa(250);
-  }
+  };
+  await buscarDia(dias[0]);
+  if (!modoMes && dias.length > 1 && chamadas > 0) await mapEmLotes(dias.slice(1), 4, buscarDia);
   if (!chamadas) throw new Error(`Nao consegui ler os aniversariantes no Clinicorp${ultimoErro ? `: ${ultimoErro}` : ''}`);
   return { pacientes: [...achados.entries()].map(([chave, p]) => ({ chave, ...p })), camposVistos: [...camposVistos].sort(), falhas, modoMes };
 }
@@ -273,15 +274,15 @@ async function completarTelefone(tenantId, p) {
 
 // traz os aniversariantes do mes do Clinicorp e grava a programacao. Nunca mexe em quem ja foi
 // enviado/pulado/editado; so atualiza nome/telefone de quem ainda esta pendente.
-export async function sincronizarMes(tenantId, ano, mes) {
+// soHoje = true: so o dia de hoje (1 chamada ao Clinicorp, abre em segundos); o mes inteiro fica pro botao "Sincronizar".
+export async function sincronizarMes(tenantId, ano, mes, { soHoje = false } = {}) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   if (!Number.isInteger(ano) || !Number.isInteger(mes) || mes < 1 || mes > 12 || ano < 2020 || ano > 2100) throw new Error('Mes invalido.');
   await tabelasProntas;
-  const { pacientes, camposVistos, falhas, modoMes } = await buscarDoMes(tenantId, ano, mes);
-  let completados = 0;
-  for (const p of pacientes) {
-    if (!p.telefone && completados < 60) { completados++; await completarTelefone(tenantId, p); await pausa(150); }
-  }
+  const hoje = hojeMaceio();
+  if (soHoje && (hoje.ano !== ano || hoje.mes !== mes)) throw new Error('"So hoje" vale apenas pro mes atual.');
+  const { pacientes, camposVistos, falhas, modoMes } = await buscarDoMes(tenantId, ano, mes, soHoje ? hoje.dia : null);
+  await mapEmLotes(pacientes.filter((p) => !p.telefone).slice(0, 60), 4, (p) => completarTelefone(tenantId, p));
   // perfil de cada paciente (agendado/ativo/em tratamento/finalizado/inativo) - nunca derruba a sincronizacao
   let perfil = { mapa: new Map(), avisos: [], contagem: null };
   try {
@@ -303,7 +304,7 @@ export async function sincronizarMes(tenantId, ano, mes) {
       [tenantId, p.chave, p.nome, p.telefone, `${ano}-${doisDig(mes)}-${doisDig(p.dia)}`, p.telefone ? 'pendente' : 'sem_telefone', perfis ? JSON.stringify(perfis) : null],
     );
   }
-  const resumo = { quando: new Date().toISOString(), ano, mes, total: pacientes.length, semTelefone: pacientes.filter((p) => !p.telefone).length, camposVistos, falhas, modoMes, perfis: perfil.contagem, avisosPerfil: perfil.avisos };
+  const resumo = { quando: new Date().toISOString(), ano, mes, soHoje, total: pacientes.length, semTelefone: pacientes.filter((p) => !p.telefone).length, camposVistos, falhas, modoMes, perfis: perfil.contagem, avisosPerfil: perfil.avisos };
   await pool.query(
     `INSERT INTO aniversariantes_config (tenant_id, ultima_sync) VALUES ($1, $2)
      ON CONFLICT (tenant_id) DO UPDATE SET ultima_sync = $2`,

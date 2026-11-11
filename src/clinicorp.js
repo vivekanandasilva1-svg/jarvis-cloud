@@ -3,6 +3,7 @@
 // Postgres via tenantConfig.js, nunca mais em env var global. Tenant sem Clinicorp configurado
 // recebe um erro claro em vez de acidentalmente usar a config de outro cliente.
 import * as tenantConfig from './tenantConfig.js';
+import { mapEmLotes } from './lotes.js';
 
 const BASE_URL = 'https://api.clinicorp.com/rest/v1';
 
@@ -241,11 +242,8 @@ function dividirEmJanelasDe31Dias(from, to) {
 // execucao clinica, mas esse dado ja vem embutido aqui)
 export async function getEstimatesExecutionSummary(tenantId, { from, to, status, situacaoClinica } = {}) {
   const janelas = dividirEmJanelasDe31Dias(from, to);
-  const todos = [];
-  for (const janela of janelas) {
-    const pedaco = await listEstimates(tenantId, { from: janela.from, to: janela.to });
-    todos.push(...pedaco);
-  }
+  // ate 4 janelas ao mesmo tempo (a ordem se mantem); 24 meses eram 24 chamadas em fila
+  const todos = (await mapEmLotes(janelas, 4, (janela) => listEstimates(tenantId, { from: janela.from, to: janela.to }))).flat();
 
   // um mesmo orcamento pode aparecer em mais de uma janela se a busca original cruzar meses -
   // dedup pelo id do orcamento (TreatmentId/PaymentPlanId, aqui exposto como "id")

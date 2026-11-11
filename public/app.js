@@ -10879,6 +10879,9 @@ const anivMesAnt = document.getElementById('anivMesAnt');
 const anivMesProx = document.getElementById('anivMesProx');
 const anivMesLabel = document.getElementById('anivMesLabel');
 const anivSincronizar = document.getElementById('anivSincronizar');
+const anivBtnHoje = document.getElementById('anivHoje');
+let anivUltimaSync = null;
+anivBtnHoje.addEventListener('click', () => anivAtualizarHoje(false));
 const anivDiag = document.getElementById('anivDiag');
 const anivListaErro = document.getElementById('anivListaErro');
 const anivLista = document.getElementById('anivLista');
@@ -10931,6 +10934,7 @@ async function carregarAniversariantes() {
     anivUsarIaLabel.textContent = config.usarIa ? 'IA reescreve a mensagem pra cada paciente' : 'IA nao reescreve (todos recebem o texto acima)';
     anivInstrucoesIa.value = config.instrucoesIa || '';
     anivAplicarConfigPerfis(config);
+    anivUltimaSync = config.ultimaSync || null;
     mostrarDiagnosticoAniv(config.ultimaSync);
   } catch (err) {
     anivErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
@@ -10938,12 +10942,41 @@ async function carregarAniversariantes() {
   }
   carregarArquivosAniv();
   carregarListaAniv();
+  anivAtualizarHoje(true);
+}
+
+// Aniversariantes de hoje: 1 chamada ao Clinicorp (segundos), em vez do mes todo. Ao abrir a aba, se ainda
+// nao buscou hoje, faz sozinho em segundo plano e redesenha a lista.
+let anivBuscandoHoje = false;
+async function anivAtualizarHoje(silencioso) {
+  const agora = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Maceio' });
+  const [ano, mes] = agora.split('-').map(Number);
+  if (anivBuscandoHoje) return;
+  if (silencioso) {
+    const ult = anivUltimaSync;
+    if (ult?.quando && new Date(ult.quando).toLocaleDateString('en-CA', { timeZone: 'America/Maceio' }) === agora && ult.ano === ano && ult.mes === mes) return;
+  }
+  anivBuscandoHoje = true;
+  anivBtnHoje.disabled = true;
+  anivBtnHoje.textContent = 'Buscando hoje...';
+  try {
+    const { resumo } = await anivChamar('/api/aniversariantes/sincronizar', { method: 'POST', body: JSON.stringify({ ano, mes, soHoje: true }) });
+    anivUltimaSync = resumo;
+    if (anivAno === ano && anivMes === mes) await carregarListaAniv();
+    if (!silencioso) mostrarDiagnosticoAniv(resumo);
+  } catch (err) {
+    if (!silencioso) { anivListaErro.textContent = err.message; anivListaErro.hidden = false; }
+  } finally {
+    anivBuscandoHoje = false;
+    anivBtnHoje.disabled = false;
+    anivBtnHoje.textContent = 'Atualizar hoje';
+  }
 }
 
 function mostrarDiagnosticoAniv(sync) {
   if (!sync) { anivDiag.hidden = true; return; }
   const quando = new Date(sync.quando).toLocaleString('pt-BR', { timeZone: 'America/Maceio' });
-  let txt = `Ultima sincronizacao (${ANIV_MESES[sync.mes - 1]}/${sync.ano}) em ${quando}: ${sync.total} aniversariante(s)`;
+  let txt = `Ultima sincronizacao (${sync.soHoje ? 'so hoje, ' : ''}${ANIV_MESES[sync.mes - 1]}/${sync.ano}) em ${quando}: ${sync.total} aniversariante(s)`;
   if (sync.semTelefone) txt += `, ${sync.semTelefone} sem telefone`;
   if (sync.falhas) txt += `, ${sync.falhas} dia(s) com erro no Clinicorp`;
   txt += '.';
@@ -11080,6 +11113,7 @@ anivSincronizar.addEventListener('click', async () => {
   anivSincronizar.textContent = 'Buscando no Clinicorp...';
   try {
     const { resumo } = await anivChamar('/api/aniversariantes/sincronizar', { method: 'POST', body: JSON.stringify({ ano: anivAno, mes: anivMes }) });
+    anivUltimaSync = resumo;
     mostrarDiagnosticoAniv(resumo);
     await carregarListaAniv();
   } catch (err) {
@@ -11087,7 +11121,7 @@ anivSincronizar.addEventListener('click', async () => {
     anivListaErro.hidden = false;
   } finally {
     anivSincronizar.disabled = false;
-    anivSincronizar.textContent = 'Sincronizar com o Clinicorp';
+    anivSincronizar.textContent = 'Sincronizar o mês todo';
   }
 });
 

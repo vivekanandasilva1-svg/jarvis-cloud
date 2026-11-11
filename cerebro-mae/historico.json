@@ -439,6 +439,14 @@
     "conteudo": "Inspirado no quadro CRC do Clinicorp: contadores clicáveis (Do dia / Em atraso / Contato realizado) e botão 'Enviar os atrasados agora'. Atraso = aniversário de dia anterior (no mês mostrado) ainda pendente/falhou, com telefone. O agendador continua NUNCA mandando dia passado sozinho; o envio dos atrasados é ação manual do dono, em segundo plano, respeita o filtro de perfil e a pausa de 20-45s, e bloqueia execução simultânea. Pendente: atraso só cobre o mês exibido (o Clinicorp mostra mais antigos); opção de enviar atrasados automaticamente não foi feita."
   },
   {
+    "chave": "aniv:rapido",
+    "modulo": "aniversariantes",
+    "data": "2026-11-11",
+    "tipo": "fato",
+    "titulo": "Aniversariantes: lista do dia abre em segundos",
+    "conteudo": "Cliente reclamou de demora pra achar os aniversariantes do dia. Causa: a sincronização buscava o mês todo em fila (30 chamadas ao Clinicorp + 250ms de pausa cada, telefone por paciente, agenda por paciente e 24 janelas de orçamento, tudo 1 por vez). Correção: modo 'só hoje' (1 chamada; roda sozinho ao abrir a aba e no botão Atualizar hoje) e chamadas ao Clinicorp em paralelo (4 por vez, src/lotes.js) no mês todo. O botão virou 'Sincronizar o mês todo'. Pendente: se ainda houver lentidão com dados reais, medir latência do Clinicorp por endpoint."
+  },
+  {
     "chave": "mod:clinicorp",
     "hub": true,
     "modulo": "clinicorp",
