@@ -1199,12 +1199,15 @@ export async function espelharFollowUp(tenantId, instancia, linhas) {
   const opNumero = (await operadoresPorNumero(tenantId))[instancia];
   const naLista = new Set();
   const vistos = new Set();
+  // quem ja estava em andamento no funil Follow Up ANTES desta lista (o gancho de entrada ja coloca os novos no funil)
+  const { rows: jaFunil } = await pool.query(`SELECT contato_id FROM ffu_leads WHERE tenant_id = $1 AND removido_em IS NULL AND concluido_em IS NULL AND contato_id IS NOT NULL`, [tenantId]);
+  const estavamNoFunil = new Set(jaFunil.map((x) => x.contato_id));
   for (const linha of linhas.slice(0, 2000)) {
     const numero = normalizarTelefone(linha?.numero);
     if (!numero) { r.invalidos++; continue; }
-    const chaveDup = varianteNonoDigito(numero) && /^55\d{2}9/.test(numero) ? varianteNonoDigito(numero) : numero;
-    if (vistos.has(numero) || vistos.has(chaveDup)) { r.repetidosNaLista++; continue; }
-    vistos.add(numero);
+    const canonico = /^55\d{2}[6-9]\d{7}$/.test(numero) ? `${numero.slice(0, 4)}9${numero.slice(4)}` : numero; // com e sem o 9 = mesma pessoa
+    if (vistos.has(canonico)) { r.repetidosNaLista++; continue; }
+    vistos.add(canonico);
     r.naLista++;
     const nome = textoOuNull(linha.nome, 120);
     let existente = await acharContatoPorTelefone(tenantId, numero);
@@ -1226,8 +1229,8 @@ export async function espelharFollowUp(tenantId, instancia, linhas) {
     }
     naLista.add(id);
     // funil Follow Up (Dia 0 a 5): quem ja esta em andamento nele nao entra de novo
-    const noFunil = await funilFU.adicionarDoCrm(tenantId, id).catch(() => null);
-    if (noFunil) { if (noFunil.jaEstava) r.jaNoFunil++; else r.entraramNoFunil++; }
+    await funilFU.adicionarDoCrm(tenantId, id).catch(() => null);
+    if (estavamNoFunil.has(id)) r.jaNoFunil++; else r.entraramNoFunil++;
     if (opNumero !== undefined) await atribuirSeLivre(tenantId, id, opNumero).catch(() => {});
   }
   if (!naLista.size) return r;
