@@ -257,11 +257,19 @@ export async function registrarMensagem(tenantId, { numero, instancia, direcao, 
   // formato: assume o card que ainda nao tinha conversa, em vez de abrir um card duplicado
   const variante = varianteNonoDigito(numero);
   if (variante) {
-    await pool.query(
+    const { rowCount } = await pool.query(
       `UPDATE crm_contatos SET numero = $1 WHERE tenant_id = $2 AND instancia = $3 AND numero = $4 AND ultima_mensagem_em IS NULL
          AND NOT EXISTS (SELECT 1 FROM crm_contatos WHERE tenant_id = $2 AND instancia = $3 AND numero = $1)`,
       [numero, tenantId, instancia, variante],
     );
+    if (!rowCount) {
+      // o card do outro formato ja tem conversa: a mensagem entra NELE (mesma conversa), nao num card repetido
+      const { rows: igual } = await pool.query(`SELECT 1 FROM crm_contatos WHERE tenant_id = $1 AND instancia = $2 AND numero = $3`, [tenantId, instancia, numero]);
+      if (!igual.length) {
+        const { rows: outro } = await pool.query(`SELECT 1 FROM crm_contatos WHERE tenant_id = $1 AND instancia = $2 AND numero = $3`, [tenantId, instancia, variante]);
+        if (outro.length) numero = variante;
+      }
+    }
   }
 
   const preview = (texto || '').slice(0, 200) || (tipo !== 'text' ? `[${tipo}]` : '');
@@ -1099,6 +1107,81 @@ export async function definirAtendente(tenantId, contatoId, operadorId) {
     await pool.query(`UPDATE crm_contatos SET atendente_id = $3, atendente_nome = $4, atendente_em = now() WHERE id = $1 AND tenant_id = $2`, [contatoId, tenantId, op.id, op.nome]);
   }
   eventosCrm.emit('contato-atualizado', { tenantId, contatoId });
+}
+
+// ---------- repetidos: junta o mesmo paciente (mesmo telefone, com/sem o 9) no mesmo numero de WhatsApp ----------
+// Fica com o card de conversa mais recente, leva pra ele as mensagens, notas, historico e funil do(s) outro(s), completa os
+// campos vazios e apaga o(s) repetido(s). Contatos do MESMO telefone em NUMEROS de WhatsApp diferentes nao sao juntos
+// de proposito: cada numero (setor) tem o seu funil.
+const CHAVE_TELEFONE_SQL = `(substr(regexp_replace(numero, '\\D', '', 'g'), greatest(length(regexp_replace(numero, '\\D', '', 'g')) - 9, 1), 2) || right(regexp_replace(numero, '\\D', '', 'g'), 8))`;
+
+export async function mesclarRepetidos(tenantId = null) {
+  if (!pool) return { grupos: 0, mesclados: 0 };
+  await tabelasProntas;
+  const params = [];
+  let filtroTenant = '';
+  if (tenantId) { params.push(tenantId); filtroTenant = ` AND tenant_id = $${params.length}`; }
+  const { rows: grupos } = await pool.query(
+    `SELECT tenant_id, instancia, ${CHAVE_TELEFONE_SQL} AS k, array_agg(id ORDER BY ultima_mensagem_em DESC NULLS LAST, id ASC) AS ids
+       FROM crm_contatos WHERE instancia NOT LIKE 'ig:%' AND numero ~ '^[0-9]{10,15}$'${filtroTenant}
+      GROUP BY tenant_id, instancia, ${CHAVE_TELEFONE_SQL} HAVING count(*) > 1`,
+    params,
+  );
+  let mesclados = 0;
+  for (const g of grupos) {
+    const [manterId, ...outros] = g.ids;
+    for (const outroId of outros) {
+      const cliente = await pool.connect();
+      try {
+        await cliente.query('BEGIN');
+        const { rows: [m] } = await cliente.query(`SELECT * FROM crm_contatos WHERE id = $1 AND tenant_id = $2 FOR UPDATE`, [manterId, g.tenant_id]);
+        const { rows: [o] } = await cliente.query(`SELECT * FROM crm_contatos WHERE id = $1 AND tenant_id = $2 FOR UPDATE`, [outroId, g.tenant_id]);
+        if (!m || !o) { await cliente.query('ROLLBACK'); continue; }
+        // historico: as conversas do repetido passam pro numero do card que fica
+        await cliente.query(`UPDATE crm_mensagens SET numero = $4 WHERE tenant_id = $1 AND instancia = $2 AND numero = $3`, [g.tenant_id, g.instancia, o.numero, m.numero]);
+        await cliente.query(`UPDATE crm_chamadas SET numero = $4 WHERE tenant_id = $1 AND instancia = $2 AND numero = $3`, [g.tenant_id, g.instancia, o.numero, m.numero]).catch(() => {});
+        await cliente.query(`UPDATE crm_notas SET contato_id = $1 WHERE contato_id = $2`, [manterId, outroId]);
+        await cliente.query(`UPDATE crm_etapa_eventos SET contato_id = $1 WHERE contato_id = $2`, [manterId, outroId]);
+        await cliente.query(`UPDATE clinicorp_followup_sync SET contato_id = $1 WHERE contato_id = $2`, [manterId, outroId]).catch(() => {});
+        // funil follow up: se os dois estavam no funil, fica o do card que permanece
+        const { rows: temFunil } = await cliente.query(`SELECT 1 FROM ffu_leads WHERE contato_id = $1 AND removido_em IS NULL AND concluido_em IS NULL`, [manterId]).catch(() => ({ rows: [] }));
+        if (temFunil.length) await cliente.query(`UPDATE ffu_leads SET removido_em = now() WHERE contato_id = $1`, [outroId]).catch(() => {});
+        else await cliente.query(`UPDATE ffu_leads SET contato_id = $1, numero = $3 WHERE contato_id = $2`, [manterId, outroId, m.numero]).catch(() => {});
+        // follow up antigo (1 linha por contato): fica a do card que permanece, senao herda a do repetido
+        const { rows: temFu } = await cliente.query(`SELECT 1 FROM follow_up_contatos WHERE contato_id = $1`, [manterId]).catch(() => ({ rows: [] }));
+        if (!temFu.length) await cliente.query(`UPDATE follow_up_contatos SET contato_id = $1 WHERE contato_id = $2`, [manterId, outroId]).catch(() => {});
+        // completa o que estiver vazio no card que fica
+        const etiquetas = limparEtiquetas([...(m.etiquetas || []), ...(o.etiquetas || [])]);
+        const obs = [m.observacoes, o.observacoes].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join('\n');
+        await cliente.query(
+          `UPDATE crm_contatos SET nome = COALESCE(nome, $2), email = COALESCE(email, $3), observacoes = $4, etiquetas = $5,
+             atendente_id = COALESCE(atendente_id, $6), atendente_nome = COALESCE(atendente_nome, $7) WHERE id = $1`,
+          [manterId, o.nome, o.email, obs || null, etiquetas, o.atendente_id, o.atendente_nome],
+        );
+        await cliente.query(`DELETE FROM crm_contatos WHERE id = $1`, [outroId]);
+        await cliente.query('COMMIT');
+        mesclados++;
+        eventosCrm.emit('contato-atualizado', { tenantId: g.tenant_id, contatoId: manterId });
+      } catch (err) {
+        await cliente.query('ROLLBACK').catch(() => {});
+        console.error(`Erro juntando repetido ${outroId} em ${manterId}:`, err.message);
+      } finally {
+        cliente.release();
+      }
+    }
+  }
+  return { grupos: grupos.length, mesclados };
+}
+
+export function iniciarVarreduraRepetidos() {
+  const rodar = async () => {
+    try {
+      const r = await mesclarRepetidos();
+      if (r.mesclados) console.log(`[crm] repetidos juntados: ${r.mesclados} (${r.grupos} grupos)`);
+    } catch (err) { console.error('[crm] varredura de repetidos:', err.message); }
+  };
+  setTimeout(rodar, 60 * 1000).unref();
+  setInterval(rodar, 60 * 60 * 1000).unref();
 }
 
 // ESPELHAR: a coluna Follow Up do CRM passa a ser igual a lista da coluna Follow Up do Clinicorp (CRC).

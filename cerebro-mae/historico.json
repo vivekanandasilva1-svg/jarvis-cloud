@@ -964,5 +964,13 @@
     "tipo": "funcao",
     "titulo": "Espelhar Follow Up do Clinicorp por lista (a API não expõe o quadro CRC)",
     "conteudo": "Como a API pública do Clinicorp (49 endpoints, spec em sistema.clinicorp.com/api-docs) não traz a coluna Follow Up do quadro CRC, criado o botão 'Espelhar Follow Up do Clinicorp' no CRM: sobe a lista exportada do CRC e a coluna Follow Up do CRM fica igual (crm.espelharFollowUp, rota POST /api/crm/follow-up/espelhar, opção também no modal de importação de Contatos). Entram novos/movidos (já no Dia 0 do funil e com o operador do número), saem só os que vieram de espelho anterior e não estão na lista (card criado pelo espelho e sem conversa é apagado; os demais voltam para Em atendimento); o que a equipe colocou sozinha nunca sai (tabela crm_espelho_followup rastreia). Não dispara cadência de mensagens. Sync automático por status FOLLOWUP: intervalo passou para 30min (limite de 25 req/hora do Clinicorp) e foi desligado nos dois números da Vitaly. Pendente: se o Clinicorp liberar endpoint do quadro, trocar a lista por chamada automática."
+  },
+  {
+    "chave": "crm:anti-repetidos",
+    "modulo": "crm",
+    "data": "2026-11-11",
+    "tipo": "melhoria",
+    "titulo": "Anti-repetidos: mesmo paciente (com/sem o 9) nunca vira dois cards",
+    "conteudo": "Auditoria em produção: 0 repetidos. Reforços: (1) chegada de mensagem no outro formato do telefone entra no card que já existe no mesmo número de WhatsApp (antes só reaproveitava card sem conversa e podia abrir um segundo); (2) crm.mesclarRepetidos roda no boot e a cada 1h: junta cards do mesmo telefone (DDD + 8 últimos dígitos) no MESMO número, ficando com o de conversa mais recente e levando mensagens, notas, histórico, funil, etiquetas, e-mail e operador; (3) Funil Follow Up não aceita o mesmo paciente (ou contato) duas vezes, com/sem o 9. Decisão: o mesmo telefone em NÚMEROS de WhatsApp diferentes continua separado (cada número tem seu funil). Já existiam: índice único (conta, número, instância), dedupe na importação, no Clinicorp e no cadastro manual."
   }
 ]

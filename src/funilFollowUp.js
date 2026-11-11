@@ -126,10 +126,13 @@ export async function adicionarLead(tenantId, { contatoId, numero, nome, instanc
   if (!nm && !num) throw new Error('Informe o nome ou o número do lead.');
   const datas = validarAgenda(agenda && agenda.length ? agenda : agendaPadrao());
   // o mesmo paciente nao entra duas vezes no funil enquanto ainda esta em andamento
-  if (num) {
+  if (num || contatoId) {
+    const variantes = [num];
+    if (/^55\d{2}9\d{8}$/.test(num)) variantes.push(num.slice(0, 4) + num.slice(5));
+    else if (/^55\d{2}[6-9]\d{7}$/.test(num)) variantes.push(`${num.slice(0, 4)}9${num.slice(4)}`);
     const { rows: dup } = await pool.query(
-      `SELECT id FROM ffu_leads WHERE tenant_id = $1 AND numero = $2 AND COALESCE(instancia,'') = COALESCE($3,'') AND concluido_em IS NULL AND removido_em IS NULL`,
-      [tenantId, num, inst],
+      `SELECT id FROM ffu_leads WHERE tenant_id = $1 AND (numero = ANY($2::text[]) OR ($4::int IS NOT NULL AND contato_id = $4)) AND COALESCE(instancia,'') = COALESCE($3,'') AND concluido_em IS NULL AND removido_em IS NULL`,
+      [tenantId, variantes, inst, contatoId ? Number(contatoId) : null],
     );
     if (dup.length) throw new Error('Esse paciente já está no Funil Follow Up.');
   }
