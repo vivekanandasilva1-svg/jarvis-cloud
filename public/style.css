@@ -3688,3 +3688,8 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 .aniv-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 .aniv-tag { border-radius: 6px; padding: 0 6px; font-size: 10.5px; color: var(--text-dim); border: 1px solid var(--border); }
 .aniv-tag.aviso { color: #ffb74d; border-color: rgba(255, 183, 77, 0.5); }
+.aniv-resumo { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.aniv-chip { display: flex; flex-direction: column; align-items: center; min-width: 110px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); font-size: 11px; cursor: pointer; }
+.aniv-chip strong { font-size: 18px; color: var(--text); }
+.aniv-chip.ativo { border-color: var(--gold-bright); }
+#anivEnviarAtrasados { margin-bottom: 8px; }

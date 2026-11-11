@@ -431,6 +431,14 @@
     "conteudo": "A clínica escolhe pra quais perfis o parabéns sai (agendado, ativo, em tratamento, finalizado, inativo; vale ter pelo menos um dos marcados). Perfil calculado no Clinicorp: agenda do paciente (consulta futura = agendado; consulta sem falta nos últimos N meses = ativo, N configurável) e execução dos orçamentos APROVADOS dos últimos 24 meses (parcial/não iniciado = em tratamento; todos executados = finalizado). Se o Clinicorp falhar o paciente fica 'indefinido' e NÃO recebe quando há filtro (aviso na tela). Envio manual ignora o filtro. Pendente: confirmar com dados reais os campos de id do paciente nos orçamentos (o código tenta PatientId/PersonId e cai no nome)."
   },
   {
+    "chave": "aniv:atraso",
+    "modulo": "aniversariantes",
+    "data": "2026-11-11",
+    "tipo": "fato",
+    "titulo": "Aniversariantes: Do dia, Em atraso e Contato realizado",
+    "conteudo": "Inspirado no quadro CRC do Clinicorp: contadores clicáveis (Do dia / Em atraso / Contato realizado) e botão 'Enviar os atrasados agora'. Atraso = aniversário de dia anterior (no mês mostrado) ainda pendente/falhou, com telefone. O agendador continua NUNCA mandando dia passado sozinho; o envio dos atrasados é ação manual do dono, em segundo plano, respeita o filtro de perfil e a pausa de 20-45s, e bloqueia execução simultânea. Pendente: atraso só cobre o mês exibido (o Clinicorp mostra mais antigos); opção de enviar atrasados automaticamente não foi feita."
+  },
+  {
     "chave": "mod:clinicorp",
     "hub": true,
     "modulo": "clinicorp",

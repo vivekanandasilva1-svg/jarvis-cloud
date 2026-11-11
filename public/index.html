@@ -1415,6 +1415,9 @@
           <button type="button" id="anivSincronizar">Sincronizar com o Clinicorp</button>
           <select id="anivVer" title="Filtrar a lista por perfil">
             <option value="todos">Ver: todos</option>
+            <option value="hoje">Do dia</option>
+            <option value="atraso">Em atraso</option>
+            <option value="realizado">Contato realizado</option>
             <option value="agendado">Agendados</option>
             <option value="ativo">Ativos</option>
             <option value="em_tratamento">Em tratamento</option>
@@ -1424,6 +1427,8 @@
             <option value="fora">Fora do filtro de envio</option>
           </select>
         </div>
+        <div class="aniv-resumo" id="anivResumo"></div>
+        <button type="button" id="anivEnviarAtrasados" hidden>Enviar os atrasados agora</button>
         <p class="agenda-vazia" id="anivDiag" hidden></p>
         <p class="agenda-erro" id="anivListaErro" hidden></p>
         <div id="anivLista">

@@ -495,6 +495,45 @@ export async function processarTenant(tenantId, { pausaMs } = {}) {
   return { enviados, foraDoFiltro };
 }
 
+// Aniversarios que ja passaram sem a mensagem sair (a clinica ligou a automacao depois, WhatsApp caiu etc).
+// O agendador nunca manda dia passado sozinho; aqui e uma acao do dono: manda os pendentes de dias anteriores
+// do mes (que passam no filtro de perfil) em segundo plano, com a mesma pausa de 20-45s entre pacientes.
+const atrasadosRodando = new Set();
+export function atrasadosEmEnvio(tenantId) { return atrasadosRodando.has(tenantId); }
+
+export async function enviarAtrasados(tenantId, ano, mes, { pausaMs } = {}) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  if (atrasadosRodando.has(tenantId)) throw new Error('Os atrasados ja estao sendo enviados - aguarde terminar.');
+  const config = await obterConfig(tenantId);
+  await instanciaDoTenant(tenantId); // falha cedo se nao ha WhatsApp conectado
+  const hoje = hojeMaceio();
+  const ini = `${ano}-${doisDig(mes)}-01`;
+  const { rows } = await pool.query(
+    `SELECT id, perfis FROM aniversariantes_envios
+     WHERE tenant_id = $1 AND data_envio >= $2::date AND data_envio < ($2::date + interval '1 month')
+       AND data_envio < $3::date AND status IN ('pendente','falhou') AND telefone <> ''
+     ORDER BY data_envio DESC, id`,
+    [tenantId, ini, hoje.iso],
+  );
+  const ids = rows.filter((r) => passaNoFiltro(r.perfis, config.perfisFiltro)).map((r) => r.id);
+  const foraDoFiltro = rows.length - ids.length;
+  if (!ids.length) return { total: 0, foraDoFiltro };
+  atrasadosRodando.add(tenantId);
+  (async () => {
+    try {
+      for (const id of ids) {
+        try { await enviarEnvio(tenantId, id); } catch (err) {
+          console.error(`Aniversariantes: atrasado ${id} (tenant ${tenantId}) falhou:`, err.message);
+          if (err.codigo === 'CONTA_INATIVA' || /Nenhum WhatsApp conectado/.test(err.message)) break;
+        }
+        await pausa(pausaMs ?? 20000 + Math.random() * 25000);
+      }
+    } finally { atrasadosRodando.delete(tenantId); }
+  })();
+  return { total: ids.length, foraDoFiltro };
+}
+
 // a cada 5min, pra cada clinica com a automacao ligada
 export function iniciarSchedulerAniversariantes() {
   const checar = async () => {

@@ -11260,10 +11260,66 @@ function anivPassa(perfis) {
   return Array.isArray(perfis) && perfis.some((p) => anivFiltro.includes(p));
 }
 
+// "Do dia" / "Em atraso" / "Contato realizado", como o quadro CRC do Clinicorp
+function anivCategoria(it) {
+  const hojeIso = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Maceio' });
+  if (it.status === 'enviado') return 'realizado';
+  if (it.data_envio === hojeIso) return 'hoje';
+  if (it.data_envio < hojeIso && (it.status === 'pendente' || it.status === 'falhou') && it.telefone) return 'atraso';
+  return '';
+}
+
+const anivResumo = document.getElementById('anivResumo');
+const anivEnviarAtrasados = document.getElementById('anivEnviarAtrasados');
+let anivPollTimer = null;
+
+function desenharResumoAniv() {
+  const cont = { hoje: 0, atraso: 0, realizado: 0 };
+  for (const it of anivItens) { const c = anivCategoria(it); if (c) cont[c]++; }
+  anivResumo.textContent = '';
+  for (const [id, rotulo] of [['hoje', 'Do dia'], ['atraso', 'Em atraso'], ['realizado', 'Contato realizado']]) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `aniv-chip${anivVer.value === id ? ' ativo' : ''}`;
+    const n = document.createElement('strong');
+    n.textContent = String(cont[id]);
+    b.append(rotulo, n);
+    b.addEventListener('click', () => { anivVer.value = anivVer.value === id ? 'todos' : id; desenharListaAniv(); });
+    anivResumo.appendChild(b);
+  }
+  anivEnviarAtrasados.hidden = !cont.atraso;
+  anivEnviarAtrasados.textContent = `Enviar os ${cont.atraso} atrasados agora`;
+}
+
+anivEnviarAtrasados.addEventListener('click', async () => {
+  const n = anivItens.filter((it) => anivCategoria(it) === 'atraso' && anivPassa(it.perfis)).length;
+  if (!confirm(`Enviar a mensagem de aniversário atrasada para ${n} paciente(s) que passam no filtro de perfis?\n\nSai em segundo plano, com 20 a 45 segundos entre cada um.`)) return;
+  anivEnviarAtrasados.disabled = true;
+  anivListaErro.hidden = true;
+  try {
+    const r = await anivChamar('/api/aniversariantes/enviar-atrasados', { method: 'POST', body: JSON.stringify({ ano: anivAno, mes: anivMes }) });
+    addBubble(r.total ? `Enviando ${r.total} mensagens atrasadas em segundo plano${r.foraDoFiltro ? ` (${r.foraDoFiltro} ficaram de fora pelo filtro)` : ''}.` : `Nenhum atrasado passa no filtro de perfis${r.foraDoFiltro ? ` (${r.foraDoFiltro} fora do filtro)` : ''}.`, 'system');
+    clearInterval(anivPollTimer);
+    let voltas = 0;
+    if (r.total) anivPollTimer = setInterval(() => { carregarListaAniv(); if (++voltas >= 60) clearInterval(anivPollTimer); }, 30000);
+  } catch (err) {
+    anivListaErro.textContent = err.message;
+    anivListaErro.hidden = false;
+  } finally {
+    anivEnviarAtrasados.disabled = false;
+  }
+});
+
 function desenharListaAniv() {
   anivLista.textContent = '';
+  desenharResumoAniv();
   const ver = anivVer.value;
-  const itens = anivItens.filter((it) => (ver === 'todos' ? true : ver === 'fora' ? it.status === 'pendente' && !anivPassa(it.perfis) : (it.perfis || []).includes(ver)));
+  const itens = anivItens.filter((it) => {
+    if (ver === 'todos') return true;
+    if (ver === 'hoje' || ver === 'atraso' || ver === 'realizado') return anivCategoria(it) === ver;
+    if (ver === 'fora') return it.status === 'pendente' && !anivPassa(it.perfis);
+    return (it.perfis || []).includes(ver);
+  });
   if (anivItens.length && !itens.length) {
     const vazio = document.createElement('p');
     vazio.className = 'agenda-vazia';

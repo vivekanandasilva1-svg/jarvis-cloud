@@ -1949,6 +1949,15 @@ app.post('/api/aniversariantes/envios/:id/enviar', async (req, res) => {
   }
 });
 
+app.post('/api/aniversariantes/enviar-atrasados', async (req, res) => {
+  try {
+    const { ano, mes } = mesDaQuery(req.body || {});
+    res.json({ ok: true, ...(await aniversariantes.enviarAtrasados(req.tenantId, ano, mes)) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
 app.post('/api/aniversariantes/teste', async (req, res) => {
   try {
     await aniversariantes.enviarTeste(req.tenantId, req.body?.numero);
