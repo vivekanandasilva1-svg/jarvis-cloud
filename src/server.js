@@ -36,6 +36,7 @@ import { iniciarSchedulerClinicorpFollowUp } from './clinicorpFollowUp.js';
 import * as followUpInteligente from './followUpInteligente.js';
 import * as funilFU from './funilFollowUp.js';
 import * as indicacoes from './indicacoes.js';
+import * as indicacoesIA from './indicacoesIA.js';
 import * as aniversariantes from './aniversariantes.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
 import { iniciarCerebroMae } from './cerebroMae.js';
@@ -1448,6 +1449,19 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
     return;
   }
 
+  // numero responsavel pelas Indicacoes: SO a IA exclusiva dessa aba responde aqui (prompt/arquivos/memoria proprios),
+  // nunca o Follow Up nem o Auto Atendimento normal. IA pausada/desligada = ninguem responde sozinho (a equipe atende).
+  if (await indicacoesIA.ehNumeroDasIndicacoes(tenantId, instanciaDoWebhook).catch(() => false)) {
+    return processarEmFila(`${tenantId}:${numero}`, async () => {
+      try {
+        await indicacoesIA.atender(tenantId, numero, instanciaDoWebhook, { texto, tipo });
+      } catch (err) {
+        console.error('Erro na IA das Indicacoes:', err);
+        if (ehErroDeCredito(err)) registrarFalhaCredito().catch(() => {});
+      }
+    });
+  }
+
   // se o card desse contato estiver na coluna "Follow Up" do CRM, quem responde e o motor de
   // Follow Up (followUp.js) - substitui 100% o auto-atendimento normal enquanto estiver nessa
   // coluna, pra nunca ter os dois motores respondendo a mesma conversa ao mesmo tempo. So volta
@@ -1787,9 +1801,94 @@ app.get('/api/indicacoes', async (req, res) => {
     res.status(500).json({ erro: err.message });
   }
 });
+// ---- IA exclusiva da aba Indicacoes ----
+app.get('/api/indicacoes/ia', async (req, res) => {
+  try {
+    const [config, arquivos, cfgInd] = await Promise.all([indicacoesIA.obterConfig(req.tenantId), indicacoesIA.listarArquivos(req.tenantId), indicacoes.obterConfig(req.tenantId)]);
+    res.json({ config, arquivos, promptPadrao: indicacoesIA.PROMPT_PADRAO, instancia: cfgInd.instancia });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.put('/api/indicacoes/ia/config', async (req, res) => {
+  try {
+    await indicacoesIA.salvarConfig(req.tenantId, { ativo: !!req.body?.ativo, prompt: req.body?.prompt });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/ia/ativo', async (req, res) => {
+  try {
+    await indicacoesIA.definirAtivo(req.tenantId, !!req.body?.ativo);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/ia/arquivos', async (req, res) => {
+  try {
+    const { nomeArquivo, base64, mediaType, descricao } = req.body || {};
+    const id = await indicacoesIA.salvarArquivo(req.tenantId, { nomeArquivo, mediaType, descricao, buffer: Buffer.from(String(base64 || ''), 'base64') });
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/indicacoes/ia/arquivos/:id', async (req, res) => {
+  try {
+    await indicacoesIA.apagarArquivo(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/:id/ia-pausa', async (req, res) => {
+  try {
+    await indicacoesIA.pausarIndicado(req.tenantId, req.params.id, !!req.body?.pausada);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// ---- relatorio de ligacoes do numero responsavel pelas Indicacoes ----
+app.get('/api/indicacoes/ligacoes', async (req, res) => {
+  try {
+    const cfg = await indicacoes.obterConfig(req.tenantId);
+    if (!cfg.instancia) return res.status(400).json({ erro: 'Escolha primeiro o número responsável pelas Indicações.' });
+    const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+    const ate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.ate || '')) ? String(req.query.ate) : hoje;
+    const de = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.de || '')) ? String(req.query.de) : new Date(Date.now() - 3 * 3600000 - 29 * 86400000).toISOString().slice(0, 10);
+    res.json({ instancia: cfg.instancia, ...(await chamadas.relatorioChamadas(req.tenantId, { de, ate, instancia: cfg.instancia })) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/ligacoes', async (req, res) => {
+  try {
+    const cfg = await indicacoes.obterConfig(req.tenantId);
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    const b = req.body || {};
+    const id = await chamadas.registrarChamadaManual(req.tenantId, { numero: b.numero, nome: b.nome, direcao: 'feita', status: b.status, duracaoSeg: b.duracaoSeg, quando: b.quando, operadorNome: perfil?.nome, obs: b.obs, instancia: cfg.instancia || 'manual' });
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/indicacoes/ligacoes/:id', async (req, res) => {
+  try {
+    await chamadas.apagarChamada(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.put('/api/indicacoes/config', async (req, res) => {
   try {
     await indicacoes.definirInstancia(req.tenantId, req.body?.instancia || null, await tenants.listarInstanciasDoTenant(req.tenantId));
+    indicacoesIA.limparCacheNumero(req.tenantId);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });

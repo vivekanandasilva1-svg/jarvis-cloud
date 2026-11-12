@@ -3731,3 +3731,12 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 .ind-retorno.hoje { color: #ffd9a8; background: rgba(249, 115, 22, 0.16); border-color: rgba(249, 115, 22, 0.6); }
 .ind-retorno.vencido { color: #ff9a9d; background: rgba(229, 72, 77, 0.14); border-color: rgba(229, 72, 77, 0.6); }
 .ind-atrasada { color: #ff9a9d; background: rgba(229, 72, 77, 0.14); border-color: rgba(229, 72, 77, 0.6); }
+
+.ind-filtros { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-bottom: 10px; }
+.ind-filtros label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-dim); }
+.ind-cards-resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.ind-card-resumo { border: 1px solid var(--borda); background: var(--superficie); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.ind-card-resumo strong { font-size: 20px; color: var(--gold-bright); }
+.ind-card-resumo span { font-size: 11.5px; color: var(--text-dim); }
+.ind-ia-arquivos { margin: 10px 0; }
+#indIaPrompt { width: 100%; box-sizing: border-box; margin-bottom: 8px; }

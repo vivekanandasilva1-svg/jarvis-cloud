@@ -5650,7 +5650,7 @@ function renderSaldo(d) {
     linha(`Última conferência (${new Date(c.em).toLocaleDateString('pt-BR')}): app achava ${usd(c.estimadoUsd)}, real ${usd(c.realUsd)}`, c.diferencaUsd > 0 ? `−${usd(c.diferencaUsd)} fora do app` : 'sem diferença');
   }
   if (d.foraDoApp30diasUsd > 0) linha('Gasto fora do app (30 dias)', usd(d.foraDoApp30diasUsd));
-  const NOMES_MODULO = { 'auto-atendimento': 'Auto Atendimento', lumia: 'Lumia', 'follow-up': 'Follow Up', aniversariantes: 'Aniversariantes', 'follow-up-inteligente': 'Follow Up Inteligente', externo: 'Gasto externo', 'gerador-relatorios': 'Gerador de Relatórios' };
+  const NOMES_MODULO = { 'auto-atendimento': 'Auto Atendimento', lumia: 'Lumia', 'follow-up': 'Follow Up', aniversariantes: 'Aniversariantes', indicacoes: 'Indicações', 'follow-up-inteligente': 'Follow Up Inteligente', externo: 'Gasto externo', 'gerador-relatorios': 'Gerador de Relatórios' };
   for (const r of d.porCliente || []) linha(`${r.nome} · ${NOMES_MODULO[r.modulo] || r.modulo || 'outros'}`, usd(r.custoUsd));
   saldoHistorico.textContent = '';
   const ROTULO_AJUSTE = { conferencia: 'Conferência', recarga: 'Recarga', gasto_externo: 'Gasto externo' };
@@ -11498,6 +11498,10 @@ function indCriarCard(i) {
   const nb = document.createElement('button'); nb.type = 'button'; nb.textContent = i.qtd_notas ? `📝 Anotações (${i.qtd_notas})` : '📝 Anotações';
   nb.addEventListener('click', () => { document.getElementById('indNotasTitulo').textContent = `Anotações · ${i.nome}`; document.getElementById('indNotasModal').hidden = false; indPainelNotasModal().definirContato(i.id); });
   acoes.appendChild(nb);
+  const ia = document.createElement('button'); ia.type = 'button'; ia.textContent = i.ia_pausada ? 'IA pausada · retomar' : 'Pausar IA';
+  ia.title = 'Pausa ou retoma a IA só neste contato';
+  ia.addEventListener('click', async () => { await fetch(`/api/indicacoes/${i.id}/ia-pausa`, { method: 'POST', headers: indH(), body: JSON.stringify({ pausada: !i.ia_pausada }) }); carregarIndicacoes(); });
+  acoes.appendChild(ia);
   const wa = document.createElement('a'); wa.className = 'ind-btn'; wa.textContent = 'WhatsApp'; wa.target = '_blank'; wa.rel = 'noopener'; wa.href = `https://wa.me/${i.telefone}`; acoes.appendChild(wa);
   const conf = document.createElement('button'); conf.type = 'button'; conf.textContent = 'Conferir no Clinicorp';
   conf.title = 'Consulta o Clinicorp para ver se o indicado já é paciente (1 consulta)';
@@ -11566,12 +11570,15 @@ function indTrocarVista(v) {
   indVista = v;
   document.getElementById('indBoard').hidden = v !== 'funil';
   document.getElementById('indResumo').hidden = v !== 'funil';
-  document.getElementById('indPesquisa').hidden = v !== 'pesquisa';
-  document.getElementById('indVerFunil').classList.toggle('ativo', v === 'funil');
-  document.getElementById('indVerPesquisa').classList.toggle('ativo', v === 'pesquisa');
+  for (const [id, nome] of [['indPesquisa', 'pesquisa'], ['indLigacoes', 'ligacoes'], ['indIA', 'ia']]) document.getElementById(id).hidden = v !== nome;
+  for (const [id, nome] of [['indVerFunil', 'funil'], ['indVerPesquisa', 'pesquisa'], ['indVerLigacoes', 'ligacoes'], ['indVerIA', 'ia']]) document.getElementById(id).classList.toggle('ativo', v === nome);
+  if (v === 'ligacoes') indCarregarLigacoes();
+  if (v === 'ia') indCarregarIA();
 }
 document.getElementById('indVerFunil').addEventListener('click', () => indTrocarVista('funil'));
 document.getElementById('indVerPesquisa').addEventListener('click', () => indTrocarVista('pesquisa'));
+document.getElementById('indVerLigacoes').addEventListener('click', () => indTrocarVista('ligacoes'));
+document.getElementById('indVerIA').addEventListener('click', () => indTrocarVista('ia'));
 
 function indDesenharPesquisa() {
   const box = document.getElementById('indPesquisa');
@@ -11842,4 +11849,136 @@ document.getElementById('indRetForm').addEventListener('submit', async (e) => {
 document.getElementById('indRetRemover').addEventListener('click', async () => {
   await fetch(`/api/indicacoes/${indRetId}/retorno`, { method: 'DELETE', headers: indH() });
   indRetModal.hidden = true; carregarIndicacoes();
+});
+
+// ---- Ligacoes do numero responsavel ----
+const indFmtSeg = (s) => { s = Number(s) || 0; const m = Math.floor(s / 60); return m ? `${m}min ${String(s % 60).padStart(2, '0')}s` : `${s}s`; };
+const indHoje = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+async function indCarregarLigacoes() {
+  const de = document.getElementById('indLigDe'), ate = document.getElementById('indLigAte');
+  if (!ate.value) ate.value = indHoje();
+  if (!de.value) de.value = new Date(Date.now() - 3 * 3600000 - 29 * 86400000).toISOString().slice(0, 10);
+  const info = document.getElementById('indLigInfo'), cards = document.getElementById('indLigResumo'), tab = document.getElementById('indLigTabela');
+  info.textContent = ''; cards.textContent = ''; tab.textContent = '';
+  try {
+    const r = await fetch(`/api/indicacoes/ligacoes?de=${de.value}&ate=${ate.value}`, { headers: indH() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    info.textContent = `Ligações do número ${d.instancia} no período. O WhatsApp só avisa as chamadas que ele mesmo registra; as demais entram pelo botão "Registrar ligação" (ou ao registrar uma tentativa como ligação).`;
+    const x = d.resumo;
+    for (const [v, t] of [[x.total, 'ligações'], [x.feitas, 'feitas'], [x.atendidas, 'atendidas'], [x.perdidas, 'perdidas'], [indFmtSeg(x.segundos_total), 'tempo total'], [indFmtSeg(x.segundos_medio), 'média por ligação']]) {
+      const c = document.createElement('div'); c.className = 'ind-card-resumo';
+      const a = document.createElement('strong'); a.textContent = v; const b = document.createElement('span'); b.textContent = t; c.append(a, b); cards.appendChild(c);
+    }
+    const thead = document.createElement('thead'); const trh = document.createElement('tr');
+    for (const h of ['Quando', 'Contato', 'Sentido', 'Resultado', 'Duração', 'Quem ligou', 'Observação', '']) { const th = document.createElement('th'); th.textContent = h; trh.appendChild(th); }
+    thead.appendChild(trh); tab.appendChild(thead);
+    const tb = document.createElement('tbody');
+    if (!d.chamadas.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 8; td.textContent = 'Nenhuma ligação nesse período.'; tr.appendChild(td); tb.appendChild(tr); }
+    const ST = { atendida: 'Atendida', perdida: 'Não atendeu', recusada: 'Recusada', tocando: 'Tocando' };
+    for (const c of d.chamadas) {
+      const tr = document.createElement('tr');
+      const cel = (t) => { const td = document.createElement('td'); td.textContent = t; tr.appendChild(td); return td; };
+      cel(new Date(c.inicio).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }));
+      cel(`${c.nome || c.numero}${c.nome ? ` · ${c.numero}` : ''}`); cel(c.direcao === 'feita' ? 'Feita' : 'Recebida'); cel(ST[c.status] || c.status); cel(c.duracao_seg ? indFmtSeg(c.duracao_seg) : '-'); cel(c.operador_nome || '-'); cel(c.obs || '');
+      const td = document.createElement('td');
+      if (c.origem === 'manual') { const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Apagar'; b.addEventListener('click', async () => { if (!confirm('Apagar este registro de ligação?')) return; await fetch(`/api/indicacoes/ligacoes/${c.id}`, { method: 'DELETE', headers: indH() }); indCarregarLigacoes(); }); td.appendChild(b); }
+      tr.appendChild(td); tb.appendChild(tr);
+    }
+    tab.appendChild(tb);
+  } catch (err) { info.textContent = err.message; }
+}
+document.getElementById('indLigAtualizar').addEventListener('click', indCarregarLigacoes);
+const indLigModal = document.getElementById('indLigModal');
+document.getElementById('indLigNova').addEventListener('click', () => {
+  for (const id of ['indLigNumero', 'indLigNome', 'indLigObs']) document.getElementById(id).value = '';
+  document.getElementById('indLigDuracao').value = '0'; document.getElementById('indLigStatus').value = 'atendida';
+  const dl = document.getElementById('indLigLista'); dl.textContent = '';
+  for (const i of indDados.indicados.slice(0, 1500)) dl.appendChild(new Option(`${i.nome}`, i.telefone));
+  document.getElementById('indLigErro').hidden = true; document.getElementById('indLigSalvar').classList.remove('pendente', 'salvo');
+  indLigModal.hidden = false;
+});
+document.getElementById('indLigNumero').addEventListener('change', (e) => { const i = indDados.indicados.find((x) => x.telefone === e.target.value.replace(/\D/g, '')); if (i) { document.getElementById('indLigNome').value = i.nome; e.target.value = i.telefone; } });
+indLigModal.addEventListener('click', (e) => { if (e.target === indLigModal || e.target.closest('[data-fechar="indLigModal"]')) indLigModal.hidden = true; });
+document.getElementById('indLigForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = document.getElementById('indLigErro'); erro.hidden = true;
+  const btn = document.getElementById('indLigSalvar'); btn.disabled = true;
+  try {
+    const r = await fetch('/api/indicacoes/ligacoes', { method: 'POST', headers: indH(), body: JSON.stringify({ numero: document.getElementById('indLigNumero').value, nome: document.getElementById('indLigNome').value, status: document.getElementById('indLigStatus').value, duracaoSeg: Math.round(Number(document.getElementById('indLigDuracao').value || 0) * 60), obs: document.getElementById('indLigObs').value }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, 'Ligação registrada');
+    setTimeout(() => { indLigModal.hidden = true; }, 400);
+    indCarregarLigacoes();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; }
+  btn.disabled = false;
+});
+
+// ---- IA exclusiva da aba ----
+let indIaDados = { config: { ativo: false, prompt: '' }, arquivos: [], promptPadrao: '' };
+function indIaDesenharEstado() {
+  const a = indIaDados.config.ativo;
+  document.getElementById('indIaAtivo').checked = a;
+  document.getElementById('indIaAtivoLabel').textContent = a ? 'IA atendendo no número das Indicações' : 'IA pausada';
+  document.getElementById('indIaEstado').textContent = a ? '(ligada)' : '(pausada)';
+}
+async function indCarregarIA() {
+  try {
+    const r = await fetch('/api/indicacoes/ia', { headers: indH() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    indIaDados = d;
+    document.getElementById('indIaPrompt').value = d.config.prompt || '';
+    document.getElementById('indIaPrompt').placeholder = d.promptPadrao || '';
+    indIaDesenharEstado();
+    const box = document.getElementById('indIaArquivos'); box.textContent = '';
+    if (!d.arquivos.length) { const p = document.createElement('p'); p.className = 'agenda-vazia'; p.textContent = 'Nenhum arquivo ainda.'; box.appendChild(p); }
+    for (const a of d.arquivos) {
+      const item = document.createElement('div'); item.className = 'auto-arquivo-item';
+      const info = document.createElement('div'); info.className = 'auto-arquivo-info';
+      const n = document.createElement('div'); n.className = 'auto-arquivo-nome'; n.textContent = a.nome_arquivo;
+      const dt = document.createElement('div'); dt.className = 'auto-arquivo-detalhe'; dt.textContent = `${a.media_type} · ${(a.tamanho / 1024).toFixed(0)} KB${a.descricao ? ` · ${a.descricao}` : ''}`;
+      info.append(n, dt); item.appendChild(info);
+      const x = document.createElement('button'); x.type = 'button'; x.textContent = 'Apagar'; x.style.cssText = 'font-size:11px;padding:3px 8px;margin-left:6px;color:#f87171;';
+      x.addEventListener('click', async () => { if (!confirm(`Apagar "${a.nome_arquivo}"?`)) return; await fetch(`/api/indicacoes/ia/arquivos/${a.id}`, { method: 'DELETE', headers: indH() }); indCarregarIA(); });
+      item.appendChild(x); box.appendChild(item);
+    }
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+}
+document.getElementById('indIaAtivo').addEventListener('change', async (e) => {
+  const quer = e.target.checked;
+  try {
+    const r = await fetch('/api/indicacoes/ia/ativo', { method: 'POST', headers: indH(), body: JSON.stringify({ ativo: quer }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    indIaDados.config.ativo = quer; indIaDesenharEstado();
+    mostrarAviso(quer ? 'IA das Indicações ligada' : 'IA das Indicações pausada', 'ok');
+  } catch (err) { e.target.checked = !quer; mostrarAviso(err.message, 'erro'); }
+});
+document.getElementById('indIaPadrao').addEventListener('click', () => { document.getElementById('indIaPrompt').value = indIaDados.promptPadrao || ''; marcarPendente(document.getElementById('indIaSalvar')); });
+document.getElementById('indIaSalvar').addEventListener('click', async () => {
+  const btn = document.getElementById('indIaSalvar'); btn.disabled = true;
+  try {
+    const r = await fetch('/api/indicacoes/ia/config', { method: 'PUT', headers: indH(), body: JSON.stringify({ ativo: indIaDados.config.ativo, prompt: document.getElementById('indIaPrompt').value }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, 'Prompt da IA salvo');
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  btn.disabled = false;
+});
+document.getElementById('indIaEnviar').addEventListener('click', async () => {
+  const erro = document.getElementById('indIaErro'); erro.hidden = true;
+  const arq = document.getElementById('indIaArquivo').files?.[0];
+  if (!arq) { erro.textContent = 'Escolha um arquivo.'; erro.hidden = false; return; }
+  const btn = document.getElementById('indIaEnviar'); btn.disabled = true; btn.textContent = 'Enviando...';
+  try {
+    const b64 = await arquivoParaBase64(arq);
+    const r = await fetch('/api/indicacoes/ia/arquivos', { method: 'POST', headers: indH(), body: JSON.stringify({ nomeArquivo: arq.name, mediaType: arq.type || 'application/octet-stream', base64: b64, descricao: document.getElementById('indIaDescricao').value }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    document.getElementById('indIaArquivo').value = ''; document.getElementById('indIaDescricao').value = '';
+    mostrarAviso('Arquivo enviado', 'ok'); indCarregarIA();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; }
+  btn.disabled = false; btn.textContent = 'Enviar arquivo';
 });

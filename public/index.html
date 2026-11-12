@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261112c" />
+  <link rel="stylesheet" href="style.css?v=20261112d" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -922,10 +922,41 @@
         <div class="ind-subnav">
           <button type="button" id="indVerFunil" class="ind-sub ativo">Funil de indicados</button>
           <button type="button" id="indVerPesquisa" class="ind-sub">Pesquisa de satisfação <span class="ind-sub-qtd" id="indPesqQtd"></span></button>
+          <button type="button" id="indVerLigacoes" class="ind-sub">Ligações</button>
+          <button type="button" id="indVerIA" class="ind-sub">IA da CRM <span class="ind-sub-qtd" id="indIaEstado"></span></button>
         </div>
         <p class="ind-resumo" id="indResumo"></p>
         <div class="crm-board" id="indBoard"><p class="agenda-vazia">Carregando...</p></div>
         <div class="ind-pesquisa" id="indPesquisa" hidden></div>
+        <div class="ind-pesquisa" id="indLigacoes" hidden>
+          <div class="ind-filtros">
+            <label>De <input type="date" id="indLigDe" /></label>
+            <label>Até <input type="date" id="indLigAte" /></label>
+            <button type="button" id="indLigAtualizar" class="crm-btn-secundario">Atualizar</button>
+            <button type="button" id="indLigNova">+ Registrar ligação</button>
+          </div>
+          <p class="ind-resumo" id="indLigInfo"></p>
+          <div class="ind-cards-resumo" id="indLigResumo"></div>
+          <div class="ct-tabela-wrap"><table class="ct-tabela" id="indLigTabela"></table></div>
+        </div>
+        <div class="ind-pesquisa" id="indIA" hidden>
+          <div class="auto-toggle-row">
+            <label class="auto-switch"><input type="checkbox" id="indIaAtivo" /><span class="auto-switch-track"><span class="auto-switch-thumb"></span></span></label>
+            <span id="indIaAtivoLabel">IA pausada</span>
+          </div>
+          <p class="ct-info">A IA responde só no número responsável pelas Indicações (escolhido no topo da aba). Quando está pausada, ninguém responde sozinho e a equipe atende. Também dá para pausar a IA em um contato específico, no card dele. Por enquanto ela responde mensagens de texto.</p>
+          <label class="auto-label">Prompt da IA das Indicações</label>
+          <textarea id="indIaPrompt" rows="9" placeholder="Como a IA deve conversar com os indicados..."></textarea>
+          <div class="ffu-acoes" style="margin-bottom:12px"><button type="button" id="indIaSalvar" class="relatorio-config-enviar">Salvar prompt</button><button type="button" id="indIaPadrao" class="crm-btn-secundario">Usar texto sugerido</button></div>
+          <label class="auto-label">Arquivos que a IA pode enviar (imagem, áudio, PDF ou vídeo curto até 12 MB)</label>
+          <div class="ffu-acoes">
+            <input type="file" id="indIaArquivo" accept="image/*,audio/*,video/mp4,application/pdf" />
+            <input type="text" id="indIaDescricao" placeholder="Quando enviar? (ex.: apresentação da clínica)" maxlength="200" style="min-width:240px" />
+            <button type="button" id="indIaEnviar" class="crm-btn-secundario">Enviar arquivo</button>
+          </div>
+          <div id="indIaArquivos" class="ind-ia-arquivos"></div>
+          <p class="crm-conversa-erro" id="indIaErro" hidden></p>
+        </div>
       </div>
 
       <div class="ct-modal" id="indModal" hidden>
@@ -1008,6 +1039,25 @@
           </div>
           <div class="notas-painel notas-fixo" id="indNotasPainel"></div>
         </div>
+      </div>
+
+      <div class="ct-modal" id="indLigModal" hidden>
+        <form class="ct-caixa" id="indLigForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Registrar ligação</strong>
+            <button type="button" class="ct-fechar" data-fechar="indLigModal">✕</button>
+          </div>
+          <label class="ct-campo">Telefone de quem recebeu<input type="tel" id="indLigNumero" list="indLigLista" placeholder="82 99999-9999" /></label>
+          <datalist id="indLigLista"></datalist>
+          <label class="ct-campo">Nome<input type="text" id="indLigNome" maxlength="120" /></label>
+          <label class="ct-campo">Resultado
+            <select id="indLigStatus"><option value="atendida">Atendeu</option><option value="perdida">Não atendeu</option><option value="recusada">Recusou</option></select>
+          </label>
+          <label class="ct-campo">Duração (minutos)<input type="number" id="indLigDuracao" min="0" max="180" value="0" /></label>
+          <label class="ct-campo">Observação<textarea id="indLigObs" maxlength="500"></textarea></label>
+          <p class="crm-conversa-erro" id="indLigErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="indLigSalvar" class="relatorio-config-enviar">Salvar ligação</button></div>
+        </form>
       </div>
 
       <div class="ct-modal" id="indLinkModal" hidden>
@@ -1843,6 +1893,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261112c"></script>
+  <script src="app.js?v=20261112d"></script>
 </body>
 </html>

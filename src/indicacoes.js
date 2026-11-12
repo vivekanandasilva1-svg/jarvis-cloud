@@ -286,6 +286,25 @@ export async function registrarTentativa(tenantId, id, { resultado, obs, ligacao
   return { ok: true, n, etapa };
 }
 
+// a IA da aba registra o resultado da conversa pra equipe (agendou / sem interesse / pedir retorno) + nota "IA: ..."
+export async function registrarResultadoPelaIA(tenantId, id, { resultado, observacao, retornoEm }) {
+  await tabelasProntas;
+  const obs = texto(observacao, 500);
+  const { rows: [i] } = await pool.query('SELECT id, etapa FROM ind_indicados WHERE id = $1 AND tenant_id = $2', [Number(id), tenantId]);
+  if (!i) throw new Error('Indicado não encontrado.');
+  let rotulo;
+  if (resultado === 'agendou') { await pool.query(`UPDATE ind_indicados SET etapa = 'agendado', atualizado_em = now() WHERE id = $1`, [i.id]); rotulo = 'quer agendar'; }
+  else if (resultado === 'sem_interesse') { await pool.query(`UPDATE ind_indicados SET etapa = 'sem_sucesso', atualizado_em = now() WHERE id = $1`, [i.id]); rotulo = 'sem interesse'; }
+  else if (resultado === 'pedir_retorno') {
+    const d = new Date(retornoEm);
+    if (Number.isNaN(d.getTime()) || d.getTime() < Date.now() - 60000) throw new Error('Informe data e hora futuras para o retorno.');
+    await pool.query('UPDATE ind_indicados SET retorno_em = $2, retorno_nota = $3, atualizado_em = now() WHERE id = $1', [i.id, d, obs]);
+    rotulo = 'pediu retorno';
+  } else throw new Error('Resultado inválido.');
+  await pool.query('INSERT INTO ind_notas (tenant_id, indicado_id, autor_id, autor_nome, texto) VALUES ($1,$2,0,$3,$4)', [tenantId, i.id, 'IA', `Conversa com a IA: ${rotulo}${obs ? ` - ${obs}` : ''}`]);
+  return { ok: true };
+}
+
 // alerta de retorno (como no CRM): data/hora combinada + nota; passa a destacar o card quando chega
 export async function definirRetorno(tenantId, id, { retornoEm, nota }) {
   await tabelasProntas;
