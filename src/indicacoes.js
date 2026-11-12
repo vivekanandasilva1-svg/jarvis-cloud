@@ -227,6 +227,15 @@ export async function apagar(tenantId, id) {
   await pool.query('DELETE FROM ind_indicados WHERE id = $1 AND tenant_id = $2', [Number(id), tenantId]);
 }
 
+// numero de WhatsApp responsavel pelas Indicacoes (escolhido entre os numeros conectados da conta; null = nenhum)
+export async function definirInstancia(tenantId, instancia, instanciasDaConta) {
+  await tabelasProntas;
+  const nome = instancia ? String(instancia) : null;
+  if (nome && !(instanciasDaConta || []).includes(nome)) throw new Error('Escolha um número de WhatsApp desta conta.');
+  await obterConfig(tenantId); // garante a linha (e o token)
+  await pool.query('UPDATE ind_config SET instancia = $2, atualizado_em = now() WHERE tenant_id = $1', [tenantId, nome]);
+}
+
 // consulta o Clinicorp (1 requisicao) pra saber se o indicado JA e paciente - so quando alguem clica
 export async function conferirNoClinicorp(tenantId, id) {
   await tabelasProntas;

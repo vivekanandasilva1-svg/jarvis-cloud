@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261112a" />
+  <link rel="stylesheet" href="style.css?v=20261112b" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -910,6 +910,7 @@
         <div class="crm-board-header">
           <span>Indicações: quem indicou, quem foi indicado e o funil de contato (1ª tentativa no Dia 1, 2ª no Dia 2, 3ª no Dia 7).</span>
           <div class="crm-board-nav">
+            <select id="indNumero" title="Número de WhatsApp responsável pelas Indicações"></select>
             <input type="search" id="indBusca" placeholder="Buscar indicado ou indicador" class="ind-busca" />
             <button type="button" id="indNovoBtn">+ Indicação</button>
             <button type="button" id="indImportarBtn">Importar lista</button>
@@ -917,6 +918,7 @@
             <button type="button" id="indRefresh">Atualizar</button>
           </div>
         </div>
+        <p class="ind-responsavel" id="indResponsavel"></p>
         <div class="ind-subnav">
           <button type="button" id="indVerFunil" class="ind-sub ativo">Funil de indicados</button>
           <button type="button" id="indVerPesquisa" class="ind-sub">Pesquisa de satisfação <span class="ind-sub-qtd" id="indPesqQtd"></span></button>
@@ -1799,6 +1801,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261112a"></script>
+  <script src="app.js?v=20261112b"></script>
 </body>
 </html>

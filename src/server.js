@@ -153,7 +153,8 @@ app.use(async (req, res, next) => {
     if (req.operadorId > 0) {
       const soDono = req.path.startsWith('/api/colaboradores')
         || (req.method !== 'GET' && (req.path.startsWith('/api/crm/distribuicao') || req.path.startsWith('/api/crm/clinicorp-followup')))
-        || (req.method !== 'GET' && /^\/api\/whatsapp\/instancias\/[^/]+\/operador$/.test(req.path));
+        || (req.method !== 'GET' && /^\/api\/whatsapp\/instancias\/[^/]+\/operador$/.test(req.path))
+        || (req.method !== 'GET' && req.path === '/api/indicacoes/config');
       if (soDono) return res.status(403).json({ erro: 'so o acesso principal da conta pode fazer isso' });
     }
     const abaProtegida = Object.entries(TAB_ROTA_PREFIXO).find(([, prefixo]) => req.path.startsWith(prefixo));
@@ -1774,9 +1775,24 @@ app.put('/api/funil-fu/tarefas', async (req, res) => {
 app.get('/api/indicacoes', async (req, res) => {
   try {
     const [lista, config] = await Promise.all([indicacoes.listar(req.tenantId), indicacoes.obterConfig(req.tenantId)]);
-    res.json({ etapas: indicacoes.ETAPAS, origens: indicacoes.ORIGENS, token: config.token, ...lista });
+    // numeros conectados da conta (com o operador de cada um) pra escolher o responsavel pelas Indicacoes
+    const permitidas = new Set(await tenants.listarInstanciasDoTenant(req.tenantId).catch(() => []));
+    const [evo, porNumero, operadores] = await Promise.all([evolutionApi.listarInstancias().catch(() => []), tenants.operadoresPorNumero(req.tenantId).catch(() => ({})), crm.listarOperadores(req.tenantId).catch(() => [])]);
+    const numeros = evo.filter((i) => permitidas.has(i.nome) && !String(i.nome).startsWith('ig:')).map((i) => ({
+      nome: i.nome, numero: i.numero || null, status: i.status || null,
+      operadorId: porNumero[i.nome] ?? null, operadorNome: porNumero[i.nome] !== undefined ? (operadores.find((o) => o.id === porNumero[i.nome])?.nome || null) : null,
+    }));
+    res.json({ etapas: indicacoes.ETAPAS, origens: indicacoes.ORIGENS, token: config.token, instancia: config.instancia, numeros, ...lista });
   } catch (err) {
     res.status(500).json({ erro: err.message });
+  }
+});
+app.put('/api/indicacoes/config', async (req, res) => {
+  try {
+    await indicacoes.definirInstancia(req.tenantId, req.body?.instancia || null, await tenants.listarInstanciasDoTenant(req.tenantId));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
   }
 });
 app.post('/api/indicacoes', async (req, res) => {

@@ -11558,6 +11558,31 @@ function indDesenharPesquisa() {
   }
 }
 
+// ---- numero responsavel pelas Indicacoes (entre os numeros conectados da conta) ----
+function indDesenharNumero() {
+  const sel = document.getElementById('indNumero');
+  const numeros = indDados.numeros || [];
+  sel.textContent = '';
+  sel.add(new Option('Número responsável: nenhum', ''));
+  for (const n of numeros) sel.add(new Option(`${n.nome}${n.numero ? ` (${n.numero})` : ''}${n.status && n.status !== 'open' ? ' - desconectado' : ''}`, n.nome));
+  sel.value = indDados.instancia || '';
+  sel.disabled = !meuEhDono; // so o acesso principal troca
+  sel.hidden = !numeros.length;
+  const info = document.getElementById('indResponsavel');
+  const atual = numeros.find((n) => n.nome === indDados.instancia);
+  if (!atual) info.textContent = numeros.length ? 'Nenhum número escolhido para as Indicações: escolha acima o número da CRM responsável por esta parte.' : 'Conecte um número na aba WhatsApp para escolher o responsável pelas Indicações.';
+  else info.textContent = `Número responsável: ${atual.nome}${atual.numero ? ` (${atual.numero})` : ''} · Operador: ${atual.operadorNome || 'nenhum definido (escolha na aba WhatsApp)'}`;
+}
+document.getElementById('indNumero').addEventListener('change', async (e) => {
+  try {
+    const r = await fetch('/api/indicacoes/config', { method: 'PUT', headers: indH(), body: JSON.stringify({ instancia: e.target.value || null }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    mostrarAviso(e.target.value ? 'Número responsável pelas Indicações salvo' : 'Número responsável removido', 'ok');
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  carregarIndicacoes();
+});
+
 async function carregarIndicacoes() {
   try {
     const res = await fetch('/api/indicacoes', { headers: indH() });
@@ -11566,6 +11591,7 @@ async function carregarIndicacoes() {
     indDados = d;
     indDesenhar();
     indDesenharPesquisa();
+    indDesenharNumero();
   } catch (err) {
     indBoard.textContent = '';
     const p = document.createElement('p'); p.className = 'agenda-vazia'; p.textContent = `Não consegui carregar as indicações: ${err.message}`; indBoard.appendChild(p);
