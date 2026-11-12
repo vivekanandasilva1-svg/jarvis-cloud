@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261112f" />
+  <link rel="stylesheet" href="style.css?v=20261112g" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -927,9 +927,11 @@
           <button type="button" id="indVerIA" class="ind-sub">IA da CRM <span class="ind-sub-qtd" id="indIaEstado"></span></button>
         </div>
         <p class="ind-resumo" id="indResumo" hidden></p>
+        <p class="ind-dica" id="indDicaIndicados" hidden>💡 <b>Como usar:</b> cada indicado tem 3 tentativas de contato: Dia 1, Dia 2 e Dia 7 (a contar da entrada). Registre cada tentativa em <b>Registrar tentativa</b> para o card avançar sozinho para a próxima; arraste o card para mudar de coluna.</p>
         <div class="crm-board" id="indBoard" hidden><p class="agenda-vazia">Carregando...</p></div>
         <div class="ind-pac" id="indPesquisa">
           <p class="ind-resumo" id="indPacResumo"></p>
+          <p class="ind-dica">💡 <b>Como usar:</b> arraste o card entre as colunas (ou use o seletor dentro dele). O botão <b>Pedir indicação</b> abre o WhatsApp com a mensagem pronta (dá para editar antes de enviar) e já move o paciente para “Pedindo indicação”. Para mudar o texto padrão, clique em <b>Mensagens</b> no topo da aba: use <b>{nome}</b> para o primeiro nome do paciente e <b>{link}</b> para o endereço do formulário.</p>
           <div class="crm-board" id="indPacBoard"><p class="agenda-vazia">Carregando...</p></div>
         </div>
         <div class="ind-pesquisa" id="indLigacoes" hidden>
@@ -1911,6 +1913,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261112f"></script>
+  <script src="app.js?v=20261112g"></script>
 </body>
 </html>

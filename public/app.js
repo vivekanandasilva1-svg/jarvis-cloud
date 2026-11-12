@@ -11600,6 +11600,7 @@ function indTrocarVista(v) {
   indVista = v;
   document.getElementById('indBoard').hidden = v !== 'funil';
   document.getElementById('indResumo').hidden = v !== 'funil';
+  document.getElementById('indDicaIndicados').hidden = v !== 'funil';
   for (const [id, nome] of [['indPesquisa', 'pesquisa'], ['indLigacoes', 'ligacoes'], ['indIA', 'ia']]) document.getElementById(id).hidden = v !== nome;
   for (const [id, nome] of [['indVerFunil', 'funil'], ['indVerPesquisa', 'pesquisa'], ['indVerLigacoes', 'ligacoes'], ['indVerIA', 'ia']]) document.getElementById(id).classList.toggle('ativo', v === nome);
   if (v === 'ligacoes') indCarregarLigacoes();

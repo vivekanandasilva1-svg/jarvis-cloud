@@ -3745,3 +3745,6 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 .ind-pac .crm-board { flex: 1 1 auto; }
 .ind-comentario { font-style: italic; border-left: 2px solid var(--gold); padding-left: 8px; }
 .ind-card.ind-resp.ruim { border-color: rgba(229, 72, 77, 0.6); }
+
+.ind-dica { margin: 0 0 10px; padding: 8px 12px; font-size: 12.5px; line-height: 1.45; color: var(--text-dim); background: rgba(212, 175, 55, 0.08); border: 1px solid rgba(212, 175, 55, 0.25); border-radius: 8px; }
+.ind-dica b { color: var(--gold-bright); }
