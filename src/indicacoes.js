@@ -236,7 +236,9 @@ export async function conferirNoClinicorp(tenantId, id) {
   let paciente = null;
   try {
     const r = await clinicorp.findPatient(tenantId, { phone: local });
-    paciente = r && (r.PatientId || r.Name) ? r : null;
+    // a busca por telefone devolve uma LISTA de pacientes (ou um objeto, dependendo do caso)
+    const candidatos = Array.isArray(r) ? r : (r ? [r] : []);
+    paciente = candidatos.find((x) => x && (x.PatientId || x.Name)) || null;
   } catch (err) {
     if (/nao tem o Clinicorp conectado/i.test(err.message)) throw err;
     if (/429|limite|requisi/i.test(err.message)) throw new Error('O Clinicorp limita as consultas por hora - tente de novo daqui a pouco.');
