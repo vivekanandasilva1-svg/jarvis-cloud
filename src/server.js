@@ -36,6 +36,7 @@ import { iniciarSchedulerClinicorpFollowUp } from './clinicorpFollowUp.js';
 import * as followUpInteligente from './followUpInteligente.js';
 import * as funilFU from './funilFollowUp.js';
 import * as indicacoes from './indicacoes.js';
+import * as resgate from './resgate.js';
 import * as indicacoesIA from './indicacoesIA.js';
 import * as aniversariantes from './aniversariantes.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
@@ -93,6 +94,7 @@ const TAB_ROTA_PREFIXO = {
   followUpInteligente: '/api/fu-inteligente',
   funilFollowUp: '/api/funil-fu',
   indicacoes: '/api/indicacoes',
+  resgateOrcamentos: '/api/resgate',
   disparos: '/api/disparos',
   aniversariantes: '/api/aniversariantes',
   relatorios: '/api/relatorios',
@@ -155,7 +157,8 @@ app.use(async (req, res, next) => {
       const soDono = req.path.startsWith('/api/colaboradores')
         || (req.method !== 'GET' && (req.path.startsWith('/api/crm/distribuicao') || req.path.startsWith('/api/crm/clinicorp-followup')))
         || (req.method !== 'GET' && /^\/api\/whatsapp\/instancias\/[^/]+\/operador$/.test(req.path))
-        || (req.method !== 'GET' && req.path === '/api/indicacoes/config');
+        || (req.method !== 'GET' && req.path === '/api/indicacoes/config')
+        || (req.method !== 'GET' && req.path === '/api/resgate/config');
       if (soDono) return res.status(403).json({ erro: 'so o acesso principal da conta pode fazer isso' });
     }
     const abaProtegida = Object.entries(TAB_ROTA_PREFIXO).find(([, prefixo]) => req.path.startsWith(prefixo));
@@ -1782,6 +1785,122 @@ app.put('/api/funil-fu/tarefas', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });
+  }
+});
+
+// ---------- Resgate de orcamentos (aba: orcamentos aprovados inacabados, funil da CRM) ----------
+// quando ha operador responsavel, so ele (e o acesso principal) acessa os dados dessa atividade
+app.use('/api/resgate', async (req, res, next) => {
+  try {
+    if (!(req.operadorId > 0)) return next();
+    const cfg = await resgate.obterConfig(req.tenantId);
+    if (cfg.operador_id !== null && cfg.operador_id !== undefined && cfg.operador_id !== req.operadorId) {
+      const op = (await crm.listarOperadores(req.tenantId).catch(() => [])).find((o) => o.id === cfg.operador_id);
+      return res.status(403).json({ erro: `Esta atividade está com ${op?.nome || 'outro operador'}.`, bloqueado: true });
+    }
+    next();
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.get('/api/resgate', async (req, res) => {
+  try {
+    const cfg = await resgate.obterConfig(req.tenantId);
+    const operadores = (await crm.listarOperadores(req.tenantId).catch(() => [])).filter((o) => o.id > 0);
+    // primeira abertura: carga inicial no Clinicorp em segundo plano
+    if (!cfg.ultima_sync) resgate.sincronizar(req.tenantId, { janelas: 6 }).catch((err) => console.error('[resgate] carga inicial:', err.message));
+    res.json({
+      etapas: resgate.ETAPAS, resultados: resgate.RESULTADOS,
+      mensagem: cfg.msg_whatsapp || resgate.MSG_PADRAO, mensagemPersonalizada: !!cfg.msg_whatsapp,
+      operadorId: cfg.operador_id, operadorNome: operadores.find((o) => o.id === cfg.operador_id)?.nome || null,
+      operadores, podeEscolherOperador: !(req.operadorId > 0),
+      ultimaSync: cfg.ultima_sync, resumoSync: cfg.ultimo_resumo, carregando: !cfg.ultima_sync,
+      pacientes: await resgate.listar(req.tenantId),
+    });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/atualizar', async (req, res) => {
+  try {
+    const cfg = await resgate.obterConfig(req.tenantId);
+    if (cfg.ultima_sync && Date.now() - new Date(cfg.ultima_sync).getTime() < 10 * 60000) {
+      return res.status(429).json({ erro: 'A última atualização foi há poucos minutos. O Clinicorp limita as consultas por hora - tente de novo em instantes.' });
+    }
+    res.json({ ok: true, ...(await resgate.sincronizar(req.tenantId, { janelas: 4 })) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.put('/api/resgate/config', async (req, res) => {
+  try {
+    await resgate.definirOperador(req.tenantId, req.body?.operadorId, await crm.listarOperadores(req.tenantId));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.put('/api/resgate/mensagem', async (req, res) => {
+  try {
+    await resgate.salvarMensagem(req.tenantId, req.body?.mensagem);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/:id/etapa', async (req, res) => {
+  try {
+    await resgate.moverEtapa(req.tenantId, req.params.id, req.body?.etapa);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/:id/tentativa', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json(await resgate.registrarTentativa(req.tenantId, req.params.id, { ...(req.body || {}), autor: perfil?.nome }));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/:id/retorno', async (req, res) => {
+  try {
+    await resgate.definirRetorno(req.tenantId, req.params.id, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/resgate/:id/retorno', async (req, res) => {
+  try {
+    await resgate.limparRetorno(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.get('/api/resgate/:id/notas', async (req, res) => {
+  try {
+    res.json({ notas: await resgate.listarNotas(req.tenantId, req.params.id), euId: req.operadorId || 0 });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/:id/notas', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json({ ok: true, nota: await resgate.criarNota(req.tenantId, req.params.id, { texto: req.body?.texto, autorId: req.operadorId || 0, autorNome: perfil?.nome }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/resgate/notas/:id', async (req, res) => {
+  try {
+    await resgate.apagarNota(req.tenantId, req.params.id, req.operadorId || 0);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
   }
 });
 
@@ -3468,6 +3587,7 @@ followUp.iniciarSchedulerFollowUp();
 followUpInteligente.iniciarSchedulerFollowUpInteligente();
 funilFU.iniciarSchedulerFunilFollowUp();
 indicacoes.iniciarSchedulerIndicacoes();
+resgate.iniciarSchedulerResgate();
 crm.iniciarVarreduraRepetidos();
 // Disparos (campanhas de mensagens em massa) - so envia campanhas que o dono iniciou/agendou na aba Disparos
 disparos.iniciarSchedulerDisparos();
