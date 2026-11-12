@@ -1092,5 +1092,13 @@
     "tipo": "melhoria",
     "titulo": "Indicações: cards arrastáveis e mensagens de WhatsApp editáveis",
     "conteudo": "Cards do funil de pacientes e do funil de indicados passam a ser arrastáveis entre colunas (mesmo padrão do CRM; cada funil só aceita card do próprio tipo; usa as mesmas rotas de etapa). Botão 'Mensagens' na aba edita os textos que abrem prontos no WhatsApp ('Pedir indicação' com {nome} e 'Link do formulário' com {link}); guardado por clínica em ind_config (msg_pedido/msg_link), vazio = texto padrão; a mensagem do link precisa conter {link}."
+  },
+  {
+    "chave": "resgate:orcamentos-inacabados",
+    "modulo": "plataforma",
+    "data": "2026-11-12",
+    "tipo": "funcao",
+    "titulo": "Aba Resgate de orçamentos: pacientes com orçamento aprovado inacabado ou sem iniciar",
+    "conteudo": "Nova aba (chave resgateOrcamentos, liberável por cliente/colaborador). O Clinicorp informa por procedimento se foi executado (Executed='X', ExecutedDate, NotApproved, Deleted), então a Lumia detecta sozinha: orçamento APPROVED com parte executada e valor pendente > 0 (sobra de R$ 0, procedimento excluído ou não aprovado não conta) = Inacabado; aprovado sem nada executado = coluna à parte 'Aprovado sem iniciar'. Leitura no Clinicorp em lotes (limite 25 req/h): scheduler a cada 30 min lê o período mais recente + 2 do histórico (cursor, até 12 meses) + agenda dos próximos 30 dias para marcar quem já tem consulta; só roda para contas com a aba liberada e que sejam donas do Clinicorp (conta que divide o Clinicorp não sincroniza). Funil: Aprovado sem iniciar | Inacabados | 1ª/2ª/3ª tentativa | Agendou retomada | Retomou o tratamento | Sem sucesso; quando o paciente executa algo novo o card vai sozinho para Retomou (ou se concluir o orçamento). Filtro 'Parado há' 15/30/45/60/90+ dias e 'ocultar quem tem consulta marcada' valem só para as duas colunas de entrada; ordem por valor, tempo parado ou aprovação; card mostra feitos x faltam, valor pendente, dias parado, tentativas, alerta de retorno, anotações, WhatsApp com mensagem editável ({nome}, {pendentes}) e arrastar. Operador responsável escolhido só pelo ADM (res_config.operador_id): quando definido, só ele e o ADM acessam. Só a equipe atende (sem IA). Pendente: ligações/relatório desta aba e IA, se pedirem."
   }
 ]

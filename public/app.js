@@ -76,6 +76,7 @@ const tabBtnOrigem = document.getElementById('tabBtnOrigem');
 const tabBtnFollowUpInteligente = document.getElementById('tabBtnFollowUpInteligente');
 const tabBtnFunilFu = document.getElementById('tabBtnFunilFu');
 const tabBtnIndicacoes = document.getElementById('tabBtnIndicacoes');
+const tabBtnResgate = document.getElementById('tabBtnResgate');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
 const tabBtnGeradorRelatorios = document.getElementById('tabBtnGeradorRelatorios');
 const tabBtnIntegracoes = document.getElementById('tabBtnIntegracoes');
@@ -104,6 +105,7 @@ const tabOrigem = document.getElementById('tabOrigem');
 const tabFollowUpInteligente = document.getElementById('tabFollowUpInteligente');
 const tabFunilFu = document.getElementById('tabFunilFu');
 const tabIndicacoes = document.getElementById('tabIndicacoes');
+const tabResgate = document.getElementById('tabResgate');
 const tabRelatorios = document.getElementById('tabRelatorios');
 const tabGeradorRelatorios = document.getElementById('tabGeradorRelatorios');
 const tabIntegracoes = document.getElementById('tabIntegracoes');
@@ -413,6 +415,7 @@ function aplicarMenuPermitido() {
   tabBtnFollowUpInteligente.hidden = !abaLiberada('followUpInteligente');
   tabBtnFunilFu.hidden = !abaLiberada('funilFollowUp');
   tabBtnIndicacoes.hidden = !abaLiberada('indicacoes');
+  tabBtnResgate.hidden = !abaLiberada('resgateOrcamentos');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
   tabBtnGeradorRelatorios.hidden = !abaLiberada('geradorRelatorios');
   tabBtnIntegracoes.hidden = !abaLiberada('integracoes');
@@ -439,7 +442,7 @@ function mostrarApp() {
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
     const primeiraLiberada = [
       ['conversas', tabBtnConversas], ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm], ['contatos', tabBtnContatos], ['resultados', tabBtnResultados], ['instagram', tabBtnInstagram],
-      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['aniversariantes', tabBtnAniversariantes], ['followUpInteligente', tabBtnFollowUpInteligente], ['funilFollowUp', tabBtnFunilFu], ['indicacoes', tabBtnIndicacoes], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
+      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['aniversariantes', tabBtnAniversariantes], ['followUpInteligente', tabBtnFollowUpInteligente], ['funilFollowUp', tabBtnFunilFu], ['indicacoes', tabBtnIndicacoes], ['resgateOrcamentos', tabBtnResgate], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
     ].find(([, btn]) => !btn.hidden);
     if (primeiraLiberada) mudarAba(primeiraLiberada[0]);
   }
@@ -2030,6 +2033,7 @@ const CABECALHOS_ABA = {
   disparos: ['Automação', 'Disparos', 'Campanhas de mensagens no WhatsApp: listas, programação, anexos, relatório e IA.'],
   followUp: ['Atendimento', 'Follow Up', 'Retome automaticamente os leads que pararam de responder.'],
   aniversariantes: ['Clientes', 'Aniversariantes do mês', 'Parabéns automático, no dia, para os pacientes que fazem aniversário (integrado ao Clinicorp).'],
+  resgateOrcamentos: ['Clientes', 'Resgate de orçamentos', 'Pacientes com orçamento aprovado inacabado ou sem iniciar, para a equipe retomar e fechar o restante.'],
   indicacoes: ['Clientes', 'Indicações', 'Pacientes que indicam, os indicados, a pesquisa de satisfação e o funil de contato da CRM de indicações.'],
   funilFollowUp: ['Clientes', 'Funil Follow Up', 'Dia 0 a Dia 5: uma tarefa por dia, com alerta de retorno programado pra cada lead.'],
   followUpInteligente: ['Atendimento', 'Follow Up Inteligente', 'Mensagens automáticas por etapa do funil, nos dias que você escolher.'],
@@ -2093,6 +2097,7 @@ function mudarAba(aba) {
   tabFollowUpInteligente.hidden = aba !== 'followUpInteligente';
   tabFunilFu.hidden = aba !== 'funilFollowUp';
   tabIndicacoes.hidden = aba !== 'indicacoes';
+  tabResgate.hidden = aba !== 'resgateOrcamentos';
   tabRelatorios.hidden = aba !== 'relatorios';
   tabGeradorRelatorios.hidden = aba !== 'geradorRelatorios';
   tabIntegracoes.hidden = aba !== 'integracoes';
@@ -2116,6 +2121,7 @@ function mudarAba(aba) {
   tabBtnFollowUpInteligente.classList.toggle('active', aba === 'followUpInteligente');
   tabBtnFunilFu.classList.toggle('active', aba === 'funilFollowUp');
   tabBtnIndicacoes.classList.toggle('active', aba === 'indicacoes');
+  tabBtnResgate.classList.toggle('active', aba === 'resgateOrcamentos');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
   tabBtnGeradorRelatorios.classList.toggle('active', aba === 'geradorRelatorios');
   tabBtnIntegracoes.classList.toggle('active', aba === 'integracoes');
@@ -2156,6 +2162,8 @@ function mudarAba(aba) {
     carregarFunilFu();
   } else if (aba === 'indicacoes') {
     carregarIndicacoes();
+  } else if (aba === 'resgateOrcamentos') {
+    carregarResgate();
   } else if (aba === 'relatorios') {
     carregarDestinatariosRelatorios();
     carregarConfigsRelatorios();
@@ -2233,6 +2241,7 @@ tabBtnOrigem.addEventListener('click', () => mudarAba('origem'));
 tabBtnFollowUpInteligente.addEventListener('click', () => mudarAba('followUpInteligente'));
 tabBtnFunilFu.addEventListener('click', () => mudarAba('funilFollowUp'));
 tabBtnIndicacoes.addEventListener('click', () => mudarAba('indicacoes'));
+tabBtnResgate.addEventListener('click', () => mudarAba('resgateOrcamentos'));
 tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
 tabBtnCerebro.addEventListener('click', () => mudarAba('cerebro'));
 tabBtnClientes.addEventListener('click', () => mudarAba('clientes'));
@@ -8502,7 +8511,7 @@ async function selecionarCliente(id, nome, username) {
   tabsAviso.textContent = 'Nenhuma marcada = tudo liberado (padrão). Marque só pra restringir.';
   clienteIntegracoesPainel.appendChild(tabsAviso);
 
-  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', aniversariantes: 'Aniversariantes', followUpInteligente: 'Follow Up Inteligente', funilFollowUp: 'Funil Follow Up', indicacoes: 'Indicações', disparos: 'Disparos', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
+  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', aniversariantes: 'Aniversariantes', followUpInteligente: 'Follow Up Inteligente', funilFollowUp: 'Funil Follow Up', indicacoes: 'Indicações', resgateOrcamentos: 'Resgate de orçamentos', disparos: 'Disparos', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
   const tabsForm = document.createElement('div');
   tabsForm.className = 'cliente-form';
   const tabsCheckboxes = {};
@@ -10799,7 +10808,7 @@ document.getElementById('crmEspelharBtn').addEventListener('click', () => {
 // ---------- Ferramentas de cada colaborador (so o acesso principal edita) ----------
 const FERRAMENTAS_COLAB = [
   ['painel', 'Painel (Lumia/Chat)'], ['agenda', 'Agenda'], ['whatsapp', 'WhatsApp'], ['crm', 'CRM, Conversas, Contatos, Resultados e Origem dos leads'],
-  ['auto', 'Auto Atendimento'], ['followUp', 'Follow Up'], ['aniversariantes', 'Aniversariantes do mês'], ['followUpInteligente', 'Follow Up Inteligente'], ['funilFollowUp', 'Funil Follow Up'], ['indicacoes', 'Indicações'],
+  ['auto', 'Auto Atendimento'], ['followUp', 'Follow Up'], ['aniversariantes', 'Aniversariantes do mês'], ['followUpInteligente', 'Follow Up Inteligente'], ['funilFollowUp', 'Funil Follow Up'], ['indicacoes', 'Indicações'], ['resgateOrcamentos', 'Resgate de orçamentos'],
   ['disparos', 'Disparos'], ['relatorios', 'Relatórios automáticos'], ['geradorRelatorios', 'Gerador de Relatórios'], ['integracoes', 'Integrações'], ['instagram', 'Instagram'],
 ];
 function abrirFerramentasColab(c) {
@@ -12070,3 +12079,267 @@ document.getElementById('indMsgPadrao').addEventListener('click', async () => {
   if (!confirm('Voltar os dois textos ao padrão?')) return;
   if (await indSalvarMensagens('', '', document.getElementById('indMsgSalvar'), 'Textos padrão restaurados')) { document.getElementById('indMsgPedido').value = indDados.mensagens.pedido; document.getElementById('indMsgLink').value = indDados.mensagens.link; }
 });
+
+// ---------- Resgate de orçamentos (inacabados / aprovados sem iniciar) ----------
+const resBoard = document.getElementById('resBoard');
+let resDados = { etapas: [], resultados: {}, pacientes: [], mensagem: '', operadores: [] };
+let resDiasMin = 15;
+let resPollTimer = null;
+let resArrastando = null;
+const resH = () => ({ 'x-app-password': appPassword, 'Content-Type': 'application/json' });
+const resMoeda = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+const resData = (iso) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+const resDH = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const resSemAcento = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+function resNomePendentes(p) {
+  const nomes = (p.faltam || []).map((f) => String(f.d || '').toLowerCase()).filter(Boolean);
+  const unicos = [...new Set(nomes)];
+  if (!unicos.length) return 'etapas do orçamento';
+  return unicos.slice(0, 2).join(' e ') + (unicos.length > 2 ? ' e outros' : '');
+}
+
+function resAtivarArraste(card, id) {
+  card.draggable = true;
+  card.addEventListener('dragstart', (e) => { resArrastando = id; card.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', String(id)); e.dataTransfer.effectAllowed = 'move'; } catch { /* sem dataTransfer */ } });
+  card.addEventListener('dragend', () => { card.classList.remove('dragging'); resArrastando = null; });
+}
+function resAtivarSoltar(coluna, etapaId) {
+  coluna.addEventListener('dragover', (e) => { if (!resArrastando) return; e.preventDefault(); coluna.classList.add('drag-over'); });
+  coluna.addEventListener('dragleave', () => coluna.classList.remove('drag-over'));
+  coluna.addEventListener('drop', async (e) => {
+    e.preventDefault(); coluna.classList.remove('drag-over');
+    const id = resArrastando; if (!id) return;
+    try {
+      const r = await fetch(`/api/resgate/${id}/etapa`, { method: 'POST', headers: resH(), body: JSON.stringify({ etapa: etapaId }) });
+      if (!r.ok) mostrarAviso((await r.json().catch(() => ({}))).erro || 'Não consegui mover', 'erro');
+    } catch (err) { mostrarAviso(err.message, 'erro'); }
+    carregarResgate();
+  });
+}
+
+function resPainelNotas() {
+  if (!resPainelNotas.p) {
+    resPainelNotas.p = criarPainelNotas(document.getElementById('resNotasPainel'), (id, n) => { const x = resDados.pacientes.find((k) => k.id === id); if (x) x.qtd_notas = n; }, {
+      fixo: true, urlLista: (id) => `/api/resgate/${id}/notas`, urlApagar: (id) => `/api/resgate/notas/${id}`,
+    });
+  }
+  return resPainelNotas.p;
+}
+
+function resCriarCard(p) {
+  const card = document.createElement('div');
+  card.className = 'crm-card ind-card res-card';
+  resAtivarArraste(card, p.id);
+  const nome = document.createElement('div'); nome.className = 'crm-card-nome'; nome.textContent = p.nome || 'Sem nome'; card.appendChild(nome);
+  const sub = document.createElement('div'); sub.className = 'crm-card-numero'; sub.textContent = `${p.telefone || 'sem telefone'}${p.profissional ? ` · ${p.profissional}` : ''}`; card.appendChild(sub);
+  const valor = document.createElement('div'); valor.className = 'res-valor'; valor.textContent = `Falta executar ${resMoeda(p.valor_pendente)}`; card.appendChild(valor);
+  const tags = document.createElement('div'); tags.className = 'ind-tags';
+  const parado = document.createElement('span'); parado.className = 'ind-tag' + (p.dias_parado >= 45 ? ' vermelho' : p.dias_parado >= 30 ? ' laranja' : ''); parado.textContent = p.categoria === 'sem_inicio' ? `Aprovado há ${p.dias_parado} dias` : `Parado há ${p.dias_parado} dias`; tags.appendChild(parado);
+  if (p.proxima_consulta_em) { const c = document.createElement('span'); c.className = 'ind-tag ok'; c.textContent = `Consulta marcada ${resData(p.proxima_consulta_em)}`; tags.appendChild(c); }
+  if (p.retomou_em) { const c = document.createElement('span'); c.className = 'ind-tag ok'; c.textContent = `Retomou em ${resData(p.retomou_em)}`; tags.appendChild(c); }
+  card.appendChild(tags);
+  // procedimentos (feitos x faltam)
+  const det = document.createElement('details'); det.className = 'res-detalhes';
+  const sum = document.createElement('summary'); sum.textContent = `${p.procs_feitos} de ${p.procs_total} feitos · ver procedimentos`; det.appendChild(sum);
+  for (const f of p.feitos || []) { const li = document.createElement('div'); li.className = 'res-proc feito'; li.textContent = `✔ ${f.d}${f.data ? ` (${resData(f.data)})` : ''}`; det.appendChild(li); }
+  for (const f of p.faltam || []) { const li = document.createElement('div'); li.className = 'res-proc falta'; li.textContent = `• ${f.d}${f.v ? ` — ${resMoeda(f.v)}` : ''}`; det.appendChild(li); }
+  card.appendChild(det);
+  if ((p.tentativas || []).length) {
+    const h = document.createElement('div'); h.className = 'ind-obs';
+    h.textContent = p.tentativas.map((t) => `${t.n}ª: ${resDados.resultados?.[t.resultado] || t.resultado} (${resData(t.feita_em)})`).join(' · ');
+    card.appendChild(h);
+  }
+  if (p.retorno_em) {
+    const d = new Date(p.retorno_em);
+    const r = document.createElement('div'); r.className = 'ind-retorno' + (d.getTime() < Date.now() ? ' vencido' : d.toDateString() === new Date().toDateString() ? ' hoje' : '');
+    r.textContent = `⏰ Retorno ${d.getTime() < Date.now() ? 'atrasado' : d.toDateString() === new Date().toDateString() ? 'hoje' : 'em'} ${resDH(p.retorno_em)}${p.retorno_nota ? ` · ${p.retorno_nota}` : ''}`;
+    card.appendChild(r);
+  }
+  const acoes = document.createElement('div'); acoes.className = 'ffu-acoes';
+  const sel = document.createElement('select'); sel.className = 'ind-etapa-sel'; sel.title = 'Mover para outra etapa';
+  for (const e of resDados.etapas) sel.add(new Option(e.nome, e.id));
+  sel.value = p.etapa;
+  sel.addEventListener('change', async () => { await fetch(`/api/resgate/${p.id}/etapa`, { method: 'POST', headers: resH(), body: JSON.stringify({ etapa: sel.value }) }); carregarResgate(); });
+  acoes.appendChild(sel);
+  const reg = document.createElement('button'); reg.type = 'button'; reg.className = 'ffu-exec'; reg.textContent = 'Registrar contato';
+  reg.addEventListener('click', () => resAbrirTentativa(p));
+  acoes.appendChild(reg);
+  if (p.telefone) {
+    const wa = document.createElement('a'); wa.className = 'ind-btn'; wa.target = '_blank'; wa.rel = 'noopener'; wa.textContent = 'WhatsApp';
+    const primeiro = String(p.nome || '').trim().split(/\s+/)[0] || '';
+    wa.href = `https://wa.me/${p.telefone}?text=${encodeURIComponent((resDados.mensagem || '').split('{nome}').join(primeiro).split('{pendentes}').join(resNomePendentes(p)))}`;
+    acoes.appendChild(wa);
+  }
+  const rb = document.createElement('button'); rb.type = 'button'; rb.textContent = p.retorno_em ? 'Retorno' : 'Alerta de retorno';
+  rb.addEventListener('click', () => resAbrirRetorno(p));
+  acoes.appendChild(rb);
+  const nb = document.createElement('button'); nb.type = 'button'; nb.textContent = p.qtd_notas ? `📝 Anotações (${p.qtd_notas})` : '📝 Anotações';
+  nb.addEventListener('click', () => { document.getElementById('resNotasTitulo').textContent = `Anotações · ${p.nome}`; document.getElementById('resNotasModal').hidden = false; resPainelNotas().definirContato(p.id); });
+  acoes.appendChild(nb);
+  card.appendChild(acoes);
+  return card;
+}
+
+function resDesenhar() {
+  const q = resSemAcento(document.getElementById('resBusca').value.trim());
+  const ocultar = document.getElementById('resOcultarConsulta').checked;
+  const ordem = document.getElementById('resOrdem').value;
+  const todos = resDados.pacientes.filter((p) => !q || resSemAcento(`${p.nome} ${p.telefone || ''}`).includes(q));
+  const entrada = (p) => p.etapa === 'sem_inicio' || p.etapa === 'novo';
+  const passa = (p) => !entrada(p) || ((p.dias_parado >= resDiasMin) && !(ocultar && p.proxima_consulta_em));
+  const cmp = { valor: (a, b) => b.valor_pendente - a.valor_pendente, parado: (a, b) => b.dias_parado - a.dias_parado, recente: (a, b) => new Date(b.aprovado_em) - new Date(a.aprovado_em) }[ordem];
+  resBoard.textContent = '';
+  let totalPend = 0, qtdPend = 0, escondidos = 0;
+  for (const e of resDados.etapas) {
+    const doEtapa = todos.filter((p) => p.etapa === e.id);
+    const visiveis = doEtapa.filter(passa).sort(entrada({ etapa: e.id }) ? cmp : (a, b) => new Date(b.atualizado_em) - new Date(a.atualizado_em));
+    escondidos += doEtapa.length - visiveis.length;
+    if (e.id !== 'retomou' && e.id !== 'sem_sucesso') for (const p of visiveis) { totalPend += p.valor_pendente; qtdPend++; }
+    const col = document.createElement('div'); col.className = 'crm-coluna' + (e.id === 'sem_inicio' ? ' res-coluna-a-parte' : '');
+    resAtivarSoltar(col, e.id);
+    const head = document.createElement('div'); head.className = 'crm-coluna-header';
+    const t = document.createElement('span'); t.textContent = e.nome;
+    const c = document.createElement('span'); c.className = 'crm-coluna-contagem'; c.textContent = visiveis.length;
+    head.append(t, c); col.appendChild(head);
+    const sum = document.createElement('div'); sum.className = 'res-col-total'; sum.textContent = visiveis.length ? resMoeda(visiveis.reduce((a, p) => a + p.valor_pendente, 0)) : ''; col.appendChild(sum);
+    const cards = document.createElement('div'); cards.className = 'crm-coluna-cards';
+    if (!visiveis.length) { const v = document.createElement('div'); v.className = 'crm-coluna-vazia'; v.textContent = 'Ninguém aqui'; cards.appendChild(v); }
+    for (const p of visiveis.slice(0, 150)) cards.appendChild(resCriarCard(p));
+    if (visiveis.length > 150) { const m = document.createElement('div'); m.className = 'crm-coluna-vazia'; m.textContent = `+ ${visiveis.length - 150} (use os filtros para ver)`; cards.appendChild(m); }
+    col.appendChild(cards); resBoard.appendChild(col);
+  }
+  const quando = resDados.ultimaSync ? `Última leitura do Clinicorp: ${resDH(resDados.ultimaSync)}.` : 'Ainda não leu o Clinicorp.';
+  document.getElementById('resResumo').textContent = `${qtdPend} paciente(s) em resgate somando ${resMoeda(totalPend)} ainda não executados${escondidos ? ` · ${escondidos} escondido(s) pelos filtros` : ''}. ${quando}`;
+}
+
+async function carregarResgate() {
+  clearTimeout(resPollTimer);
+  try {
+    const res = await fetch('/api/resgate', { headers: resH() });
+    const d = await res.json();
+    if (!res.ok) { resBoard.textContent = ''; const p = document.createElement('p'); p.className = 'agenda-vazia'; p.textContent = d.erro || 'Não consegui carregar.'; resBoard.appendChild(p); return; }
+    resDados = d;
+    const sel = document.getElementById('resOperador');
+    sel.textContent = '';
+    sel.add(new Option('Operador responsável: todos com acesso', ''));
+    for (const o of d.operadores) sel.add(new Option(`Operador responsável: ${o.nome}`, String(o.id)));
+    sel.value = d.operadorId === null || d.operadorId === undefined ? '' : String(d.operadorId);
+    sel.disabled = !d.podeEscolherOperador;
+    sel.hidden = !d.operadores.length;
+    resDesenhar();
+    // primeira carga: o servidor esta lendo o Clinicorp em segundo plano - volta a olhar sozinho
+    if (d.carregando || !d.pacientes.length) {
+      document.getElementById('resResumo').textContent = d.carregando ? 'Lendo os orçamentos no Clinicorp pela primeira vez... isso leva alguns minutos (o Clinicorp limita as consultas por hora). A tela atualiza sozinha.' : document.getElementById('resResumo').textContent;
+      if (d.carregando && !tabResgate.hidden) resPollTimer = setTimeout(carregarResgate, 20000);
+    }
+  } catch (err) { resBoard.textContent = ''; const p = document.createElement('p'); p.className = 'agenda-vazia'; p.textContent = `Não consegui carregar: ${err.message}`; resBoard.appendChild(p); }
+}
+document.getElementById('resRefresh').addEventListener('click', carregarResgate);
+document.getElementById('resBusca').addEventListener('input', resDesenhar);
+document.getElementById('resOcultarConsulta').addEventListener('change', resDesenhar);
+document.getElementById('resOrdem').addEventListener('change', resDesenhar);
+for (const b of document.querySelectorAll('.res-dias')) b.addEventListener('click', () => { resDiasMin = Number(b.dataset.dias); for (const x of document.querySelectorAll('.res-dias')) x.classList.toggle('ativo', x === b); resDesenhar(); });
+document.getElementById('resOperador').addEventListener('change', async (e) => {
+  try {
+    const r = await fetch('/api/resgate/config', { method: 'PUT', headers: resH(), body: JSON.stringify({ operadorId: e.target.value === '' ? null : Number(e.target.value) }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    mostrarAviso(e.target.value ? 'Operador responsável salvo' : 'Operador responsável removido', 'ok');
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  carregarResgate();
+});
+document.getElementById('resAtualizarBtn').addEventListener('click', async () => {
+  const b = document.getElementById('resAtualizarBtn'); b.disabled = true; b.textContent = 'Lendo o Clinicorp...';
+  try {
+    const r = await fetch('/api/resgate/atualizar', { method: 'POST', headers: resH() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    mostrarAviso(d.resumo, 'ok');
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  b.disabled = false; b.textContent = 'Atualizar do Clinicorp';
+  carregarResgate();
+});
+
+// ---- registrar contato ----
+const resTentModal = document.getElementById('resTentModal');
+const resRetModal = document.getElementById('resRetModal');
+const resNotasModal = document.getElementById('resNotasModal');
+const resMsgModal = document.getElementById('resMsgModal');
+let resTentId = null, resRetId = null;
+resNotasModal.addEventListener('click', (e) => { if (e.target === resNotasModal || e.target.closest('[data-fechar="resNotasModal"]')) { resNotasModal.hidden = true; carregarResgate(); } });
+document.getElementById('resTentResultado').addEventListener('change', (e) => { document.getElementById('resTentRetornoLabel').hidden = e.target.value !== 'retornar'; });
+function resAbrirTentativa(p) {
+  resTentId = p.id;
+  document.getElementById('resTentTitulo').textContent = `${(p.tentativas || []).length + 1}º contato · ${p.nome}`;
+  const sel = document.getElementById('resTentResultado'); sel.textContent = '';
+  for (const [k, v] of Object.entries(resDados.resultados || {})) sel.add(new Option(v, k));
+  document.getElementById('resTentObs').value = ''; document.getElementById('resTentRetorno').value = ''; document.getElementById('resTentLigacao').checked = true;
+  document.getElementById('resTentRetornoLabel').hidden = true; document.getElementById('resTentErro').hidden = true;
+  document.getElementById('resTentSalvar').classList.remove('pendente', 'salvo');
+  resTentModal.hidden = false;
+}
+resTentModal.addEventListener('click', (e) => { if (e.target === resTentModal || e.target.closest('[data-fechar="resTentModal"]')) resTentModal.hidden = true; });
+document.getElementById('resTentForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = document.getElementById('resTentErro'); erro.hidden = true;
+  const btn = document.getElementById('resTentSalvar'); btn.disabled = true;
+  try {
+    const ret = document.getElementById('resTentRetorno').value;
+    const r = await fetch(`/api/resgate/${resTentId}/tentativa`, { method: 'POST', headers: resH(), body: JSON.stringify({ resultado: document.getElementById('resTentResultado').value, obs: document.getElementById('resTentObs').value, ligacao: document.getElementById('resTentLigacao').checked, retornoEm: ret ? new Date(ret).toISOString() : null }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, 'Contato registrado');
+    setTimeout(() => { resTentModal.hidden = true; }, 400);
+    carregarResgate();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; }
+  btn.disabled = false;
+});
+
+// ---- alerta de retorno ----
+function resParaInput(d) { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
+function resAbrirRetorno(p) {
+  resRetId = p.id;
+  document.getElementById('resRetData').value = p.retorno_em ? resParaInput(new Date(p.retorno_em)) : '';
+  document.getElementById('resRetNota').value = p.retorno_nota || '';
+  document.getElementById('resRetErro').hidden = true; document.getElementById('resRetRemover').hidden = !p.retorno_em;
+  document.getElementById('resRetSalvar').classList.remove('pendente', 'salvo');
+  resRetModal.hidden = false;
+}
+resRetModal.addEventListener('click', (e) => { if (e.target === resRetModal || e.target.closest('[data-fechar="resRetModal"]')) resRetModal.hidden = true; });
+document.getElementById('resRetForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = document.getElementById('resRetErro'); erro.hidden = true;
+  const v = document.getElementById('resRetData').value;
+  if (!v) { erro.textContent = 'Informe a data e a hora.'; erro.hidden = false; return; }
+  const btn = document.getElementById('resRetSalvar'); btn.disabled = true;
+  try {
+    const r = await fetch(`/api/resgate/${resRetId}/retorno`, { method: 'POST', headers: resH(), body: JSON.stringify({ retornoEm: new Date(v).toISOString(), nota: document.getElementById('resRetNota').value }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, 'Alerta de retorno salvo');
+    setTimeout(() => { resRetModal.hidden = true; }, 400);
+    carregarResgate();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; }
+  btn.disabled = false;
+});
+document.getElementById('resRetRemover').addEventListener('click', async () => { await fetch(`/api/resgate/${resRetId}/retorno`, { method: 'DELETE', headers: resH() }); resRetModal.hidden = true; carregarResgate(); });
+
+// ---- mensagem de WhatsApp editavel ----
+document.getElementById('resMsgBtn').addEventListener('click', () => {
+  document.getElementById('resMsgTexto').value = resDados.mensagem || '';
+  document.getElementById('resMsgErro').hidden = true; document.getElementById('resMsgSalvar').classList.remove('pendente', 'salvo');
+  resMsgModal.hidden = false;
+});
+resMsgModal.addEventListener('click', (e) => { if (e.target === resMsgModal || e.target.closest('[data-fechar="resMsgModal"]')) resMsgModal.hidden = true; });
+async function resSalvarMensagem(texto, btn, aviso) {
+  const erro = document.getElementById('resMsgErro'); erro.hidden = true; btn.disabled = true;
+  try {
+    const r = await fetch('/api/resgate/mensagem', { method: 'PUT', headers: resH(), body: JSON.stringify({ mensagem: texto }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, aviso); await carregarResgate(); return true;
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; return false; } finally { btn.disabled = false; }
+}
+document.getElementById('resMsgForm').addEventListener('submit', async (e) => { e.preventDefault(); if (await resSalvarMensagem(document.getElementById('resMsgTexto').value, document.getElementById('resMsgSalvar'), 'Mensagem salva')) setTimeout(() => { resMsgModal.hidden = true; }, 500); });
+document.getElementById('resMsgPadrao').addEventListener('click', async () => { if (!confirm('Voltar ao texto padrão?')) return; if (await resSalvarMensagem('', document.getElementById('resMsgSalvar'), 'Texto padrão restaurado')) document.getElementById('resMsgTexto').value = resDados.mensagem; });

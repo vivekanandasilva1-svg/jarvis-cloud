@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261112g" />
+  <link rel="stylesheet" href="style.css?v=20261112h" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -94,6 +94,10 @@
         <button type="button" class="nav-btn" id="tabBtnIndicacoes" data-tab="indicacoes">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1 1.2.8 2 1.9 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z"/></svg>
           <span>Indicações</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnResgate" data-tab="resgateOrcamentos">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 15h-2v-2h2zm0-4h-2V7h2z"/></svg>
+          <span>Resgate de orçamentos</span>
         </button>
         <button type="button" class="nav-btn" id="tabBtnCrm" data-tab="crm">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3h6v18H3V3zm8 0h6v10h-6V3zm8 0h2v18h-2V3zm-8 12h6v6h-6v-6z"/></svg>
@@ -1096,6 +1100,91 @@
       </div>
     </div>
 
+    <div class="window-body tab-crm" id="tabResgate" hidden>
+      <div class="crm-board-wrap">
+        <div class="crm-board-header">
+          <span>Resgate de orçamentos: pacientes com orçamento aprovado que ficou pela metade (ou nunca começou). A equipe retoma o contato para fechar o restante.</span>
+          <div class="crm-board-nav">
+            <select id="resOperador" title="Operador responsável por esta atividade (só o acesso principal escolhe)"></select>
+            <input type="search" id="resBusca" placeholder="Buscar paciente" class="ind-busca" />
+            <button type="button" id="resMsgBtn" title="Editar o texto da mensagem de WhatsApp">Mensagem</button>
+            <button type="button" id="resAtualizarBtn" title="Lê de novo os orçamentos no Clinicorp">Atualizar do Clinicorp</button>
+            <button type="button" id="resRefresh">Atualizar tela</button>
+          </div>
+        </div>
+        <div class="res-filtros">
+          <span class="res-filtros-rotulo">Parado há:</span>
+          <button type="button" class="ind-sub res-dias" data-dias="0">Todos</button>
+          <button type="button" class="ind-sub res-dias ativo" data-dias="15">15+ dias</button>
+          <button type="button" class="ind-sub res-dias" data-dias="30">30+ dias</button>
+          <button type="button" class="ind-sub res-dias" data-dias="45">45+ dias</button>
+          <button type="button" class="ind-sub res-dias" data-dias="60">60+ dias</button>
+          <button type="button" class="ind-sub res-dias" data-dias="90">90+ dias</button>
+          <label class="res-check"><input type="checkbox" id="resOcultarConsulta" checked /> Ocultar quem já tem consulta marcada</label>
+          <select id="resOrdem" title="Ordem dos cards nas duas primeiras colunas">
+            <option value="valor">Maior valor pendente</option>
+            <option value="parado">Mais tempo parado</option>
+            <option value="recente">Aprovados mais recentes</option>
+          </select>
+        </div>
+        <p class="ind-resumo" id="resResumo"></p>
+        <p class="ind-dica">💡 <b>Como usar:</b> os pacientes entram sozinhos a partir do Clinicorp: <b>Inacabados</b> são os que fizeram parte do orçamento e pararam; <b>Aprovado sem iniciar</b> são os que aprovaram e ainda não começaram. Os botões “Parado há” filtram essas duas primeiras colunas (os cards que a equipe já está trabalhando nunca somem). Clique em <b>Registrar contato</b> a cada tentativa, ou arraste o card entre as colunas. Quando o paciente voltar a executar um procedimento, o card vai sozinho para <b>Retomou o tratamento</b>. O botão <b>Mensagem</b> muda o texto do WhatsApp: use <b>{nome}</b> e <b>{pendentes}</b>.</p>
+        <div class="crm-board" id="resBoard"><p class="agenda-vazia">Carregando...</p></div>
+      </div>
+
+      <div class="ct-modal" id="resTentModal" hidden>
+        <form class="ct-caixa" id="resTentForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong id="resTentTitulo">Registrar contato</strong>
+            <button type="button" class="ct-fechar" data-fechar="resTentModal">✕</button>
+          </div>
+          <label class="ct-campo">Resultado do contato<select id="resTentResultado"></select></label>
+          <label class="ct-campo" id="resTentRetornoLabel" hidden>Quando retornar?<input type="datetime-local" id="resTentRetorno" /></label>
+          <label class="ct-campo">Observação <small>(o que foi falado, motivo da parada...)</small><textarea id="resTentObs" maxlength="1000"></textarea></label>
+          <label class="ct-campo" style="flex-direction:row;align-items:center;gap:8px;"><input type="checkbox" id="resTentLigacao" checked style="width:auto" /> Foi uma ligação</label>
+          <p class="crm-conversa-erro" id="resTentErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="resTentSalvar" class="relatorio-config-enviar">Salvar contato</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="resRetModal" hidden>
+        <form class="ct-caixa" id="resRetForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Alerta de retorno</strong>
+            <button type="button" class="ct-fechar" data-fechar="resRetModal">✕</button>
+          </div>
+          <p class="ct-info">O card fica destacado quando chegar a data e a hora combinadas.</p>
+          <label class="ct-campo">Data e hora<input type="datetime-local" id="resRetData" /></label>
+          <label class="ct-campo">Nota <small>(o que combinou)</small><textarea id="resRetNota" maxlength="500"></textarea></label>
+          <p class="crm-conversa-erro" id="resRetErro" hidden></p>
+          <div class="ct-rodape"><button type="button" id="resRetRemover" class="crm-btn-secundario">Remover alerta</button><span class="ct-espaco"></span><button type="submit" id="resRetSalvar" class="relatorio-config-enviar">Salvar alerta</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="resNotasModal" hidden>
+        <div class="ct-caixa">
+          <div class="ct-caixa-topo">
+            <strong id="resNotasTitulo">Anotações</strong>
+            <button type="button" class="ct-fechar" data-fechar="resNotasModal">✕</button>
+          </div>
+          <div class="notas-painel notas-fixo" id="resNotasPainel"></div>
+        </div>
+      </div>
+
+      <div class="ct-modal" id="resMsgModal" hidden>
+        <form class="ct-caixa" id="resMsgForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Mensagem de WhatsApp</strong>
+            <button type="button" class="ct-fechar" data-fechar="resMsgModal">✕</button>
+          </div>
+          <p class="ct-info">Texto que abre pronto no WhatsApp quando a CRM clica em WhatsApp no card (ela ainda pode editar antes de enviar). Onde estiver <b>{nome}</b>, entra o primeiro nome do paciente; onde estiver <b>{pendentes}</b>, entram os procedimentos que faltam.</p>
+          <label class="ct-campo">Mensagem<textarea id="resMsgTexto" rows="6" maxlength="1000"></textarea></label>
+          <p class="crm-conversa-erro" id="resMsgErro" hidden></p>
+          <div class="ct-rodape"><button type="button" id="resMsgPadrao" class="crm-btn-secundario">Voltar ao texto padrão</button><span class="ct-espaco"></span><button type="submit" id="resMsgSalvar" class="relatorio-config-enviar">Salvar mensagem</button></div>
+        </form>
+      </div>
+    </div>
+
     <div class="window-body tab-crm" id="tabCrm" hidden>
       <div class="crm-board-wrap">
         <div class="crm-board-header">
@@ -1913,6 +2002,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261112g"></script>
+  <script src="app.js?v=20261112h"></script>
 </body>
 </html>
