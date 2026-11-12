@@ -1796,7 +1796,7 @@ app.get('/api/indicacoes', async (req, res) => {
       nome: i.nome, numero: i.numero || null, status: i.status || null,
       operadorId: porNumero[i.nome] ?? null, operadorNome: porNumero[i.nome] !== undefined ? (operadores.find((o) => o.id === porNumero[i.nome])?.nome || null) : null,
     }));
-    res.json({ etapas: indicacoes.ETAPAS, origens: indicacoes.ORIGENS, resultados: indicacoes.RESULTADOS, etapasResp: indicacoes.ETAPAS_RESP, token: config.token, instancia: config.instancia, numeros, ...lista });
+    res.json({ etapas: indicacoes.ETAPAS, origens: indicacoes.ORIGENS, resultados: indicacoes.RESULTADOS, etapasResp: indicacoes.ETAPAS_RESP, token: config.token, instancia: config.instancia, numeros, mensagens: { pedido: config.msg_pedido || indicacoes.MSG_PEDIDO_PADRAO, link: config.msg_link || indicacoes.MSG_LINK_PADRAO, personalizadas: !!(config.msg_pedido || config.msg_link) }, ...lista });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -1885,6 +1885,14 @@ app.delete('/api/indicacoes/ligacoes/:id', async (req, res) => {
   }
 });
 
+app.put('/api/indicacoes/mensagens', async (req, res) => {
+  try {
+    await indicacoes.salvarMensagens(req.tenantId, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
 app.put('/api/indicacoes/config', async (req, res) => {
   try {
     await indicacoes.definirInstancia(req.tenantId, req.body?.instancia || null, await tenants.listarInstanciasDoTenant(req.tenantId));

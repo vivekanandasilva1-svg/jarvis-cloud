@@ -1084,5 +1084,13 @@
     "tipo": "melhoria",
     "titulo": "Indicações: funil dos pacientes que respondem a pesquisa + aba Indicados",
     "conteudo": "Organização definida pelo dono: (1) FUNIL DE PACIENTES (primeira visão da aba): quem preenche o formulário cai como card com a resposta visível (nota, indicaria sim/não, comentário completo) nas colunas Nova resposta > Atenção (nota <= 6, entra direto aqui) > Pedindo indicação > Indicou > Não vai indicar; a CRM chama o paciente para pedir indicação (botão 'Pedir indicação' abre o WhatsApp com mensagem pronta e já move para Pedindo indicação; também Registrar ligação, anotações próprias e 'Cadastrar indicados dele'). Paciente vira 'Indicou' sozinho quando ele indica alguém no formulário ou quando a CRM cadastra um indicado com o telefone dele. (2) INDICADOS: aba separada com as pessoas indicadas pelos pacientes contatados, com o funil de tentativas (Dia 1/2/7), retorno, anotações e IA. Tabela ind_respostas ganhou etapa; ind_notas aceita nota de resposta (resposta_id). Substitui a antiga lista solta 'Pesquisa de satisfação'."
+  },
+  {
+    "chave": "indicacoes:arrastar-e-mensagens",
+    "modulo": "plataforma",
+    "data": "2026-11-12",
+    "tipo": "melhoria",
+    "titulo": "Indicações: cards arrastáveis e mensagens de WhatsApp editáveis",
+    "conteudo": "Cards do funil de pacientes e do funil de indicados passam a ser arrastáveis entre colunas (mesmo padrão do CRM; cada funil só aceita card do próprio tipo; usa as mesmas rotas de etapa). Botão 'Mensagens' na aba edita os textos que abrem prontos no WhatsApp ('Pedir indicação' com {nome} e 'Link do formulário' com {link}); guardado por clínica em ind_config (msg_pedido/msg_link), vazio = texto padrão; a mensagem do link precisa conter {link}."
   }
 ]

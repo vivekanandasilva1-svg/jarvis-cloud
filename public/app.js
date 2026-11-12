@@ -11417,6 +11417,30 @@ const indH = () => ({ 'x-app-password': appPassword, 'Content-Type': 'applicatio
 const indSemAcento = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const indQuando = (iso) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 
+// ---- arrastar e soltar entre colunas (igual ao CRM) ----
+let indArrastando = null; // { tipo: 'resp' | 'ind', id }
+function indAtivarArraste(card, tipo, id) {
+  card.draggable = true;
+  card.addEventListener('dragstart', (e) => { indArrastando = { tipo, id }; card.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', String(id)); e.dataTransfer.effectAllowed = 'move'; } catch { /* sem dataTransfer */ } });
+  card.addEventListener('dragend', () => { card.classList.remove('dragging'); indArrastando = null; });
+}
+function indAtivarSoltar(coluna, tipo, etapaId) {
+  coluna.addEventListener('dragover', (e) => { if (indArrastando?.tipo !== tipo) return; e.preventDefault(); coluna.classList.add('drag-over'); });
+  coluna.addEventListener('dragleave', () => coluna.classList.remove('drag-over'));
+  coluna.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    coluna.classList.remove('drag-over');
+    const a = indArrastando;
+    if (!a || a.tipo !== tipo) return;
+    const url = tipo === 'resp' ? `/api/indicacoes/respostas/${a.id}/etapa` : `/api/indicacoes/${a.id}/etapa`;
+    try {
+      const r = await fetch(url, { method: 'POST', headers: indH(), body: JSON.stringify({ etapa: etapaId }) });
+      if (!r.ok) mostrarAviso((await r.json().catch(() => ({}))).erro || 'Não consegui mover', 'erro');
+    } catch (err) { mostrarAviso(err.message, 'erro'); }
+    carregarIndicacoes();
+  });
+}
+
 const IND_DIA = 86400000;
 const indDH = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 function indTentativaPendente(i) {
@@ -11449,6 +11473,7 @@ function indPainelNotasModal(tipo = 'ind') {
 function indCriarCard(i) {
   const card = document.createElement('div');
   card.className = 'crm-card ind-card';
+  indAtivarArraste(card, 'ind', i.id);
   const nome = document.createElement('div'); nome.className = 'crm-card-nome'; nome.textContent = i.nome; card.appendChild(nome);
   const tel = document.createElement('div'); tel.className = 'crm-card-numero'; tel.textContent = i.telefone; card.appendChild(tel);
   const por = document.createElement('div'); por.className = 'crm-card-operador'; por.textContent = `Indicado por ${i.indicador_nome || '—'}`; card.appendChild(por);
@@ -11552,6 +11577,7 @@ function indDesenhar() {
   indBoard.textContent = '';
   for (const e of indDados.etapas) {
     const col = document.createElement('div'); col.className = 'crm-coluna';
+    indAtivarSoltar(col, 'ind', e.id);
     const lista = todos.filter((i) => i.etapa === e.id);
     const head = document.createElement('div'); head.className = 'crm-coluna-header';
     const t = document.createElement('span'); t.textContent = e.nome;
@@ -11588,6 +11614,7 @@ document.getElementById('indVerIA').addEventListener('click', () => indTrocarVis
 function indCriarCardPaciente(r) {
   const card = document.createElement('div');
   card.className = 'crm-card ind-card ind-resp' + (r.nota <= 6 ? ' ruim' : '');
+  indAtivarArraste(card, 'resp', r.id);
   const nome = document.createElement('div'); nome.className = 'crm-card-nome'; nome.textContent = r.nome; card.appendChild(nome);
   const tel = document.createElement('div'); tel.className = 'crm-card-numero'; tel.textContent = r.telefone; card.appendChild(tel);
   const tags = document.createElement('div'); tags.className = 'ind-tags';
@@ -11606,7 +11633,7 @@ function indCriarCardPaciente(r) {
   const wa = document.createElement('a'); wa.className = 'ind-btn'; wa.target = '_blank'; wa.rel = 'noopener'; wa.textContent = 'Pedir indicação';
   const primeiro = r.nome.split(' ')[0];
   wa.title = 'Abre o WhatsApp com uma mensagem pedindo indicação';
-  wa.href = `https://wa.me/${r.telefone}?text=${encodeURIComponent(`Olá, ${primeiro}! Aqui é da clínica. Obrigado por responder nossa pesquisa e pela confiança! Se você conhece alguém (família ou amigos) que também gostaria de cuidar do sorriso com a gente, pode me passar o nome e o WhatsApp da pessoa? Entraremos em contato com todo o cuidado.`)}`;
+  wa.href = `https://wa.me/${r.telefone}?text=${encodeURIComponent((indDados.mensagens?.pedido || '').split('{nome}').join(primeiro))}`;
   wa.addEventListener('click', async () => { if ((r.etapa || 'nova') === 'nova' || r.etapa === 'atencao') { await fetch(`/api/indicacoes/respostas/${r.id}/etapa`, { method: 'POST', headers: indH(), body: JSON.stringify({ etapa: 'contato' }) }); carregarIndicacoes(); } });
   acoes.appendChild(wa);
   const lig = document.createElement('button'); lig.type = 'button'; lig.textContent = 'Registrar ligação';
@@ -11641,6 +11668,7 @@ function indDesenharPesquisa() {
   board.textContent = '';
   for (const e of indDados.etapasResp || []) {
     const col = document.createElement('div'); col.className = 'crm-coluna';
+    indAtivarSoltar(col, 'resp', e.id);
     const itens = lista.filter((r) => (r.etapa || 'nova') === e.id);
     const head = document.createElement('div'); head.className = 'crm-coluna-header';
     const t = document.createElement('span'); t.textContent = e.nome;
@@ -11791,7 +11819,7 @@ document.getElementById('indImpConfirmar').addEventListener('click', async () =>
 document.getElementById('indLinkBtn').addEventListener('click', () => {
   const link = `${location.origin}/indicacao/${indDados.token}`;
   document.getElementById('indLinkTexto').value = link;
-  document.getElementById('indLinkWa').href = `https://wa.me/?text=${encodeURIComponent(`Olá! Que bom que você está gostando do nosso atendimento. Se quiser indicar amigos ou familiares, é só preencher aqui: ${link}`)}`;
+  document.getElementById('indLinkWa').href = `https://wa.me/?text=${encodeURIComponent((indDados.mensagens?.link || '').split('{link}').join(link))}`;
   indLinkModal.hidden = false;
 });
 indLinkModal.addEventListener('click', (e) => { if (e.target === indLinkModal || e.target.closest('[data-fechar="indLinkModal"]')) indLinkModal.hidden = true; });
@@ -12009,4 +12037,35 @@ document.getElementById('indIaEnviar').addEventListener('click', async () => {
     mostrarAviso('Arquivo enviado', 'ok'); indCarregarIA();
   } catch (err) { erro.textContent = err.message; erro.hidden = false; }
   btn.disabled = false; btn.textContent = 'Enviar arquivo';
+});
+
+// ---- mensagens padrao editaveis ----
+const indMsgModal = document.getElementById('indMsgModal');
+document.getElementById('indMsgBtn').addEventListener('click', () => {
+  document.getElementById('indMsgPedido').value = indDados.mensagens?.pedido || '';
+  document.getElementById('indMsgLink').value = indDados.mensagens?.link || '';
+  document.getElementById('indMsgErro').hidden = true;
+  document.getElementById('indMsgSalvar').classList.remove('pendente', 'salvo');
+  indMsgModal.hidden = false;
+});
+indMsgModal.addEventListener('click', (e) => { if (e.target === indMsgModal || e.target.closest('[data-fechar="indMsgModal"]')) indMsgModal.hidden = true; });
+async function indSalvarMensagens(pedido, link, btn, aviso) {
+  const erro = document.getElementById('indMsgErro'); erro.hidden = true;
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/indicacoes/mensagens', { method: 'PUT', headers: indH(), body: JSON.stringify({ pedido, link }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, aviso);
+    await carregarIndicacoes();
+    return true;
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; return false; } finally { btn.disabled = false; }
+}
+document.getElementById('indMsgForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (await indSalvarMensagens(document.getElementById('indMsgPedido').value, document.getElementById('indMsgLink').value, document.getElementById('indMsgSalvar'), 'Mensagens salvas')) setTimeout(() => { indMsgModal.hidden = true; }, 500);
+});
+document.getElementById('indMsgPadrao').addEventListener('click', async () => {
+  if (!confirm('Voltar os dois textos ao padrão?')) return;
+  if (await indSalvarMensagens('', '', document.getElementById('indMsgSalvar'), 'Textos padrão restaurados')) { document.getElementById('indMsgPedido').value = indDados.mensagens.pedido; document.getElementById('indMsgLink').value = indDados.mensagens.link; }
 });

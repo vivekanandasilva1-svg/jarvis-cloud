@@ -32,6 +32,9 @@ export const ETAPAS_RESP = [
   { id: 'sem_indicacao', nome: 'Não vai indicar' },
 ];
 const IDS_ETAPAS_RESP = new Set(ETAPAS_RESP.map((e) => e.id));
+// textos padrao das mensagens de WhatsApp da aba (a clinica pode editar em "Mensagens")
+export const MSG_PEDIDO_PADRAO = 'Olá, {nome}! Aqui é da clínica. Obrigado por responder nossa pesquisa e pela confiança! Se você conhece alguém (família ou amigos) que também gostaria de cuidar do sorriso com a gente, pode me passar o nome e o WhatsApp da pessoa? Entraremos em contato com todo o cuidado.';
+export const MSG_LINK_PADRAO = 'Olá! Que bom que você está gostando do nosso atendimento. Se quiser indicar amigos ou familiares, é só preencher aqui: {link}';
 export const ORIGENS = { recepcao: 'Recepção', formulario: 'Formulário', lista: 'Lista', individual: 'Cadastro individual' };
 
 async function garantirTabelas() {
@@ -55,6 +58,8 @@ async function garantirTabelas() {
       criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  await pool.query(`ALTER TABLE ind_config ADD COLUMN IF NOT EXISTS msg_pedido TEXT`);
+  await pool.query(`ALTER TABLE ind_config ADD COLUMN IF NOT EXISTS msg_link TEXT`);
   await pool.query(`CREATE INDEX IF NOT EXISTS ind_indicadores_tel_idx ON ind_indicadores (tenant_id, telefone)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ind_indicados (
@@ -147,12 +152,22 @@ const texto = (v, max) => { const t = String(v ?? '').trim().replace(/\s+/g, ' '
 export async function obterConfig(tenantId) {
   if (!pool) return { token: null, instancia: null };
   await tabelasProntas;
-  const { rows } = await pool.query('SELECT token, instancia FROM ind_config WHERE tenant_id = $1', [tenantId]);
+  const { rows } = await pool.query('SELECT token, instancia, msg_pedido, msg_link FROM ind_config WHERE tenant_id = $1', [tenantId]);
   if (rows[0]) return rows[0];
   const token = crypto.randomBytes(12).toString('hex');
   await pool.query('INSERT INTO ind_config (tenant_id, token) VALUES ($1, $2) ON CONFLICT (tenant_id) DO NOTHING', [tenantId, token]);
-  const { rows: r2 } = await pool.query('SELECT token, instancia FROM ind_config WHERE tenant_id = $1', [tenantId]);
+  const { rows: r2 } = await pool.query('SELECT token, instancia, msg_pedido, msg_link FROM ind_config WHERE tenant_id = $1', [tenantId]);
   return r2[0];
+}
+
+// mensagens padrao editaveis (vazio = volta ao texto padrao). {nome} e {link} sao trocados na hora de enviar.
+export async function salvarMensagens(tenantId, { pedido, link }) {
+  await tabelasProntas;
+  const p = String(pedido ?? '').trim().slice(0, 1000) || null;
+  const l = String(link ?? '').trim().slice(0, 1000) || null;
+  if (l && !l.includes('{link}')) throw new Error('A mensagem do link precisa ter {link} no texto - é onde o endereço do formulário entra.');
+  await obterConfig(tenantId);
+  await pool.query('UPDATE ind_config SET msg_pedido = $2, msg_link = $3, atualizado_em = now() WHERE tenant_id = $1', [tenantId, p, l]);
 }
 
 // acha (ou cria) o indicador: pelo telefone (com/sem o 9) ou, sem telefone, pelo nome exato

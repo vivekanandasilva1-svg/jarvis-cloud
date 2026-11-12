@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261112e" />
+  <link rel="stylesheet" href="style.css?v=20261112f" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -914,6 +914,7 @@
             <input type="search" id="indBusca" placeholder="Buscar indicado ou indicador" class="ind-busca" />
             <button type="button" id="indNovoBtn">+ Indicação</button>
             <button type="button" id="indImportarBtn">Importar lista</button>
+            <button type="button" id="indMsgBtn" title="Editar os textos das mensagens de WhatsApp (pedir indicação e enviar o link)">Mensagens</button>
             <button type="button" id="indLinkBtn" title="Link do formulário digital para mandar aos pacientes pelo WhatsApp">Link do formulário</button>
             <button type="button" id="indRefresh">Atualizar</button>
           </div>
@@ -1060,6 +1061,20 @@
           <label class="ct-campo">Observação<textarea id="indLigObs" maxlength="500"></textarea></label>
           <p class="crm-conversa-erro" id="indLigErro" hidden></p>
           <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="indLigSalvar" class="relatorio-config-enviar">Salvar ligação</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="indMsgModal" hidden>
+        <form class="ct-caixa" id="indMsgForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Mensagens de WhatsApp</strong>
+            <button type="button" class="ct-fechar" data-fechar="indMsgModal">✕</button>
+          </div>
+          <p class="ct-info">São os textos que abrem prontos no WhatsApp quando a CRM clica nos botões. Ela ainda pode editar antes de enviar. Onde estiver <b>{nome}</b>, entra o primeiro nome do paciente; onde estiver <b>{link}</b>, entra o endereço do formulário.</p>
+          <label class="ct-campo">Botão "Pedir indicação" (nos cards dos pacientes)<textarea id="indMsgPedido" rows="5" maxlength="1000"></textarea></label>
+          <label class="ct-campo">Botão "Link do formulário" (envio da pesquisa)<textarea id="indMsgLink" rows="4" maxlength="1000"></textarea></label>
+          <p class="crm-conversa-erro" id="indMsgErro" hidden></p>
+          <div class="ct-rodape"><button type="button" id="indMsgPadrao" class="crm-btn-secundario">Voltar aos textos padrão</button><span class="ct-espaco"></span><button type="submit" id="indMsgSalvar" class="relatorio-config-enviar">Salvar mensagens</button></div>
         </form>
       </div>
 
@@ -1896,6 +1911,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261112e"></script>
+  <script src="app.js?v=20261112f"></script>
 </body>
 </html>
