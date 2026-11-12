@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261112b" />
+  <link rel="stylesheet" href="style.css?v=20261112c" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -968,6 +968,48 @@
         </div>
       </div>
 
+      <div class="ct-modal" id="indTentModal" hidden>
+        <form class="ct-caixa" id="indTentForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong id="indTentTitulo">Registrar tentativa</strong>
+            <button type="button" class="ct-fechar" data-fechar="indTentModal">✕</button>
+          </div>
+          <label class="ct-campo">Resultado do contato
+            <select id="indTentResultado"></select>
+          </label>
+          <label class="ct-campo" id="indTentRetornoLabel" hidden>Quando retornar?<input type="datetime-local" id="indTentRetorno" /></label>
+          <label class="ct-campo">Observação <small>(o que foi falado)</small><textarea id="indTentObs" maxlength="1000"></textarea></label>
+          <label class="ct-campo" style="flex-direction:row;align-items:center;gap:8px;"><input type="checkbox" id="indTentLigacao" checked style="width:auto" /> Foi uma ligação (entra no relatório de ligações do número)</label>
+          <label class="ct-campo" id="indTentDuracaoLabel">Duração da ligação (minutos)<input type="number" id="indTentDuracao" min="0" max="180" step="1" value="0" /></label>
+          <p class="crm-conversa-erro" id="indTentErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="indTentSalvar" class="relatorio-config-enviar">Salvar tentativa</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="indRetModal" hidden>
+        <form class="ct-caixa" id="indRetForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Alerta de retorno</strong>
+            <button type="button" class="ct-fechar" data-fechar="indRetModal">✕</button>
+          </div>
+          <p class="ct-info">O card fica destacado quando chegar a data e a hora combinadas.</p>
+          <label class="ct-campo">Data e hora<input type="datetime-local" id="indRetData" /></label>
+          <label class="ct-campo">Nota <small>(o que combinou)</small><textarea id="indRetNota" maxlength="500"></textarea></label>
+          <p class="crm-conversa-erro" id="indRetErro" hidden></p>
+          <div class="ct-rodape"><button type="button" id="indRetRemover" class="crm-btn-secundario">Remover alerta</button><span class="ct-espaco"></span><button type="submit" id="indRetSalvar" class="relatorio-config-enviar">Salvar alerta</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="indNotasModal" hidden>
+        <div class="ct-caixa">
+          <div class="ct-caixa-topo">
+            <strong id="indNotasTitulo">Anotações</strong>
+            <button type="button" class="ct-fechar" data-fechar="indNotasModal">✕</button>
+          </div>
+          <div class="notas-painel notas-fixo" id="indNotasPainel"></div>
+        </div>
+      </div>
+
       <div class="ct-modal" id="indLinkModal" hidden>
         <div class="ct-caixa">
           <div class="ct-caixa-topo">
@@ -1801,6 +1843,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261112b"></script>
+  <script src="app.js?v=20261112c"></script>
 </body>
 </html>

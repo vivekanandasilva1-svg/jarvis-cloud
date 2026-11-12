@@ -1060,5 +1060,13 @@
     "tipo": "funcao",
     "titulo": "Indicações: escolher o número de WhatsApp responsável",
     "conteudo": "Na aba Indicações o acesso principal escolhe, entre os números conectados da conta, qual é o responsável por essa parte (ind_config.instancia; PUT /api/indicacoes/config, só dono). A aba mostra o número e o operador dele (definido em WhatsApp > Operador do número). Base para as etapas 2 e 3 (mensagens/IA e relatório de ligações usam esse número). Colaborador só lê."
+  },
+  {
+    "chave": "indicacoes:etapa-2",
+    "modulo": "plataforma",
+    "data": "2026-11-12",
+    "tipo": "funcao",
+    "titulo": "Indicações (etapa 2): tentativas Dia 1/2/7, alerta de retorno, anotações e registro de ligação",
+    "conteudo": "Cada indicado recebe datas previstas 09:00 (Maceio) para a 1ª tentativa (Dia 1), 2ª (Dia 2) e 3ª (Dia 7) contadas da entrada. O scheduler (1 min) passa o card sozinho para o quadro da tentativa na data, MAS só da 1ª para a 2ª e da 2ª para a 3ª depois que a tentativa anterior foi registrada (mesma regra do Funil Follow Up); card com tentativa vencida fica pendente (vermelho após 24h). 'Registrar tentativa' tem resultado (não atendeu, agendou, pediu retorno, sem interesse, número errado), observação e se foi ligação: agendou -> Agendado; sem interesse/número errado ou 3ª não atendida -> Sem sucesso; pediu retorno -> alerta de retorno com data. Alerta de retorno manual também, destacado hoje/atrasado. Anotações por indicado (ind_notas, mesmo painel do CRM). Ligação marcada entra em crm_chamadas com o número responsável (registrarChamadaManual ganhou instancia; relatorioChamadas ganhou filtro por instancia). Resumo no topo: tentativas pendentes e retornos. Pendente (etapa 3): IA exclusiva da aba e tela de relatório de ligações."
   }
 ]

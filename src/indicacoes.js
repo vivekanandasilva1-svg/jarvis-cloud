@@ -11,6 +11,7 @@ import { pool } from './db.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
 import { normalizarTelefone, varianteNonoDigito } from './crm.js';
 import * as clinicorp from './clinicorp.js';
+import * as chamadas from './chamadas.js';
 
 export const ETAPAS = [
   { id: 'novo', nome: 'Novo indicado' },
@@ -66,6 +67,44 @@ async function garantirTabelas() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS ind_indicados_tenant_idx ON ind_indicados (tenant_id, etapa)`);
   await pool.query(`ALTER TABLE ind_indicados ADD COLUMN IF NOT EXISTS cadastrado_clinicorp_em TIMESTAMPTZ`);
+  // datas das 3 tentativas (Dia 1, Dia 2 e Dia 7 a partir da entrada, 09:00 de Maceio), alerta de retorno e pausa da IA
+  await pool.query(`ALTER TABLE ind_indicados ADD COLUMN IF NOT EXISTS t1_em TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE ind_indicados ADD COLUMN IF NOT EXISTS t2_em TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE ind_indicados ADD COLUMN IF NOT EXISTS t3_em TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE ind_indicados ADD COLUMN IF NOT EXISTS retorno_em TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE ind_indicados ADD COLUMN IF NOT EXISTS retorno_nota TEXT`);
+  await pool.query(`ALTER TABLE ind_indicados ADD COLUMN IF NOT EXISTS ia_pausada BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`
+    UPDATE ind_indicados SET
+      t1_em = ((date_trunc('day', criado_em AT TIME ZONE 'America/Maceio') + interval '1 day 9 hours') AT TIME ZONE 'America/Maceio'),
+      t2_em = ((date_trunc('day', criado_em AT TIME ZONE 'America/Maceio') + interval '2 days 9 hours') AT TIME ZONE 'America/Maceio'),
+      t3_em = ((date_trunc('day', criado_em AT TIME ZONE 'America/Maceio') + interval '7 days 9 hours') AT TIME ZONE 'America/Maceio')
+    WHERE t1_em IS NULL`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ind_tentativas (
+      id SERIAL PRIMARY KEY,
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      indicado_id INT NOT NULL REFERENCES ind_indicados(id) ON DELETE CASCADE,
+      n INT NOT NULL,
+      resultado TEXT NOT NULL,
+      obs TEXT,
+      ligacao BOOLEAN NOT NULL DEFAULT false,
+      feita_por TEXT,
+      feita_em TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS ind_tentativas_ind_idx ON ind_tentativas (indicado_id, n)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ind_notas (
+      id SERIAL PRIMARY KEY,
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      indicado_id INT NOT NULL REFERENCES ind_indicados(id) ON DELETE CASCADE,
+      autor_id INT NOT NULL DEFAULT 0,
+      autor_nome TEXT,
+      texto TEXT NOT NULL,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
   // respostas da pesquisa de satisfacao (formulario publico)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ind_respostas (
@@ -84,6 +123,11 @@ async function garantirTabelas() {
 }
 const tabelasProntas = garantirTabelas().catch((err) => console.error('[indicacoes] erro criando tabelas:', err.message));
 
+// 09:00 (Maceio, UTC-3) de hoje + N dias
+function nove(dias) {
+  const base = new Date(Date.now() - 3 * 3600000);
+  return new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate() + dias, 9 + 3, 0, 0));
+}
 const texto = (v, max) => { const t = String(v ?? '').trim().replace(/\s+/g, ' ').slice(0, max); return t || null; };
 
 export async function obterConfig(tenantId) {
@@ -133,8 +177,8 @@ export async function cadastrarIndicacao(tenantId, { indicadorNome, indicadorTel
   if (ex[0]) return { duplicado: true, id: ex[0].id, nome: ex[0].nome, etapa: ex[0].etapa, indicadoPor: ex[0].indicador_nome };
   const o = ORIGENS[origem] ? origem : 'individual';
   const { rows: [novo] } = await pool.query(
-    `INSERT INTO ind_indicados (tenant_id, indicador_id, nome, telefone, origem, observacao, criado_por) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-    [tenantId, indicador.id, nomeIndicado, telIndicado, o, texto(observacao, 1000), texto(autor, 80)],
+    `INSERT INTO ind_indicados (tenant_id, indicador_id, nome, telefone, origem, observacao, criado_por, t1_em, t2_em, t3_em) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+    [tenantId, indicador.id, nomeIndicado, telIndicado, o, texto(observacao, 1000), texto(autor, 80), nove(1), nove(2), nove(7)],
   );
   return { ok: true, id: novo.id };
 }
@@ -162,8 +206,11 @@ export async function importarLista(tenantId, linhas, autor) {
 export async function listar(tenantId) {
   if (!pool) return { indicados: [] };
   await tabelasProntas;
+  await avancarTentativas();
   const { rows } = await pool.query(
     `SELECT i.id, i.nome, i.telefone, i.etapa, i.origem, i.ja_paciente, i.observacao, i.criado_por, i.criado_em, i.atualizado_em,
+            i.t1_em, i.t2_em, i.t3_em, i.retorno_em, i.retorno_nota, i.ia_pausada, i.cadastrado_clinicorp_em,
+            (SELECT count(*)::int FROM ind_notas n WHERE n.indicado_id = i.id) AS qtd_notas,
             ind.id AS indicador_id, ind.nome AS indicador_nome, ind.telefone AS indicador_telefone
        FROM ind_indicados i LEFT JOIN ind_indicadores ind ON ind.id = i.indicador_id
       WHERE i.tenant_id = $1 ORDER BY i.criado_em DESC LIMIT 3000`,
@@ -173,7 +220,103 @@ export async function listar(tenantId) {
     'SELECT id, nome, telefone, nota, indicaria, comentario, contatado, criado_em FROM ind_respostas WHERE tenant_id = $1 ORDER BY criado_em DESC LIMIT 1000',
     [tenantId],
   );
+  const { rows: tent } = await pool.query(
+    `SELECT t.indicado_id, t.n, t.resultado, t.obs, t.ligacao, t.feita_por, t.feita_em FROM ind_tentativas t JOIN ind_indicados i ON i.id = t.indicado_id WHERE i.tenant_id = $1 ORDER BY t.feita_em`,
+    [tenantId],
+  );
+  const porId = new Map();
+  for (const t of tent) { if (!porId.has(t.indicado_id)) porId.set(t.indicado_id, []); porId.get(t.indicado_id).push(t); }
+  for (const r of rows) r.tentativas = porId.get(r.id) || [];
   return { indicados: rows, respostas };
+}
+
+export const RESULTADOS = {
+  nao_atendeu: 'Não atendeu',
+  agendou: 'Agendou',
+  retornar: 'Pediu para retornar',
+  sem_interesse: 'Sem interesse',
+  numero_errado: 'Número errado',
+};
+
+// avanca sozinho pro quadro da proxima tentativa quando chega a data E a tentativa anterior foi registrada
+// (mesma regra do Funil Follow Up: sem registrar a tentativa do dia, nao passa)
+export async function avancarTentativas() {
+  if (!pool) return;
+  await tabelasProntas;
+  await pool.query(`UPDATE ind_indicados SET etapa = 'tentativa1', atualizado_em = now() WHERE etapa = 'novo' AND t1_em <= now()`);
+  await pool.query(`UPDATE ind_indicados i SET etapa = 'tentativa2', atualizado_em = now() WHERE etapa = 'tentativa1' AND t2_em <= now() AND EXISTS (SELECT 1 FROM ind_tentativas t WHERE t.indicado_id = i.id AND t.n = 1)`);
+  await pool.query(`UPDATE ind_indicados i SET etapa = 'tentativa3', atualizado_em = now() WHERE etapa = 'tentativa2' AND t3_em <= now() AND EXISTS (SELECT 1 FROM ind_tentativas t WHERE t.indicado_id = i.id AND t.n = 2)`);
+}
+export function iniciarSchedulerIndicacoes() {
+  const rodar = () => avancarTentativas().catch((err) => console.error('[indicacoes] avancar tentativas:', err.message));
+  setTimeout(rodar, 25 * 1000).unref();
+  setInterval(rodar, 60 * 1000).unref();
+}
+
+// registra a tentativa de contato (ligacao, mensagem...) e aplica o resultado
+export async function registrarTentativa(tenantId, id, { resultado, obs, ligacao, duracaoSeg, retornoEm, autor }) {
+  await tabelasProntas;
+  if (!RESULTADOS[resultado]) throw new Error('Escolha o resultado da tentativa.');
+  const { rows: [i] } = await pool.query('SELECT id, nome, telefone, etapa FROM ind_indicados WHERE id = $1 AND tenant_id = $2', [Number(id), tenantId]);
+  if (!i) throw new Error('Indicado não encontrado.');
+  if (['agendado', 'compareceu', 'sem_sucesso'].includes(i.etapa)) throw new Error('Esse indicado já está finalizado. Mova de etapa se precisar retomar.');
+  const { rows: [c] } = await pool.query('SELECT count(*)::int AS n FROM ind_tentativas WHERE indicado_id = $1', [i.id]);
+  const n = c.n + 1;
+  if (n > 3) throw new Error('As 3 tentativas já foram registradas.');
+  let retorno = null;
+  if (resultado === 'retornar') {
+    retorno = new Date(retornoEm);
+    if (Number.isNaN(retorno.getTime()) || retorno.getTime() < Date.now() - 60000) throw new Error('Informe a data e hora do retorno (no futuro).');
+  }
+  await pool.query('INSERT INTO ind_tentativas (tenant_id, indicado_id, n, resultado, obs, ligacao, feita_por) VALUES ($1,$2,$3,$4,$5,$6,$7)', [tenantId, i.id, n, resultado, texto(obs, 1000), !!ligacao, texto(autor, 80)]);
+  // proxima etapa
+  let etapa = `tentativa${n}`;
+  if (resultado === 'agendou') etapa = 'agendado';
+  else if (resultado === 'sem_interesse' || resultado === 'numero_errado') etapa = 'sem_sucesso';
+  else if (resultado === 'nao_atendeu' && n >= 3) etapa = 'sem_sucesso';
+  await pool.query('UPDATE ind_indicados SET etapa = $3, atualizado_em = now(), retorno_em = $4, retorno_nota = $5 WHERE id = $1 AND tenant_id = $2', [i.id, tenantId, etapa, retorno, retorno ? texto(obs, 500) : null]);
+  // ligacao feita pelo WhatsApp/celular entra no relatorio de ligacoes do numero responsavel
+  if (ligacao) {
+    const cfg = await obterConfig(tenantId);
+    await chamadas.registrarChamadaManual(tenantId, {
+      numero: i.telefone, nome: i.nome, direcao: 'feita', status: resultado === 'nao_atendeu' ? 'perdida' : 'atendida',
+      duracaoSeg: Number(duracaoSeg) || 0, operadorNome: autor, obs: `Indicação - tentativa ${n}: ${RESULTADOS[resultado]}${obs ? ` - ${texto(obs, 200)}` : ''}`, instancia: cfg.instancia || 'manual',
+    }).catch((err) => console.error('[indicacoes] registrar ligacao:', err.message));
+  }
+  return { ok: true, n, etapa };
+}
+
+// alerta de retorno (como no CRM): data/hora combinada + nota; passa a destacar o card quando chega
+export async function definirRetorno(tenantId, id, { retornoEm, nota }) {
+  await tabelasProntas;
+  const d = new Date(retornoEm);
+  if (Number.isNaN(d.getTime())) throw new Error('Informe a data e hora do retorno.');
+  const { rowCount } = await pool.query('UPDATE ind_indicados SET retorno_em = $3, retorno_nota = $4, atualizado_em = now() WHERE id = $1 AND tenant_id = $2', [Number(id), tenantId, d, texto(nota, 500)]);
+  if (!rowCount) throw new Error('Indicado não encontrado.');
+}
+export async function limparRetorno(tenantId, id) {
+  await tabelasProntas;
+  await pool.query('UPDATE ind_indicados SET retorno_em = NULL, retorno_nota = NULL WHERE id = $1 AND tenant_id = $2', [Number(id), tenantId]);
+}
+
+// ---------- anotacoes ----------
+export async function listarNotas(tenantId, indicadoId) {
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT id, autor_id, autor_nome, texto, criado_em FROM ind_notas WHERE tenant_id = $1 AND indicado_id = $2 ORDER BY criado_em DESC, id DESC', [tenantId, Number(indicadoId)]);
+  return rows;
+}
+export async function criarNota(tenantId, indicadoId, { texto: t, autorId, autorNome }) {
+  await tabelasProntas;
+  const corpo = String(t || '').trim().slice(0, 4000);
+  if (!corpo) throw new Error('Escreva a anotação.');
+  const { rows: [ok] } = await pool.query('SELECT 1 AS x FROM ind_indicados WHERE id = $1 AND tenant_id = $2', [Number(indicadoId), tenantId]);
+  if (!ok) throw new Error('Indicado não encontrado.');
+  const { rows: [n] } = await pool.query('INSERT INTO ind_notas (tenant_id, indicado_id, autor_id, autor_nome, texto) VALUES ($1,$2,$3,$4,$5) RETURNING id, autor_id, autor_nome, texto, criado_em', [tenantId, Number(indicadoId), Number(autorId) || 0, texto(autorNome, 80), corpo]);
+  return n;
+}
+export async function apagarNota(tenantId, notaId, quemId) {
+  await tabelasProntas;
+  await pool.query('DELETE FROM ind_notas WHERE id = $1 AND tenant_id = $2 AND ($3::int = 0 OR autor_id = $3::int)', [Number(notaId), tenantId, Number(quemId) || 0]);
 }
 
 export async function marcarRespostaContatada(tenantId, id, contatado) {

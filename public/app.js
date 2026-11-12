@@ -10379,7 +10379,7 @@ document.getElementById('perfilSalvar').addEventListener('click', async (e) => {
 // ---------- Anotacoes sobre o paciente (Conversas e CRM) ----------
 // historico do que a equipe esta tratando/resolvendo com cada paciente, pra consultar e lembrar depois.
 // Mesmo painel nos dois lugares; as anotacoes sao do contato (aparecem igual em Conversas e no CRM).
-function criarPainelNotas(raiz, aoMudarContagem, { fixo = false } = {}) {
+function criarPainelNotas(raiz, aoMudarContagem, { fixo = false, urlLista = (id) => `/api/crm/contatos/${id}/notas`, urlApagar = (id) => `/api/crm/notas/${id}` } = {}) {
   let contatoId = null;
   const topo = document.createElement('div');
   topo.className = 'notas-topo';
@@ -10411,7 +10411,7 @@ function criarPainelNotas(raiz, aoMudarContagem, { fixo = false } = {}) {
     if (!contatoId) return;
     const pedido = contatoId;
     try {
-      const res = await fetch(`/api/crm/contatos/${pedido}/notas`, { headers: { 'x-app-password': appPassword } });
+      const res = await fetch(urlLista(pedido), { headers: { 'x-app-password': appPassword } });
       const d = await res.json();
       if (!res.ok) throw new Error(d.erro || 'erro');
       if (pedido !== contatoId) return;
@@ -10432,7 +10432,7 @@ function criarPainelNotas(raiz, aoMudarContagem, { fixo = false } = {}) {
           x.type = 'button'; x.textContent = '✕'; x.title = 'Apagar anotação';
           x.addEventListener('click', async () => {
             if (!confirm('Apagar esta anotação?')) return;
-            await fetch(`/api/crm/notas/${n.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+            await fetch(urlApagar(n.id), { method: 'DELETE', headers: { 'x-app-password': appPassword } });
             await carregar();
           });
           cab.appendChild(x);
@@ -10451,7 +10451,7 @@ function criarPainelNotas(raiz, aoMudarContagem, { fixo = false } = {}) {
     if (!texto || !contatoId) return;
     salvar.disabled = true;
     try {
-      const res = await fetch(`/api/crm/contatos/${contatoId}/notas`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ texto }) });
+      const res = await fetch(urlLista(contatoId), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ texto }) });
       const d = await res.json();
       if (!res.ok) throw new Error(d.erro || 'erro');
       area.value = '';
@@ -11417,6 +11417,31 @@ const indH = () => ({ 'x-app-password': appPassword, 'Content-Type': 'applicatio
 const indSemAcento = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const indQuando = (iso) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 
+const IND_DIA = 86400000;
+const indDH = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+function indTentativaPendente(i) {
+  const m = /^tentativa(\d)$/.exec(i.etapa);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if ((i.tentativas || []).some((t) => t.n === n)) return null;
+  const prevista = new Date(i[`t${n}_em`]);
+  return { n, prevista, atrasada: Date.now() - prevista.getTime() > IND_DIA };
+}
+function indRetornoInfo(i) {
+  if (!i.retorno_em) return null;
+  const d = new Date(i.retorno_em);
+  return { d, vencido: d.getTime() < Date.now(), hoje: d.toDateString() === new Date().toDateString() };
+}
+function indPainelNotasModal() {
+  if (!indPainelNotasModal.p) {
+    const raiz = document.getElementById('indNotasPainel');
+    indPainelNotasModal.p = criarPainelNotas(raiz, (id, n) => { const x = indDados.indicados.find((k) => k.id === id); if (x) x.qtd_notas = n; }, {
+      fixo: true, urlLista: (id) => `/api/indicacoes/${id}/notas`, urlApagar: (id) => `/api/indicacoes/notas/${id}`,
+    });
+  }
+  return indPainelNotasModal.p;
+}
+
 function indCriarCard(i) {
   const card = document.createElement('div');
   card.className = 'crm-card ind-card';
@@ -11429,6 +11454,28 @@ function indCriarCard(i) {
   if (i.ja_paciente === false) { const t = document.createElement('span'); t.className = 'ind-tag'; t.textContent = 'Novo no Clinicorp'; tags.appendChild(t); }
   const data = document.createElement('span'); data.className = 'ind-tag'; data.textContent = indQuando(i.criado_em); tags.appendChild(data);
   card.appendChild(tags);
+  // tentativas ja feitas + proxima prevista
+  if ((i.tentativas || []).length) {
+    const h = document.createElement('div'); h.className = 'ind-obs';
+    h.textContent = i.tentativas.map((t) => `${t.n}ª: ${indDados.resultados?.[t.resultado] || t.resultado} (${indQuando(t.feita_em)})`).join(' · ');
+    card.appendChild(h);
+  }
+  const pend = indTentativaPendente(i);
+  if (pend) {
+    const a = document.createElement('div'); a.className = 'ffu-selo pend' + (pend.atrasada ? ' ind-atrasada' : '');
+    a.textContent = `⚠ ${pend.n}ª tentativa pendente (prevista ${indQuando(pend.prevista)})`;
+    card.appendChild(a);
+    if (pend.atrasada) card.classList.add('ffu-atrasado');
+  } else if (['novo', 'tentativa1', 'tentativa2'].includes(i.etapa)) {
+    const prox = i.etapa === 'novo' ? 1 : Number(i.etapa.slice(-1)) + 1;
+    if (i[`t${prox}_em`]) { const q = document.createElement('div'); q.className = 'ffu-quando'; q.textContent = `${prox}ª tentativa prevista para ${indDH(i[`t${prox}_em`])}`; card.appendChild(q); }
+  }
+  const ret = indRetornoInfo(i);
+  if (ret) {
+    const r = document.createElement('div'); r.className = 'ind-retorno' + (ret.vencido ? ' vencido' : ret.hoje ? ' hoje' : '');
+    r.textContent = `⏰ Retorno ${ret.vencido ? 'atrasado' : ret.hoje ? 'hoje' : 'em'} ${indDH(i.retorno_em)}${i.retorno_nota ? ` · ${i.retorno_nota}` : ''}`;
+    card.appendChild(r);
+  }
   if (i.observacao) { const o = document.createElement('div'); o.className = 'ind-obs'; o.textContent = i.observacao; card.appendChild(o); }
   const acoes = document.createElement('div'); acoes.className = 'ffu-acoes';
   const sel = document.createElement('select'); sel.className = 'ind-etapa-sel'; sel.title = 'Mover para outra etapa';
@@ -11440,6 +11487,17 @@ function indCriarCard(i) {
     carregarIndicacoes();
   });
   acoes.appendChild(sel);
+  if (!['agendado', 'compareceu', 'sem_sucesso'].includes(i.etapa) && (i.tentativas || []).length < 3) {
+    const t = document.createElement('button'); t.type = 'button'; t.className = 'ffu-exec'; t.textContent = 'Registrar tentativa';
+    t.addEventListener('click', () => indAbrirTentativa(i));
+    acoes.appendChild(t);
+  }
+  const rb = document.createElement('button'); rb.type = 'button'; rb.textContent = ret ? 'Retorno' : 'Alerta de retorno';
+  rb.addEventListener('click', () => indAbrirRetorno(i));
+  acoes.appendChild(rb);
+  const nb = document.createElement('button'); nb.type = 'button'; nb.textContent = i.qtd_notas ? `📝 Anotações (${i.qtd_notas})` : '📝 Anotações';
+  nb.addEventListener('click', () => { document.getElementById('indNotasTitulo').textContent = `Anotações · ${i.nome}`; document.getElementById('indNotasModal').hidden = false; indPainelNotasModal().definirContato(i.id); });
+  acoes.appendChild(nb);
   const wa = document.createElement('a'); wa.className = 'ind-btn'; wa.textContent = 'WhatsApp'; wa.target = '_blank'; wa.rel = 'noopener'; wa.href = `https://wa.me/${i.telefone}`; acoes.appendChild(wa);
   const conf = document.createElement('button'); conf.type = 'button'; conf.textContent = 'Conferir no Clinicorp';
   conf.title = 'Consulta o Clinicorp para ver se o indicado já é paciente (1 consulta)';
@@ -11498,7 +11556,9 @@ function indDesenhar() {
   }
   const indicadores = new Set(indDados.indicados.map((i) => i.indicador_id).filter(Boolean)).size;
   const conv = indDados.indicados.filter((i) => i.etapa === 'compareceu').length;
-  document.getElementById('indResumo').textContent = `${indDados.indicados.length} indicado(s) de ${indicadores} indicador(es) · ${conv} compareceram`;
+  const pendentes = indDados.indicados.filter((i) => indTentativaPendente(i)).length;
+  const retornos = indDados.indicados.filter((i) => { const r = indRetornoInfo(i); return r && (r.vencido || r.hoje); }).length;
+  document.getElementById('indResumo').textContent = `${indDados.indicados.length} indicado(s) de ${indicadores} indicador(es) · ${conv} compareceram · ${pendentes} tentativa(s) pendente(s) · ${retornos} retorno(s) para hoje/atrasados`;
 }
 
 let indVista = 'funil';
@@ -11703,4 +11763,83 @@ indLinkModal.addEventListener('click', (e) => { if (e.target === indLinkModal ||
 document.getElementById('indLinkCopiar').addEventListener('click', async () => {
   const t = document.getElementById('indLinkTexto');
   try { await navigator.clipboard.writeText(t.value); mostrarAviso('Link copiado'); } catch { t.select(); document.execCommand('copy'); mostrarAviso('Link copiado'); }
+});
+
+// ---- registrar tentativa ----
+const indTentModal = document.getElementById('indTentModal');
+const indRetModal = document.getElementById('indRetModal');
+const indNotasModal = document.getElementById('indNotasModal');
+let indTentId = null, indRetId = null;
+indNotasModal.addEventListener('click', (e) => { if (e.target === indNotasModal || e.target.closest('[data-fechar="indNotasModal"]')) { indNotasModal.hidden = true; carregarIndicacoes(); } });
+function indAtualizarCamposTentativa() {
+  const r = document.getElementById('indTentResultado').value;
+  document.getElementById('indTentRetornoLabel').hidden = r !== 'retornar';
+  document.getElementById('indTentDuracaoLabel').hidden = !document.getElementById('indTentLigacao').checked || r === 'nao_atendeu';
+}
+document.getElementById('indTentResultado').addEventListener('change', indAtualizarCamposTentativa);
+document.getElementById('indTentLigacao').addEventListener('change', indAtualizarCamposTentativa);
+function indAbrirTentativa(i) {
+  indTentId = i.id;
+  const n = (i.tentativas || []).length + 1;
+  document.getElementById('indTentTitulo').textContent = `${n}ª tentativa · ${i.nome}`;
+  const sel = document.getElementById('indTentResultado'); sel.textContent = '';
+  for (const [k, v] of Object.entries(indDados.resultados || {})) sel.add(new Option(v, k));
+  document.getElementById('indTentObs').value = ''; document.getElementById('indTentRetorno').value = ''; document.getElementById('indTentDuracao').value = '0';
+  document.getElementById('indTentLigacao').checked = true;
+  document.getElementById('indTentErro').hidden = true;
+  document.getElementById('indTentSalvar').classList.remove('pendente', 'salvo');
+  indAtualizarCamposTentativa();
+  indTentModal.hidden = false;
+}
+indTentModal.addEventListener('click', (e) => { if (e.target === indTentModal || e.target.closest('[data-fechar="indTentModal"]')) indTentModal.hidden = true; });
+document.getElementById('indTentForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = document.getElementById('indTentErro'); erro.hidden = true;
+  const btn = document.getElementById('indTentSalvar'); btn.disabled = true;
+  try {
+    const ret = document.getElementById('indTentRetorno').value;
+    const r = await fetch(`/api/indicacoes/${indTentId}/tentativa`, {
+      method: 'POST', headers: indH(),
+      body: JSON.stringify({ resultado: document.getElementById('indTentResultado').value, obs: document.getElementById('indTentObs').value, ligacao: document.getElementById('indTentLigacao').checked, duracaoSeg: Math.round(Number(document.getElementById('indTentDuracao').value || 0) * 60), retornoEm: ret ? new Date(ret).toISOString() : null }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, 'Tentativa registrada');
+    setTimeout(() => { indTentModal.hidden = true; }, 400);
+    carregarIndicacoes();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; }
+  btn.disabled = false;
+});
+
+// ---- alerta de retorno ----
+function indParaInput(d) { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
+function indAbrirRetorno(i) {
+  indRetId = i.id;
+  document.getElementById('indRetData').value = i.retorno_em ? indParaInput(new Date(i.retorno_em)) : '';
+  document.getElementById('indRetNota').value = i.retorno_nota || '';
+  document.getElementById('indRetErro').hidden = true;
+  document.getElementById('indRetRemover').hidden = !i.retorno_em;
+  document.getElementById('indRetSalvar').classList.remove('pendente', 'salvo');
+  indRetModal.hidden = false;
+}
+indRetModal.addEventListener('click', (e) => { if (e.target === indRetModal || e.target.closest('[data-fechar="indRetModal"]')) indRetModal.hidden = true; });
+document.getElementById('indRetForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = document.getElementById('indRetErro'); erro.hidden = true;
+  const v = document.getElementById('indRetData').value;
+  if (!v) { erro.textContent = 'Informe a data e a hora.'; erro.hidden = false; return; }
+  const btn = document.getElementById('indRetSalvar'); btn.disabled = true;
+  try {
+    const r = await fetch(`/api/indicacoes/${indRetId}/retorno`, { method: 'POST', headers: indH(), body: JSON.stringify({ retornoEm: new Date(v).toISOString(), nota: document.getElementById('indRetNota').value }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, 'Alerta de retorno salvo');
+    setTimeout(() => { indRetModal.hidden = true; }, 400);
+    carregarIndicacoes();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; }
+  btn.disabled = false;
+});
+document.getElementById('indRetRemover').addEventListener('click', async () => {
+  await fetch(`/api/indicacoes/${indRetId}/retorno`, { method: 'DELETE', headers: indH() });
+  indRetModal.hidden = true; carregarIndicacoes();
 });

@@ -1782,7 +1782,7 @@ app.get('/api/indicacoes', async (req, res) => {
       nome: i.nome, numero: i.numero || null, status: i.status || null,
       operadorId: porNumero[i.nome] ?? null, operadorNome: porNumero[i.nome] !== undefined ? (operadores.find((o) => o.id === porNumero[i.nome])?.nome || null) : null,
     }));
-    res.json({ etapas: indicacoes.ETAPAS, origens: indicacoes.ORIGENS, token: config.token, instancia: config.instancia, numeros, ...lista });
+    res.json({ etapas: indicacoes.ETAPAS, origens: indicacoes.ORIGENS, resultados: indicacoes.RESULTADOS, token: config.token, instancia: config.instancia, numeros, ...lista });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -1831,6 +1831,53 @@ app.put('/api/indicacoes/:id', async (req, res) => {
 app.delete('/api/indicacoes/:id', async (req, res) => {
   try {
     await indicacoes.apagar(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/:id/tentativa', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json(await indicacoes.registrarTentativa(req.tenantId, req.params.id, { ...(req.body || {}), autor: perfil?.nome }));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/:id/retorno', async (req, res) => {
+  try {
+    await indicacoes.definirRetorno(req.tenantId, req.params.id, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/indicacoes/:id/retorno', async (req, res) => {
+  try {
+    await indicacoes.limparRetorno(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.get('/api/indicacoes/:id/notas', async (req, res) => {
+  try {
+    res.json({ notas: await indicacoes.listarNotas(req.tenantId, req.params.id), euId: req.operadorId || 0 });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/:id/notas', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json({ ok: true, nota: await indicacoes.criarNota(req.tenantId, req.params.id, { texto: req.body?.texto, autorId: req.operadorId || 0, autorNome: perfil?.nome }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/indicacoes/notas/:id', async (req, res) => {
+  try {
+    await indicacoes.apagarNota(req.tenantId, req.params.id, req.operadorId || 0);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ erro: err.message });
@@ -3290,6 +3337,7 @@ followUp.iniciarSchedulerFollowUp();
 // Scheduler do Follow Up Inteligente (cards por etapa do funil) - desativado por tenant por padrao.
 followUpInteligente.iniciarSchedulerFollowUpInteligente();
 funilFU.iniciarSchedulerFunilFollowUp();
+indicacoes.iniciarSchedulerIndicacoes();
 crm.iniciarVarreduraRepetidos();
 // Disparos (campanhas de mensagens em massa) - so envia campanhas que o dono iniciou/agendou na aba Disparos
 disparos.iniciarSchedulerDisparos();
