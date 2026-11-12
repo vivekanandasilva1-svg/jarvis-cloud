@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261112d" />
+  <link rel="stylesheet" href="style.css?v=20261112e" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -920,14 +920,17 @@
         </div>
         <p class="ind-responsavel" id="indResponsavel"></p>
         <div class="ind-subnav">
-          <button type="button" id="indVerFunil" class="ind-sub ativo">Funil de indicados</button>
-          <button type="button" id="indVerPesquisa" class="ind-sub">Pesquisa de satisfação <span class="ind-sub-qtd" id="indPesqQtd"></span></button>
+          <button type="button" id="indVerPesquisa" class="ind-sub ativo">Funil de pacientes (pesquisa) <span class="ind-sub-qtd" id="indPesqQtd"></span></button>
+          <button type="button" id="indVerFunil" class="ind-sub">Indicados</button>
           <button type="button" id="indVerLigacoes" class="ind-sub">Ligações</button>
           <button type="button" id="indVerIA" class="ind-sub">IA da CRM <span class="ind-sub-qtd" id="indIaEstado"></span></button>
         </div>
-        <p class="ind-resumo" id="indResumo"></p>
-        <div class="crm-board" id="indBoard"><p class="agenda-vazia">Carregando...</p></div>
-        <div class="ind-pesquisa" id="indPesquisa" hidden></div>
+        <p class="ind-resumo" id="indResumo" hidden></p>
+        <div class="crm-board" id="indBoard" hidden><p class="agenda-vazia">Carregando...</p></div>
+        <div class="ind-pac" id="indPesquisa">
+          <p class="ind-resumo" id="indPacResumo"></p>
+          <div class="crm-board" id="indPacBoard"><p class="agenda-vazia">Carregando...</p></div>
+        </div>
         <div class="ind-pesquisa" id="indLigacoes" hidden>
           <div class="ind-filtros">
             <label>De <input type="date" id="indLigDe" /></label>
@@ -1893,6 +1896,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261112d"></script>
+  <script src="app.js?v=20261112e"></script>
 </body>
 </html>

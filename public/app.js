@@ -11432,12 +11432,16 @@ function indRetornoInfo(i) {
   const d = new Date(i.retorno_em);
   return { d, vencido: d.getTime() < Date.now(), hoje: d.toDateString() === new Date().toDateString() };
 }
-function indPainelNotasModal() {
-  if (!indPainelNotasModal.p) {
+function indPainelNotasModal(tipo = 'ind') {
+  if (indPainelNotasModal.tipo !== tipo) {
     const raiz = document.getElementById('indNotasPainel');
-    indPainelNotasModal.p = criarPainelNotas(raiz, (id, n) => { const x = indDados.indicados.find((k) => k.id === id); if (x) x.qtd_notas = n; }, {
-      fixo: true, urlLista: (id) => `/api/indicacoes/${id}/notas`, urlApagar: (id) => `/api/indicacoes/notas/${id}`,
+    raiz.textContent = '';
+    indPainelNotasModal.p = criarPainelNotas(raiz, (id, n) => { const x = (tipo === 'resp' ? indDados.respostas : indDados.indicados).find((k) => k.id === id); if (x) x.qtd_notas = n; }, {
+      fixo: true,
+      urlLista: (id) => (tipo === 'resp' ? `/api/indicacoes/respostas/${id}/notas` : `/api/indicacoes/${id}/notas`),
+      urlApagar: (id) => `/api/indicacoes/notas/${id}`,
     });
+    indPainelNotasModal.tipo = tipo;
   }
   return indPainelNotasModal.p;
 }
@@ -11565,7 +11569,7 @@ function indDesenhar() {
   document.getElementById('indResumo').textContent = `${indDados.indicados.length} indicado(s) de ${indicadores} indicador(es) · ${conv} compareceram · ${pendentes} tentativa(s) pendente(s) · ${retornos} retorno(s) para hoje/atrasados`;
 }
 
-let indVista = 'funil';
+let indVista = 'pesquisa';
 function indTrocarVista(v) {
   indVista = v;
   document.getElementById('indBoard').hidden = v !== 'funil';
@@ -11580,48 +11584,72 @@ document.getElementById('indVerPesquisa').addEventListener('click', () => indTro
 document.getElementById('indVerLigacoes').addEventListener('click', () => indTrocarVista('ligacoes'));
 document.getElementById('indVerIA').addEventListener('click', () => indTrocarVista('ia'));
 
+// ---- funil dos PACIENTES que responderam a pesquisa: a CRM chama cada um pra pedir indicacao ----
+function indCriarCardPaciente(r) {
+  const card = document.createElement('div');
+  card.className = 'crm-card ind-card ind-resp' + (r.nota <= 6 ? ' ruim' : '');
+  const nome = document.createElement('div'); nome.className = 'crm-card-nome'; nome.textContent = r.nome; card.appendChild(nome);
+  const tel = document.createElement('div'); tel.className = 'crm-card-numero'; tel.textContent = r.telefone; card.appendChild(tel);
+  const tags = document.createElement('div'); tags.className = 'ind-tags';
+  const nota = document.createElement('span'); nota.className = 'ind-nota'; nota.textContent = `★ ${r.nota}/10`; tags.appendChild(nota);
+  const ind = document.createElement('span'); ind.className = 'ind-tag' + (r.indicaria ? ' ok' : ''); ind.textContent = r.indicaria ? 'Indicaria' : 'Não indicaria'; tags.appendChild(ind);
+  const q = document.createElement('span'); q.className = 'ind-tag'; q.textContent = indQuando(r.criado_em); tags.appendChild(q);
+  if (r.qtd_indicados) { const t = document.createElement('span'); t.className = 'ind-tag ok'; t.textContent = `${r.qtd_indicados} indicado(s)`; tags.appendChild(t); }
+  card.appendChild(tags);
+  if (r.comentario) { const c = document.createElement('div'); c.className = 'ind-obs ind-comentario'; c.textContent = `“${r.comentario}”`; card.appendChild(c); }
+  const acoes = document.createElement('div'); acoes.className = 'ffu-acoes';
+  const sel = document.createElement('select'); sel.className = 'ind-etapa-sel'; sel.title = 'Mover para outra etapa';
+  for (const e of indDados.etapasResp || []) sel.add(new Option(e.nome, e.id));
+  sel.value = r.etapa || 'nova';
+  sel.addEventListener('change', async () => { await fetch(`/api/indicacoes/respostas/${r.id}/etapa`, { method: 'POST', headers: indH(), body: JSON.stringify({ etapa: sel.value }) }); carregarIndicacoes(); });
+  acoes.appendChild(sel);
+  const wa = document.createElement('a'); wa.className = 'ind-btn'; wa.target = '_blank'; wa.rel = 'noopener'; wa.textContent = 'Pedir indicação';
+  const primeiro = r.nome.split(' ')[0];
+  wa.title = 'Abre o WhatsApp com uma mensagem pedindo indicação';
+  wa.href = `https://wa.me/${r.telefone}?text=${encodeURIComponent(`Olá, ${primeiro}! Aqui é da clínica. Obrigado por responder nossa pesquisa e pela confiança! Se você conhece alguém (família ou amigos) que também gostaria de cuidar do sorriso com a gente, pode me passar o nome e o WhatsApp da pessoa? Entraremos em contato com todo o cuidado.`)}`;
+  wa.addEventListener('click', async () => { if ((r.etapa || 'nova') === 'nova' || r.etapa === 'atencao') { await fetch(`/api/indicacoes/respostas/${r.id}/etapa`, { method: 'POST', headers: indH(), body: JSON.stringify({ etapa: 'contato' }) }); carregarIndicacoes(); } });
+  acoes.appendChild(wa);
+  const lig = document.createElement('button'); lig.type = 'button'; lig.textContent = 'Registrar ligação';
+  lig.addEventListener('click', () => { document.getElementById('indLigNova').click(); document.getElementById('indLigNumero').value = r.telefone; document.getElementById('indLigNome').value = r.nome; });
+  acoes.appendChild(lig);
+  const cad = document.createElement('button'); cad.type = 'button'; cad.className = 'ffu-exec'; cad.textContent = 'Cadastrar indicados dele';
+  cad.addEventListener('click', () => { document.getElementById('indNovoBtn').click(); document.getElementById('indIndicadorNome').value = r.nome; document.getElementById('indIndicadorTel').value = r.telefone; document.getElementById('indIndicadoNome').focus(); });
+  acoes.appendChild(cad);
+  const nb = document.createElement('button'); nb.type = 'button'; nb.textContent = r.qtd_notas ? `📝 Anotações (${r.qtd_notas})` : '📝 Anotações';
+  nb.addEventListener('click', () => { document.getElementById('indNotasTitulo').textContent = `Anotações · ${r.nome}`; document.getElementById('indNotasModal').hidden = false; indPainelNotasModal('resp').definirContato(r.id); });
+  acoes.appendChild(nb);
+  const ap = document.createElement('button'); ap.type = 'button'; ap.textContent = 'Apagar';
+  ap.addEventListener('click', async () => { if (!confirm('Apagar esta resposta?')) return; await fetch(`/api/indicacoes/respostas/${r.id}`, { method: 'DELETE', headers: indH() }); carregarIndicacoes(); });
+  acoes.appendChild(ap);
+  card.appendChild(acoes);
+  return card;
+}
+
 function indDesenharPesquisa() {
-  const box = document.getElementById('indPesquisa');
+  const board = document.getElementById('indPacBoard');
   const resp = indDados.respostas || [];
   const q = indSemAcento(document.getElementById('indBusca').value.trim());
   const lista = resp.filter((r) => !q || indSemAcento(`${r.nome} ${r.telefone} ${r.comentario || ''}`).includes(q));
   document.getElementById('indPesqQtd').textContent = resp.length ? `(${resp.length})` : '';
-  box.textContent = '';
+  const resumo = document.getElementById('indPacResumo');
   if (resp.length) {
     const media = (resp.reduce((a, r) => a + r.nota, 0) / resp.length).toFixed(1);
     const sim = resp.filter((r) => r.indicaria).length;
-    const nps = (() => { const pro = resp.filter((r) => r.nota >= 9).length, det = resp.filter((r) => r.nota <= 6).length; return Math.round(((pro - det) / resp.length) * 100); })();
-    const r0 = document.createElement('p'); r0.className = 'ind-resumo';
-    r0.textContent = `${resp.length} resposta(s) · nota média ${media} · ${sim} indicariam (${Math.round((sim / resp.length) * 100)}%) · NPS ${nps}`;
-    box.appendChild(r0);
-  }
-  if (!lista.length) { const v = document.createElement('p'); v.className = 'agenda-vazia'; v.textContent = resp.length ? 'Nada encontrado nessa busca.' : 'Nenhuma resposta ainda. Mande o link da pesquisa aos pacientes pelo botão "Link do formulário".'; box.appendChild(v); return; }
-  for (const r of lista) {
-    const card = document.createElement('div'); card.className = 'ind-resp' + (r.nota <= 6 ? ' ruim' : '');
-    const topo = document.createElement('div'); topo.className = 'ind-resp-topo';
-    const nome = document.createElement('strong'); nome.textContent = r.nome;
-    const nota = document.createElement('span'); nota.className = 'ind-nota'; nota.textContent = `★ ${r.nota}/10`;
-    const ind = document.createElement('span'); ind.className = 'ind-tag' + (r.indicaria ? ' ok' : ''); ind.textContent = r.indicaria ? 'Indicaria' : 'Não indicaria';
-    const quando = document.createElement('span'); quando.className = 'ind-tag'; quando.textContent = indQuando(r.criado_em);
-    topo.append(nome, nota, ind, quando);
-    card.appendChild(topo);
-    const tel = document.createElement('div'); tel.className = 'crm-card-numero'; tel.textContent = r.telefone; card.appendChild(tel);
-    if (r.comentario) { const c = document.createElement('div'); c.className = 'ind-obs'; c.textContent = r.comentario; card.appendChild(c); }
-    const acoes = document.createElement('div'); acoes.className = 'ffu-acoes';
-    const wa = document.createElement('a'); wa.className = 'ind-btn'; wa.textContent = 'WhatsApp'; wa.target = '_blank'; wa.rel = 'noopener'; wa.href = `https://wa.me/${r.telefone}`; acoes.appendChild(wa);
-    if (r.indicaria) {
-      const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Cadastrar indicados dele';
-      b.addEventListener('click', () => { document.getElementById('indNovoBtn').click(); document.getElementById('indIndicadorNome').value = r.nome; document.getElementById('indIndicadorTel').value = r.telefone; document.getElementById('indIndicadoNome').focus(); });
-      acoes.appendChild(b);
-    }
-    const c = document.createElement('button'); c.type = 'button'; c.textContent = r.contatado ? 'Contatado ✔' : 'Marcar como contatado';
-    c.addEventListener('click', async () => { await fetch(`/api/indicacoes/respostas/${r.id}/contatado`, { method: 'POST', headers: indH(), body: JSON.stringify({ contatado: !r.contatado }) }); carregarIndicacoes(); });
-    acoes.appendChild(c);
-    const ap = document.createElement('button'); ap.type = 'button'; ap.textContent = 'Apagar';
-    ap.addEventListener('click', async () => { if (!confirm('Apagar esta resposta?')) return; await fetch(`/api/indicacoes/respostas/${r.id}`, { method: 'DELETE', headers: indH() }); carregarIndicacoes(); });
-    acoes.appendChild(ap);
-    card.appendChild(acoes);
-    box.appendChild(card);
+    const pro = resp.filter((r) => r.nota >= 9).length, det = resp.filter((r) => r.nota <= 6).length;
+    resumo.textContent = `${resp.length} resposta(s) · nota média ${media} · ${sim} indicariam (${Math.round((sim / resp.length) * 100)}%) · NPS ${Math.round(((pro - det) / resp.length) * 100)} · ${resp.filter((r) => r.etapa === 'indicou').length} já indicaram`;
+  } else resumo.textContent = 'Nenhuma resposta ainda. Mande o link da pesquisa aos pacientes pelo botão "Link do formulário": quem responder cai aqui, e a CRM chama para pedir indicação.';
+  board.textContent = '';
+  for (const e of indDados.etapasResp || []) {
+    const col = document.createElement('div'); col.className = 'crm-coluna';
+    const itens = lista.filter((r) => (r.etapa || 'nova') === e.id);
+    const head = document.createElement('div'); head.className = 'crm-coluna-header';
+    const t = document.createElement('span'); t.textContent = e.nome;
+    const c = document.createElement('span'); c.className = 'crm-coluna-contagem'; c.textContent = itens.length;
+    head.append(t, c); col.appendChild(head);
+    const cards = document.createElement('div'); cards.className = 'crm-coluna-cards';
+    if (!itens.length) { const v = document.createElement('div'); v.className = 'crm-coluna-vazia'; v.textContent = 'Ninguém aqui'; cards.appendChild(v); }
+    for (const r of itens) cards.appendChild(indCriarCardPaciente(r));
+    col.appendChild(cards); board.appendChild(col);
   }
 }
 

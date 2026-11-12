@@ -1076,5 +1076,13 @@
     "tipo": "funcao",
     "titulo": "Indicações (etapa 3): IA exclusiva da aba, pausa e relatório de ligações do número",
     "conteudo": "IA exclusiva (src/indicacoesIA.js): responde só no número escolhido como responsável pelas Indicações (webhook: motor próprio, nunca Follow Up nem Auto Atendimento nesse número), com prompt próprio (texto sugerido editável), arquivos próprios (imagem, áudio, PDF, vídeo MP4 até 12 MB, máx 20) que a IA envia pela ferramenta enviar_arquivo, memória própria (ind_ia_sessoes) e ferramenta registrar_resultado (agendou -> Agendado, sem interesse -> Sem sucesso, pedir retorno -> alerta de retorno; sempre deixa nota 'IA' no indicado). Pausa: interruptor geral (IA atendendo/pausada) e botão 'Pausar IA' por indicado; também respeita a pausa da conversa no CRM. Só texto por enquanto (áudio/imagem recebidos não são respondidos). Gasto contabilizado no módulo 'indicacoes'. Aba Ligações: resumo (total, feitas, atendidas, perdidas, tempo total e médio) e lista só do número responsável + 'Registrar ligação' manual (o WhatsApp não permite o sistema ligar nem avisa ligação feita pelo celular). Nota: com o número das Indicações definido, o Auto Atendimento normal fica desligado nele."
+  },
+  {
+    "chave": "indicacoes:funil-de-pacientes",
+    "modulo": "plataforma",
+    "data": "2026-11-12",
+    "tipo": "melhoria",
+    "titulo": "Indicações: funil dos pacientes que respondem a pesquisa + aba Indicados",
+    "conteudo": "Organização definida pelo dono: (1) FUNIL DE PACIENTES (primeira visão da aba): quem preenche o formulário cai como card com a resposta visível (nota, indicaria sim/não, comentário completo) nas colunas Nova resposta > Atenção (nota <= 6, entra direto aqui) > Pedindo indicação > Indicou > Não vai indicar; a CRM chama o paciente para pedir indicação (botão 'Pedir indicação' abre o WhatsApp com mensagem pronta e já move para Pedindo indicação; também Registrar ligação, anotações próprias e 'Cadastrar indicados dele'). Paciente vira 'Indicou' sozinho quando ele indica alguém no formulário ou quando a CRM cadastra um indicado com o telefone dele. (2) INDICADOS: aba separada com as pessoas indicadas pelos pacientes contatados, com o funil de tentativas (Dia 1/2/7), retorno, anotações e IA. Tabela ind_respostas ganhou etapa; ind_notas aceita nota de resposta (resposta_id). Substitui a antiga lista solta 'Pesquisa de satisfação'."
   }
 ]

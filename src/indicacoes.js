@@ -23,6 +23,15 @@ export const ETAPAS = [
   { id: 'sem_sucesso', nome: 'Sem sucesso' },
 ];
 const IDS_ETAPAS = new Set(ETAPAS.map((e) => e.id));
+// funil dos PACIENTES que respondem a pesquisa (a CRM chama cada um pra pedir indicacao)
+export const ETAPAS_RESP = [
+  { id: 'nova', nome: 'Nova resposta' },
+  { id: 'atencao', nome: 'Atenção (nota baixa)' },
+  { id: 'contato', nome: 'Pedindo indicação' },
+  { id: 'indicou', nome: 'Indicou' },
+  { id: 'sem_indicacao', nome: 'Não vai indicar' },
+];
+const IDS_ETAPAS_RESP = new Set(ETAPAS_RESP.map((e) => e.id));
 export const ORIGENS = { recepcao: 'Recepção', formulario: 'Formulário', lista: 'Lista', individual: 'Cadastro individual' };
 
 async function garantirTabelas() {
@@ -105,6 +114,11 @@ async function garantirTabelas() {
       criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // funil dos pacientes da pesquisa + anotacoes tambem nas respostas
+  await pool.query(`ALTER TABLE ind_respostas ADD COLUMN IF NOT EXISTS etapa TEXT NOT NULL DEFAULT 'nova'`);
+  await pool.query(`UPDATE ind_respostas SET etapa = 'contato' WHERE contatado = true AND etapa = 'nova'`);
+  await pool.query(`ALTER TABLE ind_notas ALTER COLUMN indicado_id DROP NOT NULL`);
+  await pool.query(`ALTER TABLE ind_notas ADD COLUMN IF NOT EXISTS resposta_id INT REFERENCES ind_respostas(id) ON DELETE CASCADE`);
   // respostas da pesquisa de satisfacao (formulario publico)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ind_respostas (
@@ -180,6 +194,10 @@ export async function cadastrarIndicacao(tenantId, { indicadorNome, indicadorTel
     `INSERT INTO ind_indicados (tenant_id, indicador_id, nome, telefone, origem, observacao, criado_por, t1_em, t2_em, t3_em) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
     [tenantId, indicador.id, nomeIndicado, telIndicado, o, texto(observacao, 1000), texto(autor, 80), nove(1), nove(2), nove(7)],
   );
+  if (indicador.telefone) {
+    const vi = varianteNonoDigito(indicador.telefone);
+    await pool.query(`UPDATE ind_respostas SET etapa = 'indicou' WHERE tenant_id = $1 AND telefone = ANY($2::text[]) AND etapa <> 'indicou'`, [tenantId, vi ? [indicador.telefone, vi] : [indicador.telefone]]);
+  }
   return { ok: true, id: novo.id };
 }
 
@@ -217,9 +235,17 @@ export async function listar(tenantId) {
     [tenantId],
   );
   const { rows: respostas } = await pool.query(
-    'SELECT id, nome, telefone, nota, indicaria, comentario, contatado, criado_em FROM ind_respostas WHERE tenant_id = $1 ORDER BY criado_em DESC LIMIT 1000',
+    `SELECT id, nome, telefone, nota, indicaria, comentario, contatado, etapa, criado_em,
+            (SELECT count(*)::int FROM ind_notas n WHERE n.resposta_id = ind_respostas.id) AS qtd_notas
+       FROM ind_respostas WHERE tenant_id = $1 ORDER BY criado_em DESC LIMIT 1000`,
     [tenantId],
   );
+  const { rows: conta } = await pool.query(
+    `SELECT ind.telefone, count(i.id)::int AS n FROM ind_indicadores ind JOIN ind_indicados i ON i.indicador_id = ind.id WHERE ind.tenant_id = $1 AND ind.telefone IS NOT NULL GROUP BY ind.telefone`,
+    [tenantId],
+  );
+  const porTel = new Map(conta.map((c) => [c.telefone, c.n]));
+  for (const r of respostas) { const v = varianteNonoDigito(r.telefone); r.qtd_indicados = (porTel.get(r.telefone) || 0) + (v ? (porTel.get(v) || 0) : 0); }
   const { rows: tent } = await pool.query(
     `SELECT t.indicado_id, t.n, t.resultado, t.obs, t.ligacao, t.feita_por, t.feita_em FROM ind_tentativas t JOIN ind_indicados i ON i.id = t.indicado_id WHERE i.tenant_id = $1 ORDER BY t.feita_em`,
     [tenantId],
@@ -336,6 +362,27 @@ export async function criarNota(tenantId, indicadoId, { texto: t, autorId, autor
 export async function apagarNota(tenantId, notaId, quemId) {
   await tabelasProntas;
   await pool.query('DELETE FROM ind_notas WHERE id = $1 AND tenant_id = $2 AND ($3::int = 0 OR autor_id = $3::int)', [Number(notaId), tenantId, Number(quemId) || 0]);
+}
+
+export async function moverEtapaResposta(tenantId, id, etapa) {
+  if (!IDS_ETAPAS_RESP.has(etapa)) throw new Error('Etapa inválida.');
+  await tabelasProntas;
+  const { rowCount } = await pool.query('UPDATE ind_respostas SET etapa = $3, contatado = ($3 <> \'nova\' AND $3 <> \'atencao\') WHERE id = $1 AND tenant_id = $2', [Number(id), tenantId, etapa]);
+  if (!rowCount) throw new Error('Resposta não encontrada.');
+}
+export async function listarNotasResposta(tenantId, id) {
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT id, autor_id, autor_nome, texto, criado_em FROM ind_notas WHERE tenant_id = $1 AND resposta_id = $2 ORDER BY criado_em DESC, id DESC', [tenantId, Number(id)]);
+  return rows;
+}
+export async function criarNotaResposta(tenantId, id, { texto: t, autorId, autorNome }) {
+  await tabelasProntas;
+  const corpo = String(t || '').trim().slice(0, 4000);
+  if (!corpo) throw new Error('Escreva a anotação.');
+  const { rows: [ok] } = await pool.query('SELECT 1 AS x FROM ind_respostas WHERE id = $1 AND tenant_id = $2', [Number(id), tenantId]);
+  if (!ok) throw new Error('Resposta não encontrada.');
+  const { rows: [n] } = await pool.query('INSERT INTO ind_notas (tenant_id, resposta_id, autor_id, autor_nome, texto) VALUES ($1,$2,$3,$4,$5) RETURNING id, autor_id, autor_nome, texto, criado_em', [tenantId, Number(id), Number(autorId) || 0, texto(autorNome, 80), corpo]);
+  return n;
 }
 
 export async function marcarRespostaContatada(tenantId, id, contatado) {
@@ -457,10 +504,11 @@ export async function registrarPublico(token, corpo, ip) {
   if (!tel) throw new Error('Informe o seu telefone com DDD.');
   if (!Number.isInteger(nota) || nota < 0 || nota > 10) throw new Error('Escolha uma nota de 0 a 10.');
   if (typeof corpo?.indicaria !== 'boolean') throw new Error('Responda se nos indicaria.');
+  let respostaId = null;
   await pool.query(
-    'INSERT INTO ind_respostas (tenant_id, nome, telefone, nota, indicaria, comentario) VALUES ($1,$2,$3,$4,$5,$6)',
-    [t.id, nome, tel, nota, corpo.indicaria, texto(corpo?.comentario, 2000)],
-  );
+    'INSERT INTO ind_respostas (tenant_id, nome, telefone, nota, indicaria, comentario, etapa) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+    [t.id, nome, tel, nota, corpo.indicaria, texto(corpo?.comentario, 2000), nota <= 6 ? 'atencao' : 'nova'],
+  ).then(async (r) => { respostaId = r.rows[0].id; });
   // se quis ja indicar alguem agora (opcional), entra no funil como "formulario"
   let indicados = 0;
   if (corpo.indicaria && Array.isArray(corpo?.indicados)) {
@@ -471,5 +519,6 @@ export async function registrarPublico(token, corpo, ip) {
       } catch { /* indicado invalido: ignora, a pesquisa ja foi salva */ }
     }
   }
+  if (indicados > 0 && respostaId) await pool.query(`UPDATE ind_respostas SET etapa = 'indicou' WHERE id = $1`, [respostaId]);
   return { ok: true, indicados };
 }

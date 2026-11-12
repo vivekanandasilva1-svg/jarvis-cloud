@@ -1796,7 +1796,7 @@ app.get('/api/indicacoes', async (req, res) => {
       nome: i.nome, numero: i.numero || null, status: i.status || null,
       operadorId: porNumero[i.nome] ?? null, operadorNome: porNumero[i.nome] !== undefined ? (operadores.find((o) => o.id === porNumero[i.nome])?.nome || null) : null,
     }));
-    res.json({ etapas: indicacoes.ETAPAS, origens: indicacoes.ORIGENS, resultados: indicacoes.RESULTADOS, token: config.token, instancia: config.instancia, numeros, ...lista });
+    res.json({ etapas: indicacoes.ETAPAS, origens: indicacoes.ORIGENS, resultados: indicacoes.RESULTADOS, etapasResp: indicacoes.ETAPAS_RESP, token: config.token, instancia: config.instancia, numeros, ...lista });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
@@ -1985,6 +1985,29 @@ app.delete('/api/indicacoes/notas/:id', async (req, res) => {
 app.post('/api/indicacoes/:id/cadastrar-clinicorp', async (req, res) => {
   try {
     res.json(await indicacoes.cadastrarNoClinicorp(req.tenantId, req.params.id));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/respostas/:id/etapa', async (req, res) => {
+  try {
+    await indicacoes.moverEtapaResposta(req.tenantId, req.params.id, req.body?.etapa);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.get('/api/indicacoes/respostas/:id/notas', async (req, res) => {
+  try {
+    res.json({ notas: await indicacoes.listarNotasResposta(req.tenantId, req.params.id), euId: req.operadorId || 0 });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/respostas/:id/notas', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json({ ok: true, nota: await indicacoes.criarNotaResposta(req.tenantId, req.params.id, { texto: req.body?.texto, autorId: req.operadorId || 0, autorNome: perfil?.nome }) });
   } catch (err) {
     res.status(400).json({ erro: err.message });
   }
