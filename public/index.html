@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261111c" />
+  <link rel="stylesheet" href="style.css?v=20261112a" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -91,6 +91,10 @@
           <span>Funil Follow Up</span>
         </button>
         <div class="nav-grupo">Clientes</div>
+        <button type="button" class="nav-btn" id="tabBtnIndicacoes" data-tab="indicacoes">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1 1.2.8 2 1.9 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z"/></svg>
+          <span>Indicações</span>
+        </button>
         <button type="button" class="nav-btn" id="tabBtnCrm" data-tab="crm">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3h6v18H3V3zm8 0h6v10h-6V3zm8 0h2v18h-2V3zm-8 12h6v6h-6v-6z"/></svg>
           <span>CRM</span>
@@ -898,6 +902,83 @@
           <p class="crm-conversa-erro" id="ffuTarefasErro" hidden></p>
           <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="ffuTarefasSalvar" class="relatorio-config-enviar">Salvar</button></div>
         </form>
+      </div>
+    </div>
+
+    <div class="window-body tab-crm" id="tabIndicacoes" hidden>
+      <div class="crm-board-wrap">
+        <div class="crm-board-header">
+          <span>Indicações: quem indicou, quem foi indicado e o funil de contato (1ª tentativa no Dia 1, 2ª no Dia 2, 3ª no Dia 7).</span>
+          <div class="crm-board-nav">
+            <input type="search" id="indBusca" placeholder="Buscar indicado ou indicador" class="ind-busca" />
+            <button type="button" id="indNovoBtn">+ Indicação</button>
+            <button type="button" id="indImportarBtn">Importar lista</button>
+            <button type="button" id="indLinkBtn" title="Link do formulário digital para mandar aos pacientes pelo WhatsApp">Link do formulário</button>
+            <button type="button" id="indRefresh">Atualizar</button>
+          </div>
+        </div>
+        <div class="ind-subnav">
+          <button type="button" id="indVerFunil" class="ind-sub ativo">Funil de indicados</button>
+          <button type="button" id="indVerPesquisa" class="ind-sub">Pesquisa de satisfação <span class="ind-sub-qtd" id="indPesqQtd"></span></button>
+        </div>
+        <p class="ind-resumo" id="indResumo"></p>
+        <div class="crm-board" id="indBoard"><p class="agenda-vazia">Carregando...</p></div>
+        <div class="ind-pesquisa" id="indPesquisa" hidden></div>
+      </div>
+
+      <div class="ct-modal" id="indModal" hidden>
+        <form class="ct-caixa" id="indForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Nova indicação</strong>
+            <button type="button" class="ct-fechar" data-fechar="indModal">✕</button>
+          </div>
+          <div class="ffu-agenda-titulo">Quem indicou</div>
+          <label class="ct-campo">Nome do paciente que indicou<input type="text" id="indIndicadorNome" maxlength="120" /></label>
+          <label class="ct-campo">WhatsApp de quem indicou <small>(recomendado: evita duplicar o indicador)</small><input type="tel" id="indIndicadorTel" placeholder="82 99999-9999" /></label>
+          <div class="ffu-agenda-titulo">Quem foi indicado</div>
+          <label class="ct-campo">Nome do indicado<input type="text" id="indIndicadoNome" maxlength="120" /></label>
+          <label class="ct-campo">WhatsApp do indicado<input type="tel" id="indIndicadoTel" placeholder="82 99999-9999" /></label>
+          <label class="ct-campo">Como chegou
+            <select id="indOrigem"><option value="recepcao">Pedido na recepção</option><option value="individual">Cadastro individual</option></select>
+          </label>
+          <label class="ct-campo">Observação <small>(opcional)</small><textarea id="indObs" maxlength="1000"></textarea></label>
+          <p class="crm-conversa-erro" id="indErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="indSalvarBtn" class="relatorio-config-enviar">Salvar</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="indImpModal" hidden>
+        <div class="ct-caixa">
+          <div class="ct-caixa-topo">
+            <strong>Importar lista de indicações</strong>
+            <button type="button" class="ct-fechar" data-fechar="indImpModal">✕</button>
+          </div>
+          <p class="ct-info">Planilha (.xlsx) ou CSV com 4 colunas: <b>Indicador</b>, <b>Telefone do indicador</b>, <b>Indicado</b> e <b>Telefone do indicado</b>. Indicados que já existem (mesmo telefone, com ou sem o 9) não são repetidos.</p>
+          <input type="file" id="indImpArquivo" accept=".csv,.xlsx,.xls,text/csv" />
+          <p class="ct-imp-resumo" id="indImpResumo"></p>
+          <p class="ct-imp-resultado" id="indImpResultado" hidden></p>
+          <p class="crm-conversa-erro" id="indImpErro" hidden></p>
+          <div class="ct-rodape">
+            <button type="button" id="indImpModelo" class="crm-btn-secundario">Baixar modelo</button>
+            <span class="ct-espaco"></span>
+            <button type="button" id="indImpConfirmar" class="relatorio-config-enviar" hidden>Importar</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="ct-modal" id="indLinkModal" hidden>
+        <div class="ct-caixa">
+          <div class="ct-caixa-topo">
+            <strong>Link da pesquisa de satisfação e indicação</strong>
+            <button type="button" class="ct-fechar" data-fechar="indLinkModal">✕</button>
+          </div>
+          <p class="ct-info">Envie este link pelo WhatsApp aos pacientes que estão gostando do atendimento. O paciente responde nome, telefone, nota de 0 a 10, se nos indicaria e deixa sugestão, elogio ou reclamação. Quem já quiser indicar alguém cai direto no funil.</p>
+          <label class="ct-campo">Link<input type="text" id="indLinkTexto" readonly /></label>
+          <div class="ct-rodape">
+            <button type="button" id="indLinkCopiar" class="crm-btn-secundario">Copiar link</button>
+            <a id="indLinkWa" class="crm-btn-secundario ind-link-wa" target="_blank" rel="noopener">Abrir no WhatsApp</a>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1718,6 +1799,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261111c"></script>
+  <script src="app.js?v=20261112a"></script>
 </body>
 </html>

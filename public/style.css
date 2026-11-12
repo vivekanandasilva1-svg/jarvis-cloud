@@ -3703,3 +3703,24 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 .aniv-col-vazia { font-size: 12px; color: var(--text-dim); text-align: center; margin: 10px 0; }
 .aniv-col-envio { border: 1px solid rgba(212, 175, 55, 0.45); background: rgba(212, 175, 55, 0.14); color: var(--gold-bright); border-radius: 8px; padding: 7px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .aniv-col-envio:disabled { opacity: 0.5; cursor: default; }
+
+
+/* ---------- Indicacoes ---------- */
+.ind-busca { min-width: 190px; }
+.ind-subnav { display: flex; gap: 6px; margin: 0 0 8px; }
+.ind-sub { border: 1px solid var(--borda); background: transparent; color: var(--text-dim); border-radius: 8px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; }
+.ind-sub.ativo { background: rgba(212, 175, 55, 0.16); color: var(--gold-bright); border-color: var(--gold); }
+.ind-sub-qtd { opacity: .8; }
+.ind-resumo { margin: 0 0 8px; padding: 0 2px; font-size: 12.5px; color: var(--text-dim); }
+.ind-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.ind-tag { font-size: 10.5px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--borda); color: var(--text-dim); }
+.ind-tag.ok { border-color: rgba(48, 164, 108, 0.6); color: #9fe3bd; background: rgba(48, 164, 108, 0.12); }
+.ind-obs { font-size: 11.5px; color: var(--text-dim); margin-top: 6px; line-height: 1.35; white-space: pre-wrap; }
+.ind-etapa-sel { background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text); border-radius: 7px; padding: 4px 6px; font-size: 11.5px; max-width: 150px; }
+.ind-btn, .ind-link-wa { display: inline-block; border: 1px solid var(--borda); background: var(--superficie-2); color: var(--text); border-radius: 7px; padding: 4px 8px; font-size: 11.5px; text-decoration: none; cursor: pointer; }
+.ind-link-wa { padding: 8px 12px; font-size: 13px; }
+.ind-pesquisa { padding: 0 2px 16px; overflow-y: auto; }
+.ind-resp { border: 1px solid var(--borda); background: var(--superficie); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; }
+.ind-resp.ruim { border-color: rgba(229, 72, 77, 0.6); }
+.ind-resp-topo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ind-nota { color: var(--gold-bright); font-weight: 700; }

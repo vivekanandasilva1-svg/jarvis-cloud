@@ -35,6 +35,7 @@ import * as clinicorpFollowUp from './clinicorpFollowUp.js';
 import { iniciarSchedulerClinicorpFollowUp } from './clinicorpFollowUp.js';
 import * as followUpInteligente from './followUpInteligente.js';
 import * as funilFU from './funilFollowUp.js';
+import * as indicacoes from './indicacoes.js';
 import * as aniversariantes from './aniversariantes.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
 import { iniciarCerebroMae } from './cerebroMae.js';
@@ -90,6 +91,7 @@ const TAB_ROTA_PREFIXO = {
   followUp: '/api/follow-up',
   followUpInteligente: '/api/fu-inteligente',
   funilFollowUp: '/api/funil-fu',
+  indicacoes: '/api/indicacoes',
   disparos: '/api/disparos',
   aniversariantes: '/api/aniversariantes',
   relatorios: '/api/relatorios',
@@ -124,7 +126,9 @@ app.use(async (req, res, next) => {
     req.path.startsWith('/api/crm/midia/') ||
     // pagina de proposta comercial (public/proposta.html) e publica, sem login - quem preenche
     // e o proprio Vivekananda direto no navegador, e quem le o link e o cliente em potencial
-    req.path.startsWith('/api/propostas')
+    req.path.startsWith('/api/propostas') ||
+    // formulario publico de indicacao (link da clinica, protegido por token longo + honeypot + limite por IP)
+    req.path.startsWith('/api/publico/indicacao/')
   ) return next();
 
   // /api/agenda/google/conectar e navegacao de pagina de verdade (o navegador redireciona pro
@@ -391,6 +395,25 @@ app.use(express.static(PUBLIC_DIR));
 
 // landing page publica de venda (public/conheca.html) com endereco curto
 app.get('/conheca', (req, res) => res.sendFile('conheca.html', { root: PUBLIC_DIR }));
+
+// ---------- Indicacoes: formulario publico (public/indicacao.html) ----------
+app.get('/indicacao/:token', (req, res) => res.sendFile('indicacao.html', { root: PUBLIC_DIR }));
+app.get('/api/publico/indicacao/:token', async (req, res) => {
+  try {
+    const info = await indicacoes.infoPublica(req.params.token);
+    if (!info) return res.status(404).json({ erro: 'Link inválido ou desativado.' });
+    res.json(info);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro inesperado.' });
+  }
+});
+app.post('/api/publico/indicacao/:token', async (req, res) => {
+  try {
+    res.json(await indicacoes.registrarPublico(req.params.token, req.body || {}, req.ip));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
 
 // ---------- Proposta comercial (public/proposta.html) - link curto por id em vez de query string ----------
 app.post('/api/propostas', async (req, res) => {
@@ -1742,6 +1765,87 @@ app.put('/api/funil-fu/tarefas', async (req, res) => {
   try {
     await funilFU.salvarTarefas(req.tenantId, req.body?.tarefas);
     res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// ---------- Indicacoes (aba: indicador -> indicado, funil da CRM de indicacoes) ----------
+app.get('/api/indicacoes', async (req, res) => {
+  try {
+    const [lista, config] = await Promise.all([indicacoes.listar(req.tenantId), indicacoes.obterConfig(req.tenantId)]);
+    res.json({ etapas: indicacoes.ETAPAS, origens: indicacoes.ORIGENS, token: config.token, ...lista });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    const r = await indicacoes.cadastrarIndicacao(req.tenantId, { ...(req.body || {}), origem: req.body?.origem, autor: perfil?.nome });
+    res.json(r);
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/importar', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json({ ok: true, ...(await indicacoes.importarLista(req.tenantId, req.body?.linhas, perfil?.nome)) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/:id/etapa', async (req, res) => {
+  try {
+    await indicacoes.moverEtapa(req.tenantId, req.params.id, req.body?.etapa);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.put('/api/indicacoes/:id', async (req, res) => {
+  try {
+    await indicacoes.editar(req.tenantId, req.params.id, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/indicacoes/:id', async (req, res) => {
+  try {
+    await indicacoes.apagar(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/:id/cadastrar-clinicorp', async (req, res) => {
+  try {
+    res.json(await indicacoes.cadastrarNoClinicorp(req.tenantId, req.params.id));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/respostas/:id/contatado', async (req, res) => {
+  try {
+    await indicacoes.marcarRespostaContatada(req.tenantId, req.params.id, req.body?.contatado !== false);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/indicacoes/respostas/:id', async (req, res) => {
+  try {
+    await indicacoes.apagarResposta(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/:id/conferir-clinicorp', async (req, res) => {
+  try {
+    res.json({ ok: true, ...(await indicacoes.conferirNoClinicorp(req.tenantId, req.params.id)) });
   } catch (err) {
     res.status(400).json({ erro: err.message });
   }

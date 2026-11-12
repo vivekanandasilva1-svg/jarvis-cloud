@@ -1044,5 +1044,13 @@
     "tipo": "decisao",
     "titulo": "Conta Vitaly: acesso principal ADM + um acesso por número",
     "conteudo": "Estrutura aplicada na conta Vitaly (tenant 10): acesso principal administrador 'admvitaly' (nome no topo ADM Vitaly); o login antigo do cliente virou o colaborador LabArtis (mesmo usuário e mesma senha de antes), responsável pelo número Lu LabArts (558293684781) e dono dos 394 contatos que estavam com o dono/sem operador nesse número; Follow Up Vânia (renomeada) continua responsável pelo 558281666045 (instância 82981666045). Cada número = um acesso/operador, com leads isolados; só o ADM troca de visão e gerencia equipe/ferramentas. Para derrubar sessões antigas do dono criado tenants.dono_sessoes_desde (token do dono emitido antes da troca = 401; trocar a senha do dono pelo admin também derruba). Backup local do estado anterior em backups-lumia/ (não versionado). Pendente: acesso_expira_em da conta está em 30/10/2026 (vencido) embora a conta siga ativa."
+  },
+  {
+    "chave": "indicacoes:etapa-1",
+    "modulo": "plataforma",
+    "data": "2026-11-12",
+    "tipo": "funcao",
+    "titulo": "Aba Indicações (etapa 1): base indicador/indicado, importação, pesquisa de satisfação pública",
+    "conteudo": "Nova aba 'Indicações' (chave indicacoes em TABS_VALIDAS/ferramentas por cliente/colaborador). Funil de indicados: Novo > 1ª tentativa (Dia 1) > 2ª (Dia 2) > 3ª (Dia 7) > Agendado > Compareceu / Sem sucesso. Indicado entra por cadastro individual (origem recepção/individual), planilha (Indicador, Telefone do indicador, Indicado, Telefone do indicado) ou formulário público; o mesmo telefone (com/sem 9) nunca vira dois indicados por clínica. Link público único por clínica (/indicacao/<token>, protegido por token longo, honeypot e limite por IP): pesquisa de satisfação com nome completo, telefone, nota 0-10 em estrelas, 'nos indicaria?' sim/não e sugestão/elogio/reclamação; quem diz sim pode já indicar até 3 pessoas. Visão 'Pesquisa de satisfação' com nota média, % que indicaria e NPS; nota baixa destacada. Clinicorp só sob demanda (limite 25 req/h): 'Conferir no Clinicorp' (busca por telefone) e 'Cadastrar no Clinicorp' (cria o paciente com observação de quem indicou, só quando a CRM clica). Pendente (etapas 2 e 3): tarefas/alerta de retorno por tentativa com datas Dia 1/2/7, anotações, IA exclusiva da aba (prompt + arquivos + pausar), relatório de ligações do número da CRM 02 (número ainda será conectado) e registrar ligação."
   }
 ]

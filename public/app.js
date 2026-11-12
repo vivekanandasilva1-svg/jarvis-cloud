@@ -75,6 +75,7 @@ const tabBtnChamadas = document.getElementById('tabBtnChamadas');
 const tabBtnOrigem = document.getElementById('tabBtnOrigem');
 const tabBtnFollowUpInteligente = document.getElementById('tabBtnFollowUpInteligente');
 const tabBtnFunilFu = document.getElementById('tabBtnFunilFu');
+const tabBtnIndicacoes = document.getElementById('tabBtnIndicacoes');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
 const tabBtnGeradorRelatorios = document.getElementById('tabBtnGeradorRelatorios');
 const tabBtnIntegracoes = document.getElementById('tabBtnIntegracoes');
@@ -102,6 +103,7 @@ const tabChamadas = document.getElementById('tabChamadas');
 const tabOrigem = document.getElementById('tabOrigem');
 const tabFollowUpInteligente = document.getElementById('tabFollowUpInteligente');
 const tabFunilFu = document.getElementById('tabFunilFu');
+const tabIndicacoes = document.getElementById('tabIndicacoes');
 const tabRelatorios = document.getElementById('tabRelatorios');
 const tabGeradorRelatorios = document.getElementById('tabGeradorRelatorios');
 const tabIntegracoes = document.getElementById('tabIntegracoes');
@@ -410,6 +412,7 @@ function aplicarMenuPermitido() {
   tabBtnOrigem.hidden = !abaLiberada('crm') || !meuEhDono; // origem dos leads usa a base do CRM, mesma permissao
   tabBtnFollowUpInteligente.hidden = !abaLiberada('followUpInteligente');
   tabBtnFunilFu.hidden = !abaLiberada('funilFollowUp');
+  tabBtnIndicacoes.hidden = !abaLiberada('indicacoes');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
   tabBtnGeradorRelatorios.hidden = !abaLiberada('geradorRelatorios');
   tabBtnIntegracoes.hidden = !abaLiberada('integracoes');
@@ -436,7 +439,7 @@ function mostrarApp() {
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
     const primeiraLiberada = [
       ['conversas', tabBtnConversas], ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm], ['contatos', tabBtnContatos], ['resultados', tabBtnResultados], ['instagram', tabBtnInstagram],
-      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['aniversariantes', tabBtnAniversariantes], ['followUpInteligente', tabBtnFollowUpInteligente], ['funilFollowUp', tabBtnFunilFu], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
+      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['aniversariantes', tabBtnAniversariantes], ['followUpInteligente', tabBtnFollowUpInteligente], ['funilFollowUp', tabBtnFunilFu], ['indicacoes', tabBtnIndicacoes], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
     ].find(([, btn]) => !btn.hidden);
     if (primeiraLiberada) mudarAba(primeiraLiberada[0]);
   }
@@ -2027,6 +2030,7 @@ const CABECALHOS_ABA = {
   disparos: ['Automação', 'Disparos', 'Campanhas de mensagens no WhatsApp: listas, programação, anexos, relatório e IA.'],
   followUp: ['Atendimento', 'Follow Up', 'Retome automaticamente os leads que pararam de responder.'],
   aniversariantes: ['Clientes', 'Aniversariantes do mês', 'Parabéns automático, no dia, para os pacientes que fazem aniversário (integrado ao Clinicorp).'],
+  indicacoes: ['Clientes', 'Indicações', 'Pacientes que indicam, os indicados, a pesquisa de satisfação e o funil de contato da CRM de indicações.'],
   funilFollowUp: ['Clientes', 'Funil Follow Up', 'Dia 0 a Dia 5: uma tarefa por dia, com alerta de retorno programado pra cada lead.'],
   followUpInteligente: ['Atendimento', 'Follow Up Inteligente', 'Mensagens automáticas por etapa do funil, nos dias que você escolher.'],
   conversas: ['Atendimento', 'Conversas', 'Atenda o WhatsApp direto pela Lumia, em tempo real.'],
@@ -2088,6 +2092,7 @@ function mudarAba(aba) {
   tabOrigem.hidden = aba !== 'origem';
   tabFollowUpInteligente.hidden = aba !== 'followUpInteligente';
   tabFunilFu.hidden = aba !== 'funilFollowUp';
+  tabIndicacoes.hidden = aba !== 'indicacoes';
   tabRelatorios.hidden = aba !== 'relatorios';
   tabGeradorRelatorios.hidden = aba !== 'geradorRelatorios';
   tabIntegracoes.hidden = aba !== 'integracoes';
@@ -2110,6 +2115,7 @@ function mudarAba(aba) {
   tabBtnOrigem.classList.toggle('active', aba === 'origem');
   tabBtnFollowUpInteligente.classList.toggle('active', aba === 'followUpInteligente');
   tabBtnFunilFu.classList.toggle('active', aba === 'funilFollowUp');
+  tabBtnIndicacoes.classList.toggle('active', aba === 'indicacoes');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
   tabBtnGeradorRelatorios.classList.toggle('active', aba === 'geradorRelatorios');
   tabBtnIntegracoes.classList.toggle('active', aba === 'integracoes');
@@ -2148,6 +2154,8 @@ function mudarAba(aba) {
     carregarFollowUpInteligente();
   } else if (aba === 'funilFollowUp') {
     carregarFunilFu();
+  } else if (aba === 'indicacoes') {
+    carregarIndicacoes();
   } else if (aba === 'relatorios') {
     carregarDestinatariosRelatorios();
     carregarConfigsRelatorios();
@@ -2224,6 +2232,7 @@ tabBtnChamadas.addEventListener('click', () => mudarAba('chamadas'));
 tabBtnOrigem.addEventListener('click', () => mudarAba('origem'));
 tabBtnFollowUpInteligente.addEventListener('click', () => mudarAba('followUpInteligente'));
 tabBtnFunilFu.addEventListener('click', () => mudarAba('funilFollowUp'));
+tabBtnIndicacoes.addEventListener('click', () => mudarAba('indicacoes'));
 tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
 tabBtnCerebro.addEventListener('click', () => mudarAba('cerebro'));
 tabBtnClientes.addEventListener('click', () => mudarAba('clientes'));
@@ -8493,7 +8502,7 @@ async function selecionarCliente(id, nome, username) {
   tabsAviso.textContent = 'Nenhuma marcada = tudo liberado (padrão). Marque só pra restringir.';
   clienteIntegracoesPainel.appendChild(tabsAviso);
 
-  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', aniversariantes: 'Aniversariantes', followUpInteligente: 'Follow Up Inteligente', funilFollowUp: 'Funil Follow Up', disparos: 'Disparos', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
+  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', aniversariantes: 'Aniversariantes', followUpInteligente: 'Follow Up Inteligente', funilFollowUp: 'Funil Follow Up', indicacoes: 'Indicações', disparos: 'Disparos', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
   const tabsForm = document.createElement('div');
   tabsForm.className = 'cliente-form';
   const tabsCheckboxes = {};
@@ -10790,7 +10799,7 @@ document.getElementById('crmEspelharBtn').addEventListener('click', () => {
 // ---------- Ferramentas de cada colaborador (so o acesso principal edita) ----------
 const FERRAMENTAS_COLAB = [
   ['painel', 'Painel (Lumia/Chat)'], ['agenda', 'Agenda'], ['whatsapp', 'WhatsApp'], ['crm', 'CRM, Conversas, Contatos, Resultados e Origem dos leads'],
-  ['auto', 'Auto Atendimento'], ['followUp', 'Follow Up'], ['aniversariantes', 'Aniversariantes do mês'], ['followUpInteligente', 'Follow Up Inteligente'], ['funilFollowUp', 'Funil Follow Up'],
+  ['auto', 'Auto Atendimento'], ['followUp', 'Follow Up'], ['aniversariantes', 'Aniversariantes do mês'], ['followUpInteligente', 'Follow Up Inteligente'], ['funilFollowUp', 'Funil Follow Up'], ['indicacoes', 'Indicações'],
   ['disparos', 'Disparos'], ['relatorios', 'Relatórios automáticos'], ['geradorRelatorios', 'Gerador de Relatórios'], ['integracoes', 'Integrações'], ['instagram', 'Instagram'],
 ];
 function abrirFerramentasColab(c) {
@@ -11396,3 +11405,276 @@ function desenharListaAniv() {
 }
 
 anivVer.addEventListener('change', desenharListaAniv);
+
+// ---------- Indicações (indicador -> indicado, funil de contato da CRM de indicações) ----------
+const indBoard = document.getElementById('indBoard');
+const indModal = document.getElementById('indModal');
+const indImpModal = document.getElementById('indImpModal');
+const indLinkModal = document.getElementById('indLinkModal');
+let indDados = { etapas: [], origens: {}, indicados: [], token: '' };
+let indLinhasImp = [];
+const indH = () => ({ 'x-app-password': appPassword, 'Content-Type': 'application/json' });
+const indSemAcento = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const indQuando = (iso) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+function indCriarCard(i) {
+  const card = document.createElement('div');
+  card.className = 'crm-card ind-card';
+  const nome = document.createElement('div'); nome.className = 'crm-card-nome'; nome.textContent = i.nome; card.appendChild(nome);
+  const tel = document.createElement('div'); tel.className = 'crm-card-numero'; tel.textContent = i.telefone; card.appendChild(tel);
+  const por = document.createElement('div'); por.className = 'crm-card-operador'; por.textContent = `Indicado por ${i.indicador_nome || '—'}`; card.appendChild(por);
+  const tags = document.createElement('div'); tags.className = 'ind-tags';
+  const origem = document.createElement('span'); origem.className = 'ind-tag'; origem.textContent = indDados.origens[i.origem] || i.origem; tags.appendChild(origem);
+  if (i.ja_paciente === true) { const t = document.createElement('span'); t.className = 'ind-tag ok'; t.textContent = 'Já é paciente'; tags.appendChild(t); }
+  if (i.ja_paciente === false) { const t = document.createElement('span'); t.className = 'ind-tag'; t.textContent = 'Novo no Clinicorp'; tags.appendChild(t); }
+  const data = document.createElement('span'); data.className = 'ind-tag'; data.textContent = indQuando(i.criado_em); tags.appendChild(data);
+  card.appendChild(tags);
+  if (i.observacao) { const o = document.createElement('div'); o.className = 'ind-obs'; o.textContent = i.observacao; card.appendChild(o); }
+  const acoes = document.createElement('div'); acoes.className = 'ffu-acoes';
+  const sel = document.createElement('select'); sel.className = 'ind-etapa-sel'; sel.title = 'Mover para outra etapa';
+  for (const e of indDados.etapas) sel.add(new Option(e.nome, e.id));
+  sel.value = i.etapa;
+  sel.addEventListener('change', async () => {
+    const r = await fetch(`/api/indicacoes/${i.id}/etapa`, { method: 'POST', headers: indH(), body: JSON.stringify({ etapa: sel.value }) });
+    if (!r.ok) mostrarAviso((await r.json().catch(() => ({}))).erro || 'erro', 'erro');
+    carregarIndicacoes();
+  });
+  acoes.appendChild(sel);
+  const wa = document.createElement('a'); wa.className = 'ind-btn'; wa.textContent = 'WhatsApp'; wa.target = '_blank'; wa.rel = 'noopener'; wa.href = `https://wa.me/${i.telefone}`; acoes.appendChild(wa);
+  const conf = document.createElement('button'); conf.type = 'button'; conf.textContent = 'Conferir no Clinicorp';
+  conf.title = 'Consulta o Clinicorp para ver se o indicado já é paciente (1 consulta)';
+  conf.addEventListener('click', async () => {
+    conf.disabled = true;
+    try {
+      const r = await fetch(`/api/indicacoes/${i.id}/conferir-clinicorp`, { method: 'POST', headers: indH() });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'erro');
+      mostrarAviso(d.jaPaciente ? `Já é paciente${d.nomeNoClinicorp ? `: ${d.nomeNoClinicorp}` : ''}` : 'Não encontrado no Clinicorp (indicado novo)', 'ok');
+      carregarIndicacoes();
+    } catch (err) { mostrarAviso(err.message, 'erro'); conf.disabled = false; }
+  });
+  acoes.appendChild(conf);
+  if (i.ja_paciente !== true) {
+    const cad = document.createElement('button'); cad.type = 'button'; cad.textContent = 'Cadastrar no Clinicorp';
+    cad.title = 'Cria o indicado como paciente no Clinicorp (só quando você clicar)';
+    cad.addEventListener('click', async () => {
+      if (!confirm(`Cadastrar ${i.nome} como paciente no Clinicorp?`)) return;
+      cad.disabled = true;
+      try {
+        const r = await fetch(`/api/indicacoes/${i.id}/cadastrar-clinicorp`, { method: 'POST', headers: indH() });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.erro || 'erro');
+        mostrarAviso('Cadastrado no Clinicorp', 'ok'); carregarIndicacoes();
+      } catch (err) { mostrarAviso(err.message, 'erro'); cad.disabled = false; }
+    });
+    acoes.appendChild(cad);
+  }
+  const apagar = document.createElement('button'); apagar.type = 'button'; apagar.textContent = 'Apagar';
+  apagar.addEventListener('click', async () => {
+    if (!confirm(`Apagar a indicação de ${i.nome}?`)) return;
+    await fetch(`/api/indicacoes/${i.id}`, { method: 'DELETE', headers: indH() });
+    carregarIndicacoes();
+  });
+  acoes.appendChild(apagar);
+  card.appendChild(acoes);
+  return card;
+}
+
+function indDesenhar() {
+  const q = indSemAcento(document.getElementById('indBusca').value.trim());
+  const todos = indDados.indicados.filter((i) => !q || indSemAcento(`${i.nome} ${i.telefone} ${i.indicador_nome || ''}`).includes(q));
+  indBoard.textContent = '';
+  for (const e of indDados.etapas) {
+    const col = document.createElement('div'); col.className = 'crm-coluna';
+    const lista = todos.filter((i) => i.etapa === e.id);
+    const head = document.createElement('div'); head.className = 'crm-coluna-header';
+    const t = document.createElement('span'); t.textContent = e.nome;
+    const c = document.createElement('span'); c.className = 'crm-coluna-contagem'; c.textContent = lista.length;
+    head.append(t, c); col.appendChild(head);
+    const cards = document.createElement('div'); cards.className = 'crm-coluna-cards';
+    if (!lista.length) { const v = document.createElement('div'); v.className = 'crm-coluna-vazia'; v.textContent = 'Ninguém aqui'; cards.appendChild(v); }
+    for (const i of lista) cards.appendChild(indCriarCard(i));
+    col.appendChild(cards); indBoard.appendChild(col);
+  }
+  const indicadores = new Set(indDados.indicados.map((i) => i.indicador_id).filter(Boolean)).size;
+  const conv = indDados.indicados.filter((i) => i.etapa === 'compareceu').length;
+  document.getElementById('indResumo').textContent = `${indDados.indicados.length} indicado(s) de ${indicadores} indicador(es) · ${conv} compareceram`;
+}
+
+let indVista = 'funil';
+function indTrocarVista(v) {
+  indVista = v;
+  document.getElementById('indBoard').hidden = v !== 'funil';
+  document.getElementById('indResumo').hidden = v !== 'funil';
+  document.getElementById('indPesquisa').hidden = v !== 'pesquisa';
+  document.getElementById('indVerFunil').classList.toggle('ativo', v === 'funil');
+  document.getElementById('indVerPesquisa').classList.toggle('ativo', v === 'pesquisa');
+}
+document.getElementById('indVerFunil').addEventListener('click', () => indTrocarVista('funil'));
+document.getElementById('indVerPesquisa').addEventListener('click', () => indTrocarVista('pesquisa'));
+
+function indDesenharPesquisa() {
+  const box = document.getElementById('indPesquisa');
+  const resp = indDados.respostas || [];
+  const q = indSemAcento(document.getElementById('indBusca').value.trim());
+  const lista = resp.filter((r) => !q || indSemAcento(`${r.nome} ${r.telefone} ${r.comentario || ''}`).includes(q));
+  document.getElementById('indPesqQtd').textContent = resp.length ? `(${resp.length})` : '';
+  box.textContent = '';
+  if (resp.length) {
+    const media = (resp.reduce((a, r) => a + r.nota, 0) / resp.length).toFixed(1);
+    const sim = resp.filter((r) => r.indicaria).length;
+    const nps = (() => { const pro = resp.filter((r) => r.nota >= 9).length, det = resp.filter((r) => r.nota <= 6).length; return Math.round(((pro - det) / resp.length) * 100); })();
+    const r0 = document.createElement('p'); r0.className = 'ind-resumo';
+    r0.textContent = `${resp.length} resposta(s) · nota média ${media} · ${sim} indicariam (${Math.round((sim / resp.length) * 100)}%) · NPS ${nps}`;
+    box.appendChild(r0);
+  }
+  if (!lista.length) { const v = document.createElement('p'); v.className = 'agenda-vazia'; v.textContent = resp.length ? 'Nada encontrado nessa busca.' : 'Nenhuma resposta ainda. Mande o link da pesquisa aos pacientes pelo botão "Link do formulário".'; box.appendChild(v); return; }
+  for (const r of lista) {
+    const card = document.createElement('div'); card.className = 'ind-resp' + (r.nota <= 6 ? ' ruim' : '');
+    const topo = document.createElement('div'); topo.className = 'ind-resp-topo';
+    const nome = document.createElement('strong'); nome.textContent = r.nome;
+    const nota = document.createElement('span'); nota.className = 'ind-nota'; nota.textContent = `★ ${r.nota}/10`;
+    const ind = document.createElement('span'); ind.className = 'ind-tag' + (r.indicaria ? ' ok' : ''); ind.textContent = r.indicaria ? 'Indicaria' : 'Não indicaria';
+    const quando = document.createElement('span'); quando.className = 'ind-tag'; quando.textContent = indQuando(r.criado_em);
+    topo.append(nome, nota, ind, quando);
+    card.appendChild(topo);
+    const tel = document.createElement('div'); tel.className = 'crm-card-numero'; tel.textContent = r.telefone; card.appendChild(tel);
+    if (r.comentario) { const c = document.createElement('div'); c.className = 'ind-obs'; c.textContent = r.comentario; card.appendChild(c); }
+    const acoes = document.createElement('div'); acoes.className = 'ffu-acoes';
+    const wa = document.createElement('a'); wa.className = 'ind-btn'; wa.textContent = 'WhatsApp'; wa.target = '_blank'; wa.rel = 'noopener'; wa.href = `https://wa.me/${r.telefone}`; acoes.appendChild(wa);
+    if (r.indicaria) {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Cadastrar indicados dele';
+      b.addEventListener('click', () => { document.getElementById('indNovoBtn').click(); document.getElementById('indIndicadorNome').value = r.nome; document.getElementById('indIndicadorTel').value = r.telefone; document.getElementById('indIndicadoNome').focus(); });
+      acoes.appendChild(b);
+    }
+    const c = document.createElement('button'); c.type = 'button'; c.textContent = r.contatado ? 'Contatado ✔' : 'Marcar como contatado';
+    c.addEventListener('click', async () => { await fetch(`/api/indicacoes/respostas/${r.id}/contatado`, { method: 'POST', headers: indH(), body: JSON.stringify({ contatado: !r.contatado }) }); carregarIndicacoes(); });
+    acoes.appendChild(c);
+    const ap = document.createElement('button'); ap.type = 'button'; ap.textContent = 'Apagar';
+    ap.addEventListener('click', async () => { if (!confirm('Apagar esta resposta?')) return; await fetch(`/api/indicacoes/respostas/${r.id}`, { method: 'DELETE', headers: indH() }); carregarIndicacoes(); });
+    acoes.appendChild(ap);
+    card.appendChild(acoes);
+    box.appendChild(card);
+  }
+}
+
+async function carregarIndicacoes() {
+  try {
+    const res = await fetch('/api/indicacoes', { headers: indH() });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro');
+    indDados = d;
+    indDesenhar();
+    indDesenharPesquisa();
+  } catch (err) {
+    indBoard.textContent = '';
+    const p = document.createElement('p'); p.className = 'agenda-vazia'; p.textContent = `Não consegui carregar as indicações: ${err.message}`; indBoard.appendChild(p);
+  }
+}
+document.getElementById('indRefresh').addEventListener('click', carregarIndicacoes);
+document.getElementById('indBusca').addEventListener('input', () => { indDesenhar(); indDesenharPesquisa(); });
+
+// ---- cadastro individual ----
+document.getElementById('indNovoBtn').addEventListener('click', () => {
+  for (const id of ['indIndicadorNome', 'indIndicadorTel', 'indIndicadoNome', 'indIndicadoTel', 'indObs']) document.getElementById(id).value = '';
+  document.getElementById('indErro').hidden = true;
+  document.getElementById('indSalvarBtn').classList.remove('pendente', 'salvo');
+  indModal.hidden = false;
+  document.getElementById('indIndicadorNome').focus();
+});
+indModal.addEventListener('click', (e) => { if (e.target === indModal || e.target.closest('[data-fechar="indModal"]')) indModal.hidden = true; });
+document.getElementById('indForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = document.getElementById('indErro'); erro.hidden = true;
+  const btn = document.getElementById('indSalvarBtn'); btn.disabled = true;
+  try {
+    const r = await fetch('/api/indicacoes', {
+      method: 'POST', headers: indH(),
+      body: JSON.stringify({ indicadorNome: document.getElementById('indIndicadorNome').value, indicadorTelefone: document.getElementById('indIndicadorTel').value, indicadoNome: document.getElementById('indIndicadoNome').value, indicadoTelefone: document.getElementById('indIndicadoTel').value, origem: document.getElementById('indOrigem').value, observacao: document.getElementById('indObs').value }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    if (d.duplicado) throw new Error(`Esse telefone já foi indicado${d.indicadoPor ? ` por ${d.indicadoPor}` : ''} (${d.nome}) - não foi repetido.`);
+    marcarSalvo(btn, 'Indicação cadastrada');
+    setTimeout(() => { indModal.hidden = true; }, 500);
+    carregarIndicacoes();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; }
+  btn.disabled = false;
+});
+
+// ---- importar lista ----
+function indMapearCabecalho(cab) {
+  const norm = cab.map((c) => indSemAcento(c));
+  const ehTel = (c) => /tel|fone|whats|cel|contato/.test(c);
+  const indicador = (c) => /indicador/.test(c);
+  const indicado = (c) => /indicado(?!r)/.test(c); // "indicador" contem "indicado": nao confundir
+  const m = {
+    indicadoTelefone: norm.findIndex((c) => indicado(c) && ehTel(c)),
+    indicadorTelefone: norm.findIndex((c) => indicador(c) && ehTel(c)),
+  };
+  m.indicadoNome = norm.findIndex((c, k) => indicado(c) && !ehTel(c) && k !== m.indicadoTelefone);
+  m.indicadorNome = norm.findIndex((c, k) => indicador(c) && !ehTel(c) && k !== m.indicadorTelefone);
+  return m;
+}
+document.getElementById('indImportarBtn').addEventListener('click', () => {
+  indLinhasImp = [];
+  document.getElementById('indImpArquivo').value = '';
+  for (const id of ['indImpResumo', 'indImpResultado', 'indImpErro']) { const el = document.getElementById(id); el.textContent = ''; if (id !== 'indImpResumo') el.hidden = true; }
+  document.getElementById('indImpConfirmar').hidden = true;
+  indImpModal.hidden = false;
+});
+indImpModal.addEventListener('click', (e) => { if (e.target === indImpModal || e.target.closest('[data-fechar="indImpModal"]')) indImpModal.hidden = true; });
+document.getElementById('indImpArquivo').addEventListener('change', async (e) => {
+  const arq = e.target.files?.[0]; if (!arq) return;
+  const erro = document.getElementById('indImpErro'); erro.hidden = true;
+  try {
+    const buf = await arq.arrayBuffer();
+    let linhas;
+    if (/\.(xlsx|xls)$/i.test(arq.name)) {
+      const XLSX = await ctGarantirSheetJs();
+      const livro = XLSX.read(buf, { type: 'array' });
+      linhas = XLSX.utils.sheet_to_json(livro.Sheets[livro.SheetNames[0]], { header: 1, raw: false, defval: '' });
+    } else linhas = ctLerCsv(ctDecodificarTexto(buf));
+    linhas = linhas.map((l) => l.map((v) => String(v ?? '').trim())).filter((l) => l.some(Boolean));
+    if (linhas.length < 2) throw new Error('A planilha precisa ter o cabeçalho e pelo menos uma linha.');
+    const m = indMapearCabecalho(linhas[0]);
+    if (m.indicadoNome < 0 || m.indicadoTelefone < 0 || m.indicadorNome < 0) throw new Error('Não achei as colunas. Use os títulos: Indicador, Telefone do indicador, Indicado, Telefone do indicado (baixe o modelo).');
+    indLinhasImp = linhas.slice(1).map((l) => ({ indicadorNome: l[m.indicadorNome], indicadorTelefone: m.indicadorTelefone >= 0 ? l[m.indicadorTelefone] : '', indicadoNome: l[m.indicadoNome], indicadoTelefone: l[m.indicadoTelefone] })).filter((l) => l.indicadoNome || l.indicadoTelefone);
+    document.getElementById('indImpResumo').textContent = `${indLinhasImp.length} indicação(ões) prontas para importar.`;
+    const b = document.getElementById('indImpConfirmar'); b.hidden = false; b.disabled = !indLinhasImp.length; b.textContent = `Importar ${indLinhasImp.length}`;
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; indLinhasImp = []; document.getElementById('indImpConfirmar').hidden = true; }
+});
+document.getElementById('indImpModelo').addEventListener('click', () => {
+  const csv = '﻿Indicador;Telefone do indicador;Indicado;Telefone do indicado\r\nMaria da Silva;82 99999-0001;João Souza;82 99999-0002\r\n';
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = 'modelo-indicacoes.csv'; a.click(); URL.revokeObjectURL(a.href);
+});
+document.getElementById('indImpConfirmar').addEventListener('click', async () => {
+  const b = document.getElementById('indImpConfirmar'); b.disabled = true; b.textContent = 'Importando...';
+  const erro = document.getElementById('indImpErro'); erro.hidden = true;
+  try {
+    const tot = { novos: 0, duplicados: 0, invalidos: 0, erros: [] };
+    for (let k = 0; k < indLinhasImp.length; k += 500) {
+      const r = await fetch('/api/indicacoes/importar', { method: 'POST', headers: indH(), body: JSON.stringify({ linhas: indLinhasImp.slice(k, k + 500) }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'erro');
+      tot.novos += d.novos; tot.duplicados += d.duplicados; tot.invalidos += d.invalidos; tot.erros.push(...(d.erros || []));
+    }
+    const res = document.getElementById('indImpResultado');
+    res.textContent = `Importação concluída: ${tot.novos} novos, ${tot.duplicados} já existiam (não repetidos), ${tot.invalidos} inválidos${tot.erros.length ? ` (${tot.erros.join('; ')})` : ''}.`;
+    res.hidden = false; b.hidden = true; document.getElementById('indImpResumo').textContent = '';
+    mostrarAviso('Lista importada'); carregarIndicacoes();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; b.disabled = false; b.textContent = 'Tentar de novo'; }
+});
+
+// ---- link do formulario ----
+document.getElementById('indLinkBtn').addEventListener('click', () => {
+  const link = `${location.origin}/indicacao/${indDados.token}`;
+  document.getElementById('indLinkTexto').value = link;
+  document.getElementById('indLinkWa').href = `https://wa.me/?text=${encodeURIComponent(`Olá! Que bom que você está gostando do nosso atendimento. Se quiser indicar amigos ou familiares, é só preencher aqui: ${link}`)}`;
+  indLinkModal.hidden = false;
+});
+indLinkModal.addEventListener('click', (e) => { if (e.target === indLinkModal || e.target.closest('[data-fechar="indLinkModal"]')) indLinkModal.hidden = true; });
+document.getElementById('indLinkCopiar').addEventListener('click', async () => {
+  const t = document.getElementById('indLinkTexto');
+  try { await navigator.clipboard.writeText(t.value); mostrarAviso('Link copiado'); } catch { t.select(); document.execCommand('copy'); mostrarAviso('Link copiado'); }
+});
