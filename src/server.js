@@ -37,6 +37,7 @@ import * as followUpInteligente from './followUpInteligente.js';
 import * as funilFU from './funilFollowUp.js';
 import * as indicacoes from './indicacoes.js';
 import * as resgate from './resgate.js';
+import * as metaSaude from './metaSaude.js';
 import * as indicacoesIA from './indicacoesIA.js';
 import * as aniversariantes from './aniversariantes.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
@@ -1788,6 +1789,25 @@ app.put('/api/funil-fu/tarefas', async (req, res) => {
   }
 });
 
+// ---------- Saude das contas de anuncios do Meta (alertas diarios) ----------
+app.get('/api/ads/saude', async (req, res) => {
+  try {
+    if (req.operadorId > 0) return res.status(403).json({ erro: 'so o acesso principal da conta pode ver isso' });
+    res.json({ alertas: await metaSaude.listarAbertos(req.tenantId), ultima: await metaSaude.ultimaExecucao(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/ads/saude/verificar', async (req, res) => {
+  try {
+    if (req.operadorId > 0) return res.status(403).json({ erro: 'so o acesso principal da conta pode fazer isso' });
+    const r = await metaSaude.verificarTenant(req.tenantId);
+    res.json({ ok: true, ...r });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 // ---------- Resgate de orcamentos (aba: orcamentos aprovados inacabados, funil da CRM) ----------
 // quando ha operador responsavel, so ele (e o acesso principal) acessa os dados dessa atividade
 app.use('/api/resgate', async (req, res, next) => {
@@ -3275,6 +3295,10 @@ app.get('/api/notificacoes', async (req, res) => {
         alertas.push({ tipo: 'saldo-baixo', recarregar: true, titulo: `Saldo da IA baixo (~US$ ${saldo.saldoUsd.toFixed(2)})`, detalhe: 'Recarregue antes que acabe e a IA pare de responder.' });
       }
     }
+    // saude das contas de anuncios do Meta (so o dono da conta ve; vem do monitor em metaSaude.js)
+    if (!(req.operadorId > 0)) {
+      for (const a of await metaSaude.listarAbertos(req.tenantId).catch(() => [])) alertas.push({ tipo: 'meta-ads', titulo: `Meta Ads · ${a.cliente || a.conta_nome}: ${a.titulo}`, detalhe: a.detalhe });
+    }
     const total = alertas.length + resumo.naoLidas.length + resumo.retornos.length + resumo.preAgendamentos.length + faltas.length;
     res.json({ total, ...resumo, faltas, alertas });
   } catch (err) {
@@ -3588,6 +3612,7 @@ followUpInteligente.iniciarSchedulerFollowUpInteligente();
 funilFU.iniciarSchedulerFunilFollowUp();
 indicacoes.iniciarSchedulerIndicacoes();
 resgate.iniciarSchedulerResgate();
+metaSaude.iniciarSchedulerMetaSaude();
 crm.iniciarVarreduraRepetidos();
 // Disparos (campanhas de mensagens em massa) - so envia campanhas que o dono iniciou/agendou na aba Disparos
 disparos.iniciarSchedulerDisparos();
