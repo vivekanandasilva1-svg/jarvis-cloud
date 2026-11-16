@@ -5659,7 +5659,7 @@ function renderSaldo(d) {
     linha(`Última conferência (${new Date(c.em).toLocaleDateString('pt-BR')}): app achava ${usd(c.estimadoUsd)}, real ${usd(c.realUsd)}`, c.diferencaUsd > 0 ? `−${usd(c.diferencaUsd)} fora do app` : 'sem diferença');
   }
   if (d.foraDoApp30diasUsd > 0) linha('Gasto fora do app (30 dias)', usd(d.foraDoApp30diasUsd));
-  const NOMES_MODULO = { 'auto-atendimento': 'Auto Atendimento', lumia: 'Lumia', 'follow-up': 'Follow Up', aniversariantes: 'Aniversariantes', indicacoes: 'Indicações', 'follow-up-inteligente': 'Follow Up Inteligente', externo: 'Gasto externo', 'gerador-relatorios': 'Gerador de Relatórios' };
+  const NOMES_MODULO = { 'auto-atendimento': 'Auto Atendimento', lumia: 'Lumia', 'follow-up': 'Follow Up', aniversariantes: 'Aniversariantes', indicacoes: 'Indicações', 'follow-up-inteligente': 'Follow Up Inteligente', externo: 'Gasto externo', 'gerador-relatorios': 'Gerador de Relatórios', gestao: 'Gestão Geral' };
   for (const r of d.porCliente || []) linha(`${r.nome} · ${NOMES_MODULO[r.modulo] || r.modulo || 'outros'}`, usd(r.custoUsd));
   saldoHistorico.textContent = '';
   const ROTULO_AJUSTE = { conferencia: 'Conferência', recarga: 'Recarga', gasto_externo: 'Gasto externo' };

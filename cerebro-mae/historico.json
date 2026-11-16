@@ -431,6 +431,14 @@
     "conteudo": "Rotas /api/gestao/setor/:setor (vendas, recepcao, asbs, laboratorio, financeiro), /metas, /decisoes e /lancamentos; tabelas gestao_metas, gestao_decisoes e gestao_lancamentos, tudo por tenant e só pro acesso principal. Recepção usa agenda do Clinicorp (list_info: ScheduledTotal, MissedAppointmentTotal, CanceledAppointment; confirmados nos próximos 7 dias pelo status que contém 'confirm'). Financeiro usa list_summary (TotalSales, TotalIncome, TotalExpenses) comparado ao período anterior. ASBs e Laboratório (e espera média, cadastros incompletos, inadimplência, contas a vencer) são lançamento manual por semana (segunda a domingo), porque não há API. Metas salvas valem sobre o padrão; vazio = sem meta. Pendente: IA de verdade nos pontos de atenção e no Pergunte à IA, publicar o app na VPS, lançamentos manuais por vários períodos."
   },
   {
+    "chave": "gestao:ia",
+    "modulo": "gestao",
+    "data": "2026-11-16",
+    "tipo": "fato",
+    "titulo": "Gestão Geral: IA que analisa o setor e responde perguntas",
+    "conteudo": "POST /api/gestao/ia/analisar (3 a 5 pontos priorizados, resposta estruturada) e /ia/perguntar (texto livre), em src/gestaoIa.js. A IA recebe só o painel do setor em JSON (indicadores, meta, semáforo, funil, origens, valores/dias dos orçamentos parados, decisões em aberto), SEM nomes ou telefones de pacientes, e é instruída a usar só os números do contexto e a apenas sugerir. Só leitura: não envia mensagem nem altera nada. Custo atribuído à clínica no módulo gestao (saldo IA). Limite de 40 chamadas por hora por clínica; pergunta até 500 caracteres. Erro da IA vira mensagem amigável."
+  },
+  {
     "chave": "mod:aniversariantes",
     "hub": true,
     "modulo": "aniversariantes",

@@ -42,6 +42,7 @@ import * as indicacoesIA from './indicacoesIA.js';
 import * as aniversariantes from './aniversariantes.js';
 import * as gestao from './gestao.js';
 import * as gestaoStore from './gestaoStore.js';
+import * as gestaoIa from './gestaoIa.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
 import { iniciarCerebroMae } from './cerebroMae.js';
 import { ehErroDeCredito, creditoEsgotado, registrarFalhaCredito } from './alertaCreditos.js';
@@ -2390,6 +2391,22 @@ app.patch('/api/gestao/decisoes/:id', async (req, res) => {
 });
 app.delete('/api/gestao/decisoes/:id', async (req, res) => {
   try { await gestaoStore.apagarDecisao(req.tenantId, Number(req.params.id)); res.json({ ok: true }); } catch (err) { gestaoErro(res, err); }
+});
+
+// IA da gestao: so leitura/sugestao. Custo atribuido a clinica (modulo 'gestao').
+app.post('/api/gestao/ia/analisar', async (req, res) => {
+  try {
+    const { setor, de, ate } = req.body || {};
+    if (!gestao.SETORES_COM_PAINEL.includes(setor)) return res.status(400).json({ erro: 'Setor invalido.' });
+    res.json({ pontos: await gestaoIa.analisarSetor(req.tenantId, setor, { de, ate }) });
+  } catch (err) { gestaoErro(res, err); }
+});
+app.post('/api/gestao/ia/perguntar', async (req, res) => {
+  try {
+    const { setor, pergunta, de, ate } = req.body || {};
+    if (!gestao.SETORES_COM_PAINEL.includes(setor)) return res.status(400).json({ erro: 'Setor invalido.' });
+    res.json({ resposta: await gestaoIa.perguntar(req.tenantId, setor, pergunta, { de, ate }) });
+  } catch (err) { gestaoErro(res, err); }
 });
 
 // lancamento manual (indicadores sem integracao), por semana
