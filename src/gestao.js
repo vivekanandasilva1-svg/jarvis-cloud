@@ -5,6 +5,7 @@ import * as crm from './crm.js';
 import * as clinicorp from './clinicorp.js';
 import { pool } from './db.js';
 import * as store from './gestaoStore.js';
+import * as metaads from './metaads.js';
 
 // metas de referencia (SUGESTAO - o gestor ainda vai definir as reais). null = sem meta definida.
 export const METAS_VENDAS = {
@@ -14,7 +15,13 @@ export const METAS_VENDAS = {
   comparecimento: { meta: 75, melhor: 'maior' },
   fechamento: { meta: 40, melhor: 'maior' },
   parados: { meta: 0, melhor: 'menor' },
+  // indicadores do Meta Ads: so aparecem se o gestor escolheu contas de anuncio; comecam sem meta
+  investimento: { meta: null, melhor: 'menor' },
+  resultadosAnuncio: { meta: null, melhor: 'maior' },
+  cpl: { meta: null, melhor: 'menor' },
+  custoPorVenda: { meta: null, melhor: 'menor' },
 };
+const KPIS_META = ['investimento', 'resultadosAnuncio', 'cpl', 'custoPorVenda'];
 
 // verde bateu a meta; amarelo ate 25% de distancia; vermelho alem disso
 export function semaforo(valor, meta, melhor = 'maior') {
@@ -64,6 +71,86 @@ async function orcamentos(tenantId, hoje) {
     status: String(o.status || ''),
     responsavel: String(o.profissional || ''),
   })).filter((o) => o.data);
+}
+
+
+// ---------- Meta Ads (so leitura): contas que o gestor escolheu para alimentar o painel de Vendas ----------
+
+const CHAVE_CONTAS_META = 'vendas_contas_meta';
+const MAX_CONTAS_META = 20;
+const STATUS_CONTA_META = { 1: 'ativa', 2: 'desativada', 3: 'pagamento em atraso', 7: 'em análise de risco', 8: 'liquidação pendente', 9: 'carência de pagamento', 100: 'encerramento pendente', 101: 'encerrada' };
+
+// lista as contas de anuncio que o cliente tem acesso (ja conectadas na Lumia) e quais estao escolhidas
+export async function contasMeta(tenantId) {
+  const escolhidas = await store.obterConfig(tenantId, CHAVE_CONTAS_META, []);
+  let contas;
+  try {
+    contas = await metaads.listAdAccounts(tenantId);
+  } catch (err) {
+    if (/nenhuma conta de anuncio/i.test(err.message)) return { conectado: false, contas: [], escolhidas: [] };
+    throw err;
+  }
+  return {
+    conectado: true,
+    escolhidas,
+    contas: contas.map((c) => ({ id: c.id, nome: c.name, empresa: c.empresa || c.business_name || '', status: STATUS_CONTA_META[c.account_status] || 'desconhecido', moeda: c.currency || 'BRL' })),
+  };
+}
+
+// so aceita contas que o proprio cliente enxerga (nunca um id de conta de outro cliente)
+export async function salvarContasMeta(tenantId, ids) {
+  if (!Array.isArray(ids)) throw new Error('Envie a lista de contas.');
+  const unicos = [...new Set(ids.map((i) => String(i)))];
+  if (unicos.length > MAX_CONTAS_META) throw new Error(`Escolha no maximo ${MAX_CONTAS_META} contas.`);
+  if (unicos.length) {
+    const { contas, conectado } = await contasMeta(tenantId);
+    if (!conectado) throw new Error('Esse cliente nao tem nenhuma conta de anuncio (Meta Ads) conectada.');
+    const validas = new Set(contas.map((c) => c.id));
+    const invalida = unicos.find((i) => !validas.has(i));
+    if (invalida) throw new Error('Uma das contas escolhidas nao pertence a esse cliente.');
+  }
+  await store.salvarConfig(tenantId, CHAVE_CONTAS_META, unicos);
+}
+
+const num = (v) => Number(v) || 0;
+
+// soma o desempenho das contas escolhidas no periodo (e no periodo anterior, pra comparar)
+async function metricasMeta(tenantId, ids, { de, ate }) {
+  const dias = diasEntre(de, ate) + 1;
+  const anterior = { de: somarDias(de, -dias), ate: somarDias(de, -1) };
+  const avisos = [];
+  const lerConta = async (id, per) => {
+    const linhas = await metaads.getInsights(tenantId, { objectId: id, objectType: 'account', level: 'account', since: per.de, until: per.ate });
+    const t = { gasto: 0, impressoes: 0, cliques: 0, alcance: 0, resultados: 0, tipos: new Set() };
+    for (const l of linhas) {
+      t.gasto += num(l.spend); t.impressoes += num(l.impressions); t.cliques += num(l.clicks); t.alcance += num(l.reach);
+      const r = metaads.extractResultsAndCPA(l);
+      t.resultados += r.resultados; if (r.tipo) t.tipos.add(r.tipo);
+    }
+    return t;
+  };
+  const somar = (lista) => lista.reduce((a, t) => ({ gasto: a.gasto + t.gasto, impressoes: a.impressoes + t.impressoes, cliques: a.cliques + t.cliques, alcance: a.alcance + t.alcance, resultados: a.resultados + t.resultados, tipos: new Set([...a.tipos, ...t.tipos]) }), { gasto: 0, impressoes: 0, cliques: 0, alcance: 0, resultados: 0, tipos: new Set() });
+  const porConta = [];
+  const atuais = [];
+  const anteriores = [];
+  for (const id of ids) {
+    try {
+      const [a, b] = await Promise.all([lerConta(id, { de, ate }), lerConta(id, anterior).catch(() => null)]);
+      atuais.push(a); if (b) anteriores.push(b);
+      porConta.push({ id, gasto: a.gasto, resultados: a.resultados, cpl: a.resultados ? a.gasto / a.resultados : null });
+    } catch (err) {
+      avisos.push(`Meta Ads: não consegui ler a conta ${id} (${err.message}).`);
+    }
+  }
+  if (!atuais.length) return { ok: false, avisos };
+  const a = somar(atuais);
+  const b = anteriores.length ? somar(anteriores) : null;
+  return {
+    ok: true, avisos, porConta,
+    atual: { ...a, ctr: a.impressoes ? (a.cliques / a.impressoes) * 100 : null, frequencia: a.alcance ? a.impressoes / a.alcance : null, cpl: a.resultados ? a.gasto / a.resultados : null, tipos: [...a.tipos] },
+    anterior: b ? { ...b, cpl: b.resultados ? b.gasto / b.resultados : null } : null,
+    mistura: a.tipos.size > 1, // contas com tipos de resultado diferentes (lead x conversa): a soma mistura os dois
+  };
 }
 
 export async function painelVendas(tenantId, { de, ate } = {}) {
@@ -128,6 +215,34 @@ export async function painelVendas(tenantId, { de, ate } = {}) {
     fechamento: fechamento === null ? (orc ? 'sem orçamentos no período' : 'sem dados do Clinicorp') : 'orçamentos aprovados no período',
     parados: parados === null ? 'sem dados do Clinicorp' : `${reais(valorParado)} em aberto`,
   };
+  // ----- Meta Ads (opcional: so se o gestor escolheu contas)
+  let anuncios = { conectado: null, escolhidas: [], contas: [] };
+  const escolhidas = await store.obterConfig(tenantId, CHAVE_CONTAS_META, []);
+  if (escolhidas.length) {
+    const m = await metricasMeta(tenantId, escolhidas, { de: periodoDe, ate: periodoAte });
+    avisos.push(...m.avisos);
+    const vendasAnuncio = origemLinhas.filter((l) => l.fonte === 'meta_ads').reduce((s, l) => s + l.compraram, 0);
+    const nomes = Object.fromEntries(((await contasMeta(tenantId).catch(() => ({ contas: [] }))).contas).map((c) => [c.id, c.nome]));
+    if (m.ok) {
+      const at = m.atual;
+      valores.investimento = Math.round(at.gasto * 100) / 100;
+      valores.resultadosAnuncio = at.resultados;
+      valores.cpl = at.cpl === null ? null : Math.round(at.cpl * 100) / 100;
+      valores.custoPorVenda = vendasAnuncio ? Math.round((at.gasto / vendasAnuncio) * 100) / 100 : null;
+      Object.assign(rotulos, { investimento: 'Investimento em anúncios (Meta)', resultadosAnuncio: 'Resultados dos anúncios', cpl: 'Custo por resultado', custoPorVenda: 'Custo por venda (anúncio)' });
+      Object.assign(formatos, { investimento: 'reais', resultadosAnuncio: 'numero', cpl: 'reais', custoPorVenda: 'reais' });
+      const ant = m.anterior;
+      Object.assign(comparacoes, {
+        investimento: ant ? variacao(at.gasto, ant.gasto) : `${escolhidas.length} conta(s) escolhida(s)`,
+        resultadosAnuncio: `${m.atual.tipos.join(', ') || 'sem resultados'}${ant ? ` · ${variacao(at.resultados, ant.resultados)}` : ''}`,
+        cpl: at.cpl === null ? 'sem resultados no período' : ant && ant.cpl ? variacao(at.cpl, ant.cpl) : `CTR ${at.ctr === null ? '—' : at.ctr.toFixed(2).replace('.', ',')}%`,
+        custoPorVenda: vendasAnuncio ? `${vendasAnuncio} venda(s) de anúncio no CRM` : 'nenhuma venda de anúncio marcada no CRM',
+      });
+      if (m.mistura) avisos.push('As contas escolhidas misturam tipos de resultado (ex.: lead e conversa iniciada); o total soma os dois.');
+      anuncios = { conectado: true, escolhidas, contas: m.porConta.map((c) => ({ ...c, nome: nomes[c.id] || c.id })), ctr: at.ctr, alcance: at.alcance, frequencia: at.frequencia, impressoes: at.impressoes, cliques: at.cliques, gasto: at.gasto, resultados: at.resultados, cpl: at.cpl, vendasAnuncio };
+    } else anuncios = { conectado: true, escolhidas, contas: [] };
+  }
+
   const kpis = Object.keys(rotulos).map((id) => ({
     id, rotulo: rotulos[id], valor: valores[id], formato: formatos[id], indicador: id, meta: metas[id].meta, melhor: metas[id].melhor, metaPadrao: metas[id].padrao,
     comparacao: comparacoes[id], status: semaforo(valores[id], metas[id].meta, metas[id].melhor),
@@ -163,6 +278,9 @@ export async function painelVendas(tenantId, { de, ate } = {}) {
     if (melhor.compraram > 0) decidirHoje.push(`Melhor conversão por origem: ${melhor.fonte} (${melhor.compraram} de ${melhor.leads} leads compraram).`);
     if (pior) decidirHoje.push(`${pior.fonte} trouxe ${pior.leads} leads e nenhuma compra no período.`);
   }
+  if (anuncios.gasto > 0 && anuncios.resultados === 0) decidirHoje.push(`Os anúncios gastaram ${reais(anuncios.gasto)} no período e não trouxeram nenhum resultado.`);
+  if (valores.cpl !== null && valores.cpl !== undefined && metas.cpl?.meta != null && valores.cpl > metas.cpl.meta) decidirHoje.push(`O custo por resultado dos anúncios está em ${reais(valores.cpl)} (meta ${reais(metas.cpl.meta)}).`);
+  if (valores.custoPorVenda !== null && valores.custoPorVenda !== undefined) decidirHoje.push(`Cada venda vinda de anúncio custou ${reais(valores.custoPorVenda)} em investimento.`);
   if (!decidirHoje.length) decidirHoje.push('Nada fora do normal nos números deste período.');
 
   return {
@@ -173,6 +291,7 @@ export async function painelVendas(tenantId, { de, ate } = {}) {
     kpis,
     funil,
     origens,
+    anuncios,
     decidirHoje: decidirHoje.slice(0, 5),
     orcamentos: topParados,
     perguntas: [
@@ -265,7 +384,7 @@ export function indicadoresManuais(setor) {
 }
 export function catalogoDeMetas() {
   const cat = { vendas: { nome: 'Vendas', indicadores: [] } };
-  const rotulosVendas = { leads: ['Leads novos', 'numero'], semResposta: ['Sem resposta há mais de 1h', 'numero'], agendaram: ['Agendaram avaliação', 'percentual'], comparecimento: ['Comparecimento', 'percentual'], fechamento: ['Fechamento de orçamentos', 'percentual'], parados: ['Orçamentos parados há mais de 7 dias', 'numero'] };
+  const rotulosVendas = { leads: ['Leads novos', 'numero'], semResposta: ['Sem resposta há mais de 1h', 'numero'], agendaram: ['Agendaram avaliação', 'percentual'], comparecimento: ['Comparecimento', 'percentual'], fechamento: ['Fechamento de orçamentos', 'percentual'], parados: ['Orçamentos parados há mais de 7 dias', 'numero'], investimento: ['Investimento em anúncios (Meta)', 'reais'], resultadosAnuncio: ['Resultados dos anúncios', 'numero'], cpl: ['Custo por resultado (anúncios)', 'reais'], custoPorVenda: ['Custo por venda (anúncio)', 'reais'] };
   for (const [id, m] of Object.entries(METAS_VENDAS)) cat.vendas.indicadores.push({ id, rotulo: rotulosVendas[id][0], formato: rotulosVendas[id][1], melhor: m.melhor, padrao: m.meta });
   for (const [setor, def] of Object.entries(DEFS)) {
     cat[setor] = { nome: def.nome, indicadores: Object.entries(def.indicadores).map(([id, d]) => ({ id, rotulo: d.rotulo, formato: d.formato, melhor: d.melhor, padrao: d.meta })) };

@@ -2373,6 +2373,17 @@ app.put('/api/gestao/metas', async (req, res) => {
   } catch (err) { gestaoErro(res, err); }
 });
 
+// Meta Ads (so leitura): contas que o cliente enxerga e quais alimentam o painel de Vendas
+app.get('/api/gestao/meta/contas', async (req, res) => {
+  try { res.json(await gestao.contasMeta(req.tenantId)); } catch (err) { gestaoErro(res, err); }
+});
+app.put('/api/gestao/meta/contas', async (req, res) => {
+  try {
+    await gestao.salvarContasMeta(req.tenantId, req.body?.ids);
+    res.json({ ok: true });
+  } catch (err) { gestaoErro(res, err); }
+});
+
 // decisoes e tarefas
 app.get('/api/gestao/decisoes', async (req, res) => {
   try { res.json({ decisoes: await gestaoStore.listarDecisoes(req.tenantId, { setor: req.query.setor || null }) }); } catch (err) { gestaoErro(res, err); }

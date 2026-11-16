@@ -439,6 +439,14 @@
     "conteudo": "POST /api/gestao/ia/analisar (3 a 5 pontos priorizados, resposta estruturada) e /ia/perguntar (texto livre), em src/gestaoIa.js. A IA recebe só o painel do setor em JSON (indicadores, meta, semáforo, funil, origens, valores/dias dos orçamentos parados, decisões em aberto), SEM nomes ou telefones de pacientes, e é instruída a usar só os números do contexto e a apenas sugerir. Só leitura: não envia mensagem nem altera nada. Custo atribuído à clínica no módulo gestao (saldo IA). Limite de 40 chamadas por hora por clínica; pergunta até 500 caracteres. Erro da IA vira mensagem amigável."
   },
   {
+    "chave": "gestao:meta",
+    "modulo": "gestao",
+    "data": "2026-11-16",
+    "tipo": "fato",
+    "titulo": "Gestão Geral: escolher contas do Meta Ads para o painel de Vendas",
+    "conteudo": "GET/PUT /api/gestao/meta/contas: lista as contas de anúncio que o cliente já conectou na Lumia (metaads.listAdAccounts) e guarda quais alimentam o painel (tabela gestao_config, chave vendas_contas_meta, por clínica, máx. 20; só aceita contas que o próprio cliente enxerga). Com contas escolhidas o painel de Vendas ganha investimento, resultados, custo por resultado e custo por venda (investimento ÷ vendas de origem meta_ads no CRM), mais CTR, alcance e frequência, comparados ao período anterior. Somente leitura no Meta (insights). Metas dos novos indicadores começam sem meta. Contas com tipos de resultado diferentes (lead x conversa) são somadas com aviso. Falha de uma conta vira aviso e as demais seguem. A IA recebe só o resumo, sem token nem id de conta. Limite: custo por venda depende do time marcar Comprou no CRM e da origem vir como anúncio."
+  },
+  {
     "chave": "mod:aniversariantes",
     "hub": true,
     "modulo": "aniversariantes",

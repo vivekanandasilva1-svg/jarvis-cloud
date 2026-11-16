@@ -37,6 +37,15 @@ async function garantirTabelas() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS gestao_decisoes_tenant_idx ON gestao_decisoes (tenant_id, setor, situacao);`);
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS gestao_config (
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      chave TEXT NOT NULL,
+      valor JSONB NOT NULL,
+      atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (tenant_id, chave)
+    );
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS gestao_lancamentos (
       tenant_id INT NOT NULL REFERENCES tenants(id),
       setor TEXT NOT NULL,
@@ -210,4 +219,23 @@ export async function lancamentosDoSetor(tenantId, setor, ateIso) {
     saida[r.indicador][r.semana === semana ? 'atual' : 'anterior'] = Number(r.valor);
   }
   return saida;
+}
+
+// ---------- configuracao por clinica (ex: quais contas do Meta alimentam o painel de Vendas) ----------
+
+export async function obterConfig(tenantId, chave, padrao = null) {
+  if (!pool) return padrao;
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT valor FROM gestao_config WHERE tenant_id = $1 AND chave = $2', [tenantId, chave]);
+  return rows.length ? rows[0].valor : padrao;
+}
+
+export async function salvarConfig(tenantId, chave, valor) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  await pool.query(
+    `INSERT INTO gestao_config (tenant_id, chave, valor) VALUES ($1, $2, $3::jsonb)
+     ON CONFLICT (tenant_id, chave) DO UPDATE SET valor = $3::jsonb, atualizado_em = now()`,
+    [tenantId, chave, JSON.stringify(valor)],
+  );
 }

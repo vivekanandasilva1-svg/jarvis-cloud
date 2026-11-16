@@ -36,6 +36,7 @@ export async function montarContexto(tenantId, setor, periodo = {}) {
     indicadores: painel.kpis.map((k) => ({ indicador: k.rotulo, valor: k.valor, formato: k.formato, meta: k.meta, semaforo: k.status, comparacao: k.comparacao })),
     funil: painel.funil,
     origens: painel.origens,
+    anunciosMeta: painel.anuncios && painel.anuncios.conectado ? { contasEscolhidas: (painel.anuncios.contas || []).length, investimento: painel.anuncios.gasto, resultados: painel.anuncios.resultados, custoPorResultado: painel.anuncios.cpl, ctr: painel.anuncios.ctr, vendasDeAnuncioNoCrm: painel.anuncios.vendasAnuncio } : null,
     orcamentosParados: (painel.orcamentos || []).map((o) => ({ valor: o.valor, diasParado: o.diasParado, responsavel: o.responsavel })),
     pontosDeAtencaoAutomaticos: painel.decidirHoje,
     decisoesEmAberto: decisoes,
