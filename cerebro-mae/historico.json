@@ -407,6 +407,22 @@
     "conteudo": "Motor próprio (followUp.js), substitui o Auto Atendimento enquanto o card está na coluna. Horário de funcionamento (padrão 08-20h Maceió): fora dele não manda tentativa nem responde, mas guarda a mensagem."
   },
   {
+    "chave": "mod:gestao",
+    "hub": true,
+    "modulo": "gestao",
+    "tipo": "contexto",
+    "titulo": "Módulo: Lumia Gestão Geral (app separado do gestor)",
+    "conteudo": "Aplicativo EXTERNO à Lumia (pasta lumia-gestao no computador do dono) com a rotina semanal do gestor: segunda Vendas, terça Recepção, quarta ASBs, quinta Laboratório protético, sexta Financeiro. Usa o mesmo login da Lumia e lê os dados por /api/gestao/* (só leitura, só o acesso principal, liberável por cliente pela ferramenta gestaoGeral)."
+  },
+  {
+    "chave": "gestao:vendas",
+    "modulo": "gestao",
+    "data": "2026-11-16",
+    "tipo": "fato",
+    "titulo": "Gestão Geral: painel de Vendas com dados reais",
+    "conteudo": "GET /api/gestao/vendas (src/gestao.js) junta CRM (leads, agendamentos, comparecimento por eventos de etapa, conversas sem resposta há +1h, origem dos leads) e orçamentos do Clinicorp (fechamento no período e orçamentos OPEN/FOLLOWUP parados há +7 dias, últimos 90 dias). Semáforo: verde bate a meta, amarelo até 25% abaixo, vermelho além. Metas de referência (fechamento 40%, comparecimento 75%, agendaram 40%) são SUGESTÃO, o gestor ainda não passou as reais; leads sem meta. Se o Clinicorp falha, o painel segue só com o CRM e mostra aviso. Pendente: metas editáveis, decisões/tarefas, IA de verdade (hoje os pontos de atenção são regras automáticas), demais setores, publicar o app na VPS."
+  },
+  {
     "chave": "mod:aniversariantes",
     "hub": true,
     "modulo": "aniversariantes",

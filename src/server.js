@@ -36,6 +36,7 @@ import { iniciarSchedulerClinicorpFollowUp } from './clinicorpFollowUp.js';
 import * as followUpInteligente from './followUpInteligente.js';
 import * as funilFU from './funilFollowUp.js';
 import * as aniversariantes from './aniversariantes.js';
+import * as gestao from './gestao.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
 import { iniciarCerebroMae } from './cerebroMae.js';
 import { ehErroDeCredito, creditoEsgotado, registrarFalhaCredito } from './alertaCreditos.js';
@@ -92,6 +93,7 @@ const TAB_ROTA_PREFIXO = {
   funilFollowUp: '/api/funil-fu',
   disparos: '/api/disparos',
   aniversariantes: '/api/aniversariantes',
+  gestaoGeral: '/api/gestao',
   relatorios: '/api/relatorios',
   geradorRelatorios: '/api/gerador-relatorios',
   integracoes: '/api/integracoes',
@@ -197,7 +199,7 @@ app.use(async (req, res, next) => {
 });
 
 // ---------- colaborador: so mexe em lead que e dele (ou assume um da fila, sem operador) ----------
-const ROTAS_GERENCIAIS = [/^\/api\/crm\/resultados/, /^\/api\/crm\/origem/, /^\/api\/crm\/ocultas/, /^\/api\/crm\/contatos-ocultos/];
+const ROTAS_GERENCIAIS = [/^\/api\/gestao/, /^\/api\/crm\/resultados/, /^\/api\/crm\/origem/, /^\/api\/crm\/ocultas/, /^\/api\/crm\/contatos-ocultos/];
 app.use(async (req, res, next) => {
   if (!(req.operadorId > 0) || !req.tenantId) return next();
   const op = req.operadorId;
@@ -1894,6 +1896,16 @@ const mesDaQuery = (q) => {
   const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Maceio' }).split('-').map(Number);
   return { ano: Number(q.ano) || hoje[0], mes: Number(q.mes) || hoje[1] };
 };
+
+// Lumia Gestao Geral (app separado do gestor): leitura dos indicadores de cada setor. So o acesso
+// principal da conta (rota gerencial) e so quem tem a ferramenta "gestaoGeral" liberada.
+app.get('/api/gestao/vendas', async (req, res) => {
+  try {
+    res.json(await gestao.painelVendas(req.tenantId, { de: req.query.de, ate: req.query.ate }));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
 
 app.get('/api/aniversariantes/config', async (req, res) => {
   try {

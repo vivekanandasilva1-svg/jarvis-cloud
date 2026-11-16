@@ -8493,7 +8493,7 @@ async function selecionarCliente(id, nome, username) {
   tabsAviso.textContent = 'Nenhuma marcada = tudo liberado (padrão). Marque só pra restringir.';
   clienteIntegracoesPainel.appendChild(tabsAviso);
 
-  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', aniversariantes: 'Aniversariantes', followUpInteligente: 'Follow Up Inteligente', funilFollowUp: 'Funil Follow Up', disparos: 'Disparos', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
+  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', aniversariantes: 'Aniversariantes', gestaoGeral: 'Lumia Gestão Geral (app de gestão)', followUpInteligente: 'Follow Up Inteligente', funilFollowUp: 'Funil Follow Up', disparos: 'Disparos', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
   const tabsForm = document.createElement('div');
   tabsForm.className = 'cliente-form';
   const tabsCheckboxes = {};
@@ -10790,7 +10790,7 @@ document.getElementById('crmEspelharBtn').addEventListener('click', () => {
 // ---------- Ferramentas de cada colaborador (so o acesso principal edita) ----------
 const FERRAMENTAS_COLAB = [
   ['painel', 'Painel (Lumia/Chat)'], ['agenda', 'Agenda'], ['whatsapp', 'WhatsApp'], ['crm', 'CRM, Conversas, Contatos, Resultados e Origem dos leads'],
-  ['auto', 'Auto Atendimento'], ['followUp', 'Follow Up'], ['aniversariantes', 'Aniversariantes do mês'], ['followUpInteligente', 'Follow Up Inteligente'], ['funilFollowUp', 'Funil Follow Up'],
+  ['auto', 'Auto Atendimento'], ['followUp', 'Follow Up'], ['aniversariantes', 'Aniversariantes do mês'], ['gestaoGeral', 'Lumia Gestão Geral'], ['followUpInteligente', 'Follow Up Inteligente'], ['funilFollowUp', 'Funil Follow Up'],
   ['disparos', 'Disparos'], ['relatorios', 'Relatórios automáticos'], ['geradorRelatorios', 'Gerador de Relatórios'], ['integracoes', 'Integrações'], ['instagram', 'Instagram'],
 ];
 function abrirFerramentasColab(c) {
