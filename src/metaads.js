@@ -188,8 +188,8 @@ export async function getInsights(tenantId, { objectId, objectType = 'account', 
 
   const fields = [
     'spend', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'reach', 'frequency', 'actions', 'cost_per_action_type',
-    'inline_link_clicks', 'video_play_actions',
-    'video_p50_watched_actions', 'video_p75_watched_actions', 'video_p95_watched_actions',
+    'inline_link_clicks', 'cost_per_inline_link_click', 'video_play_actions',
+    'video_p50_watched_actions', 'video_p75_watched_actions', 'video_p95_watched_actions', 'video_p100_watched_actions',
   ];
   if (breakdownLevel === 'ad') fields.push('ad_id', 'ad_name', 'adset_id', 'adset_name');
   else if (breakdownLevel === 'adset') fields.push('adset_id', 'adset_name');

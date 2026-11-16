@@ -447,6 +447,14 @@
     "conteudo": "GET/PUT /api/gestao/meta/contas: lista as contas de anúncio que o cliente já conectou na Lumia (metaads.listAdAccounts) e guarda quais alimentam o painel (tabela gestao_config, chave vendas_contas_meta, por clínica, máx. 20; só aceita contas que o próprio cliente enxerga). Com contas escolhidas o painel de Vendas ganha investimento, resultados, custo por resultado e custo por venda (investimento ÷ vendas de origem meta_ads no CRM), mais CTR, alcance e frequência, comparados ao período anterior. Somente leitura no Meta (insights). Metas dos novos indicadores começam sem meta. Contas com tipos de resultado diferentes (lead x conversa) são somadas com aviso. Falha de uma conta vira aviso e as demais seguem. A IA recebe só o resumo, sem token nem id de conta. Limite: custo por venda depende do time marcar Comprou no CRM e da origem vir como anúncio."
   },
   {
+    "chave": "gestao:meta-padrao",
+    "modulo": "gestao",
+    "data": "2026-11-16",
+    "tipo": "decisao",
+    "titulo": "Meta Ads: padrão único de métricas igual ao relatório oficial do Gerenciador, cada conta separada",
+    "conteudo": "Os números do app e do relatório automático não batiam com o Gerenciador porque o resultado era a primeira ação encontrada (lead antes de conversa) e faltavam colunas. Agora src/metaMetricas.js define 17 colunas na ordem do relatório oficial (Conversas por mensagem iniciadas = onsite_conversion.messaging_conversation_started_7d, Custo por conversa, Valor gasto, Alcance, Impressões, Frequência, Reproduções 50/75/95/100%, Visualizações = video_play_actions, Cliques no link, CPC do link, Cliques (todos), CPC (todos), CPM, CTR (todos)), conferidas com a imagem do relatório da Vitaly. Decisão do dono: cada conta tem dados distintos, NUNCA somar contas (alcance repetiria pessoas). Relatório automático ads_metricas: bloco RESUMO DA CONTA (insights no nível da conta) antes das campanhas de cada conta, cada campanha com as 17 métricas e o nome da conta; janelas de período inalteradas e só campanhas com anúncio ativo, como antes. App: tabela por conta, cartões de indicadores de anúncio só com uma conta escolhida, seletor de período (Este mês, Mês passado, 7/30 dias, personalizado)."
+  },
+  {
     "chave": "mod:aniversariantes",
     "hub": true,
     "modulo": "aniversariantes",

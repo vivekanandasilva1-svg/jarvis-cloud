@@ -6,6 +6,7 @@ import * as clinicorp from './clinicorp.js';
 import { pool } from './db.js';
 import * as store from './gestaoStore.js';
 import * as metaads from './metaads.js';
+import { normalizarLinha, COLUNAS as COLUNAS_META } from './metaMetricas.js';
 
 // metas de referencia (SUGESTAO - o gestor ainda vai definir as reais). null = sem meta definida.
 export const METAS_VENDAS = {
@@ -112,45 +113,28 @@ export async function salvarContasMeta(tenantId, ids) {
   await store.salvarConfig(tenantId, CHAVE_CONTAS_META, unicos);
 }
 
-const num = (v) => Number(v) || 0;
+const arred2 = (v) => (v === null || v === undefined ? null : Math.round(v * 100) / 100);
 
-// soma o desempenho das contas escolhidas no periodo (e no periodo anterior, pra comparar)
-async function metricasMeta(tenantId, ids, { de, ate }) {
+// desempenho de CADA conta escolhida, separado (e do periodo anterior, pra comparar). NUNCA soma contas:
+// alcance/frequencia de contas diferentes podem repetir a mesma pessoa e misturar cenarios dificulta a leitura.
+async function metricasMeta(tenantId, ids, { de, ate }, nomes = {}) {
   const dias = diasEntre(de, ate) + 1;
   const anterior = { de: somarDias(de, -dias), ate: somarDias(de, -1) };
   const avisos = [];
   const lerConta = async (id, per) => {
     const linhas = await metaads.getInsights(tenantId, { objectId: id, objectType: 'account', level: 'account', since: per.de, until: per.ate });
-    const t = { gasto: 0, impressoes: 0, cliques: 0, alcance: 0, resultados: 0, tipos: new Set() };
-    for (const l of linhas) {
-      t.gasto += num(l.spend); t.impressoes += num(l.impressions); t.cliques += num(l.clicks); t.alcance += num(l.reach);
-      const r = metaads.extractResultsAndCPA(l);
-      t.resultados += r.resultados; if (r.tipo) t.tipos.add(r.tipo);
-    }
-    return t;
+    return normalizarLinha(linhas[0]);
   };
-  const somar = (lista) => lista.reduce((a, t) => ({ gasto: a.gasto + t.gasto, impressoes: a.impressoes + t.impressoes, cliques: a.cliques + t.cliques, alcance: a.alcance + t.alcance, resultados: a.resultados + t.resultados, tipos: new Set([...a.tipos, ...t.tipos]) }), { gasto: 0, impressoes: 0, cliques: 0, alcance: 0, resultados: 0, tipos: new Set() });
-  const porConta = [];
-  const atuais = [];
-  const anteriores = [];
+  const contas = [];
   for (const id of ids) {
     try {
-      const [a, b] = await Promise.all([lerConta(id, { de, ate }), lerConta(id, anterior).catch(() => null)]);
-      atuais.push(a); if (b) anteriores.push(b);
-      porConta.push({ id, gasto: a.gasto, resultados: a.resultados, cpl: a.resultados ? a.gasto / a.resultados : null });
+      const [atual, ant] = await Promise.all([lerConta(id, { de, ate }), lerConta(id, anterior).catch(() => null)]);
+      contas.push({ id, nome: nomes[id] || id, metricas: atual, anterior: ant });
     } catch (err) {
-      avisos.push(`Meta Ads: não consegui ler a conta ${id} (${err.message}).`);
+      avisos.push(`Meta Ads: não consegui ler a conta ${nomes[id] || id} (${err.message}).`);
     }
   }
-  if (!atuais.length) return { ok: false, avisos };
-  const a = somar(atuais);
-  const b = anteriores.length ? somar(anteriores) : null;
-  return {
-    ok: true, avisos, porConta,
-    atual: { ...a, ctr: a.impressoes ? (a.cliques / a.impressoes) * 100 : null, frequencia: a.alcance ? a.impressoes / a.alcance : null, cpl: a.resultados ? a.gasto / a.resultados : null, tipos: [...a.tipos] },
-    anterior: b ? { ...b, cpl: b.resultados ? b.gasto / b.resultados : null } : null,
-    mistura: a.tipos.size > 1, // contas com tipos de resultado diferentes (lead x conversa): a soma mistura os dois
-  };
+  return { contas, avisos };
 }
 
 export async function painelVendas(tenantId, { de, ate } = {}) {
@@ -215,32 +199,31 @@ export async function painelVendas(tenantId, { de, ate } = {}) {
     fechamento: fechamento === null ? (orc ? 'sem orçamentos no período' : 'sem dados do Clinicorp') : 'orçamentos aprovados no período',
     parados: parados === null ? 'sem dados do Clinicorp' : `${reais(valorParado)} em aberto`,
   };
-  // ----- Meta Ads (opcional: so se o gestor escolheu contas)
-  let anuncios = { conectado: null, escolhidas: [], contas: [] };
+  // ----- Meta Ads (opcional: so se o gestor escolheu contas). Cada conta aparece separada.
+  let anuncios = { conectado: null, escolhidas: [], contas: [], colunas: COLUNAS_META };
   const escolhidas = await store.obterConfig(tenantId, CHAVE_CONTAS_META, []);
   if (escolhidas.length) {
-    const m = await metricasMeta(tenantId, escolhidas, { de: periodoDe, ate: periodoAte });
+    const nomes = Object.fromEntries(((await contasMeta(tenantId).catch(() => ({ contas: [] }))).contas).map((c) => [c.id, c.nome]));
+    const m = await metricasMeta(tenantId, escolhidas, { de: periodoDe, ate: periodoAte }, nomes);
     avisos.push(...m.avisos);
     const vendasAnuncio = origemLinhas.filter((l) => l.fonte === 'meta_ads').reduce((s, l) => s + l.compraram, 0);
-    const nomes = Object.fromEntries(((await contasMeta(tenantId).catch(() => ({ contas: [] }))).contas).map((c) => [c.id, c.nome]));
-    if (m.ok) {
-      const at = m.atual;
-      valores.investimento = Math.round(at.gasto * 100) / 100;
-      valores.resultadosAnuncio = at.resultados;
-      valores.cpl = at.cpl === null ? null : Math.round(at.cpl * 100) / 100;
-      valores.custoPorVenda = vendasAnuncio ? Math.round((at.gasto / vendasAnuncio) * 100) / 100 : null;
-      Object.assign(rotulos, { investimento: 'Investimento em anúncios (Meta)', resultadosAnuncio: 'Resultados dos anúncios', cpl: 'Custo por resultado', custoPorVenda: 'Custo por venda (anúncio)' });
+    anuncios = { conectado: true, escolhidas, contas: m.contas, colunas: COLUNAS_META, vendasAnuncio, unica: m.contas.length === 1 };
+    if (m.contas.length > 1) anuncios.nota = 'Cada conta aparece separada, sem somar. Os cartões de indicadores de anúncio só aparecem quando há uma conta escolhida, para não misturar cenários.';
+    if (m.contas.length === 1) {
+      const { metricas: at, anterior: ant, nome } = m.contas[0];
+      valores.investimento = arred2(at.gasto);
+      valores.resultadosAnuncio = at.conversas;
+      valores.cpl = arred2(at.custoPorConversa);
+      valores.custoPorVenda = vendasAnuncio ? arred2(at.gasto / vendasAnuncio) : null;
+      Object.assign(rotulos, { investimento: 'Valor gasto (Meta)', resultadosAnuncio: 'Conversas por mensagem iniciadas', cpl: 'Custo por conversa por mensagem', custoPorVenda: 'Custo por venda (anúncio)' });
       Object.assign(formatos, { investimento: 'reais', resultadosAnuncio: 'numero', cpl: 'reais', custoPorVenda: 'reais' });
-      const ant = m.anterior;
       Object.assign(comparacoes, {
-        investimento: ant ? variacao(at.gasto, ant.gasto) : `${escolhidas.length} conta(s) escolhida(s)`,
-        resultadosAnuncio: `${m.atual.tipos.join(', ') || 'sem resultados'}${ant ? ` · ${variacao(at.resultados, ant.resultados)}` : ''}`,
-        cpl: at.cpl === null ? 'sem resultados no período' : ant && ant.cpl ? variacao(at.cpl, ant.cpl) : `CTR ${at.ctr === null ? '—' : at.ctr.toFixed(2).replace('.', ',')}%`,
+        investimento: ant ? `${nome} · ${variacao(at.gasto, ant.gasto)}` : nome,
+        resultadosAnuncio: ant ? variacao(at.conversas, ant.conversas) : nome,
+        cpl: at.custoPorConversa === null ? 'sem conversas no período' : ant && ant.custoPorConversa ? variacao(at.custoPorConversa, ant.custoPorConversa) : nome,
         custoPorVenda: vendasAnuncio ? `${vendasAnuncio} venda(s) de anúncio no CRM` : 'nenhuma venda de anúncio marcada no CRM',
       });
-      if (m.mistura) avisos.push('As contas escolhidas misturam tipos de resultado (ex.: lead e conversa iniciada); o total soma os dois.');
-      anuncios = { conectado: true, escolhidas, contas: m.porConta.map((c) => ({ ...c, nome: nomes[c.id] || c.id })), ctr: at.ctr, alcance: at.alcance, frequencia: at.frequencia, impressoes: at.impressoes, cliques: at.cliques, gasto: at.gasto, resultados: at.resultados, cpl: at.cpl, vendasAnuncio };
-    } else anuncios = { conectado: true, escolhidas, contas: [] };
+    }
   }
 
   const kpis = Object.keys(rotulos).map((id) => ({
@@ -278,8 +261,8 @@ export async function painelVendas(tenantId, { de, ate } = {}) {
     if (melhor.compraram > 0) decidirHoje.push(`Melhor conversão por origem: ${melhor.fonte} (${melhor.compraram} de ${melhor.leads} leads compraram).`);
     if (pior) decidirHoje.push(`${pior.fonte} trouxe ${pior.leads} leads e nenhuma compra no período.`);
   }
-  if (anuncios.gasto > 0 && anuncios.resultados === 0) decidirHoje.push(`Os anúncios gastaram ${reais(anuncios.gasto)} no período e não trouxeram nenhum resultado.`);
-  if (valores.cpl !== null && valores.cpl !== undefined && metas.cpl?.meta != null && valores.cpl > metas.cpl.meta) decidirHoje.push(`O custo por resultado dos anúncios está em ${reais(valores.cpl)} (meta ${reais(metas.cpl.meta)}).`);
+  for (const c of anuncios.contas) if (c.metricas.gasto > 0 && c.metricas.conversas === 0) decidirHoje.push(`A conta ${c.nome} gastou ${reais(c.metricas.gasto)} no período e não teve nenhuma conversa por mensagem.`);
+  if (valores.cpl !== null && valores.cpl !== undefined && metas.cpl?.meta != null && valores.cpl > metas.cpl.meta) decidirHoje.push(`O custo por conversa dos anúncios está em ${reais(valores.cpl)} (meta ${reais(metas.cpl.meta)}).`);
   if (valores.custoPorVenda !== null && valores.custoPorVenda !== undefined) decidirHoje.push(`Cada venda vinda de anúncio custou ${reais(valores.custoPorVenda)} em investimento.`);
   if (!decidirHoje.length) decidirHoje.push('Nada fora do normal nos números deste período.');
 
@@ -384,7 +367,7 @@ export function indicadoresManuais(setor) {
 }
 export function catalogoDeMetas() {
   const cat = { vendas: { nome: 'Vendas', indicadores: [] } };
-  const rotulosVendas = { leads: ['Leads novos', 'numero'], semResposta: ['Sem resposta há mais de 1h', 'numero'], agendaram: ['Agendaram avaliação', 'percentual'], comparecimento: ['Comparecimento', 'percentual'], fechamento: ['Fechamento de orçamentos', 'percentual'], parados: ['Orçamentos parados há mais de 7 dias', 'numero'], investimento: ['Investimento em anúncios (Meta)', 'reais'], resultadosAnuncio: ['Resultados dos anúncios', 'numero'], cpl: ['Custo por resultado (anúncios)', 'reais'], custoPorVenda: ['Custo por venda (anúncio)', 'reais'] };
+  const rotulosVendas = { leads: ['Leads novos', 'numero'], semResposta: ['Sem resposta há mais de 1h', 'numero'], agendaram: ['Agendaram avaliação', 'percentual'], comparecimento: ['Comparecimento', 'percentual'], fechamento: ['Fechamento de orçamentos', 'percentual'], parados: ['Orçamentos parados há mais de 7 dias', 'numero'], investimento: ['Valor gasto (Meta)', 'reais'], resultadosAnuncio: ['Conversas por mensagem iniciadas', 'numero'], cpl: ['Custo por conversa por mensagem', 'reais'], custoPorVenda: ['Custo por venda (anúncio)', 'reais'] };
   for (const [id, m] of Object.entries(METAS_VENDAS)) cat.vendas.indicadores.push({ id, rotulo: rotulosVendas[id][0], formato: rotulosVendas[id][1], melhor: m.melhor, padrao: m.meta });
   for (const [setor, def] of Object.entries(DEFS)) {
     cat[setor] = { nome: def.nome, indicadores: Object.entries(def.indicadores).map(([id, d]) => ({ id, rotulo: d.rotulo, formato: d.formato, melhor: d.melhor, padrao: d.meta })) };

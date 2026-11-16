@@ -5,6 +5,7 @@
 // identico, sem depender da IA estar disponivel pro envio automatico funcionar.
 import { pool } from './db.js';
 import * as metaAds from './metaads.js';
+import { normalizarLinha, formatarMetrica } from './metaMetricas.js';
 import * as clinicorp from './clinicorp.js';
 import { enviarMensagemTexto, enviarMensagemTextoPor } from './evolutionApi.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
@@ -300,9 +301,6 @@ function periodoDiasCalendario(frequencia) {
   return { since: desdeDate.toISOString().slice(0, 10), until: hoje, hoje };
 }
 
-function extrairValorAcao(campo) {
-  return Array.isArray(campo) && campo.length ? Number(campo[0].value || 0) : 0;
-}
 
 // dica de analise gerada por regra fixa (sem IA) - pedido explicito do usuario de nao
 // depender da Claude pra relatorio agendado, pra sempre sair identico e nao falhar se a
@@ -320,50 +318,69 @@ function gerarDicaAnalise({ freqAnuncio, resultados, gasto, videoViews50, videoV
   return 'sem alerta relevante no periodo - campanha performando dentro do esperado.';
 }
 
-function montarBlocoCampanha({ conta, campanha, row, frequencia, hoje }) {
-  const { resultados, custoPorResultado } = metaAds.extractResultsAndCPA(row);
-  const cliquesLink = Number(row.inline_link_clicks || 0);
-  const gasto = Number(row.spend || 0);
-  const alcance = Number(row.reach || 0);
-  const impressoes = Number(row.impressions || 0);
-  const freqAnuncio = Number(row.frequency || 0);
-  const visualizacoesTotais = extrairValorAcao(row.video_play_actions);
-  const videoViews50 = extrairValorAcao(row.video_p50_watched_actions);
-  const videoViews75 = extrairValorAcao(row.video_p75_watched_actions);
-  const videoViews95 = extrairValorAcao(row.video_p95_watched_actions);
-  const dica = gerarDicaAnalise({ freqAnuncio, resultados, gasto, videoViews50, videoViews95 });
+// bloco de metricas no padrao do relatorio oficial do Gerenciador (mesmas colunas, mesmo calculo).
+// "m" = normalizarLinha(row) de UMA campanha ou de UMA conta - nunca soma de contas diferentes.
+function linhasDeMetricas(m) {
+  const f = formatarMetrica;
+  return [
+    '📥 1. CONVERSAS & CUSTO',
+    `* 💬 Conversas por mensagem iniciadas: ${f(m.conversas, 'numero')}`,
+    `* 💰 Custo por conversa por mensagem: ${f(m.custoPorConversa, 'reais')}`,
+    `* 💵 Valor gasto: ${f(m.gasto, 'reais')}`,
+    '',
+    '👁️ 2. ALCANCE & ENTREGA',
+    `* 👥 Alcance: ${f(m.alcance, 'numero')} (pessoas únicas que viram)`,
+    `* 🔄 Impressões: ${f(m.impressoes, 'numero')} (total de vezes que o anúncio apareceu)`,
+    `* 🔁 Frequência: ${f(m.frequencia, 'decimal')} (quantas vezes a mesma pessoa viu o anúncio)`,
+    `* 📈 Visualizações: ${f(m.visualizacoes, 'numero')}`,
+    '',
+    '🎬 3. RETENÇÃO DE VÍDEO',
+    `* 🍿 Reproduções de 50% do vídeo: ${f(m.video50, 'numero')}`,
+    `* ⏳ Reproduções de 75% do vídeo: ${f(m.video75, 'numero')}`,
+    `* 🔥 Reproduções de 95% do vídeo: ${f(m.video95, 'numero')}`,
+    `* 🏁 Reproduções de 100% do vídeo: ${f(m.video100, 'numero')}`,
+    '',
+    '🖱️ 4. CLIQUES & CUSTO DE TRÁFEGO',
+    `* 🔗 Cliques no link: ${f(m.cliquesLink, 'numero')}`,
+    `* 💲 CPC (custo por clique no link): ${f(m.cpcLink, 'reais')}`,
+    `* 👆 Cliques (todos): ${f(m.cliques, 'numero')}`,
+    `* 💲 CPC (todos): ${f(m.cpc, 'reais')}`,
+    `* 📊 CPM (custo por 1.000 impressões): ${f(m.cpm, 'reais')}`,
+    `* 📉 CTR (todos): ${f(m.ctr, 'percentual')}`,
+  ];
+}
 
+export function montarBlocoCampanha({ conta, campanha, row, frequencia, hoje }) {
+  const m = normalizarLinha(row);
+  const dica = gerarDicaAnalise({ freqAnuncio: m.frequencia || 0, resultados: m.conversas, gasto: m.gasto, videoViews50: m.video50, videoViews95: m.video95 });
   return [
     '📱 RELATÓRIO DE MÉTRICAS: META ADS 📱',
-    `Campanha: ${campanha.name} (${conta.empresa || conta.name})`,
+    `Conta: ${conta.name}${conta.empresa ? ` (${conta.empresa})` : ''}`,
+    `Campanha: ${campanha.name}`,
     `Data: ${formatarDataBR(hoje)} DAS 00H AS 23:59 Período de Análise: ${LABEL_FREQUENCIA[frequencia] || frequencia.toUpperCase()}`,
     '',
-    '📥 1. FUNIL DE CONVERSÃO & VENDAS',
-    'Métricas principais focadas em trazer clientes para o WhatsApp.',
-    '',
-    `* 💬 Conversas Iniciadas: ${resultados} resultados`,
-    `* 💰 Custo por Conversa (CPR): ${formatarReais(custoPorResultado || 0)}`,
-    `* 🖱️ Cliques no Link: ${cliquesLink} interesses diretos`,
-    '',
-    '👁️ 2. ALCANCE & ENTREGA DO ANÚNCIO',
-    'Como o algoritmo está distribuindo as suas campanhas.',
-    '',
-    `* 👥 Alcance: ${alcance} (pessoas únicas que viram)`,
-    `* 🔄 Impressões: ${impressoes} (total de vezes que o anúncio apareceu)`,
-    `* 🔁 Frequência: ${freqAnuncio.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (quantas vezes a mesma pessoa viu o anúncio, ex: 1.45)`,
-    `* 📈 Visualizações Totais: ${visualizacoesTotais}`,
-    '',
-    '🎬 3. RETENÇÃO & ENGAJAMENTO DE VÍDEO (Vídeo Views)',
-    'Comportamento do público assistindo aos seus criativos.',
-    '',
-    `* 🍿 Reproduções de 50% do Vídeo: ${videoViews50} pessoas`,
-    `* ⏳ Reproduções de 75% do Vídeo: ${videoViews75} pessoas (público quente)`,
-    `* 🔥 Reproduções de 95% do Vídeo: ${videoViews95} pessoas (público ultra-interessado)`,
+    ...linhasDeMetricas(m),
     '',
     '🕵️‍♂️ ANÁLISE DO AGENTE DE IA',
     `💡 Dica de análise: ${dica}`,
     '',
     '🤖 Relatório de Métricas Avançadas gerado pela sua IA.',
+  ].join('\n');
+}
+
+// resumo da CONTA (calculado na propria conta pelo Meta, entao alcance/frequencia ja vem sem repeticao).
+// Cada conta tem o seu bloco: contas diferentes nunca sao somadas.
+export function montarBlocoConta({ conta, row, frequencia, hoje, campanhas }) {
+  const m = normalizarLinha(row);
+  return [
+    '📱 RELATÓRIO DE MÉTRICAS: META ADS 📱',
+    `RESUMO DA CONTA: ${conta.name}${conta.empresa ? ` (${conta.empresa})` : ''}`,
+    `Data: ${formatarDataBR(hoje)} DAS 00H AS 23:59 Período de Análise: ${LABEL_FREQUENCIA[frequencia] || frequencia.toUpperCase()}`,
+    `Campanhas ativas no relatório: ${campanhas}`,
+    '',
+    ...linhasDeMetricas(m),
+    '',
+    'ℹ️ Este resumo considera todas as campanhas da conta no período (inclusive as não listadas abaixo). Os números das campanhas a seguir não se somam a ele.',
   ].join('\n');
 }
 
@@ -379,6 +396,7 @@ export async function gerarRelatorioAdsMetricasCompleto(tenantId, { frequencia =
     } catch { continue; }
     if (!campanhas.length) continue;
 
+    const blocosDaConta = [];
     for (const camp of campanhas) {
       // so entra no relatorio campanha que tem PELO MENOS 1 anuncio REALMENTE ativo agora
       // (effective_status ACTIVE) com dado no periodo - campanha marcada ACTIVE mas com todos
@@ -398,8 +416,15 @@ export async function gerarRelatorioAdsMetricasCompleto(tenantId, { frequencia =
       const row = rows[0];
       if (!row || !(Number(row.spend) > 0 || Number(row.impressions) > 0)) continue;
 
-      blocos.push(montarBlocoCampanha({ conta: c, campanha: camp, row, frequencia, hoje }));
+      blocosDaConta.push(montarBlocoCampanha({ conta: c, campanha: camp, row, frequencia, hoje }));
     }
+    if (!blocosDaConta.length) continue;
+    // resumo da conta (nivel conta no Meta); se falhar, o relatorio segue so com as campanhas
+    try {
+      const [rowConta] = await metaAds.getInsights(tenantId, { objectId: c.id, objectType: 'account', level: 'account', since, until });
+      blocos.push(montarBlocoConta({ conta: c, row: rowConta, frequencia, hoje, campanhas: blocosDaConta.length }));
+    } catch { /* sem resumo da conta */ }
+    blocos.push(...blocosDaConta);
   }
 
   if (!blocos.length) {
