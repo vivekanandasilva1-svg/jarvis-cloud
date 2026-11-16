@@ -84,7 +84,7 @@ export async function registrarEventoChamada(tenantId, instancia, evento) {
 }
 
 // registro manual: ligacao feita/recebida por fora do WhatsApp (celular, telefone) - fica junto no relatorio
-export async function registrarChamadaManual(tenantId, { numero, nome, direcao, status, quando, duracaoSeg, operadorNome, obs }) {
+export async function registrarChamadaManual(tenantId, { numero, nome, direcao, status, quando, duracaoSeg, operadorNome, obs, instancia }) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
   const n = String(numero || '').replace(/\D/g, '');
@@ -97,8 +97,8 @@ export async function registrarChamadaManual(tenantId, { numero, nome, direcao, 
   const fim = dur !== null ? new Date(inicio.getTime() + dur * 1000) : inicio;
   const { rows } = await pool.query(
     `INSERT INTO crm_chamadas (tenant_id, instancia, numero, nome, direcao, status, inicio, atendida_em, fim, duracao_seg, origem, operador_nome, obs)
-     VALUES ($1, 'manual', $2, $3, $4, $5, $6, $7, $8, $9, 'manual', $10, $11) RETURNING id`,
-    [tenantId, n, String(nome || '').trim().slice(0, 120) || null, dir, st, inicio, st === 'atendida' ? inicio : null, fim, dur, String(operadorNome || '').slice(0, 120) || null, String(obs || '').trim().slice(0, 500) || null],
+     VALUES ($1, $12, $2, $3, $4, $5, $6, $7, $8, $9, 'manual', $10, $11) RETURNING id`,
+    [tenantId, n, String(nome || '').trim().slice(0, 120) || null, dir, st, inicio, st === 'atendida' ? inicio : null, fim, dur, String(operadorNome || '').slice(0, 120) || null, String(obs || '').trim().slice(0, 500) || null, String(instancia || 'manual').slice(0, 120)],
   );
   return rows[0].id;
 }
@@ -110,13 +110,16 @@ export async function apagarChamada(tenantId, id) {
 }
 
 // de/ate 'YYYY-MM-DD' (Maceio, UTC-3): resumo + lista + volume por hora
-export async function relatorioChamadas(tenantId, { de, ate }) {
+export async function relatorioChamadas(tenantId, { de, ate, instancia }) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
   const inicio = new Date(`${de}T00:00:00-03:00`);
   const fim = new Date(new Date(`${ate}T00:00:00-03:00`).getTime() + 86400000);
   if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime()) || fim <= inicio) throw new Error('Periodo invalido.');
   const p = [tenantId, inicio, fim];
+  // filtro opcional por numero de WhatsApp (ex.: so as ligacoes do numero responsavel pelas Indicacoes)
+  const fi = instancia ? ` AND instancia = $${p.push(String(instancia))}` : '';
+  const fiCh = instancia ? ` AND ch.instancia = $${p.length}` : '';
   const [{ rows: [r] }, { rows: horas }, { rows: lista }] = await Promise.all([
     pool.query(
       `SELECT count(*)::int AS total,
@@ -126,14 +129,14 @@ export async function relatorioChamadas(tenantId, { de, ate }) {
               (count(*) FILTER (WHERE direcao = 'feita'))::int AS feitas,
               COALESCE(sum(duracao_seg), 0)::int AS segundos_total,
               COALESCE(avg(duracao_seg) FILTER (WHERE duracao_seg > 0), 0)::int AS segundos_medio
-       FROM crm_chamadas WHERE tenant_id = $1 AND inicio >= $2 AND inicio < $3`, p),
+       FROM crm_chamadas WHERE tenant_id = $1 AND inicio >= $2 AND inicio < $3${fi}`, p),
     pool.query(
       `SELECT extract(hour FROM inicio AT TIME ZONE 'America/Maceio')::int AS hora, count(*)::int AS total
-       FROM crm_chamadas WHERE tenant_id = $1 AND inicio >= $2 AND inicio < $3 GROUP BY 1 ORDER BY 1`, p),
+       FROM crm_chamadas WHERE tenant_id = $1 AND inicio >= $2 AND inicio < $3${fi} GROUP BY 1 ORDER BY 1`, p),
     pool.query(
       `SELECT ch.id, ch.numero, COALESCE(ch.nome, c.nome) AS nome, ch.direcao, ch.video, ch.status, ch.inicio, ch.duracao_seg, ch.origem, ch.operador_nome, ch.obs
        FROM crm_chamadas ch LEFT JOIN crm_contatos c ON c.tenant_id = ch.tenant_id AND c.numero = ch.numero AND c.instancia = ch.instancia
-       WHERE ch.tenant_id = $1 AND ch.inicio >= $2 AND ch.inicio < $3 ORDER BY ch.inicio DESC LIMIT 300`, p),
+       WHERE ch.tenant_id = $1 AND ch.inicio >= $2 AND ch.inicio < $3${fiCh} ORDER BY ch.inicio DESC LIMIT 300`, p),
   ]);
   return { resumo: r, porHora: horas, chamadas: lista };
 }

@@ -35,6 +35,10 @@ import * as clinicorpFollowUp from './clinicorpFollowUp.js';
 import { iniciarSchedulerClinicorpFollowUp } from './clinicorpFollowUp.js';
 import * as followUpInteligente from './followUpInteligente.js';
 import * as funilFU from './funilFollowUp.js';
+import * as indicacoes from './indicacoes.js';
+import * as resgate from './resgate.js';
+import * as metaSaude from './metaSaude.js';
+import * as indicacoesIA from './indicacoesIA.js';
 import * as aniversariantes from './aniversariantes.js';
 import * as gestao from './gestao.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
@@ -91,6 +95,8 @@ const TAB_ROTA_PREFIXO = {
   followUp: '/api/follow-up',
   followUpInteligente: '/api/fu-inteligente',
   funilFollowUp: '/api/funil-fu',
+  indicacoes: '/api/indicacoes',
+  resgateOrcamentos: '/api/resgate',
   disparos: '/api/disparos',
   aniversariantes: '/api/aniversariantes',
   gestaoGeral: '/api/gestao',
@@ -126,7 +132,9 @@ app.use(async (req, res, next) => {
     req.path.startsWith('/api/crm/midia/') ||
     // pagina de proposta comercial (public/proposta.html) e publica, sem login - quem preenche
     // e o proprio Vivekananda direto no navegador, e quem le o link e o cliente em potencial
-    req.path.startsWith('/api/propostas')
+    req.path.startsWith('/api/propostas') ||
+    // formulario publico de indicacao (link da clinica, protegido por token longo + honeypot + limite por IP)
+    req.path.startsWith('/api/publico/indicacao/')
   ) return next();
 
   // /api/agenda/google/conectar e navegacao de pagina de verdade (o navegador redireciona pro
@@ -151,7 +159,9 @@ app.use(async (req, res, next) => {
     if (req.operadorId > 0) {
       const soDono = req.path.startsWith('/api/colaboradores')
         || (req.method !== 'GET' && (req.path.startsWith('/api/crm/distribuicao') || req.path.startsWith('/api/crm/clinicorp-followup')))
-        || (req.method !== 'GET' && /^\/api\/whatsapp\/instancias\/[^/]+\/operador$/.test(req.path));
+        || (req.method !== 'GET' && /^\/api\/whatsapp\/instancias\/[^/]+\/operador$/.test(req.path))
+        || (req.method !== 'GET' && req.path === '/api/indicacoes/config')
+        || (req.method !== 'GET' && req.path === '/api/resgate/config');
       if (soDono) return res.status(403).json({ erro: 'so o acesso principal da conta pode fazer isso' });
     }
     const abaProtegida = Object.entries(TAB_ROTA_PREFIXO).find(([, prefixo]) => req.path.startsWith(prefixo));
@@ -393,6 +403,25 @@ app.use(express.static(PUBLIC_DIR));
 
 // landing page publica de venda (public/conheca.html) com endereco curto
 app.get('/conheca', (req, res) => res.sendFile('conheca.html', { root: PUBLIC_DIR }));
+
+// ---------- Indicacoes: formulario publico (public/indicacao.html) ----------
+app.get('/indicacao/:token', (req, res) => res.sendFile('indicacao.html', { root: PUBLIC_DIR }));
+app.get('/api/publico/indicacao/:token', async (req, res) => {
+  try {
+    const info = await indicacoes.infoPublica(req.params.token);
+    if (!info) return res.status(404).json({ erro: 'Link inválido ou desativado.' });
+    res.json(info);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro inesperado.' });
+  }
+});
+app.post('/api/publico/indicacao/:token', async (req, res) => {
+  try {
+    res.json(await indicacoes.registrarPublico(req.params.token, req.body || {}, req.ip));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
 
 // ---------- Proposta comercial (public/proposta.html) - link curto por id em vez de query string ----------
 app.post('/api/propostas', async (req, res) => {
@@ -1426,6 +1455,19 @@ async function processarMensagemEvolution(instanciaDoWebhook, data) {
     return;
   }
 
+  // numero responsavel pelas Indicacoes: SO a IA exclusiva dessa aba responde aqui (prompt/arquivos/memoria proprios),
+  // nunca o Follow Up nem o Auto Atendimento normal. IA pausada/desligada = ninguem responde sozinho (a equipe atende).
+  if (await indicacoesIA.ehNumeroDasIndicacoes(tenantId, instanciaDoWebhook).catch(() => false)) {
+    return processarEmFila(`${tenantId}:${numero}`, async () => {
+      try {
+        await indicacoesIA.atender(tenantId, numero, instanciaDoWebhook, { texto, tipo });
+      } catch (err) {
+        console.error('Erro na IA das Indicacoes:', err);
+        if (ehErroDeCredito(err)) registrarFalhaCredito().catch(() => {});
+      }
+    });
+  }
+
   // se o card desse contato estiver na coluna "Follow Up" do CRM, quem responde e o motor de
   // Follow Up (followUp.js) - substitui 100% o auto-atendimento normal enquanto estiver nessa
   // coluna, pra nunca ter os dois motores respondendo a mesma conversa ao mesmo tempo. So volta
@@ -1744,6 +1786,400 @@ app.put('/api/funil-fu/tarefas', async (req, res) => {
   try {
     await funilFU.salvarTarefas(req.tenantId, req.body?.tarefas);
     res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// ---------- Saude das contas de anuncios do Meta (alertas diarios) ----------
+app.get('/api/ads/saude', async (req, res) => {
+  try {
+    if (req.operadorId > 0) return res.status(403).json({ erro: 'so o acesso principal da conta pode ver isso' });
+    res.json({ alertas: await metaSaude.listarAbertos(req.tenantId), ultima: await metaSaude.ultimaExecucao(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/ads/saude/verificar', async (req, res) => {
+  try {
+    if (req.operadorId > 0) return res.status(403).json({ erro: 'so o acesso principal da conta pode fazer isso' });
+    const r = await metaSaude.verificarTenant(req.tenantId);
+    res.json({ ok: true, ...r });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// ---------- Resgate de orcamentos (aba: orcamentos aprovados inacabados, funil da CRM) ----------
+// quando ha operador responsavel, so ele (e o acesso principal) acessa os dados dessa atividade
+app.use('/api/resgate', async (req, res, next) => {
+  try {
+    if (!(req.operadorId > 0)) return next();
+    const cfg = await resgate.obterConfig(req.tenantId);
+    if (cfg.operador_id !== null && cfg.operador_id !== undefined && cfg.operador_id !== req.operadorId) {
+      const op = (await crm.listarOperadores(req.tenantId).catch(() => [])).find((o) => o.id === cfg.operador_id);
+      return res.status(403).json({ erro: `Esta atividade está com ${op?.nome || 'outro operador'}.`, bloqueado: true });
+    }
+    next();
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.get('/api/resgate', async (req, res) => {
+  try {
+    const cfg = await resgate.obterConfig(req.tenantId);
+    const operadores = (await crm.listarOperadores(req.tenantId).catch(() => [])).filter((o) => o.id > 0);
+    // primeira abertura: carga inicial no Clinicorp em segundo plano
+    if (!cfg.ultima_sync) resgate.sincronizar(req.tenantId, { janelas: 6 }).catch((err) => console.error('[resgate] carga inicial:', err.message));
+    res.json({
+      etapas: resgate.ETAPAS, resultados: resgate.RESULTADOS,
+      mensagem: cfg.msg_whatsapp || resgate.MSG_PADRAO, mensagemPersonalizada: !!cfg.msg_whatsapp,
+      operadorId: cfg.operador_id, operadorNome: operadores.find((o) => o.id === cfg.operador_id)?.nome || null,
+      operadores, podeEscolherOperador: !(req.operadorId > 0),
+      ultimaSync: cfg.ultima_sync, resumoSync: cfg.ultimo_resumo, carregando: !cfg.ultima_sync,
+      pacientes: await resgate.listar(req.tenantId),
+    });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/atualizar', async (req, res) => {
+  try {
+    const cfg = await resgate.obterConfig(req.tenantId);
+    if (cfg.ultima_sync && Date.now() - new Date(cfg.ultima_sync).getTime() < 10 * 60000) {
+      return res.status(429).json({ erro: 'A última atualização foi há poucos minutos. O Clinicorp limita as consultas por hora - tente de novo em instantes.' });
+    }
+    res.json({ ok: true, ...(await resgate.sincronizar(req.tenantId, { janelas: 4 })) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.put('/api/resgate/config', async (req, res) => {
+  try {
+    await resgate.definirOperador(req.tenantId, req.body?.operadorId, await crm.listarOperadores(req.tenantId));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.put('/api/resgate/mensagem', async (req, res) => {
+  try {
+    await resgate.salvarMensagem(req.tenantId, req.body?.mensagem);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/:id/etapa', async (req, res) => {
+  try {
+    await resgate.moverEtapa(req.tenantId, req.params.id, req.body?.etapa);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/:id/tentativa', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json(await resgate.registrarTentativa(req.tenantId, req.params.id, { ...(req.body || {}), autor: perfil?.nome }));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/:id/retorno', async (req, res) => {
+  try {
+    await resgate.definirRetorno(req.tenantId, req.params.id, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/resgate/:id/retorno', async (req, res) => {
+  try {
+    await resgate.limparRetorno(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.get('/api/resgate/:id/notas', async (req, res) => {
+  try {
+    res.json({ notas: await resgate.listarNotas(req.tenantId, req.params.id), euId: req.operadorId || 0 });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/:id/notas', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json({ ok: true, nota: await resgate.criarNota(req.tenantId, req.params.id, { texto: req.body?.texto, autorId: req.operadorId || 0, autorNome: perfil?.nome }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/resgate/notas/:id', async (req, res) => {
+  try {
+    await resgate.apagarNota(req.tenantId, req.params.id, req.operadorId || 0);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// ---------- Indicacoes (aba: indicador -> indicado, funil da CRM de indicacoes) ----------
+app.get('/api/indicacoes', async (req, res) => {
+  try {
+    const [lista, config] = await Promise.all([indicacoes.listar(req.tenantId), indicacoes.obterConfig(req.tenantId)]);
+    // numeros conectados da conta (com o operador de cada um) pra escolher o responsavel pelas Indicacoes
+    const permitidas = new Set(await tenants.listarInstanciasDoTenant(req.tenantId).catch(() => []));
+    const [evo, porNumero, operadores] = await Promise.all([evolutionApi.listarInstancias().catch(() => []), tenants.operadoresPorNumero(req.tenantId).catch(() => ({})), crm.listarOperadores(req.tenantId).catch(() => [])]);
+    const numeros = evo.filter((i) => permitidas.has(i.nome) && !String(i.nome).startsWith('ig:')).map((i) => ({
+      nome: i.nome, numero: i.numero || null, status: i.status || null,
+      operadorId: porNumero[i.nome] ?? null, operadorNome: porNumero[i.nome] !== undefined ? (operadores.find((o) => o.id === porNumero[i.nome])?.nome || null) : null,
+    }));
+    res.json({ etapas: indicacoes.ETAPAS, origens: indicacoes.ORIGENS, resultados: indicacoes.RESULTADOS, etapasResp: indicacoes.ETAPAS_RESP, token: config.token, instancia: config.instancia, numeros, mensagens: { pedido: config.msg_pedido || indicacoes.MSG_PEDIDO_PADRAO, link: config.msg_link || indicacoes.MSG_LINK_PADRAO, personalizadas: !!(config.msg_pedido || config.msg_link) }, ...lista });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+// ---- IA exclusiva da aba Indicacoes ----
+app.get('/api/indicacoes/ia', async (req, res) => {
+  try {
+    const [config, arquivos, cfgInd] = await Promise.all([indicacoesIA.obterConfig(req.tenantId), indicacoesIA.listarArquivos(req.tenantId), indicacoes.obterConfig(req.tenantId)]);
+    res.json({ config, arquivos, promptPadrao: indicacoesIA.PROMPT_PADRAO, instancia: cfgInd.instancia });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.put('/api/indicacoes/ia/config', async (req, res) => {
+  try {
+    await indicacoesIA.salvarConfig(req.tenantId, { ativo: !!req.body?.ativo, prompt: req.body?.prompt });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/ia/ativo', async (req, res) => {
+  try {
+    await indicacoesIA.definirAtivo(req.tenantId, !!req.body?.ativo);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/ia/arquivos', async (req, res) => {
+  try {
+    const { nomeArquivo, base64, mediaType, descricao } = req.body || {};
+    const id = await indicacoesIA.salvarArquivo(req.tenantId, { nomeArquivo, mediaType, descricao, buffer: Buffer.from(String(base64 || ''), 'base64') });
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/indicacoes/ia/arquivos/:id', async (req, res) => {
+  try {
+    await indicacoesIA.apagarArquivo(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/:id/ia-pausa', async (req, res) => {
+  try {
+    await indicacoesIA.pausarIndicado(req.tenantId, req.params.id, !!req.body?.pausada);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// ---- relatorio de ligacoes do numero responsavel pelas Indicacoes ----
+app.get('/api/indicacoes/ligacoes', async (req, res) => {
+  try {
+    const cfg = await indicacoes.obterConfig(req.tenantId);
+    if (!cfg.instancia) return res.status(400).json({ erro: 'Escolha primeiro o número responsável pelas Indicações.' });
+    const hoje = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+    const ate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.ate || '')) ? String(req.query.ate) : hoje;
+    const de = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.de || '')) ? String(req.query.de) : new Date(Date.now() - 3 * 3600000 - 29 * 86400000).toISOString().slice(0, 10);
+    res.json({ instancia: cfg.instancia, ...(await chamadas.relatorioChamadas(req.tenantId, { de, ate, instancia: cfg.instancia })) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/ligacoes', async (req, res) => {
+  try {
+    const cfg = await indicacoes.obterConfig(req.tenantId);
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    const b = req.body || {};
+    const id = await chamadas.registrarChamadaManual(req.tenantId, { numero: b.numero, nome: b.nome, direcao: 'feita', status: b.status, duracaoSeg: b.duracaoSeg, quando: b.quando, operadorNome: perfil?.nome, obs: b.obs, instancia: cfg.instancia || 'manual' });
+    res.json({ ok: true, id });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/indicacoes/ligacoes/:id', async (req, res) => {
+  try {
+    await chamadas.apagarChamada(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.put('/api/indicacoes/mensagens', async (req, res) => {
+  try {
+    await indicacoes.salvarMensagens(req.tenantId, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.put('/api/indicacoes/config', async (req, res) => {
+  try {
+    await indicacoes.definirInstancia(req.tenantId, req.body?.instancia || null, await tenants.listarInstanciasDoTenant(req.tenantId));
+    indicacoesIA.limparCacheNumero(req.tenantId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    const r = await indicacoes.cadastrarIndicacao(req.tenantId, { ...(req.body || {}), origem: req.body?.origem, autor: perfil?.nome });
+    res.json(r);
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/importar', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json({ ok: true, ...(await indicacoes.importarLista(req.tenantId, req.body?.linhas, perfil?.nome)) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/:id/etapa', async (req, res) => {
+  try {
+    await indicacoes.moverEtapa(req.tenantId, req.params.id, req.body?.etapa);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.put('/api/indicacoes/:id', async (req, res) => {
+  try {
+    await indicacoes.editar(req.tenantId, req.params.id, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/indicacoes/:id', async (req, res) => {
+  try {
+    await indicacoes.apagar(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/:id/tentativa', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json(await indicacoes.registrarTentativa(req.tenantId, req.params.id, { ...(req.body || {}), autor: perfil?.nome }));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/:id/retorno', async (req, res) => {
+  try {
+    await indicacoes.definirRetorno(req.tenantId, req.params.id, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/indicacoes/:id/retorno', async (req, res) => {
+  try {
+    await indicacoes.limparRetorno(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.get('/api/indicacoes/:id/notas', async (req, res) => {
+  try {
+    res.json({ notas: await indicacoes.listarNotas(req.tenantId, req.params.id), euId: req.operadorId || 0 });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/:id/notas', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json({ ok: true, nota: await indicacoes.criarNota(req.tenantId, req.params.id, { texto: req.body?.texto, autorId: req.operadorId || 0, autorNome: perfil?.nome }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/indicacoes/notas/:id', async (req, res) => {
+  try {
+    await indicacoes.apagarNota(req.tenantId, req.params.id, req.operadorId || 0);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/:id/cadastrar-clinicorp', async (req, res) => {
+  try {
+    res.json(await indicacoes.cadastrarNoClinicorp(req.tenantId, req.params.id));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/respostas/:id/etapa', async (req, res) => {
+  try {
+    await indicacoes.moverEtapaResposta(req.tenantId, req.params.id, req.body?.etapa);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.get('/api/indicacoes/respostas/:id/notas', async (req, res) => {
+  try {
+    res.json({ notas: await indicacoes.listarNotasResposta(req.tenantId, req.params.id), euId: req.operadorId || 0 });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/respostas/:id/notas', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json({ ok: true, nota: await indicacoes.criarNotaResposta(req.tenantId, req.params.id, { texto: req.body?.texto, autorId: req.operadorId || 0, autorNome: perfil?.nome }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/respostas/:id/contatado', async (req, res) => {
+  try {
+    await indicacoes.marcarRespostaContatada(req.tenantId, req.params.id, req.body?.contatado !== false);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/indicacoes/respostas/:id', async (req, res) => {
+  try {
+    await indicacoes.apagarResposta(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/indicacoes/:id/conferir-clinicorp', async (req, res) => {
+  try {
+    res.json({ ok: true, ...(await indicacoes.conferirNoClinicorp(req.tenantId, req.params.id)) });
   } catch (err) {
     res.status(400).json({ erro: err.message });
   }
@@ -2871,6 +3307,10 @@ app.get('/api/notificacoes', async (req, res) => {
         alertas.push({ tipo: 'saldo-baixo', recarregar: true, titulo: `Saldo da IA baixo (~US$ ${saldo.saldoUsd.toFixed(2)})`, detalhe: 'Recarregue antes que acabe e a IA pare de responder.' });
       }
     }
+    // saude das contas de anuncios do Meta (so o dono da conta ve; vem do monitor em metaSaude.js)
+    if (!(req.operadorId > 0)) {
+      for (const a of await metaSaude.listarAbertos(req.tenantId).catch(() => [])) alertas.push({ tipo: 'meta-ads', titulo: `Meta Ads · ${a.cliente || a.conta_nome}: ${a.titulo}`, detalhe: a.detalhe });
+    }
     const total = alertas.length + resumo.naoLidas.length + resumo.retornos.length + resumo.preAgendamentos.length + faltas.length;
     res.json({ total, ...resumo, faltas, alertas });
   } catch (err) {
@@ -3182,6 +3622,9 @@ followUp.iniciarSchedulerFollowUp();
 // Scheduler do Follow Up Inteligente (cards por etapa do funil) - desativado por tenant por padrao.
 followUpInteligente.iniciarSchedulerFollowUpInteligente();
 funilFU.iniciarSchedulerFunilFollowUp();
+indicacoes.iniciarSchedulerIndicacoes();
+resgate.iniciarSchedulerResgate();
+metaSaude.iniciarSchedulerMetaSaude();
 crm.iniciarVarreduraRepetidos();
 // Disparos (campanhas de mensagens em massa) - so envia campanhas que o dono iniciou/agendou na aba Disparos
 disparos.iniciarSchedulerDisparos();

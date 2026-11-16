@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261111c" />
+  <link rel="stylesheet" href="style.css?v=20261112h" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -91,6 +91,14 @@
           <span>Funil Follow Up</span>
         </button>
         <div class="nav-grupo">Clientes</div>
+        <button type="button" class="nav-btn" id="tabBtnIndicacoes" data-tab="indicacoes">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.3 0-.6 0-1 .1 1.2.8 2 1.9 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5z"/></svg>
+          <span>Indicações</span>
+        </button>
+        <button type="button" class="nav-btn" id="tabBtnResgate" data-tab="resgateOrcamentos">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 15h-2v-2h2zm0-4h-2V7h2z"/></svg>
+          <span>Resgate de orçamentos</span>
+        </button>
         <button type="button" class="nav-btn" id="tabBtnCrm" data-tab="crm">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 3h6v18H3V3zm8 0h6v10h-6V3zm8 0h2v18h-2V3zm-8 12h6v6h-6v-6z"/></svg>
           <span>CRM</span>
@@ -897,6 +905,282 @@
           <div id="ffuTarefasCampos"></div>
           <p class="crm-conversa-erro" id="ffuTarefasErro" hidden></p>
           <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="ffuTarefasSalvar" class="relatorio-config-enviar">Salvar</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="window-body tab-crm" id="tabIndicacoes" hidden>
+      <div class="crm-board-wrap">
+        <div class="crm-board-header">
+          <span>Indicações: quem indicou, quem foi indicado e o funil de contato (1ª tentativa no Dia 1, 2ª no Dia 2, 3ª no Dia 7).</span>
+          <div class="crm-board-nav">
+            <select id="indNumero" title="Número de WhatsApp responsável pelas Indicações"></select>
+            <input type="search" id="indBusca" placeholder="Buscar indicado ou indicador" class="ind-busca" />
+            <button type="button" id="indNovoBtn">+ Indicação</button>
+            <button type="button" id="indImportarBtn">Importar lista</button>
+            <button type="button" id="indMsgBtn" title="Editar os textos das mensagens de WhatsApp (pedir indicação e enviar o link)">Mensagens</button>
+            <button type="button" id="indLinkBtn" title="Link do formulário digital para mandar aos pacientes pelo WhatsApp">Link do formulário</button>
+            <button type="button" id="indRefresh">Atualizar</button>
+          </div>
+        </div>
+        <p class="ind-responsavel" id="indResponsavel"></p>
+        <div class="ind-subnav">
+          <button type="button" id="indVerPesquisa" class="ind-sub ativo">Funil de pacientes (pesquisa) <span class="ind-sub-qtd" id="indPesqQtd"></span></button>
+          <button type="button" id="indVerFunil" class="ind-sub">Indicados</button>
+          <button type="button" id="indVerLigacoes" class="ind-sub">Ligações</button>
+          <button type="button" id="indVerIA" class="ind-sub">IA da CRM <span class="ind-sub-qtd" id="indIaEstado"></span></button>
+        </div>
+        <p class="ind-resumo" id="indResumo" hidden></p>
+        <p class="ind-dica" id="indDicaIndicados" hidden>💡 <b>Como usar:</b> cada indicado tem 3 tentativas de contato: Dia 1, Dia 2 e Dia 7 (a contar da entrada). Registre cada tentativa em <b>Registrar tentativa</b> para o card avançar sozinho para a próxima; arraste o card para mudar de coluna.</p>
+        <div class="crm-board" id="indBoard" hidden><p class="agenda-vazia">Carregando...</p></div>
+        <div class="ind-pac" id="indPesquisa">
+          <p class="ind-resumo" id="indPacResumo"></p>
+          <p class="ind-dica">💡 <b>Como usar:</b> arraste o card entre as colunas (ou use o seletor dentro dele). O botão <b>Pedir indicação</b> abre o WhatsApp com a mensagem pronta (dá para editar antes de enviar) e já move o paciente para “Pedindo indicação”. Para mudar o texto padrão, clique em <b>Mensagens</b> no topo da aba: use <b>{nome}</b> para o primeiro nome do paciente e <b>{link}</b> para o endereço do formulário.</p>
+          <div class="crm-board" id="indPacBoard"><p class="agenda-vazia">Carregando...</p></div>
+        </div>
+        <div class="ind-pesquisa" id="indLigacoes" hidden>
+          <div class="ind-filtros">
+            <label>De <input type="date" id="indLigDe" /></label>
+            <label>Até <input type="date" id="indLigAte" /></label>
+            <button type="button" id="indLigAtualizar" class="crm-btn-secundario">Atualizar</button>
+            <button type="button" id="indLigNova">+ Registrar ligação</button>
+          </div>
+          <p class="ind-resumo" id="indLigInfo"></p>
+          <div class="ind-cards-resumo" id="indLigResumo"></div>
+          <div class="ct-tabela-wrap"><table class="ct-tabela" id="indLigTabela"></table></div>
+        </div>
+        <div class="ind-pesquisa" id="indIA" hidden>
+          <div class="auto-toggle-row">
+            <label class="auto-switch"><input type="checkbox" id="indIaAtivo" /><span class="auto-switch-track"><span class="auto-switch-thumb"></span></span></label>
+            <span id="indIaAtivoLabel">IA pausada</span>
+          </div>
+          <p class="ct-info">A IA responde só no número responsável pelas Indicações (escolhido no topo da aba). Quando está pausada, ninguém responde sozinho e a equipe atende. Também dá para pausar a IA em um contato específico, no card dele. Por enquanto ela responde mensagens de texto.</p>
+          <label class="auto-label">Prompt da IA das Indicações</label>
+          <textarea id="indIaPrompt" rows="9" placeholder="Como a IA deve conversar com os indicados..."></textarea>
+          <div class="ffu-acoes" style="margin-bottom:12px"><button type="button" id="indIaSalvar" class="relatorio-config-enviar">Salvar prompt</button><button type="button" id="indIaPadrao" class="crm-btn-secundario">Usar texto sugerido</button></div>
+          <label class="auto-label">Arquivos que a IA pode enviar (imagem, áudio, PDF ou vídeo curto até 12 MB)</label>
+          <div class="ffu-acoes">
+            <input type="file" id="indIaArquivo" accept="image/*,audio/*,video/mp4,application/pdf" />
+            <input type="text" id="indIaDescricao" placeholder="Quando enviar? (ex.: apresentação da clínica)" maxlength="200" style="min-width:240px" />
+            <button type="button" id="indIaEnviar" class="crm-btn-secundario">Enviar arquivo</button>
+          </div>
+          <div id="indIaArquivos" class="ind-ia-arquivos"></div>
+          <p class="crm-conversa-erro" id="indIaErro" hidden></p>
+        </div>
+      </div>
+
+      <div class="ct-modal" id="indModal" hidden>
+        <form class="ct-caixa" id="indForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Nova indicação</strong>
+            <button type="button" class="ct-fechar" data-fechar="indModal">✕</button>
+          </div>
+          <div class="ffu-agenda-titulo">Quem indicou</div>
+          <label class="ct-campo">Nome do paciente que indicou<input type="text" id="indIndicadorNome" maxlength="120" /></label>
+          <label class="ct-campo">WhatsApp de quem indicou <small>(recomendado: evita duplicar o indicador)</small><input type="tel" id="indIndicadorTel" placeholder="82 99999-9999" /></label>
+          <div class="ffu-agenda-titulo">Quem foi indicado</div>
+          <label class="ct-campo">Nome do indicado<input type="text" id="indIndicadoNome" maxlength="120" /></label>
+          <label class="ct-campo">WhatsApp do indicado<input type="tel" id="indIndicadoTel" placeholder="82 99999-9999" /></label>
+          <label class="ct-campo">Como chegou
+            <select id="indOrigem"><option value="recepcao">Pedido na recepção</option><option value="individual">Cadastro individual</option></select>
+          </label>
+          <label class="ct-campo">Observação <small>(opcional)</small><textarea id="indObs" maxlength="1000"></textarea></label>
+          <p class="crm-conversa-erro" id="indErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="indSalvarBtn" class="relatorio-config-enviar">Salvar</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="indImpModal" hidden>
+        <div class="ct-caixa">
+          <div class="ct-caixa-topo">
+            <strong>Importar lista de indicações</strong>
+            <button type="button" class="ct-fechar" data-fechar="indImpModal">✕</button>
+          </div>
+          <p class="ct-info">Planilha (.xlsx) ou CSV com 4 colunas: <b>Indicador</b>, <b>Telefone do indicador</b>, <b>Indicado</b> e <b>Telefone do indicado</b>. Indicados que já existem (mesmo telefone, com ou sem o 9) não são repetidos.</p>
+          <input type="file" id="indImpArquivo" accept=".csv,.xlsx,.xls,text/csv" />
+          <p class="ct-imp-resumo" id="indImpResumo"></p>
+          <p class="ct-imp-resultado" id="indImpResultado" hidden></p>
+          <p class="crm-conversa-erro" id="indImpErro" hidden></p>
+          <div class="ct-rodape">
+            <button type="button" id="indImpModelo" class="crm-btn-secundario">Baixar modelo</button>
+            <span class="ct-espaco"></span>
+            <button type="button" id="indImpConfirmar" class="relatorio-config-enviar" hidden>Importar</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="ct-modal" id="indTentModal" hidden>
+        <form class="ct-caixa" id="indTentForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong id="indTentTitulo">Registrar tentativa</strong>
+            <button type="button" class="ct-fechar" data-fechar="indTentModal">✕</button>
+          </div>
+          <label class="ct-campo">Resultado do contato
+            <select id="indTentResultado"></select>
+          </label>
+          <label class="ct-campo" id="indTentRetornoLabel" hidden>Quando retornar?<input type="datetime-local" id="indTentRetorno" /></label>
+          <label class="ct-campo">Observação <small>(o que foi falado)</small><textarea id="indTentObs" maxlength="1000"></textarea></label>
+          <label class="ct-campo" style="flex-direction:row;align-items:center;gap:8px;"><input type="checkbox" id="indTentLigacao" checked style="width:auto" /> Foi uma ligação (entra no relatório de ligações do número)</label>
+          <label class="ct-campo" id="indTentDuracaoLabel">Duração da ligação (minutos)<input type="number" id="indTentDuracao" min="0" max="180" step="1" value="0" /></label>
+          <p class="crm-conversa-erro" id="indTentErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="indTentSalvar" class="relatorio-config-enviar">Salvar tentativa</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="indRetModal" hidden>
+        <form class="ct-caixa" id="indRetForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Alerta de retorno</strong>
+            <button type="button" class="ct-fechar" data-fechar="indRetModal">✕</button>
+          </div>
+          <p class="ct-info">O card fica destacado quando chegar a data e a hora combinadas.</p>
+          <label class="ct-campo">Data e hora<input type="datetime-local" id="indRetData" /></label>
+          <label class="ct-campo">Nota <small>(o que combinou)</small><textarea id="indRetNota" maxlength="500"></textarea></label>
+          <p class="crm-conversa-erro" id="indRetErro" hidden></p>
+          <div class="ct-rodape"><button type="button" id="indRetRemover" class="crm-btn-secundario">Remover alerta</button><span class="ct-espaco"></span><button type="submit" id="indRetSalvar" class="relatorio-config-enviar">Salvar alerta</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="indNotasModal" hidden>
+        <div class="ct-caixa">
+          <div class="ct-caixa-topo">
+            <strong id="indNotasTitulo">Anotações</strong>
+            <button type="button" class="ct-fechar" data-fechar="indNotasModal">✕</button>
+          </div>
+          <div class="notas-painel notas-fixo" id="indNotasPainel"></div>
+        </div>
+      </div>
+
+      <div class="ct-modal" id="indLigModal" hidden>
+        <form class="ct-caixa" id="indLigForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Registrar ligação</strong>
+            <button type="button" class="ct-fechar" data-fechar="indLigModal">✕</button>
+          </div>
+          <label class="ct-campo">Telefone de quem recebeu<input type="tel" id="indLigNumero" list="indLigLista" placeholder="82 99999-9999" /></label>
+          <datalist id="indLigLista"></datalist>
+          <label class="ct-campo">Nome<input type="text" id="indLigNome" maxlength="120" /></label>
+          <label class="ct-campo">Resultado
+            <select id="indLigStatus"><option value="atendida">Atendeu</option><option value="perdida">Não atendeu</option><option value="recusada">Recusou</option></select>
+          </label>
+          <label class="ct-campo">Duração (minutos)<input type="number" id="indLigDuracao" min="0" max="180" value="0" /></label>
+          <label class="ct-campo">Observação<textarea id="indLigObs" maxlength="500"></textarea></label>
+          <p class="crm-conversa-erro" id="indLigErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="indLigSalvar" class="relatorio-config-enviar">Salvar ligação</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="indMsgModal" hidden>
+        <form class="ct-caixa" id="indMsgForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Mensagens de WhatsApp</strong>
+            <button type="button" class="ct-fechar" data-fechar="indMsgModal">✕</button>
+          </div>
+          <p class="ct-info">São os textos que abrem prontos no WhatsApp quando a CRM clica nos botões. Ela ainda pode editar antes de enviar. Onde estiver <b>{nome}</b>, entra o primeiro nome do paciente; onde estiver <b>{link}</b>, entra o endereço do formulário.</p>
+          <label class="ct-campo">Botão "Pedir indicação" (nos cards dos pacientes)<textarea id="indMsgPedido" rows="5" maxlength="1000"></textarea></label>
+          <label class="ct-campo">Botão "Link do formulário" (envio da pesquisa)<textarea id="indMsgLink" rows="4" maxlength="1000"></textarea></label>
+          <p class="crm-conversa-erro" id="indMsgErro" hidden></p>
+          <div class="ct-rodape"><button type="button" id="indMsgPadrao" class="crm-btn-secundario">Voltar aos textos padrão</button><span class="ct-espaco"></span><button type="submit" id="indMsgSalvar" class="relatorio-config-enviar">Salvar mensagens</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="indLinkModal" hidden>
+        <div class="ct-caixa">
+          <div class="ct-caixa-topo">
+            <strong>Link da pesquisa de satisfação e indicação</strong>
+            <button type="button" class="ct-fechar" data-fechar="indLinkModal">✕</button>
+          </div>
+          <p class="ct-info">Envie este link pelo WhatsApp aos pacientes que estão gostando do atendimento. O paciente responde nome, telefone, nota de 0 a 10, se nos indicaria e deixa sugestão, elogio ou reclamação. Quem já quiser indicar alguém cai direto no funil.</p>
+          <label class="ct-campo">Link<input type="text" id="indLinkTexto" readonly /></label>
+          <div class="ct-rodape">
+            <button type="button" id="indLinkCopiar" class="crm-btn-secundario">Copiar link</button>
+            <a id="indLinkWa" class="crm-btn-secundario ind-link-wa" target="_blank" rel="noopener">Abrir no WhatsApp</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="window-body tab-crm" id="tabResgate" hidden>
+      <div class="crm-board-wrap">
+        <div class="crm-board-header">
+          <span>Resgate de orçamentos: pacientes com orçamento aprovado que ficou pela metade (ou nunca começou). A equipe retoma o contato para fechar o restante.</span>
+          <div class="crm-board-nav">
+            <select id="resOperador" title="Operador responsável por esta atividade (só o acesso principal escolhe)"></select>
+            <input type="search" id="resBusca" placeholder="Buscar paciente" class="ind-busca" />
+            <button type="button" id="resMsgBtn" title="Editar o texto da mensagem de WhatsApp">Mensagem</button>
+            <button type="button" id="resAtualizarBtn" title="Lê de novo os orçamentos no Clinicorp">Atualizar do Clinicorp</button>
+            <button type="button" id="resRefresh">Atualizar tela</button>
+          </div>
+        </div>
+        <div class="res-filtros">
+          <span class="res-filtros-rotulo">Parado há:</span>
+          <button type="button" class="ind-sub res-dias" data-dias="0">Todos</button>
+          <button type="button" class="ind-sub res-dias ativo" data-dias="15">15+ dias</button>
+          <button type="button" class="ind-sub res-dias" data-dias="30">30+ dias</button>
+          <button type="button" class="ind-sub res-dias" data-dias="45">45+ dias</button>
+          <button type="button" class="ind-sub res-dias" data-dias="60">60+ dias</button>
+          <button type="button" class="ind-sub res-dias" data-dias="90">90+ dias</button>
+          <label class="res-check"><input type="checkbox" id="resOcultarConsulta" checked /> Ocultar quem já tem consulta marcada</label>
+          <select id="resOrdem" title="Ordem dos cards nas duas primeiras colunas">
+            <option value="valor">Maior valor pendente</option>
+            <option value="parado">Mais tempo parado</option>
+            <option value="recente">Aprovados mais recentes</option>
+          </select>
+        </div>
+        <p class="ind-resumo" id="resResumo"></p>
+        <p class="ind-dica">💡 <b>Como usar:</b> os pacientes entram sozinhos a partir do Clinicorp: <b>Inacabados</b> são os que fizeram parte do orçamento e pararam; <b>Aprovado sem iniciar</b> são os que aprovaram e ainda não começaram. Os botões “Parado há” filtram essas duas primeiras colunas (os cards que a equipe já está trabalhando nunca somem). Clique em <b>Registrar contato</b> a cada tentativa, ou arraste o card entre as colunas. Quando o paciente voltar a executar um procedimento, o card vai sozinho para <b>Retomou o tratamento</b>. O botão <b>Mensagem</b> muda o texto do WhatsApp: use <b>{nome}</b> e <b>{pendentes}</b>.</p>
+        <div class="crm-board" id="resBoard"><p class="agenda-vazia">Carregando...</p></div>
+      </div>
+
+      <div class="ct-modal" id="resTentModal" hidden>
+        <form class="ct-caixa" id="resTentForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong id="resTentTitulo">Registrar contato</strong>
+            <button type="button" class="ct-fechar" data-fechar="resTentModal">✕</button>
+          </div>
+          <label class="ct-campo">Resultado do contato<select id="resTentResultado"></select></label>
+          <label class="ct-campo" id="resTentRetornoLabel" hidden>Quando retornar?<input type="datetime-local" id="resTentRetorno" /></label>
+          <label class="ct-campo">Observação <small>(o que foi falado, motivo da parada...)</small><textarea id="resTentObs" maxlength="1000"></textarea></label>
+          <label class="ct-campo" style="flex-direction:row;align-items:center;gap:8px;"><input type="checkbox" id="resTentLigacao" checked style="width:auto" /> Foi uma ligação</label>
+          <p class="crm-conversa-erro" id="resTentErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="resTentSalvar" class="relatorio-config-enviar">Salvar contato</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="resRetModal" hidden>
+        <form class="ct-caixa" id="resRetForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Alerta de retorno</strong>
+            <button type="button" class="ct-fechar" data-fechar="resRetModal">✕</button>
+          </div>
+          <p class="ct-info">O card fica destacado quando chegar a data e a hora combinadas.</p>
+          <label class="ct-campo">Data e hora<input type="datetime-local" id="resRetData" /></label>
+          <label class="ct-campo">Nota <small>(o que combinou)</small><textarea id="resRetNota" maxlength="500"></textarea></label>
+          <p class="crm-conversa-erro" id="resRetErro" hidden></p>
+          <div class="ct-rodape"><button type="button" id="resRetRemover" class="crm-btn-secundario">Remover alerta</button><span class="ct-espaco"></span><button type="submit" id="resRetSalvar" class="relatorio-config-enviar">Salvar alerta</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="resNotasModal" hidden>
+        <div class="ct-caixa">
+          <div class="ct-caixa-topo">
+            <strong id="resNotasTitulo">Anotações</strong>
+            <button type="button" class="ct-fechar" data-fechar="resNotasModal">✕</button>
+          </div>
+          <div class="notas-painel notas-fixo" id="resNotasPainel"></div>
+        </div>
+      </div>
+
+      <div class="ct-modal" id="resMsgModal" hidden>
+        <form class="ct-caixa" id="resMsgForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Mensagem de WhatsApp</strong>
+            <button type="button" class="ct-fechar" data-fechar="resMsgModal">✕</button>
+          </div>
+          <p class="ct-info">Texto que abre pronto no WhatsApp quando a CRM clica em WhatsApp no card (ela ainda pode editar antes de enviar). Onde estiver <b>{nome}</b>, entra o primeiro nome do paciente; onde estiver <b>{pendentes}</b>, entram os procedimentos que faltam.</p>
+          <label class="ct-campo">Mensagem<textarea id="resMsgTexto" rows="6" maxlength="1000"></textarea></label>
+          <p class="crm-conversa-erro" id="resMsgErro" hidden></p>
+          <div class="ct-rodape"><button type="button" id="resMsgPadrao" class="crm-btn-secundario">Voltar ao texto padrão</button><span class="ct-espaco"></span><button type="submit" id="resMsgSalvar" class="relatorio-config-enviar">Salvar mensagem</button></div>
         </form>
       </div>
     </div>
@@ -1718,6 +2002,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261111c"></script>
+  <script src="app.js?v=20261112h"></script>
 </body>
 </html>

@@ -75,6 +75,8 @@ const tabBtnChamadas = document.getElementById('tabBtnChamadas');
 const tabBtnOrigem = document.getElementById('tabBtnOrigem');
 const tabBtnFollowUpInteligente = document.getElementById('tabBtnFollowUpInteligente');
 const tabBtnFunilFu = document.getElementById('tabBtnFunilFu');
+const tabBtnIndicacoes = document.getElementById('tabBtnIndicacoes');
+const tabBtnResgate = document.getElementById('tabBtnResgate');
 const tabBtnRelatorios = document.getElementById('tabBtnRelatorios');
 const tabBtnGeradorRelatorios = document.getElementById('tabBtnGeradorRelatorios');
 const tabBtnIntegracoes = document.getElementById('tabBtnIntegracoes');
@@ -102,6 +104,8 @@ const tabChamadas = document.getElementById('tabChamadas');
 const tabOrigem = document.getElementById('tabOrigem');
 const tabFollowUpInteligente = document.getElementById('tabFollowUpInteligente');
 const tabFunilFu = document.getElementById('tabFunilFu');
+const tabIndicacoes = document.getElementById('tabIndicacoes');
+const tabResgate = document.getElementById('tabResgate');
 const tabRelatorios = document.getElementById('tabRelatorios');
 const tabGeradorRelatorios = document.getElementById('tabGeradorRelatorios');
 const tabIntegracoes = document.getElementById('tabIntegracoes');
@@ -410,6 +414,8 @@ function aplicarMenuPermitido() {
   tabBtnOrigem.hidden = !abaLiberada('crm') || !meuEhDono; // origem dos leads usa a base do CRM, mesma permissao
   tabBtnFollowUpInteligente.hidden = !abaLiberada('followUpInteligente');
   tabBtnFunilFu.hidden = !abaLiberada('funilFollowUp');
+  tabBtnIndicacoes.hidden = !abaLiberada('indicacoes');
+  tabBtnResgate.hidden = !abaLiberada('resgateOrcamentos');
   tabBtnRelatorios.hidden = !abaLiberada('relatorios');
   tabBtnGeradorRelatorios.hidden = !abaLiberada('geradorRelatorios');
   tabBtnIntegracoes.hidden = !abaLiberada('integracoes');
@@ -436,7 +442,7 @@ function mostrarApp() {
   if (tabBtnPainel.hidden && !tabPainel.hidden) {
     const primeiraLiberada = [
       ['conversas', tabBtnConversas], ['agenda', tabBtnAgenda], ['whatsapp', tabBtnWhatsapp], ['crm', tabBtnCrm], ['contatos', tabBtnContatos], ['resultados', tabBtnResultados], ['instagram', tabBtnInstagram],
-      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['aniversariantes', tabBtnAniversariantes], ['followUpInteligente', tabBtnFollowUpInteligente], ['funilFollowUp', tabBtnFunilFu], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
+      ['auto', tabBtnAuto], ['followUp', tabBtnFollowUp], ['aniversariantes', tabBtnAniversariantes], ['followUpInteligente', tabBtnFollowUpInteligente], ['funilFollowUp', tabBtnFunilFu], ['indicacoes', tabBtnIndicacoes], ['resgateOrcamentos', tabBtnResgate], ['relatorios', tabBtnRelatorios], ['geradorRelatorios', tabBtnGeradorRelatorios], ['integracoes', tabBtnIntegracoes],
     ].find(([, btn]) => !btn.hidden);
     if (primeiraLiberada) mudarAba(primeiraLiberada[0]);
   }
@@ -2027,6 +2033,8 @@ const CABECALHOS_ABA = {
   disparos: ['Automação', 'Disparos', 'Campanhas de mensagens no WhatsApp: listas, programação, anexos, relatório e IA.'],
   followUp: ['Atendimento', 'Follow Up', 'Retome automaticamente os leads que pararam de responder.'],
   aniversariantes: ['Clientes', 'Aniversariantes do mês', 'Parabéns automático, no dia, para os pacientes que fazem aniversário (integrado ao Clinicorp).'],
+  resgateOrcamentos: ['Clientes', 'Resgate de orçamentos', 'Pacientes com orçamento aprovado inacabado ou sem iniciar, para a equipe retomar e fechar o restante.'],
+  indicacoes: ['Clientes', 'Indicações', 'Pacientes que indicam, os indicados, a pesquisa de satisfação e o funil de contato da CRM de indicações.'],
   funilFollowUp: ['Clientes', 'Funil Follow Up', 'Dia 0 a Dia 5: uma tarefa por dia, com alerta de retorno programado pra cada lead.'],
   followUpInteligente: ['Atendimento', 'Follow Up Inteligente', 'Mensagens automáticas por etapa do funil, nos dias que você escolher.'],
   conversas: ['Atendimento', 'Conversas', 'Atenda o WhatsApp direto pela Lumia, em tempo real.'],
@@ -2088,6 +2096,8 @@ function mudarAba(aba) {
   tabOrigem.hidden = aba !== 'origem';
   tabFollowUpInteligente.hidden = aba !== 'followUpInteligente';
   tabFunilFu.hidden = aba !== 'funilFollowUp';
+  tabIndicacoes.hidden = aba !== 'indicacoes';
+  tabResgate.hidden = aba !== 'resgateOrcamentos';
   tabRelatorios.hidden = aba !== 'relatorios';
   tabGeradorRelatorios.hidden = aba !== 'geradorRelatorios';
   tabIntegracoes.hidden = aba !== 'integracoes';
@@ -2110,6 +2120,8 @@ function mudarAba(aba) {
   tabBtnOrigem.classList.toggle('active', aba === 'origem');
   tabBtnFollowUpInteligente.classList.toggle('active', aba === 'followUpInteligente');
   tabBtnFunilFu.classList.toggle('active', aba === 'funilFollowUp');
+  tabBtnIndicacoes.classList.toggle('active', aba === 'indicacoes');
+  tabBtnResgate.classList.toggle('active', aba === 'resgateOrcamentos');
   tabBtnRelatorios.classList.toggle('active', aba === 'relatorios');
   tabBtnGeradorRelatorios.classList.toggle('active', aba === 'geradorRelatorios');
   tabBtnIntegracoes.classList.toggle('active', aba === 'integracoes');
@@ -2148,6 +2160,10 @@ function mudarAba(aba) {
     carregarFollowUpInteligente();
   } else if (aba === 'funilFollowUp') {
     carregarFunilFu();
+  } else if (aba === 'indicacoes') {
+    carregarIndicacoes();
+  } else if (aba === 'resgateOrcamentos') {
+    carregarResgate();
   } else if (aba === 'relatorios') {
     carregarDestinatariosRelatorios();
     carregarConfigsRelatorios();
@@ -2224,6 +2240,8 @@ tabBtnChamadas.addEventListener('click', () => mudarAba('chamadas'));
 tabBtnOrigem.addEventListener('click', () => mudarAba('origem'));
 tabBtnFollowUpInteligente.addEventListener('click', () => mudarAba('followUpInteligente'));
 tabBtnFunilFu.addEventListener('click', () => mudarAba('funilFollowUp'));
+tabBtnIndicacoes.addEventListener('click', () => mudarAba('indicacoes'));
+tabBtnResgate.addEventListener('click', () => mudarAba('resgateOrcamentos'));
 tabBtnIntegracoes.addEventListener('click', () => mudarAba('integracoes'));
 tabBtnCerebro.addEventListener('click', () => mudarAba('cerebro'));
 tabBtnClientes.addEventListener('click', () => mudarAba('clientes'));
@@ -5641,7 +5659,7 @@ function renderSaldo(d) {
     linha(`Última conferência (${new Date(c.em).toLocaleDateString('pt-BR')}): app achava ${usd(c.estimadoUsd)}, real ${usd(c.realUsd)}`, c.diferencaUsd > 0 ? `−${usd(c.diferencaUsd)} fora do app` : 'sem diferença');
   }
   if (d.foraDoApp30diasUsd > 0) linha('Gasto fora do app (30 dias)', usd(d.foraDoApp30diasUsd));
-  const NOMES_MODULO = { 'auto-atendimento': 'Auto Atendimento', lumia: 'Lumia', 'follow-up': 'Follow Up', aniversariantes: 'Aniversariantes', 'follow-up-inteligente': 'Follow Up Inteligente', externo: 'Gasto externo', 'gerador-relatorios': 'Gerador de Relatórios' };
+  const NOMES_MODULO = { 'auto-atendimento': 'Auto Atendimento', lumia: 'Lumia', 'follow-up': 'Follow Up', aniversariantes: 'Aniversariantes', indicacoes: 'Indicações', 'follow-up-inteligente': 'Follow Up Inteligente', externo: 'Gasto externo', 'gerador-relatorios': 'Gerador de Relatórios' };
   for (const r of d.porCliente || []) linha(`${r.nome} · ${NOMES_MODULO[r.modulo] || r.modulo || 'outros'}`, usd(r.custoUsd));
   saldoHistorico.textContent = '';
   const ROTULO_AJUSTE = { conferencia: 'Conferência', recarga: 'Recarga', gasto_externo: 'Gasto externo' };
@@ -8493,7 +8511,7 @@ async function selecionarCliente(id, nome, username) {
   tabsAviso.textContent = 'Nenhuma marcada = tudo liberado (padrão). Marque só pra restringir.';
   clienteIntegracoesPainel.appendChild(tabsAviso);
 
-  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', aniversariantes: 'Aniversariantes', gestaoGeral: 'Lumia Gestão Geral (app de gestão)', followUpInteligente: 'Follow Up Inteligente', funilFollowUp: 'Funil Follow Up', disparos: 'Disparos', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
+  const TABS_LABELS = { painel: 'Painel (Lumia/Chat)', agenda: 'Agenda', whatsapp: 'WhatsApp', crm: 'CRM', auto: 'Auto Atendimento', followUp: 'Follow Up', aniversariantes: 'Aniversariantes', gestaoGeral: 'Lumia Gestão Geral (app de gestão)', followUpInteligente: 'Follow Up Inteligente', funilFollowUp: 'Funil Follow Up', indicacoes: 'Indicações', resgateOrcamentos: 'Resgate de orçamentos', disparos: 'Disparos', relatorios: 'Relatórios', geradorRelatorios: 'Gerador de Relatórios', integracoes: 'Integrações', instagram: 'Instagram' };
   const tabsForm = document.createElement('div');
   tabsForm.className = 'cliente-form';
   const tabsCheckboxes = {};
@@ -10370,7 +10388,7 @@ document.getElementById('perfilSalvar').addEventListener('click', async (e) => {
 // ---------- Anotacoes sobre o paciente (Conversas e CRM) ----------
 // historico do que a equipe esta tratando/resolvendo com cada paciente, pra consultar e lembrar depois.
 // Mesmo painel nos dois lugares; as anotacoes sao do contato (aparecem igual em Conversas e no CRM).
-function criarPainelNotas(raiz, aoMudarContagem, { fixo = false } = {}) {
+function criarPainelNotas(raiz, aoMudarContagem, { fixo = false, urlLista = (id) => `/api/crm/contatos/${id}/notas`, urlApagar = (id) => `/api/crm/notas/${id}` } = {}) {
   let contatoId = null;
   const topo = document.createElement('div');
   topo.className = 'notas-topo';
@@ -10402,7 +10420,7 @@ function criarPainelNotas(raiz, aoMudarContagem, { fixo = false } = {}) {
     if (!contatoId) return;
     const pedido = contatoId;
     try {
-      const res = await fetch(`/api/crm/contatos/${pedido}/notas`, { headers: { 'x-app-password': appPassword } });
+      const res = await fetch(urlLista(pedido), { headers: { 'x-app-password': appPassword } });
       const d = await res.json();
       if (!res.ok) throw new Error(d.erro || 'erro');
       if (pedido !== contatoId) return;
@@ -10423,7 +10441,7 @@ function criarPainelNotas(raiz, aoMudarContagem, { fixo = false } = {}) {
           x.type = 'button'; x.textContent = '✕'; x.title = 'Apagar anotação';
           x.addEventListener('click', async () => {
             if (!confirm('Apagar esta anotação?')) return;
-            await fetch(`/api/crm/notas/${n.id}`, { method: 'DELETE', headers: { 'x-app-password': appPassword } });
+            await fetch(urlApagar(n.id), { method: 'DELETE', headers: { 'x-app-password': appPassword } });
             await carregar();
           });
           cab.appendChild(x);
@@ -10442,7 +10460,7 @@ function criarPainelNotas(raiz, aoMudarContagem, { fixo = false } = {}) {
     if (!texto || !contatoId) return;
     salvar.disabled = true;
     try {
-      const res = await fetch(`/api/crm/contatos/${contatoId}/notas`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ texto }) });
+      const res = await fetch(urlLista(contatoId), { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ texto }) });
       const d = await res.json();
       if (!res.ok) throw new Error(d.erro || 'erro');
       area.value = '';
@@ -10790,7 +10808,7 @@ document.getElementById('crmEspelharBtn').addEventListener('click', () => {
 // ---------- Ferramentas de cada colaborador (so o acesso principal edita) ----------
 const FERRAMENTAS_COLAB = [
   ['painel', 'Painel (Lumia/Chat)'], ['agenda', 'Agenda'], ['whatsapp', 'WhatsApp'], ['crm', 'CRM, Conversas, Contatos, Resultados e Origem dos leads'],
-  ['auto', 'Auto Atendimento'], ['followUp', 'Follow Up'], ['aniversariantes', 'Aniversariantes do mês'], ['gestaoGeral', 'Lumia Gestão Geral'], ['followUpInteligente', 'Follow Up Inteligente'], ['funilFollowUp', 'Funil Follow Up'],
+  ['auto', 'Auto Atendimento'], ['followUp', 'Follow Up'], ['aniversariantes', 'Aniversariantes do mês'], ['gestaoGeral', 'Lumia Gestão Geral'], ['followUpInteligente', 'Follow Up Inteligente'], ['funilFollowUp', 'Funil Follow Up'], ['indicacoes', 'Indicações'], ['resgateOrcamentos', 'Resgate de orçamentos'],
   ['disparos', 'Disparos'], ['relatorios', 'Relatórios automáticos'], ['geradorRelatorios', 'Gerador de Relatórios'], ['integracoes', 'Integrações'], ['instagram', 'Instagram'],
 ];
 function abrirFerramentasColab(c) {
@@ -11396,3 +11414,932 @@ function desenharListaAniv() {
 }
 
 anivVer.addEventListener('change', desenharListaAniv);
+
+// ---------- Indicações (indicador -> indicado, funil de contato da CRM de indicações) ----------
+const indBoard = document.getElementById('indBoard');
+const indModal = document.getElementById('indModal');
+const indImpModal = document.getElementById('indImpModal');
+const indLinkModal = document.getElementById('indLinkModal');
+let indDados = { etapas: [], origens: {}, indicados: [], token: '' };
+let indLinhasImp = [];
+const indH = () => ({ 'x-app-password': appPassword, 'Content-Type': 'application/json' });
+const indSemAcento = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const indQuando = (iso) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+// ---- arrastar e soltar entre colunas (igual ao CRM) ----
+let indArrastando = null; // { tipo: 'resp' | 'ind', id }
+function indAtivarArraste(card, tipo, id) {
+  card.draggable = true;
+  card.addEventListener('dragstart', (e) => { indArrastando = { tipo, id }; card.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', String(id)); e.dataTransfer.effectAllowed = 'move'; } catch { /* sem dataTransfer */ } });
+  card.addEventListener('dragend', () => { card.classList.remove('dragging'); indArrastando = null; });
+}
+function indAtivarSoltar(coluna, tipo, etapaId) {
+  coluna.addEventListener('dragover', (e) => { if (indArrastando?.tipo !== tipo) return; e.preventDefault(); coluna.classList.add('drag-over'); });
+  coluna.addEventListener('dragleave', () => coluna.classList.remove('drag-over'));
+  coluna.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    coluna.classList.remove('drag-over');
+    const a = indArrastando;
+    if (!a || a.tipo !== tipo) return;
+    const url = tipo === 'resp' ? `/api/indicacoes/respostas/${a.id}/etapa` : `/api/indicacoes/${a.id}/etapa`;
+    try {
+      const r = await fetch(url, { method: 'POST', headers: indH(), body: JSON.stringify({ etapa: etapaId }) });
+      if (!r.ok) mostrarAviso((await r.json().catch(() => ({}))).erro || 'Não consegui mover', 'erro');
+    } catch (err) { mostrarAviso(err.message, 'erro'); }
+    carregarIndicacoes();
+  });
+}
+
+const IND_DIA = 86400000;
+const indDH = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+function indTentativaPendente(i) {
+  const m = /^tentativa(\d)$/.exec(i.etapa);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if ((i.tentativas || []).some((t) => t.n === n)) return null;
+  const prevista = new Date(i[`t${n}_em`]);
+  return { n, prevista, atrasada: Date.now() - prevista.getTime() > IND_DIA };
+}
+function indRetornoInfo(i) {
+  if (!i.retorno_em) return null;
+  const d = new Date(i.retorno_em);
+  return { d, vencido: d.getTime() < Date.now(), hoje: d.toDateString() === new Date().toDateString() };
+}
+function indPainelNotasModal(tipo = 'ind') {
+  if (indPainelNotasModal.tipo !== tipo) {
+    const raiz = document.getElementById('indNotasPainel');
+    raiz.textContent = '';
+    indPainelNotasModal.p = criarPainelNotas(raiz, (id, n) => { const x = (tipo === 'resp' ? indDados.respostas : indDados.indicados).find((k) => k.id === id); if (x) x.qtd_notas = n; }, {
+      fixo: true,
+      urlLista: (id) => (tipo === 'resp' ? `/api/indicacoes/respostas/${id}/notas` : `/api/indicacoes/${id}/notas`),
+      urlApagar: (id) => `/api/indicacoes/notas/${id}`,
+    });
+    indPainelNotasModal.tipo = tipo;
+  }
+  return indPainelNotasModal.p;
+}
+
+function indCriarCard(i) {
+  const card = document.createElement('div');
+  card.className = 'crm-card ind-card';
+  indAtivarArraste(card, 'ind', i.id);
+  const nome = document.createElement('div'); nome.className = 'crm-card-nome'; nome.textContent = i.nome; card.appendChild(nome);
+  const tel = document.createElement('div'); tel.className = 'crm-card-numero'; tel.textContent = i.telefone; card.appendChild(tel);
+  const por = document.createElement('div'); por.className = 'crm-card-operador'; por.textContent = `Indicado por ${i.indicador_nome || '—'}`; card.appendChild(por);
+  const tags = document.createElement('div'); tags.className = 'ind-tags';
+  const origem = document.createElement('span'); origem.className = 'ind-tag'; origem.textContent = indDados.origens[i.origem] || i.origem; tags.appendChild(origem);
+  if (i.ja_paciente === true) { const t = document.createElement('span'); t.className = 'ind-tag ok'; t.textContent = 'Já é paciente'; tags.appendChild(t); }
+  if (i.ja_paciente === false) { const t = document.createElement('span'); t.className = 'ind-tag'; t.textContent = 'Novo no Clinicorp'; tags.appendChild(t); }
+  const data = document.createElement('span'); data.className = 'ind-tag'; data.textContent = indQuando(i.criado_em); tags.appendChild(data);
+  card.appendChild(tags);
+  // tentativas ja feitas + proxima prevista
+  if ((i.tentativas || []).length) {
+    const h = document.createElement('div'); h.className = 'ind-obs';
+    h.textContent = i.tentativas.map((t) => `${t.n}ª: ${indDados.resultados?.[t.resultado] || t.resultado} (${indQuando(t.feita_em)})`).join(' · ');
+    card.appendChild(h);
+  }
+  const pend = indTentativaPendente(i);
+  if (pend) {
+    const a = document.createElement('div'); a.className = 'ffu-selo pend' + (pend.atrasada ? ' ind-atrasada' : '');
+    a.textContent = `⚠ ${pend.n}ª tentativa pendente (prevista ${indQuando(pend.prevista)})`;
+    card.appendChild(a);
+    if (pend.atrasada) card.classList.add('ffu-atrasado');
+  } else if (['novo', 'tentativa1', 'tentativa2'].includes(i.etapa)) {
+    const prox = i.etapa === 'novo' ? 1 : Number(i.etapa.slice(-1)) + 1;
+    if (i[`t${prox}_em`]) { const q = document.createElement('div'); q.className = 'ffu-quando'; q.textContent = `${prox}ª tentativa prevista para ${indDH(i[`t${prox}_em`])}`; card.appendChild(q); }
+  }
+  const ret = indRetornoInfo(i);
+  if (ret) {
+    const r = document.createElement('div'); r.className = 'ind-retorno' + (ret.vencido ? ' vencido' : ret.hoje ? ' hoje' : '');
+    r.textContent = `⏰ Retorno ${ret.vencido ? 'atrasado' : ret.hoje ? 'hoje' : 'em'} ${indDH(i.retorno_em)}${i.retorno_nota ? ` · ${i.retorno_nota}` : ''}`;
+    card.appendChild(r);
+  }
+  if (i.observacao) { const o = document.createElement('div'); o.className = 'ind-obs'; o.textContent = i.observacao; card.appendChild(o); }
+  const acoes = document.createElement('div'); acoes.className = 'ffu-acoes';
+  const sel = document.createElement('select'); sel.className = 'ind-etapa-sel'; sel.title = 'Mover para outra etapa';
+  for (const e of indDados.etapas) sel.add(new Option(e.nome, e.id));
+  sel.value = i.etapa;
+  sel.addEventListener('change', async () => {
+    const r = await fetch(`/api/indicacoes/${i.id}/etapa`, { method: 'POST', headers: indH(), body: JSON.stringify({ etapa: sel.value }) });
+    if (!r.ok) mostrarAviso((await r.json().catch(() => ({}))).erro || 'erro', 'erro');
+    carregarIndicacoes();
+  });
+  acoes.appendChild(sel);
+  if (!['agendado', 'compareceu', 'sem_sucesso'].includes(i.etapa) && (i.tentativas || []).length < 3) {
+    const t = document.createElement('button'); t.type = 'button'; t.className = 'ffu-exec'; t.textContent = 'Registrar tentativa';
+    t.addEventListener('click', () => indAbrirTentativa(i));
+    acoes.appendChild(t);
+  }
+  const rb = document.createElement('button'); rb.type = 'button'; rb.textContent = ret ? 'Retorno' : 'Alerta de retorno';
+  rb.addEventListener('click', () => indAbrirRetorno(i));
+  acoes.appendChild(rb);
+  const nb = document.createElement('button'); nb.type = 'button'; nb.textContent = i.qtd_notas ? `📝 Anotações (${i.qtd_notas})` : '📝 Anotações';
+  nb.addEventListener('click', () => { document.getElementById('indNotasTitulo').textContent = `Anotações · ${i.nome}`; document.getElementById('indNotasModal').hidden = false; indPainelNotasModal().definirContato(i.id); });
+  acoes.appendChild(nb);
+  const ia = document.createElement('button'); ia.type = 'button'; ia.textContent = i.ia_pausada ? 'IA pausada · retomar' : 'Pausar IA';
+  ia.title = 'Pausa ou retoma a IA só neste contato';
+  ia.addEventListener('click', async () => { await fetch(`/api/indicacoes/${i.id}/ia-pausa`, { method: 'POST', headers: indH(), body: JSON.stringify({ pausada: !i.ia_pausada }) }); carregarIndicacoes(); });
+  acoes.appendChild(ia);
+  const wa = document.createElement('a'); wa.className = 'ind-btn'; wa.textContent = 'WhatsApp'; wa.target = '_blank'; wa.rel = 'noopener'; wa.href = `https://wa.me/${i.telefone}`; acoes.appendChild(wa);
+  const conf = document.createElement('button'); conf.type = 'button'; conf.textContent = 'Conferir no Clinicorp';
+  conf.title = 'Consulta o Clinicorp para ver se o indicado já é paciente (1 consulta)';
+  conf.addEventListener('click', async () => {
+    conf.disabled = true;
+    try {
+      const r = await fetch(`/api/indicacoes/${i.id}/conferir-clinicorp`, { method: 'POST', headers: indH() });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'erro');
+      mostrarAviso(d.jaPaciente ? `Já é paciente${d.nomeNoClinicorp ? `: ${d.nomeNoClinicorp}` : ''}` : 'Não encontrado no Clinicorp (indicado novo)', 'ok');
+      carregarIndicacoes();
+    } catch (err) { mostrarAviso(err.message, 'erro'); conf.disabled = false; }
+  });
+  acoes.appendChild(conf);
+  if (i.ja_paciente !== true) {
+    const cad = document.createElement('button'); cad.type = 'button'; cad.textContent = 'Cadastrar no Clinicorp';
+    cad.title = 'Cria o indicado como paciente no Clinicorp (só quando você clicar)';
+    cad.addEventListener('click', async () => {
+      if (!confirm(`Cadastrar ${i.nome} como paciente no Clinicorp?`)) return;
+      cad.disabled = true;
+      try {
+        const r = await fetch(`/api/indicacoes/${i.id}/cadastrar-clinicorp`, { method: 'POST', headers: indH() });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.erro || 'erro');
+        mostrarAviso('Cadastrado no Clinicorp', 'ok'); carregarIndicacoes();
+      } catch (err) { mostrarAviso(err.message, 'erro'); cad.disabled = false; }
+    });
+    acoes.appendChild(cad);
+  }
+  const apagar = document.createElement('button'); apagar.type = 'button'; apagar.textContent = 'Apagar';
+  apagar.addEventListener('click', async () => {
+    if (!confirm(`Apagar a indicação de ${i.nome}?`)) return;
+    await fetch(`/api/indicacoes/${i.id}`, { method: 'DELETE', headers: indH() });
+    carregarIndicacoes();
+  });
+  acoes.appendChild(apagar);
+  card.appendChild(acoes);
+  return card;
+}
+
+function indDesenhar() {
+  const q = indSemAcento(document.getElementById('indBusca').value.trim());
+  const todos = indDados.indicados.filter((i) => !q || indSemAcento(`${i.nome} ${i.telefone} ${i.indicador_nome || ''}`).includes(q));
+  indBoard.textContent = '';
+  for (const e of indDados.etapas) {
+    const col = document.createElement('div'); col.className = 'crm-coluna';
+    indAtivarSoltar(col, 'ind', e.id);
+    const lista = todos.filter((i) => i.etapa === e.id);
+    const head = document.createElement('div'); head.className = 'crm-coluna-header';
+    const t = document.createElement('span'); t.textContent = e.nome;
+    const c = document.createElement('span'); c.className = 'crm-coluna-contagem'; c.textContent = lista.length;
+    head.append(t, c); col.appendChild(head);
+    const cards = document.createElement('div'); cards.className = 'crm-coluna-cards';
+    if (!lista.length) { const v = document.createElement('div'); v.className = 'crm-coluna-vazia'; v.textContent = 'Ninguém aqui'; cards.appendChild(v); }
+    for (const i of lista) cards.appendChild(indCriarCard(i));
+    col.appendChild(cards); indBoard.appendChild(col);
+  }
+  const indicadores = new Set(indDados.indicados.map((i) => i.indicador_id).filter(Boolean)).size;
+  const conv = indDados.indicados.filter((i) => i.etapa === 'compareceu').length;
+  const pendentes = indDados.indicados.filter((i) => indTentativaPendente(i)).length;
+  const retornos = indDados.indicados.filter((i) => { const r = indRetornoInfo(i); return r && (r.vencido || r.hoje); }).length;
+  document.getElementById('indResumo').textContent = `${indDados.indicados.length} indicado(s) de ${indicadores} indicador(es) · ${conv} compareceram · ${pendentes} tentativa(s) pendente(s) · ${retornos} retorno(s) para hoje/atrasados`;
+}
+
+let indVista = 'pesquisa';
+function indTrocarVista(v) {
+  indVista = v;
+  document.getElementById('indBoard').hidden = v !== 'funil';
+  document.getElementById('indResumo').hidden = v !== 'funil';
+  document.getElementById('indDicaIndicados').hidden = v !== 'funil';
+  for (const [id, nome] of [['indPesquisa', 'pesquisa'], ['indLigacoes', 'ligacoes'], ['indIA', 'ia']]) document.getElementById(id).hidden = v !== nome;
+  for (const [id, nome] of [['indVerFunil', 'funil'], ['indVerPesquisa', 'pesquisa'], ['indVerLigacoes', 'ligacoes'], ['indVerIA', 'ia']]) document.getElementById(id).classList.toggle('ativo', v === nome);
+  if (v === 'ligacoes') indCarregarLigacoes();
+  if (v === 'ia') indCarregarIA();
+}
+document.getElementById('indVerFunil').addEventListener('click', () => indTrocarVista('funil'));
+document.getElementById('indVerPesquisa').addEventListener('click', () => indTrocarVista('pesquisa'));
+document.getElementById('indVerLigacoes').addEventListener('click', () => indTrocarVista('ligacoes'));
+document.getElementById('indVerIA').addEventListener('click', () => indTrocarVista('ia'));
+
+// ---- funil dos PACIENTES que responderam a pesquisa: a CRM chama cada um pra pedir indicacao ----
+function indCriarCardPaciente(r) {
+  const card = document.createElement('div');
+  card.className = 'crm-card ind-card ind-resp' + (r.nota <= 6 ? ' ruim' : '');
+  indAtivarArraste(card, 'resp', r.id);
+  const nome = document.createElement('div'); nome.className = 'crm-card-nome'; nome.textContent = r.nome; card.appendChild(nome);
+  const tel = document.createElement('div'); tel.className = 'crm-card-numero'; tel.textContent = r.telefone; card.appendChild(tel);
+  const tags = document.createElement('div'); tags.className = 'ind-tags';
+  const nota = document.createElement('span'); nota.className = 'ind-nota'; nota.textContent = `★ ${r.nota}/10`; tags.appendChild(nota);
+  const ind = document.createElement('span'); ind.className = 'ind-tag' + (r.indicaria ? ' ok' : ''); ind.textContent = r.indicaria ? 'Indicaria' : 'Não indicaria'; tags.appendChild(ind);
+  const q = document.createElement('span'); q.className = 'ind-tag'; q.textContent = indQuando(r.criado_em); tags.appendChild(q);
+  if (r.qtd_indicados) { const t = document.createElement('span'); t.className = 'ind-tag ok'; t.textContent = `${r.qtd_indicados} indicado(s)`; tags.appendChild(t); }
+  card.appendChild(tags);
+  if (r.comentario) { const c = document.createElement('div'); c.className = 'ind-obs ind-comentario'; c.textContent = `“${r.comentario}”`; card.appendChild(c); }
+  const acoes = document.createElement('div'); acoes.className = 'ffu-acoes';
+  const sel = document.createElement('select'); sel.className = 'ind-etapa-sel'; sel.title = 'Mover para outra etapa';
+  for (const e of indDados.etapasResp || []) sel.add(new Option(e.nome, e.id));
+  sel.value = r.etapa || 'nova';
+  sel.addEventListener('change', async () => { await fetch(`/api/indicacoes/respostas/${r.id}/etapa`, { method: 'POST', headers: indH(), body: JSON.stringify({ etapa: sel.value }) }); carregarIndicacoes(); });
+  acoes.appendChild(sel);
+  const wa = document.createElement('a'); wa.className = 'ind-btn'; wa.target = '_blank'; wa.rel = 'noopener'; wa.textContent = 'Pedir indicação';
+  const primeiro = r.nome.split(' ')[0];
+  wa.title = 'Abre o WhatsApp com uma mensagem pedindo indicação';
+  wa.href = `https://wa.me/${r.telefone}?text=${encodeURIComponent((indDados.mensagens?.pedido || '').split('{nome}').join(primeiro))}`;
+  wa.addEventListener('click', async () => { if ((r.etapa || 'nova') === 'nova' || r.etapa === 'atencao') { await fetch(`/api/indicacoes/respostas/${r.id}/etapa`, { method: 'POST', headers: indH(), body: JSON.stringify({ etapa: 'contato' }) }); carregarIndicacoes(); } });
+  acoes.appendChild(wa);
+  const lig = document.createElement('button'); lig.type = 'button'; lig.textContent = 'Registrar ligação';
+  lig.addEventListener('click', () => { document.getElementById('indLigNova').click(); document.getElementById('indLigNumero').value = r.telefone; document.getElementById('indLigNome').value = r.nome; });
+  acoes.appendChild(lig);
+  const cad = document.createElement('button'); cad.type = 'button'; cad.className = 'ffu-exec'; cad.textContent = 'Cadastrar indicados dele';
+  cad.addEventListener('click', () => { document.getElementById('indNovoBtn').click(); document.getElementById('indIndicadorNome').value = r.nome; document.getElementById('indIndicadorTel').value = r.telefone; document.getElementById('indIndicadoNome').focus(); });
+  acoes.appendChild(cad);
+  const nb = document.createElement('button'); nb.type = 'button'; nb.textContent = r.qtd_notas ? `📝 Anotações (${r.qtd_notas})` : '📝 Anotações';
+  nb.addEventListener('click', () => { document.getElementById('indNotasTitulo').textContent = `Anotações · ${r.nome}`; document.getElementById('indNotasModal').hidden = false; indPainelNotasModal('resp').definirContato(r.id); });
+  acoes.appendChild(nb);
+  const ap = document.createElement('button'); ap.type = 'button'; ap.textContent = 'Apagar';
+  ap.addEventListener('click', async () => { if (!confirm('Apagar esta resposta?')) return; await fetch(`/api/indicacoes/respostas/${r.id}`, { method: 'DELETE', headers: indH() }); carregarIndicacoes(); });
+  acoes.appendChild(ap);
+  card.appendChild(acoes);
+  return card;
+}
+
+function indDesenharPesquisa() {
+  const board = document.getElementById('indPacBoard');
+  const resp = indDados.respostas || [];
+  const q = indSemAcento(document.getElementById('indBusca').value.trim());
+  const lista = resp.filter((r) => !q || indSemAcento(`${r.nome} ${r.telefone} ${r.comentario || ''}`).includes(q));
+  document.getElementById('indPesqQtd').textContent = resp.length ? `(${resp.length})` : '';
+  const resumo = document.getElementById('indPacResumo');
+  if (resp.length) {
+    const media = (resp.reduce((a, r) => a + r.nota, 0) / resp.length).toFixed(1);
+    const sim = resp.filter((r) => r.indicaria).length;
+    const pro = resp.filter((r) => r.nota >= 9).length, det = resp.filter((r) => r.nota <= 6).length;
+    resumo.textContent = `${resp.length} resposta(s) · nota média ${media} · ${sim} indicariam (${Math.round((sim / resp.length) * 100)}%) · NPS ${Math.round(((pro - det) / resp.length) * 100)} · ${resp.filter((r) => r.etapa === 'indicou').length} já indicaram`;
+  } else resumo.textContent = 'Nenhuma resposta ainda. Mande o link da pesquisa aos pacientes pelo botão "Link do formulário": quem responder cai aqui, e a CRM chama para pedir indicação.';
+  board.textContent = '';
+  for (const e of indDados.etapasResp || []) {
+    const col = document.createElement('div'); col.className = 'crm-coluna';
+    indAtivarSoltar(col, 'resp', e.id);
+    const itens = lista.filter((r) => (r.etapa || 'nova') === e.id);
+    const head = document.createElement('div'); head.className = 'crm-coluna-header';
+    const t = document.createElement('span'); t.textContent = e.nome;
+    const c = document.createElement('span'); c.className = 'crm-coluna-contagem'; c.textContent = itens.length;
+    head.append(t, c); col.appendChild(head);
+    const cards = document.createElement('div'); cards.className = 'crm-coluna-cards';
+    if (!itens.length) { const v = document.createElement('div'); v.className = 'crm-coluna-vazia'; v.textContent = 'Ninguém aqui'; cards.appendChild(v); }
+    for (const r of itens) cards.appendChild(indCriarCardPaciente(r));
+    col.appendChild(cards); board.appendChild(col);
+  }
+}
+
+// ---- numero responsavel pelas Indicacoes (entre os numeros conectados da conta) ----
+function indDesenharNumero() {
+  const sel = document.getElementById('indNumero');
+  const numeros = indDados.numeros || [];
+  sel.textContent = '';
+  sel.add(new Option('Número responsável: nenhum', ''));
+  for (const n of numeros) sel.add(new Option(`${n.nome}${n.numero ? ` (${n.numero})` : ''}${n.status && n.status !== 'open' ? ' - desconectado' : ''}`, n.nome));
+  sel.value = indDados.instancia || '';
+  sel.disabled = !meuEhDono; // so o acesso principal troca
+  sel.hidden = !numeros.length;
+  const info = document.getElementById('indResponsavel');
+  const atual = numeros.find((n) => n.nome === indDados.instancia);
+  if (!atual) info.textContent = numeros.length ? 'Nenhum número escolhido para as Indicações: escolha acima o número da CRM responsável por esta parte.' : 'Conecte um número na aba WhatsApp para escolher o responsável pelas Indicações.';
+  else info.textContent = `Número responsável: ${atual.nome}${atual.numero ? ` (${atual.numero})` : ''} · Operador: ${atual.operadorNome || 'nenhum definido (escolha na aba WhatsApp)'}`;
+}
+document.getElementById('indNumero').addEventListener('change', async (e) => {
+  try {
+    const r = await fetch('/api/indicacoes/config', { method: 'PUT', headers: indH(), body: JSON.stringify({ instancia: e.target.value || null }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    mostrarAviso(e.target.value ? 'Número responsável pelas Indicações salvo' : 'Número responsável removido', 'ok');
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  carregarIndicacoes();
+});
+
+async function carregarIndicacoes() {
+  try {
+    const res = await fetch('/api/indicacoes', { headers: indH() });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro');
+    indDados = d;
+    indDesenhar();
+    indDesenharPesquisa();
+    indDesenharNumero();
+  } catch (err) {
+    indBoard.textContent = '';
+    const p = document.createElement('p'); p.className = 'agenda-vazia'; p.textContent = `Não consegui carregar as indicações: ${err.message}`; indBoard.appendChild(p);
+  }
+}
+document.getElementById('indRefresh').addEventListener('click', carregarIndicacoes);
+document.getElementById('indBusca').addEventListener('input', () => { indDesenhar(); indDesenharPesquisa(); });
+
+// ---- cadastro individual ----
+document.getElementById('indNovoBtn').addEventListener('click', () => {
+  for (const id of ['indIndicadorNome', 'indIndicadorTel', 'indIndicadoNome', 'indIndicadoTel', 'indObs']) document.getElementById(id).value = '';
+  document.getElementById('indErro').hidden = true;
+  document.getElementById('indSalvarBtn').classList.remove('pendente', 'salvo');
+  indModal.hidden = false;
+  document.getElementById('indIndicadorNome').focus();
+});
+indModal.addEventListener('click', (e) => { if (e.target === indModal || e.target.closest('[data-fechar="indModal"]')) indModal.hidden = true; });
+document.getElementById('indForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = document.getElementById('indErro'); erro.hidden = true;
+  const btn = document.getElementById('indSalvarBtn'); btn.disabled = true;
+  try {
+    const r = await fetch('/api/indicacoes', {
+      method: 'POST', headers: indH(),
+      body: JSON.stringify({ indicadorNome: document.getElementById('indIndicadorNome').value, indicadorTelefone: document.getElementById('indIndicadorTel').value, indicadoNome: document.getElementById('indIndicadoNome').value, indicadoTelefone: document.getElementById('indIndicadoTel').value, origem: document.getElementById('indOrigem').value, observacao: document.getElementById('indObs').value }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    if (d.duplicado) throw new Error(`Esse telefone já foi indicado${d.indicadoPor ? ` por ${d.indicadoPor}` : ''} (${d.nome}) - não foi repetido.`);
+    marcarSalvo(btn, 'Indicação cadastrada');
+    setTimeout(() => { indModal.hidden = true; }, 500);
+    carregarIndicacoes();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; }
+  btn.disabled = false;
+});
+
+// ---- importar lista ----
+function indMapearCabecalho(cab) {
+  const norm = cab.map((c) => indSemAcento(c));
+  const ehTel = (c) => /tel|fone|whats|cel|contato/.test(c);
+  const indicador = (c) => /indicador/.test(c);
+  const indicado = (c) => /indicado(?!r)/.test(c); // "indicador" contem "indicado": nao confundir
+  const m = {
+    indicadoTelefone: norm.findIndex((c) => indicado(c) && ehTel(c)),
+    indicadorTelefone: norm.findIndex((c) => indicador(c) && ehTel(c)),
+  };
+  m.indicadoNome = norm.findIndex((c, k) => indicado(c) && !ehTel(c) && k !== m.indicadoTelefone);
+  m.indicadorNome = norm.findIndex((c, k) => indicador(c) && !ehTel(c) && k !== m.indicadorTelefone);
+  return m;
+}
+document.getElementById('indImportarBtn').addEventListener('click', () => {
+  indLinhasImp = [];
+  document.getElementById('indImpArquivo').value = '';
+  for (const id of ['indImpResumo', 'indImpResultado', 'indImpErro']) { const el = document.getElementById(id); el.textContent = ''; if (id !== 'indImpResumo') el.hidden = true; }
+  document.getElementById('indImpConfirmar').hidden = true;
+  indImpModal.hidden = false;
+});
+indImpModal.addEventListener('click', (e) => { if (e.target === indImpModal || e.target.closest('[data-fechar="indImpModal"]')) indImpModal.hidden = true; });
+document.getElementById('indImpArquivo').addEventListener('change', async (e) => {
+  const arq = e.target.files?.[0]; if (!arq) return;
+  const erro = document.getElementById('indImpErro'); erro.hidden = true;
+  try {
+    const buf = await arq.arrayBuffer();
+    let linhas;
+    if (/\.(xlsx|xls)$/i.test(arq.name)) {
+      const XLSX = await ctGarantirSheetJs();
+      const livro = XLSX.read(buf, { type: 'array' });
+      linhas = XLSX.utils.sheet_to_json(livro.Sheets[livro.SheetNames[0]], { header: 1, raw: false, defval: '' });
+    } else linhas = ctLerCsv(ctDecodificarTexto(buf));
+    linhas = linhas.map((l) => l.map((v) => String(v ?? '').trim())).filter((l) => l.some(Boolean));
+    if (linhas.length < 2) throw new Error('A planilha precisa ter o cabeçalho e pelo menos uma linha.');
+    const m = indMapearCabecalho(linhas[0]);
+    if (m.indicadoNome < 0 || m.indicadoTelefone < 0 || m.indicadorNome < 0) throw new Error('Não achei as colunas. Use os títulos: Indicador, Telefone do indicador, Indicado, Telefone do indicado (baixe o modelo).');
+    indLinhasImp = linhas.slice(1).map((l) => ({ indicadorNome: l[m.indicadorNome], indicadorTelefone: m.indicadorTelefone >= 0 ? l[m.indicadorTelefone] : '', indicadoNome: l[m.indicadoNome], indicadoTelefone: l[m.indicadoTelefone] })).filter((l) => l.indicadoNome || l.indicadoTelefone);
+    document.getElementById('indImpResumo').textContent = `${indLinhasImp.length} indicação(ões) prontas para importar.`;
+    const b = document.getElementById('indImpConfirmar'); b.hidden = false; b.disabled = !indLinhasImp.length; b.textContent = `Importar ${indLinhasImp.length}`;
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; indLinhasImp = []; document.getElementById('indImpConfirmar').hidden = true; }
+});
+document.getElementById('indImpModelo').addEventListener('click', () => {
+  const csv = '﻿Indicador;Telefone do indicador;Indicado;Telefone do indicado\r\nMaria da Silva;82 99999-0001;João Souza;82 99999-0002\r\n';
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = 'modelo-indicacoes.csv'; a.click(); URL.revokeObjectURL(a.href);
+});
+document.getElementById('indImpConfirmar').addEventListener('click', async () => {
+  const b = document.getElementById('indImpConfirmar'); b.disabled = true; b.textContent = 'Importando...';
+  const erro = document.getElementById('indImpErro'); erro.hidden = true;
+  try {
+    const tot = { novos: 0, duplicados: 0, invalidos: 0, erros: [] };
+    for (let k = 0; k < indLinhasImp.length; k += 500) {
+      const r = await fetch('/api/indicacoes/importar', { method: 'POST', headers: indH(), body: JSON.stringify({ linhas: indLinhasImp.slice(k, k + 500) }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.erro || 'erro');
+      tot.novos += d.novos; tot.duplicados += d.duplicados; tot.invalidos += d.invalidos; tot.erros.push(...(d.erros || []));
+    }
+    const res = document.getElementById('indImpResultado');
+    res.textContent = `Importação concluída: ${tot.novos} novos, ${tot.duplicados} já existiam (não repetidos), ${tot.invalidos} inválidos${tot.erros.length ? ` (${tot.erros.join('; ')})` : ''}.`;
+    res.hidden = false; b.hidden = true; document.getElementById('indImpResumo').textContent = '';
+    mostrarAviso('Lista importada'); carregarIndicacoes();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; b.disabled = false; b.textContent = 'Tentar de novo'; }
+});
+
+// ---- link do formulario ----
+document.getElementById('indLinkBtn').addEventListener('click', () => {
+  const link = `${location.origin}/indicacao/${indDados.token}`;
+  document.getElementById('indLinkTexto').value = link;
+  document.getElementById('indLinkWa').href = `https://wa.me/?text=${encodeURIComponent((indDados.mensagens?.link || '').split('{link}').join(link))}`;
+  indLinkModal.hidden = false;
+});
+indLinkModal.addEventListener('click', (e) => { if (e.target === indLinkModal || e.target.closest('[data-fechar="indLinkModal"]')) indLinkModal.hidden = true; });
+document.getElementById('indLinkCopiar').addEventListener('click', async () => {
+  const t = document.getElementById('indLinkTexto');
+  try { await navigator.clipboard.writeText(t.value); mostrarAviso('Link copiado'); } catch { t.select(); document.execCommand('copy'); mostrarAviso('Link copiado'); }
+});
+
+// ---- registrar tentativa ----
+const indTentModal = document.getElementById('indTentModal');
+const indRetModal = document.getElementById('indRetModal');
+const indNotasModal = document.getElementById('indNotasModal');
+let indTentId = null, indRetId = null;
+indNotasModal.addEventListener('click', (e) => { if (e.target === indNotasModal || e.target.closest('[data-fechar="indNotasModal"]')) { indNotasModal.hidden = true; carregarIndicacoes(); } });
+function indAtualizarCamposTentativa() {
+  const r = document.getElementById('indTentResultado').value;
+  document.getElementById('indTentRetornoLabel').hidden = r !== 'retornar';
+  document.getElementById('indTentDuracaoLabel').hidden = !document.getElementById('indTentLigacao').checked || r === 'nao_atendeu';
+}
+document.getElementById('indTentResultado').addEventListener('change', indAtualizarCamposTentativa);
+document.getElementById('indTentLigacao').addEventListener('change', indAtualizarCamposTentativa);
+function indAbrirTentativa(i) {
+  indTentId = i.id;
+  const n = (i.tentativas || []).length + 1;
+  document.getElementById('indTentTitulo').textContent = `${n}ª tentativa · ${i.nome}`;
+  const sel = document.getElementById('indTentResultado'); sel.textContent = '';
+  for (const [k, v] of Object.entries(indDados.resultados || {})) sel.add(new Option(v, k));
+  document.getElementById('indTentObs').value = ''; document.getElementById('indTentRetorno').value = ''; document.getElementById('indTentDuracao').value = '0';
+  document.getElementById('indTentLigacao').checked = true;
+  document.getElementById('indTentErro').hidden = true;
+  document.getElementById('indTentSalvar').classList.remove('pendente', 'salvo');
+  indAtualizarCamposTentativa();
+  indTentModal.hidden = false;
+}
+indTentModal.addEventListener('click', (e) => { if (e.target === indTentModal || e.target.closest('[data-fechar="indTentModal"]')) indTentModal.hidden = true; });
+document.getElementById('indTentForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = document.getElementById('indTentErro'); erro.hidden = true;
+  const btn = document.getElementById('indTentSalvar'); btn.disabled = true;
+  try {
+    const ret = document.getElementById('indTentRetorno').value;
+    const r = await fetch(`/api/indicacoes/${indTentId}/tentativa`, {
+      method: 'POST', headers: indH(),
+      body: JSON.stringify({ resultado: document.getElementById('indTentResultado').value, obs: document.getElementById('indTentObs').value, ligacao: document.getElementById('indTentLigacao').checked, duracaoSeg: Math.round(Number(document.getElementById('indTentDuracao').value || 0) * 60), retornoEm: ret ? new Date(ret).toISOString() : null }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, 'Tentativa registrada');
+    setTimeout(() => { indTentModal.hidden = true; }, 400);
+    carregarIndicacoes();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; }
+  btn.disabled = false;
+});
+
+// ---- alerta de retorno ----
+function indParaInput(d) { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
+function indAbrirRetorno(i) {
+  indRetId = i.id;
+  document.getElementById('indRetData').value = i.retorno_em ? indParaInput(new Date(i.retorno_em)) : '';
+  document.getElementById('indRetNota').value = i.retorno_nota || '';
+  document.getElementById('indRetErro').hidden = true;
+  document.getElementById('indRetRemover').hidden = !i.retorno_em;
+  document.getElementById('indRetSalvar').classList.remove('pendente', 'salvo');
+  indRetModal.hidden = false;
+}
+indRetModal.addEventListener('click', (e) => { if (e.target === indRetModal || e.target.closest('[data-fechar="indRetModal"]')) indRetModal.hidden = true; });
+document.getElementById('indRetForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = document.getElementById('indRetErro'); erro.hidden = true;
+  const v = document.getElementById('indRetData').value;
+  if (!v) { erro.textContent = 'Informe a data e a hora.'; erro.hidden = false; return; }
+  const btn = document.getElementById('indRetSalvar'); btn.disabled = true;
+  try {
+    const r = await fetch(`/api/indicacoes/${indRetId}/retorno`, { method: 'POST', headers: indH(), body: JSON.stringify({ retornoEm: new Date(v).toISOString(), nota: document.getElementById('indRetNota').value }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, 'Alerta de retorno salvo');
+    setTimeout(() => { indRetModal.hidden = true; }, 400);
+    carregarIndicacoes();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; }
+  btn.disabled = false;
+});
+document.getElementById('indRetRemover').addEventListener('click', async () => {
+  await fetch(`/api/indicacoes/${indRetId}/retorno`, { method: 'DELETE', headers: indH() });
+  indRetModal.hidden = true; carregarIndicacoes();
+});
+
+// ---- Ligacoes do numero responsavel ----
+const indFmtSeg = (s) => { s = Number(s) || 0; const m = Math.floor(s / 60); return m ? `${m}min ${String(s % 60).padStart(2, '0')}s` : `${s}s`; };
+const indHoje = () => new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10);
+async function indCarregarLigacoes() {
+  const de = document.getElementById('indLigDe'), ate = document.getElementById('indLigAte');
+  if (!ate.value) ate.value = indHoje();
+  if (!de.value) de.value = new Date(Date.now() - 3 * 3600000 - 29 * 86400000).toISOString().slice(0, 10);
+  const info = document.getElementById('indLigInfo'), cards = document.getElementById('indLigResumo'), tab = document.getElementById('indLigTabela');
+  info.textContent = ''; cards.textContent = ''; tab.textContent = '';
+  try {
+    const r = await fetch(`/api/indicacoes/ligacoes?de=${de.value}&ate=${ate.value}`, { headers: indH() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    info.textContent = `Ligações do número ${d.instancia} no período. O WhatsApp só avisa as chamadas que ele mesmo registra; as demais entram pelo botão "Registrar ligação" (ou ao registrar uma tentativa como ligação).`;
+    const x = d.resumo;
+    for (const [v, t] of [[x.total, 'ligações'], [x.feitas, 'feitas'], [x.atendidas, 'atendidas'], [x.perdidas, 'perdidas'], [indFmtSeg(x.segundos_total), 'tempo total'], [indFmtSeg(x.segundos_medio), 'média por ligação']]) {
+      const c = document.createElement('div'); c.className = 'ind-card-resumo';
+      const a = document.createElement('strong'); a.textContent = v; const b = document.createElement('span'); b.textContent = t; c.append(a, b); cards.appendChild(c);
+    }
+    const thead = document.createElement('thead'); const trh = document.createElement('tr');
+    for (const h of ['Quando', 'Contato', 'Sentido', 'Resultado', 'Duração', 'Quem ligou', 'Observação', '']) { const th = document.createElement('th'); th.textContent = h; trh.appendChild(th); }
+    thead.appendChild(trh); tab.appendChild(thead);
+    const tb = document.createElement('tbody');
+    if (!d.chamadas.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 8; td.textContent = 'Nenhuma ligação nesse período.'; tr.appendChild(td); tb.appendChild(tr); }
+    const ST = { atendida: 'Atendida', perdida: 'Não atendeu', recusada: 'Recusada', tocando: 'Tocando' };
+    for (const c of d.chamadas) {
+      const tr = document.createElement('tr');
+      const cel = (t) => { const td = document.createElement('td'); td.textContent = t; tr.appendChild(td); return td; };
+      cel(new Date(c.inicio).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }));
+      cel(`${c.nome || c.numero}${c.nome ? ` · ${c.numero}` : ''}`); cel(c.direcao === 'feita' ? 'Feita' : 'Recebida'); cel(ST[c.status] || c.status); cel(c.duracao_seg ? indFmtSeg(c.duracao_seg) : '-'); cel(c.operador_nome || '-'); cel(c.obs || '');
+      const td = document.createElement('td');
+      if (c.origem === 'manual') { const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Apagar'; b.addEventListener('click', async () => { if (!confirm('Apagar este registro de ligação?')) return; await fetch(`/api/indicacoes/ligacoes/${c.id}`, { method: 'DELETE', headers: indH() }); indCarregarLigacoes(); }); td.appendChild(b); }
+      tr.appendChild(td); tb.appendChild(tr);
+    }
+    tab.appendChild(tb);
+  } catch (err) { info.textContent = err.message; }
+}
+document.getElementById('indLigAtualizar').addEventListener('click', indCarregarLigacoes);
+const indLigModal = document.getElementById('indLigModal');
+document.getElementById('indLigNova').addEventListener('click', () => {
+  for (const id of ['indLigNumero', 'indLigNome', 'indLigObs']) document.getElementById(id).value = '';
+  document.getElementById('indLigDuracao').value = '0'; document.getElementById('indLigStatus').value = 'atendida';
+  const dl = document.getElementById('indLigLista'); dl.textContent = '';
+  for (const i of indDados.indicados.slice(0, 1500)) dl.appendChild(new Option(`${i.nome}`, i.telefone));
+  document.getElementById('indLigErro').hidden = true; document.getElementById('indLigSalvar').classList.remove('pendente', 'salvo');
+  indLigModal.hidden = false;
+});
+document.getElementById('indLigNumero').addEventListener('change', (e) => { const i = indDados.indicados.find((x) => x.telefone === e.target.value.replace(/\D/g, '')); if (i) { document.getElementById('indLigNome').value = i.nome; e.target.value = i.telefone; } });
+indLigModal.addEventListener('click', (e) => { if (e.target === indLigModal || e.target.closest('[data-fechar="indLigModal"]')) indLigModal.hidden = true; });
+document.getElementById('indLigForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = document.getElementById('indLigErro'); erro.hidden = true;
+  const btn = document.getElementById('indLigSalvar'); btn.disabled = true;
+  try {
+    const r = await fetch('/api/indicacoes/ligacoes', { method: 'POST', headers: indH(), body: JSON.stringify({ numero: document.getElementById('indLigNumero').value, nome: document.getElementById('indLigNome').value, status: document.getElementById('indLigStatus').value, duracaoSeg: Math.round(Number(document.getElementById('indLigDuracao').value || 0) * 60), obs: document.getElementById('indLigObs').value }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, 'Ligação registrada');
+    setTimeout(() => { indLigModal.hidden = true; }, 400);
+    indCarregarLigacoes();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; }
+  btn.disabled = false;
+});
+
+// ---- IA exclusiva da aba ----
+let indIaDados = { config: { ativo: false, prompt: '' }, arquivos: [], promptPadrao: '' };
+function indIaDesenharEstado() {
+  const a = indIaDados.config.ativo;
+  document.getElementById('indIaAtivo').checked = a;
+  document.getElementById('indIaAtivoLabel').textContent = a ? 'IA atendendo no número das Indicações' : 'IA pausada';
+  document.getElementById('indIaEstado').textContent = a ? '(ligada)' : '(pausada)';
+}
+async function indCarregarIA() {
+  try {
+    const r = await fetch('/api/indicacoes/ia', { headers: indH() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    indIaDados = d;
+    document.getElementById('indIaPrompt').value = d.config.prompt || '';
+    document.getElementById('indIaPrompt').placeholder = d.promptPadrao || '';
+    indIaDesenharEstado();
+    const box = document.getElementById('indIaArquivos'); box.textContent = '';
+    if (!d.arquivos.length) { const p = document.createElement('p'); p.className = 'agenda-vazia'; p.textContent = 'Nenhum arquivo ainda.'; box.appendChild(p); }
+    for (const a of d.arquivos) {
+      const item = document.createElement('div'); item.className = 'auto-arquivo-item';
+      const info = document.createElement('div'); info.className = 'auto-arquivo-info';
+      const n = document.createElement('div'); n.className = 'auto-arquivo-nome'; n.textContent = a.nome_arquivo;
+      const dt = document.createElement('div'); dt.className = 'auto-arquivo-detalhe'; dt.textContent = `${a.media_type} · ${(a.tamanho / 1024).toFixed(0)} KB${a.descricao ? ` · ${a.descricao}` : ''}`;
+      info.append(n, dt); item.appendChild(info);
+      const x = document.createElement('button'); x.type = 'button'; x.textContent = 'Apagar'; x.style.cssText = 'font-size:11px;padding:3px 8px;margin-left:6px;color:#f87171;';
+      x.addEventListener('click', async () => { if (!confirm(`Apagar "${a.nome_arquivo}"?`)) return; await fetch(`/api/indicacoes/ia/arquivos/${a.id}`, { method: 'DELETE', headers: indH() }); indCarregarIA(); });
+      item.appendChild(x); box.appendChild(item);
+    }
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+}
+document.getElementById('indIaAtivo').addEventListener('change', async (e) => {
+  const quer = e.target.checked;
+  try {
+    const r = await fetch('/api/indicacoes/ia/ativo', { method: 'POST', headers: indH(), body: JSON.stringify({ ativo: quer }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    indIaDados.config.ativo = quer; indIaDesenharEstado();
+    mostrarAviso(quer ? 'IA das Indicações ligada' : 'IA das Indicações pausada', 'ok');
+  } catch (err) { e.target.checked = !quer; mostrarAviso(err.message, 'erro'); }
+});
+document.getElementById('indIaPadrao').addEventListener('click', () => { document.getElementById('indIaPrompt').value = indIaDados.promptPadrao || ''; marcarPendente(document.getElementById('indIaSalvar')); });
+document.getElementById('indIaSalvar').addEventListener('click', async () => {
+  const btn = document.getElementById('indIaSalvar'); btn.disabled = true;
+  try {
+    const r = await fetch('/api/indicacoes/ia/config', { method: 'PUT', headers: indH(), body: JSON.stringify({ ativo: indIaDados.config.ativo, prompt: document.getElementById('indIaPrompt').value }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, 'Prompt da IA salvo');
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  btn.disabled = false;
+});
+document.getElementById('indIaEnviar').addEventListener('click', async () => {
+  const erro = document.getElementById('indIaErro'); erro.hidden = true;
+  const arq = document.getElementById('indIaArquivo').files?.[0];
+  if (!arq) { erro.textContent = 'Escolha um arquivo.'; erro.hidden = false; return; }
+  const btn = document.getElementById('indIaEnviar'); btn.disabled = true; btn.textContent = 'Enviando...';
+  try {
+    const b64 = await arquivoParaBase64(arq);
+    const r = await fetch('/api/indicacoes/ia/arquivos', { method: 'POST', headers: indH(), body: JSON.stringify({ nomeArquivo: arq.name, mediaType: arq.type || 'application/octet-stream', base64: b64, descricao: document.getElementById('indIaDescricao').value }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    document.getElementById('indIaArquivo').value = ''; document.getElementById('indIaDescricao').value = '';
+    mostrarAviso('Arquivo enviado', 'ok'); indCarregarIA();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; }
+  btn.disabled = false; btn.textContent = 'Enviar arquivo';
+});
+
+// ---- mensagens padrao editaveis ----
+const indMsgModal = document.getElementById('indMsgModal');
+document.getElementById('indMsgBtn').addEventListener('click', () => {
+  document.getElementById('indMsgPedido').value = indDados.mensagens?.pedido || '';
+  document.getElementById('indMsgLink').value = indDados.mensagens?.link || '';
+  document.getElementById('indMsgErro').hidden = true;
+  document.getElementById('indMsgSalvar').classList.remove('pendente', 'salvo');
+  indMsgModal.hidden = false;
+});
+indMsgModal.addEventListener('click', (e) => { if (e.target === indMsgModal || e.target.closest('[data-fechar="indMsgModal"]')) indMsgModal.hidden = true; });
+async function indSalvarMensagens(pedido, link, btn, aviso) {
+  const erro = document.getElementById('indMsgErro'); erro.hidden = true;
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/indicacoes/mensagens', { method: 'PUT', headers: indH(), body: JSON.stringify({ pedido, link }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, aviso);
+    await carregarIndicacoes();
+    return true;
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; return false; } finally { btn.disabled = false; }
+}
+document.getElementById('indMsgForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (await indSalvarMensagens(document.getElementById('indMsgPedido').value, document.getElementById('indMsgLink').value, document.getElementById('indMsgSalvar'), 'Mensagens salvas')) setTimeout(() => { indMsgModal.hidden = true; }, 500);
+});
+document.getElementById('indMsgPadrao').addEventListener('click', async () => {
+  if (!confirm('Voltar os dois textos ao padrão?')) return;
+  if (await indSalvarMensagens('', '', document.getElementById('indMsgSalvar'), 'Textos padrão restaurados')) { document.getElementById('indMsgPedido').value = indDados.mensagens.pedido; document.getElementById('indMsgLink').value = indDados.mensagens.link; }
+});
+
+// ---------- Resgate de orçamentos (inacabados / aprovados sem iniciar) ----------
+const resBoard = document.getElementById('resBoard');
+let resDados = { etapas: [], resultados: {}, pacientes: [], mensagem: '', operadores: [] };
+let resDiasMin = 15;
+let resPollTimer = null;
+let resArrastando = null;
+const resH = () => ({ 'x-app-password': appPassword, 'Content-Type': 'application/json' });
+const resMoeda = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+const resData = (iso) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+const resDH = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const resSemAcento = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+function resNomePendentes(p) {
+  const nomes = (p.faltam || []).map((f) => String(f.d || '').toLowerCase()).filter(Boolean);
+  const unicos = [...new Set(nomes)];
+  if (!unicos.length) return 'etapas do orçamento';
+  return unicos.slice(0, 2).join(' e ') + (unicos.length > 2 ? ' e outros' : '');
+}
+
+function resAtivarArraste(card, id) {
+  card.draggable = true;
+  card.addEventListener('dragstart', (e) => { resArrastando = id; card.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', String(id)); e.dataTransfer.effectAllowed = 'move'; } catch { /* sem dataTransfer */ } });
+  card.addEventListener('dragend', () => { card.classList.remove('dragging'); resArrastando = null; });
+}
+function resAtivarSoltar(coluna, etapaId) {
+  coluna.addEventListener('dragover', (e) => { if (!resArrastando) return; e.preventDefault(); coluna.classList.add('drag-over'); });
+  coluna.addEventListener('dragleave', () => coluna.classList.remove('drag-over'));
+  coluna.addEventListener('drop', async (e) => {
+    e.preventDefault(); coluna.classList.remove('drag-over');
+    const id = resArrastando; if (!id) return;
+    try {
+      const r = await fetch(`/api/resgate/${id}/etapa`, { method: 'POST', headers: resH(), body: JSON.stringify({ etapa: etapaId }) });
+      if (!r.ok) mostrarAviso((await r.json().catch(() => ({}))).erro || 'Não consegui mover', 'erro');
+    } catch (err) { mostrarAviso(err.message, 'erro'); }
+    carregarResgate();
+  });
+}
+
+function resPainelNotas() {
+  if (!resPainelNotas.p) {
+    resPainelNotas.p = criarPainelNotas(document.getElementById('resNotasPainel'), (id, n) => { const x = resDados.pacientes.find((k) => k.id === id); if (x) x.qtd_notas = n; }, {
+      fixo: true, urlLista: (id) => `/api/resgate/${id}/notas`, urlApagar: (id) => `/api/resgate/notas/${id}`,
+    });
+  }
+  return resPainelNotas.p;
+}
+
+function resCriarCard(p) {
+  const card = document.createElement('div');
+  card.className = 'crm-card ind-card res-card';
+  resAtivarArraste(card, p.id);
+  const nome = document.createElement('div'); nome.className = 'crm-card-nome'; nome.textContent = p.nome || 'Sem nome'; card.appendChild(nome);
+  const sub = document.createElement('div'); sub.className = 'crm-card-numero'; sub.textContent = `${p.telefone || 'sem telefone'}${p.profissional ? ` · ${p.profissional}` : ''}`; card.appendChild(sub);
+  const valor = document.createElement('div'); valor.className = 'res-valor'; valor.textContent = `Falta executar ${resMoeda(p.valor_pendente)}`; card.appendChild(valor);
+  const tags = document.createElement('div'); tags.className = 'ind-tags';
+  const parado = document.createElement('span'); parado.className = 'ind-tag' + (p.dias_parado >= 45 ? ' vermelho' : p.dias_parado >= 30 ? ' laranja' : ''); parado.textContent = p.categoria === 'sem_inicio' ? `Aprovado há ${p.dias_parado} dias` : `Parado há ${p.dias_parado} dias`; tags.appendChild(parado);
+  if (p.proxima_consulta_em) { const c = document.createElement('span'); c.className = 'ind-tag ok'; c.textContent = `Consulta marcada ${resData(p.proxima_consulta_em)}`; tags.appendChild(c); }
+  if (p.retomou_em) { const c = document.createElement('span'); c.className = 'ind-tag ok'; c.textContent = `Retomou em ${resData(p.retomou_em)}`; tags.appendChild(c); }
+  card.appendChild(tags);
+  // procedimentos (feitos x faltam)
+  const det = document.createElement('details'); det.className = 'res-detalhes';
+  const sum = document.createElement('summary'); sum.textContent = `${p.procs_feitos} de ${p.procs_total} feitos · ver procedimentos`; det.appendChild(sum);
+  for (const f of p.feitos || []) { const li = document.createElement('div'); li.className = 'res-proc feito'; li.textContent = `✔ ${f.d}${f.data ? ` (${resData(f.data)})` : ''}`; det.appendChild(li); }
+  for (const f of p.faltam || []) { const li = document.createElement('div'); li.className = 'res-proc falta'; li.textContent = `• ${f.d}${f.v ? ` — ${resMoeda(f.v)}` : ''}`; det.appendChild(li); }
+  card.appendChild(det);
+  if ((p.tentativas || []).length) {
+    const h = document.createElement('div'); h.className = 'ind-obs';
+    h.textContent = p.tentativas.map((t) => `${t.n}ª: ${resDados.resultados?.[t.resultado] || t.resultado} (${resData(t.feita_em)})`).join(' · ');
+    card.appendChild(h);
+  }
+  if (p.retorno_em) {
+    const d = new Date(p.retorno_em);
+    const r = document.createElement('div'); r.className = 'ind-retorno' + (d.getTime() < Date.now() ? ' vencido' : d.toDateString() === new Date().toDateString() ? ' hoje' : '');
+    r.textContent = `⏰ Retorno ${d.getTime() < Date.now() ? 'atrasado' : d.toDateString() === new Date().toDateString() ? 'hoje' : 'em'} ${resDH(p.retorno_em)}${p.retorno_nota ? ` · ${p.retorno_nota}` : ''}`;
+    card.appendChild(r);
+  }
+  const acoes = document.createElement('div'); acoes.className = 'ffu-acoes';
+  const sel = document.createElement('select'); sel.className = 'ind-etapa-sel'; sel.title = 'Mover para outra etapa';
+  for (const e of resDados.etapas) sel.add(new Option(e.nome, e.id));
+  sel.value = p.etapa;
+  sel.addEventListener('change', async () => { await fetch(`/api/resgate/${p.id}/etapa`, { method: 'POST', headers: resH(), body: JSON.stringify({ etapa: sel.value }) }); carregarResgate(); });
+  acoes.appendChild(sel);
+  const reg = document.createElement('button'); reg.type = 'button'; reg.className = 'ffu-exec'; reg.textContent = 'Registrar contato';
+  reg.addEventListener('click', () => resAbrirTentativa(p));
+  acoes.appendChild(reg);
+  if (p.telefone) {
+    const wa = document.createElement('a'); wa.className = 'ind-btn'; wa.target = '_blank'; wa.rel = 'noopener'; wa.textContent = 'WhatsApp';
+    const primeiro = String(p.nome || '').trim().split(/\s+/)[0] || '';
+    wa.href = `https://wa.me/${p.telefone}?text=${encodeURIComponent((resDados.mensagem || '').split('{nome}').join(primeiro).split('{pendentes}').join(resNomePendentes(p)))}`;
+    acoes.appendChild(wa);
+  }
+  const rb = document.createElement('button'); rb.type = 'button'; rb.textContent = p.retorno_em ? 'Retorno' : 'Alerta de retorno';
+  rb.addEventListener('click', () => resAbrirRetorno(p));
+  acoes.appendChild(rb);
+  const nb = document.createElement('button'); nb.type = 'button'; nb.textContent = p.qtd_notas ? `📝 Anotações (${p.qtd_notas})` : '📝 Anotações';
+  nb.addEventListener('click', () => { document.getElementById('resNotasTitulo').textContent = `Anotações · ${p.nome}`; document.getElementById('resNotasModal').hidden = false; resPainelNotas().definirContato(p.id); });
+  acoes.appendChild(nb);
+  card.appendChild(acoes);
+  return card;
+}
+
+function resDesenhar() {
+  const q = resSemAcento(document.getElementById('resBusca').value.trim());
+  const ocultar = document.getElementById('resOcultarConsulta').checked;
+  const ordem = document.getElementById('resOrdem').value;
+  const todos = resDados.pacientes.filter((p) => !q || resSemAcento(`${p.nome} ${p.telefone || ''}`).includes(q));
+  const entrada = (p) => p.etapa === 'sem_inicio' || p.etapa === 'novo';
+  const passa = (p) => !entrada(p) || ((p.dias_parado >= resDiasMin) && !(ocultar && p.proxima_consulta_em));
+  const cmp = { valor: (a, b) => b.valor_pendente - a.valor_pendente, parado: (a, b) => b.dias_parado - a.dias_parado, recente: (a, b) => new Date(b.aprovado_em) - new Date(a.aprovado_em) }[ordem];
+  resBoard.textContent = '';
+  let totalPend = 0, qtdPend = 0, escondidos = 0;
+  for (const e of resDados.etapas) {
+    const doEtapa = todos.filter((p) => p.etapa === e.id);
+    const visiveis = doEtapa.filter(passa).sort(entrada({ etapa: e.id }) ? cmp : (a, b) => new Date(b.atualizado_em) - new Date(a.atualizado_em));
+    escondidos += doEtapa.length - visiveis.length;
+    if (e.id !== 'retomou' && e.id !== 'sem_sucesso') for (const p of visiveis) { totalPend += p.valor_pendente; qtdPend++; }
+    const col = document.createElement('div'); col.className = 'crm-coluna' + (e.id === 'sem_inicio' ? ' res-coluna-a-parte' : '');
+    resAtivarSoltar(col, e.id);
+    const head = document.createElement('div'); head.className = 'crm-coluna-header';
+    const t = document.createElement('span'); t.textContent = e.nome;
+    const c = document.createElement('span'); c.className = 'crm-coluna-contagem'; c.textContent = visiveis.length;
+    head.append(t, c); col.appendChild(head);
+    const sum = document.createElement('div'); sum.className = 'res-col-total'; sum.textContent = visiveis.length ? resMoeda(visiveis.reduce((a, p) => a + p.valor_pendente, 0)) : ''; col.appendChild(sum);
+    const cards = document.createElement('div'); cards.className = 'crm-coluna-cards';
+    if (!visiveis.length) { const v = document.createElement('div'); v.className = 'crm-coluna-vazia'; v.textContent = 'Ninguém aqui'; cards.appendChild(v); }
+    for (const p of visiveis.slice(0, 150)) cards.appendChild(resCriarCard(p));
+    if (visiveis.length > 150) { const m = document.createElement('div'); m.className = 'crm-coluna-vazia'; m.textContent = `+ ${visiveis.length - 150} (use os filtros para ver)`; cards.appendChild(m); }
+    col.appendChild(cards); resBoard.appendChild(col);
+  }
+  const quando = resDados.ultimaSync ? `Última leitura do Clinicorp: ${resDH(resDados.ultimaSync)}.` : 'Ainda não leu o Clinicorp.';
+  document.getElementById('resResumo').textContent = `${qtdPend} paciente(s) em resgate somando ${resMoeda(totalPend)} ainda não executados${escondidos ? ` · ${escondidos} escondido(s) pelos filtros` : ''}. ${quando}`;
+}
+
+async function carregarResgate() {
+  clearTimeout(resPollTimer);
+  try {
+    const res = await fetch('/api/resgate', { headers: resH() });
+    const d = await res.json();
+    if (!res.ok) { resBoard.textContent = ''; const p = document.createElement('p'); p.className = 'agenda-vazia'; p.textContent = d.erro || 'Não consegui carregar.'; resBoard.appendChild(p); return; }
+    resDados = d;
+    const sel = document.getElementById('resOperador');
+    sel.textContent = '';
+    sel.add(new Option('Operador responsável: todos com acesso', ''));
+    for (const o of d.operadores) sel.add(new Option(`Operador responsável: ${o.nome}`, String(o.id)));
+    sel.value = d.operadorId === null || d.operadorId === undefined ? '' : String(d.operadorId);
+    sel.disabled = !d.podeEscolherOperador;
+    sel.hidden = !d.operadores.length;
+    resDesenhar();
+    // primeira carga: o servidor esta lendo o Clinicorp em segundo plano - volta a olhar sozinho
+    if (d.carregando || !d.pacientes.length) {
+      document.getElementById('resResumo').textContent = d.carregando ? 'Lendo os orçamentos no Clinicorp pela primeira vez... isso leva alguns minutos (o Clinicorp limita as consultas por hora). A tela atualiza sozinha.' : document.getElementById('resResumo').textContent;
+      if (d.carregando && !tabResgate.hidden) resPollTimer = setTimeout(carregarResgate, 20000);
+    }
+  } catch (err) { resBoard.textContent = ''; const p = document.createElement('p'); p.className = 'agenda-vazia'; p.textContent = `Não consegui carregar: ${err.message}`; resBoard.appendChild(p); }
+}
+document.getElementById('resRefresh').addEventListener('click', carregarResgate);
+document.getElementById('resBusca').addEventListener('input', resDesenhar);
+document.getElementById('resOcultarConsulta').addEventListener('change', resDesenhar);
+document.getElementById('resOrdem').addEventListener('change', resDesenhar);
+for (const b of document.querySelectorAll('.res-dias')) b.addEventListener('click', () => { resDiasMin = Number(b.dataset.dias); for (const x of document.querySelectorAll('.res-dias')) x.classList.toggle('ativo', x === b); resDesenhar(); });
+document.getElementById('resOperador').addEventListener('change', async (e) => {
+  try {
+    const r = await fetch('/api/resgate/config', { method: 'PUT', headers: resH(), body: JSON.stringify({ operadorId: e.target.value === '' ? null : Number(e.target.value) }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    mostrarAviso(e.target.value ? 'Operador responsável salvo' : 'Operador responsável removido', 'ok');
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  carregarResgate();
+});
+document.getElementById('resAtualizarBtn').addEventListener('click', async () => {
+  const b = document.getElementById('resAtualizarBtn'); b.disabled = true; b.textContent = 'Lendo o Clinicorp...';
+  try {
+    const r = await fetch('/api/resgate/atualizar', { method: 'POST', headers: resH() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    mostrarAviso(d.resumo, 'ok');
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  b.disabled = false; b.textContent = 'Atualizar do Clinicorp';
+  carregarResgate();
+});
+
+// ---- registrar contato ----
+const resTentModal = document.getElementById('resTentModal');
+const resRetModal = document.getElementById('resRetModal');
+const resNotasModal = document.getElementById('resNotasModal');
+const resMsgModal = document.getElementById('resMsgModal');
+let resTentId = null, resRetId = null;
+resNotasModal.addEventListener('click', (e) => { if (e.target === resNotasModal || e.target.closest('[data-fechar="resNotasModal"]')) { resNotasModal.hidden = true; carregarResgate(); } });
+document.getElementById('resTentResultado').addEventListener('change', (e) => { document.getElementById('resTentRetornoLabel').hidden = e.target.value !== 'retornar'; });
+function resAbrirTentativa(p) {
+  resTentId = p.id;
+  document.getElementById('resTentTitulo').textContent = `${(p.tentativas || []).length + 1}º contato · ${p.nome}`;
+  const sel = document.getElementById('resTentResultado'); sel.textContent = '';
+  for (const [k, v] of Object.entries(resDados.resultados || {})) sel.add(new Option(v, k));
+  document.getElementById('resTentObs').value = ''; document.getElementById('resTentRetorno').value = ''; document.getElementById('resTentLigacao').checked = true;
+  document.getElementById('resTentRetornoLabel').hidden = true; document.getElementById('resTentErro').hidden = true;
+  document.getElementById('resTentSalvar').classList.remove('pendente', 'salvo');
+  resTentModal.hidden = false;
+}
+resTentModal.addEventListener('click', (e) => { if (e.target === resTentModal || e.target.closest('[data-fechar="resTentModal"]')) resTentModal.hidden = true; });
+document.getElementById('resTentForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = document.getElementById('resTentErro'); erro.hidden = true;
+  const btn = document.getElementById('resTentSalvar'); btn.disabled = true;
+  try {
+    const ret = document.getElementById('resTentRetorno').value;
+    const r = await fetch(`/api/resgate/${resTentId}/tentativa`, { method: 'POST', headers: resH(), body: JSON.stringify({ resultado: document.getElementById('resTentResultado').value, obs: document.getElementById('resTentObs').value, ligacao: document.getElementById('resTentLigacao').checked, retornoEm: ret ? new Date(ret).toISOString() : null }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, 'Contato registrado');
+    setTimeout(() => { resTentModal.hidden = true; }, 400);
+    carregarResgate();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; }
+  btn.disabled = false;
+});
+
+// ---- alerta de retorno ----
+function resParaInput(d) { const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
+function resAbrirRetorno(p) {
+  resRetId = p.id;
+  document.getElementById('resRetData').value = p.retorno_em ? resParaInput(new Date(p.retorno_em)) : '';
+  document.getElementById('resRetNota').value = p.retorno_nota || '';
+  document.getElementById('resRetErro').hidden = true; document.getElementById('resRetRemover').hidden = !p.retorno_em;
+  document.getElementById('resRetSalvar').classList.remove('pendente', 'salvo');
+  resRetModal.hidden = false;
+}
+resRetModal.addEventListener('click', (e) => { if (e.target === resRetModal || e.target.closest('[data-fechar="resRetModal"]')) resRetModal.hidden = true; });
+document.getElementById('resRetForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const erro = document.getElementById('resRetErro'); erro.hidden = true;
+  const v = document.getElementById('resRetData').value;
+  if (!v) { erro.textContent = 'Informe a data e a hora.'; erro.hidden = false; return; }
+  const btn = document.getElementById('resRetSalvar'); btn.disabled = true;
+  try {
+    const r = await fetch(`/api/resgate/${resRetId}/retorno`, { method: 'POST', headers: resH(), body: JSON.stringify({ retornoEm: new Date(v).toISOString(), nota: document.getElementById('resRetNota').value }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, 'Alerta de retorno salvo');
+    setTimeout(() => { resRetModal.hidden = true; }, 400);
+    carregarResgate();
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; }
+  btn.disabled = false;
+});
+document.getElementById('resRetRemover').addEventListener('click', async () => { await fetch(`/api/resgate/${resRetId}/retorno`, { method: 'DELETE', headers: resH() }); resRetModal.hidden = true; carregarResgate(); });
+
+// ---- mensagem de WhatsApp editavel ----
+document.getElementById('resMsgBtn').addEventListener('click', () => {
+  document.getElementById('resMsgTexto').value = resDados.mensagem || '';
+  document.getElementById('resMsgErro').hidden = true; document.getElementById('resMsgSalvar').classList.remove('pendente', 'salvo');
+  resMsgModal.hidden = false;
+});
+resMsgModal.addEventListener('click', (e) => { if (e.target === resMsgModal || e.target.closest('[data-fechar="resMsgModal"]')) resMsgModal.hidden = true; });
+async function resSalvarMensagem(texto, btn, aviso) {
+  const erro = document.getElementById('resMsgErro'); erro.hidden = true; btn.disabled = true;
+  try {
+    const r = await fetch('/api/resgate/mensagem', { method: 'PUT', headers: resH(), body: JSON.stringify({ mensagem: texto }) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    marcarSalvo(btn, aviso); await carregarResgate(); return true;
+  } catch (err) { erro.textContent = err.message; erro.hidden = false; return false; } finally { btn.disabled = false; }
+}
+document.getElementById('resMsgForm').addEventListener('submit', async (e) => { e.preventDefault(); if (await resSalvarMensagem(document.getElementById('resMsgTexto').value, document.getElementById('resMsgSalvar'), 'Mensagem salva')) setTimeout(() => { resMsgModal.hidden = true; }, 500); });
+document.getElementById('resMsgPadrao').addEventListener('click', async () => { if (!confirm('Voltar ao texto padrão?')) return; if (await resSalvarMensagem('', document.getElementById('resMsgSalvar'), 'Texto padrão restaurado')) document.getElementById('resMsgTexto').value = resDados.mensagem; });
