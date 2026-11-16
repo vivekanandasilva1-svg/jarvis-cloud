@@ -10,7 +10,7 @@ import * as clinicorp from './clinicorp.js';
 import { enviarMensagemTexto, enviarMensagemTextoPor } from './evolutionApi.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
 
-export const TIPOS_RELATORIO = ['ads_financeiro', 'ads_metricas', 'clinica_financeiro', 'clinica_agendamentos', 'ads_saldo_baixo'];
+export const TIPOS_RELATORIO = ['ads_financeiro', 'ads_metricas', 'ads_metricas_ontem', 'clinica_financeiro', 'clinica_agendamentos', 'ads_saldo_baixo'];
 // as duas primeiras (X_horas) existem so pra fazer sentido no alerta de saldo baixo (precisa
 // checar bem mais seguido que "diario") - nada impede escolher pros outros tipos tambem, so nao
 // costuma fazer sentido pra um relatorio de metricas/financeiro mandar a cada 6h. Frequencias
@@ -21,6 +21,7 @@ export const FREQUENCIAS = ['6_horas', '12_horas', 'diario', 'semanal', 'quinzen
 const NOME_TIPO = {
   ads_financeiro: 'Meta Ads - Financeiro Completo',
   ads_metricas: 'Meta Ads - Todas as Metricas das Campanhas',
+  ads_metricas_ontem: 'Meta Ads - Todas as Metricas do Dia Anterior (completo)',
   clinica_financeiro: 'Clinica - Relatorio Financeiro Geral',
   clinica_agendamentos: 'Clinica - Relatorio de Agendamentos Completo',
   ads_saldo_baixo: 'Meta Ads - Saldo das Contas (diario, por cor)',
@@ -291,8 +292,15 @@ function formatarDataBR(isoDate) {
 // janela de datas (fuso Maceio) pro periodo do relatorio - pedido explicito do usuario:
 // relatorio diario tem que medir de 00h ate 23h59 do dia de calendario, nao "ultimas 24h"
 // corridas a partir do momento exato do envio.
-function periodoDiasCalendario(frequencia) {
+function periodoDiasCalendario(frequencia, { diaAnterior = false } = {}) {
   const hoje = dataMaceioISO(new Date());
+  // relatorio "dia anterior": o dia de calendario de ontem inteiro (00h ate 23h59), pra mandar de manha o fechamento completo
+  if (diaAnterior) {
+    const ontem = new Date(`${hoje}T00:00:00Z`);
+    ontem.setUTCDate(ontem.getUTCDate() - 1);
+    const dia = ontem.toISOString().slice(0, 10);
+    return { since: dia, until: dia, hoje: dia };
+  }
   // frequencias sub-diarias (6_horas/12_horas) nao fazem sentido pra janela de dia de
   // calendario - trata como diario (00h-23h59 de hoje) nesse caso
   const dias = Math.max(1, Math.round(DIAS_POR_FREQUENCIA[frequencia] || 1));
@@ -316,6 +324,17 @@ function gerarDicaAnalise({ freqAnuncio, resultados, gasto, videoViews50, videoV
     return 'boa parte de quem comeca o video sai antes da metade - os primeiros segundos do criativo podem nao estar prendendo atencao.';
   }
   return 'sem alerta relevante no periodo - campanha performando dentro do esperado.';
+}
+
+// texto do periodo no cabecalho de cada relatorio: diz exatamente o que esta sendo medido
+function textoPeriodo({ frequencia, hoje, diaAnterior }) {
+  const data = formatarDataBR(hoje);
+  if (diaAnterior) return `${data} DAS 00H AS 23:59 Período de Análise: DIA ANTERIOR (COMPLETO)`;
+  if (frequencia === 'diario') {
+    const agora = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit', hour12: false });
+    return `${data} DAS 00H ATÉ ${agora} Período de Análise: DIA ATUAL (PARCIAL ATÉ AGORA)`;
+  }
+  return `${data} DAS 00H AS 23:59 Período de Análise: ${LABEL_FREQUENCIA[frequencia] || String(frequencia).toUpperCase()}`;
 }
 
 // bloco de metricas no padrao do relatorio oficial do Gerenciador (mesmas colunas, mesmo calculo).
@@ -350,14 +369,14 @@ function linhasDeMetricas(m) {
   ];
 }
 
-export function montarBlocoCampanha({ conta, campanha, row, frequencia, hoje }) {
+export function montarBlocoCampanha({ conta, campanha, row, frequencia, hoje, diaAnterior = false }) {
   const m = normalizarLinha(row);
   const dica = gerarDicaAnalise({ freqAnuncio: m.frequencia || 0, resultados: m.conversas, gasto: m.gasto, videoViews50: m.video50, videoViews95: m.video95 });
   return [
     '📱 RELATÓRIO DE MÉTRICAS: META ADS 📱',
     `Conta: ${conta.name}${conta.empresa ? ` (${conta.empresa})` : ''}`,
     `Campanha: ${campanha.name}`,
-    `Data: ${formatarDataBR(hoje)} DAS 00H AS 23:59 Período de Análise: ${LABEL_FREQUENCIA[frequencia] || frequencia.toUpperCase()}`,
+    `Data: ${textoPeriodo({ frequencia, hoje, diaAnterior })}`,
     '',
     ...linhasDeMetricas(m),
     '',
@@ -370,12 +389,12 @@ export function montarBlocoCampanha({ conta, campanha, row, frequencia, hoje }) 
 
 // resumo da CONTA (calculado na propria conta pelo Meta, entao alcance/frequencia ja vem sem repeticao).
 // Cada conta tem o seu bloco: contas diferentes nunca sao somadas.
-export function montarBlocoConta({ conta, row, frequencia, hoje, campanhas }) {
+export function montarBlocoConta({ conta, row, frequencia, hoje, campanhas, diaAnterior = false }) {
   const m = normalizarLinha(row);
   return [
     '📱 RELATÓRIO DE MÉTRICAS: META ADS 📱',
     `RESUMO DA CONTA: ${conta.name}${conta.empresa ? ` (${conta.empresa})` : ''}`,
-    `Data: ${formatarDataBR(hoje)} DAS 00H AS 23:59 Período de Análise: ${LABEL_FREQUENCIA[frequencia] || frequencia.toUpperCase()}`,
+    `Data: ${textoPeriodo({ frequencia, hoje, diaAnterior })}`,
     `Campanhas ativas no relatório: ${campanhas}`,
     '',
     ...linhasDeMetricas(m),
@@ -384,8 +403,8 @@ export function montarBlocoConta({ conta, row, frequencia, hoje, campanhas }) {
   ].join('\n');
 }
 
-export async function gerarRelatorioAdsMetricasCompleto(tenantId, { frequencia = 'diario' } = {}) {
-  const { since, until, hoje } = periodoDiasCalendario(frequencia);
+export async function gerarRelatorioAdsMetricasCompleto(tenantId, { frequencia = 'diario', diaAnterior = false } = {}) {
+  const { since, until, hoje } = periodoDiasCalendario(frequencia, { diaAnterior });
   const contas = await metaAds.listAdAccounts(tenantId, { apenasAtivas: true });
   const blocos = [];
 
@@ -416,13 +435,13 @@ export async function gerarRelatorioAdsMetricasCompleto(tenantId, { frequencia =
       const row = rows[0];
       if (!row || !(Number(row.spend) > 0 || Number(row.impressions) > 0)) continue;
 
-      blocosDaConta.push(montarBlocoCampanha({ conta: c, campanha: camp, row, frequencia, hoje }));
+      blocosDaConta.push(montarBlocoCampanha({ conta: c, campanha: camp, row, frequencia, hoje, diaAnterior }));
     }
     if (!blocosDaConta.length) continue;
     // resumo da conta (nivel conta no Meta); se falhar, o relatorio segue so com as campanhas
     try {
       const [rowConta] = await metaAds.getInsights(tenantId, { objectId: c.id, objectType: 'account', level: 'account', since, until });
-      blocos.push(montarBlocoConta({ conta: c, row: rowConta, frequencia, hoje, campanhas: blocosDaConta.length }));
+      blocos.push(montarBlocoConta({ conta: c, row: rowConta, frequencia, hoje, campanhas: blocosDaConta.length, diaAnterior }));
     } catch { /* sem resumo da conta */ }
     blocos.push(...blocosDaConta);
   }
@@ -430,7 +449,7 @@ export async function gerarRelatorioAdsMetricasCompleto(tenantId, { frequencia =
   if (!blocos.length) {
     return [
       '📱 RELATÓRIO DE MÉTRICAS: META ADS 📱',
-      `Data: ${formatarDataBR(hoje)} DAS 00H AS 23:59 Período de Análise: ${LABEL_FREQUENCIA[frequencia] || frequencia.toUpperCase()}`,
+      `Data: ${textoPeriodo({ frequencia, hoje, diaAnterior })}`,
       '',
       'Nenhuma campanha com anuncio realmente ativo (rodando agora) e entrega no periodo. Campanhas pausadas/paradas ha mais de 1 dia nao entram nesse relatorio.',
     ].join('\n');
@@ -638,6 +657,7 @@ export async function gerarAlertaSaldoBaixo(tenantId) {
 const GERADORES = {
   ads_financeiro: gerarRelatorioAdsFinanceiroCompleto,
   ads_metricas: gerarRelatorioAdsMetricasCompleto,
+  ads_metricas_ontem: (tenantId, opts = {}) => gerarRelatorioAdsMetricasCompleto(tenantId, { ...opts, frequencia: 'diario', diaAnterior: true }),
   clinica_financeiro: gerarRelatorioClinicaFinanceiroGeral,
   clinica_agendamentos: gerarRelatorioClinicaAgendamentosCompleto,
   ads_saldo_baixo: gerarAlertaSaldoBaixo,

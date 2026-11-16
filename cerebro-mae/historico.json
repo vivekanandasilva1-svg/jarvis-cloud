@@ -455,6 +455,14 @@
     "conteudo": "Os números do app e do relatório automático não batiam com o Gerenciador porque o resultado era a primeira ação encontrada (lead antes de conversa) e faltavam colunas. Agora src/metaMetricas.js define 17 colunas na ordem do relatório oficial (Conversas por mensagem iniciadas = onsite_conversion.messaging_conversation_started_7d, Custo por conversa, Valor gasto, Alcance, Impressões, Frequência, Reproduções 50/75/95/100%, Visualizações = video_play_actions, Cliques no link, CPC do link, Cliques (todos), CPC (todos), CPM, CTR (todos)), conferidas com a imagem do relatório da Vitaly. Decisão do dono: cada conta tem dados distintos, NUNCA somar contas (alcance repetiria pessoas). Relatório automático ads_metricas: bloco RESUMO DA CONTA (insights no nível da conta) antes das campanhas de cada conta, cada campanha com as 17 métricas e o nome da conta; janelas de período inalteradas e só campanhas com anúncio ativo, como antes. App: tabela por conta, cartões de indicadores de anúncio só com uma conta escolhida, seletor de período (Este mês, Mês passado, 7/30 dias, personalizado)."
   },
   {
+    "chave": "relatorios:ads-dois-horarios",
+    "modulo": "gestao",
+    "data": "2026-11-16",
+    "tipo": "decisao",
+    "titulo": "Relatórios Meta Ads por WhatsApp: 07h dia anterior completo e 18h dia atual",
+    "conteudo": "Novo tipo de relatório automático ads_metricas_ontem (Meta Ads - Todas as Metricas do Dia Anterior, completo): consulta o Meta só de ontem (00h a 23:59) e rotula o cabeçalho como DIA ANTERIOR (COMPLETO). O ads_metricas diário passou a rotular DIA ATUAL (PARCIAL ATÉ AGORA) com a hora do envio. Cada tipo tem hora e marca de último envio próprias, então 07:00 (ontem) e 18:00 (hoje) não se atrapalham. Configurado para a conta do dono (tenant 1): ads_metricas_ontem 07:00 e ads_metricas 18:00, número Vivekananda; ultimo_envio_em do ads_metricas foi zerado para o de hoje às 18h sair mesmo depois do Enviar agora. Mesmas regras de antes: só campanhas com anúncio ativo agora; o RESUMO DA CONTA considera a conta inteira. O app de gestão não batia porque mostrava 7 dias e o Gerenciador estava em Hoje: ganhou os períodos Hoje e Ontem."
+  },
+  {
     "chave": "mod:aniversariantes",
     "hub": true,
     "modulo": "aniversariantes",
