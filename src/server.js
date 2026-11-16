@@ -41,6 +41,7 @@ import * as metaSaude from './metaSaude.js';
 import * as indicacoesIA from './indicacoesIA.js';
 import * as aniversariantes from './aniversariantes.js';
 import * as gestao from './gestao.js';
+import * as gestaoStore from './gestaoStore.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
 import { iniciarCerebroMae } from './cerebroMae.js';
 import { ehErroDeCredito, creditoEsgotado, registrarFalhaCredito } from './alertaCreditos.js';
@@ -2335,12 +2336,69 @@ const mesDaQuery = (q) => {
 
 // Lumia Gestao Geral (app separado do gestor): leitura dos indicadores de cada setor. So o acesso
 // principal da conta (rota gerencial) e so quem tem a ferramenta "gestaoGeral" liberada.
-app.get('/api/gestao/vendas', async (req, res) => {
+const gestaoErro = (res, err) => res.status(400).json({ erro: err.message });
+
+// painel de um setor (vendas tem calculo proprio; os demais usam a definicao de indicadores)
+app.get('/api/gestao/setor/:setor', async (req, res) => {
   try {
-    res.json(await gestao.painelVendas(req.tenantId, { de: req.query.de, ate: req.query.ate }));
-  } catch (err) {
-    res.status(400).json({ erro: err.message });
-  }
+    const { setor } = req.params;
+    if (!gestao.SETORES_COM_PAINEL.includes(setor)) return res.status(404).json({ erro: 'Setor desconhecido.' });
+    const periodo = { de: req.query.de, ate: req.query.ate };
+    res.json(setor === 'vendas' ? await gestao.painelVendas(req.tenantId, periodo) : await gestao.painelSetor(req.tenantId, setor, periodo));
+  } catch (err) { gestaoErro(res, err); }
+});
+// compatibilidade com a primeira versao do app
+app.get('/api/gestao/vendas', async (req, res) => {
+  try { res.json(await gestao.painelVendas(req.tenantId, { de: req.query.de, ate: req.query.ate })); } catch (err) { gestaoErro(res, err); }
+});
+
+// metas: catalogo de indicadores de todos os setores + valor atual (padrao ou o que o gestor salvou)
+app.get('/api/gestao/metas', async (req, res) => {
+  try {
+    const catalogo = gestao.catalogoDeMetas();
+    for (const [setor, def] of Object.entries(catalogo)) {
+      const padroes = Object.fromEntries(def.indicadores.map((i) => [i.id, { meta: i.padrao, melhor: i.melhor }]));
+      const metas = await gestaoStore.metasDoSetor(req.tenantId, setor, padroes);
+      for (const i of def.indicadores) { i.meta = metas[i.id].meta; i.definida = metas[i.id].definida; }
+    }
+    res.json({ setores: catalogo });
+  } catch (err) { gestaoErro(res, err); }
+});
+app.put('/api/gestao/metas', async (req, res) => {
+  try {
+    const { setor, indicador, valor } = req.body || {};
+    await gestaoStore.salvarMeta(req.tenantId, setor, indicador, valor, gestao.indicadoresDoSetor(setor));
+    res.json({ ok: true });
+  } catch (err) { gestaoErro(res, err); }
+});
+
+// decisoes e tarefas
+app.get('/api/gestao/decisoes', async (req, res) => {
+  try { res.json({ decisoes: await gestaoStore.listarDecisoes(req.tenantId, { setor: req.query.setor || null }) }); } catch (err) { gestaoErro(res, err); }
+});
+app.post('/api/gestao/decisoes', async (req, res) => {
+  try {
+    const { setor, texto, responsavel, prazo } = req.body || {};
+    res.json({ ok: true, decisao: await gestaoStore.criarDecisao(req.tenantId, setor, { texto, responsavel, prazo }) });
+  } catch (err) { gestaoErro(res, err); }
+});
+app.patch('/api/gestao/decisoes/:id', async (req, res) => {
+  try {
+    const { texto, responsavel, prazo, situacao, resultado } = req.body || {};
+    res.json({ ok: true, decisao: await gestaoStore.atualizarDecisao(req.tenantId, Number(req.params.id), { texto, responsavel, prazo, situacao, resultado }) });
+  } catch (err) { gestaoErro(res, err); }
+});
+app.delete('/api/gestao/decisoes/:id', async (req, res) => {
+  try { await gestaoStore.apagarDecisao(req.tenantId, Number(req.params.id)); res.json({ ok: true }); } catch (err) { gestaoErro(res, err); }
+});
+
+// lancamento manual (indicadores sem integracao), por semana
+app.put('/api/gestao/lancamentos', async (req, res) => {
+  try {
+    const { setor, indicador, valor, semana } = req.body || {};
+    await gestaoStore.salvarLancamento(req.tenantId, setor, indicador, valor, semana, gestao.indicadoresManuais(setor));
+    res.json({ ok: true });
+  } catch (err) { gestaoErro(res, err); }
 });
 
 app.get('/api/aniversariantes/config', async (req, res) => {

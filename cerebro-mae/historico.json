@@ -423,6 +423,14 @@
     "conteudo": "GET /api/gestao/vendas (src/gestao.js) junta CRM (leads, agendamentos, comparecimento por eventos de etapa, conversas sem resposta há +1h, origem dos leads) e orçamentos do Clinicorp (fechamento no período e orçamentos OPEN/FOLLOWUP parados há +7 dias, últimos 90 dias). Semáforo: verde bate a meta, amarelo até 25% abaixo, vermelho além. Metas de referência (fechamento 40%, comparecimento 75%, agendaram 40%) são SUGESTÃO, o gestor ainda não passou as reais; leads sem meta. Se o Clinicorp falha, o painel segue só com o CRM e mostra aviso. Pendente: metas editáveis, decisões/tarefas, IA de verdade (hoje os pontos de atenção são regras automáticas), demais setores, publicar o app na VPS."
   },
   {
+    "chave": "gestao:setores",
+    "modulo": "gestao",
+    "data": "2026-11-16",
+    "tipo": "fato",
+    "titulo": "Gestão Geral: 5 setores, metas editáveis, decisões e lançamentos manuais",
+    "conteudo": "Rotas /api/gestao/setor/:setor (vendas, recepcao, asbs, laboratorio, financeiro), /metas, /decisoes e /lancamentos; tabelas gestao_metas, gestao_decisoes e gestao_lancamentos, tudo por tenant e só pro acesso principal. Recepção usa agenda do Clinicorp (list_info: ScheduledTotal, MissedAppointmentTotal, CanceledAppointment; confirmados nos próximos 7 dias pelo status que contém 'confirm'). Financeiro usa list_summary (TotalSales, TotalIncome, TotalExpenses) comparado ao período anterior. ASBs e Laboratório (e espera média, cadastros incompletos, inadimplência, contas a vencer) são lançamento manual por semana (segunda a domingo), porque não há API. Metas salvas valem sobre o padrão; vazio = sem meta. Pendente: IA de verdade nos pontos de atenção e no Pergunte à IA, publicar o app na VPS, lançamentos manuais por vários períodos."
+  },
+  {
     "chave": "mod:aniversariantes",
     "hub": true,
     "modulo": "aniversariantes",
