@@ -2345,6 +2345,7 @@ app.get('/api/gestao/setor/:setor', async (req, res) => {
     const { setor } = req.params;
     if (!gestao.SETORES_COM_PAINEL.includes(setor)) return res.status(404).json({ erro: 'Setor desconhecido.' });
     const periodo = { de: req.query.de, ate: req.query.ate };
+    if (setor === 'vendas') { periodo.metaDe = req.query.metaDe; periodo.metaAte = req.query.metaAte; }
     res.json(setor === 'vendas' ? await gestao.painelVendas(req.tenantId, periodo) : await gestao.painelSetor(req.tenantId, setor, periodo));
   } catch (err) { gestaoErro(res, err); }
 });

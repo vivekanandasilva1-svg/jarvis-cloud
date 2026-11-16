@@ -137,7 +137,7 @@ async function metricasMeta(tenantId, ids, { de, ate }, nomes = {}) {
   return { contas, avisos };
 }
 
-export async function painelVendas(tenantId, { de, ate } = {}) {
+export async function painelVendas(tenantId, { de, ate, metaDe, metaAte } = {}) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   const hoje = hojeMaceio();
   const periodoAte = /^\d{4}-\d{2}-\d{2}$/.test(ate || '') ? ate : hoje;
@@ -204,10 +204,18 @@ export async function painelVendas(tenantId, { de, ate } = {}) {
   const escolhidas = await store.obterConfig(tenantId, CHAVE_CONTAS_META, []);
   if (escolhidas.length) {
     const nomes = Object.fromEntries(((await contasMeta(tenantId).catch(() => ({ contas: [] }))).contas).map((c) => [c.id, c.nome]));
-    const m = await metricasMeta(tenantId, escolhidas, { de: periodoDe, ate: periodoAte }, nomes);
+    // periodo das metricas do Meta: o proprio (metaDe/metaAte), se o gestor escolheu, ou o do painel
+    const dataOk = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
+    const proprio = dataOk(metaDe) && dataOk(metaAte);
+    const mDe = proprio ? metaDe : periodoDe;
+    const mAte = proprio ? metaAte : periodoAte;
+    if (diasEntre(mDe, mAte) < 0 || diasEntre(mDe, mAte) > 366) throw new Error('Periodo das metricas invalido.');
+    const m = await metricasMeta(tenantId, escolhidas, { de: mDe, ate: mAte }, nomes);
     avisos.push(...m.avisos);
-    const vendasAnuncio = origemLinhas.filter((l) => l.fonte === 'meta_ads').reduce((s, l) => s + l.compraram, 0);
-    anuncios = { conectado: true, escolhidas, contas: m.contas, colunas: COLUNAS_META, vendasAnuncio, unica: m.contas.length === 1 };
+    // vendas de anuncio no CRM do MESMO periodo das metricas (senao o custo por venda misturaria periodos)
+    const origemDoMeta = proprio && (mDe !== periodoDe || mAte !== periodoAte) ? await crm.relatorioOrigem(tenantId, { de: mDe, ate: mAte }) : origemLinhas;
+    const vendasAnuncio = origemDoMeta.filter((l) => l.fonte === 'meta_ads').reduce((s, l) => s + l.compraram, 0);
+    anuncios = { conectado: true, escolhidas, contas: m.contas, colunas: COLUNAS_META, vendasAnuncio, unica: m.contas.length === 1, periodo: { de: mDe, ate: mAte }, seguePainel: !proprio, consultadoEm: new Date().toISOString() };
     if (m.contas.length > 1) anuncios.nota = 'Cada conta aparece separada, sem somar. Os cartões de indicadores de anúncio só aparecem quando há uma conta escolhida, para não misturar cenários.';
     if (m.contas.length === 1) {
       const { metricas: at, anterior: ant, nome } = m.contas[0];

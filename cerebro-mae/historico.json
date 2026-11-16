@@ -463,6 +463,14 @@
     "conteudo": "Novo tipo de relatório automático ads_metricas_ontem (Meta Ads - Todas as Metricas do Dia Anterior, completo): consulta o Meta só de ontem (00h a 23:59) e rotula o cabeçalho como DIA ANTERIOR (COMPLETO). O ads_metricas diário passou a rotular DIA ATUAL (PARCIAL ATÉ AGORA) com a hora do envio. Cada tipo tem hora e marca de último envio próprias, então 07:00 (ontem) e 18:00 (hoje) não se atrapalham. Configurado para a conta do dono (tenant 1): ads_metricas_ontem 07:00 e ads_metricas 18:00, número Vivekananda; ultimo_envio_em do ads_metricas foi zerado para o de hoje às 18h sair mesmo depois do Enviar agora. Mesmas regras de antes: só campanhas com anúncio ativo agora; o RESUMO DA CONTA considera a conta inteira. O app de gestão não batia porque mostrava 7 dias e o Gerenciador estava em Hoje: ganhou os períodos Hoje e Ontem."
   },
   {
+    "chave": "gestao:periodo-meta",
+    "modulo": "gestao",
+    "data": "2026-11-16",
+    "tipo": "fato",
+    "titulo": "Gestão Geral: filtro de período próprio nas métricas do Meta",
+    "conteudo": "O dono achou que o filtro de data não valia pras métricas do Meta (o filtro do painel ficava longe do bloco). Verificado em produção, só leitura, rodando painelVendas dentro do container: o período já chegava ao Meta (HOJE 16/11: R$ 215,91 e 42 conversas na conta Aquecidos, coerente com o Gerenciador R$ 204,86 e 40 tirado mais cedo; 7 dias R$ 1.591,79). Agora o bloco Anúncios tem filtro próprio (Igual ao painel, Hoje, Ontem, 7 dias, Este mês, Mês passado, 30 dias, personalizado) via parâmetros metaDe/metaAte em /api/gestao/setor/vendas; mostra as datas exatas e a hora da consulta ao Meta. Custo por venda usa as vendas de anúncio do MESMO período das métricas. O Meta pode atrasar minutos em relação ao Gerenciador, então comparar no mesmo instante. Pendente: se ainda divergir no mesmo período e horário, checar janela de atribuição do relatório do Gerenciador."
+  },
+  {
     "chave": "mod:aniversariantes",
     "hub": true,
     "modulo": "aniversariantes",
