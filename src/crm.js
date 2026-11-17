@@ -27,6 +27,7 @@ export const ETAPAS = [
   { id: 'compareceu', nome: 'Compareceu' },
   { id: 'nao_compareceu', nome: 'Não compareceu' },
   { id: 'comprou', nome: 'Comprou' },
+  { id: 'nao_comprou', nome: 'Não comprou' },
   { id: 'follow_up', nome: 'Follow Up' },
   { id: 'perdido', nome: 'Perdido / Não respondeu' },
   { id: 'contatos_pessoais', nome: 'Contatos pessoais' },
