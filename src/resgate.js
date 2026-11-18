@@ -9,6 +9,7 @@ import { tabelasProntas as tenantsProntos } from './tenants.js';
 import { normalizarTelefone, varianteNonoDigito } from './crm.js';
 import * as clinicorp from './clinicorp.js';
 import * as tenantConfig from './tenantConfig.js';
+import * as orcAbertos from './orcAbertos.js';
 
 export const ETAPAS = [
   { id: 'sem_inicio', nome: 'Aprovado sem iniciar' },
@@ -246,17 +247,19 @@ export async function sincronizar(tenantId, { janelas = 3 } = {}) {
     const hoje = new Date(Date.now() - 3 * 3600000);
     const iso = (d) => d.toISOString().slice(0, 10);
     const aprovados = new Map();
+    const todos = new Map(); // todos os status: alimenta o modo "Orcamentos em aberto" sem gastar consulta a mais
     let erro = null;
     for (const k of lista) {
       const ate = new Date(hoje.getTime() - k * 31 * DIA), de = new Date(ate.getTime() - 30 * DIA);
       try {
         const orc = await clinicorp.listEstimates(tenantId, { from: iso(de), to: iso(ate) });
-        for (const o of orc) if (o.Status === 'APPROVED') aprovados.set(String(o.id), o);
+        for (const o of orc) { todos.set(String(o.id), o); if (o.Status === 'APPROVED') aprovados.set(String(o.id), o); }
       } catch (err) { erro = err.message; break; }
       await new Promise((res) => setTimeout(res, 600));
     }
     const nomesEsp = await nomesEspecialidades(tenantId);
     const proc = await processarOrcamentos(tenantId, [...aprovados.values()], nomesEsp);
+    try { await orcAbertos.processar(tenantId, [...todos.values()], nomesEsp); } catch (err) { console.error('[resgate] orcamentos em aberto:', err.message); }
     let comConsulta = 0;
     if (!erro) { try { comConsulta = await marcarConsultas(tenantId); } catch (err) { erro = erro || err.message; } }
     const resumo = `${aprovados.size} orçamentos aprovados lidos (${lista.length} períodos): ${proc.novos} novos, ${proc.atualizados} atualizados, ${proc.retomaram} retomaram, ${proc.concluidos} concluídos${erro ? ` — parou com aviso: ${erro}` : ''}`;

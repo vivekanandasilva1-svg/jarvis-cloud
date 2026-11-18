@@ -37,6 +37,7 @@ import * as followUpInteligente from './followUpInteligente.js';
 import * as funilFU from './funilFollowUp.js';
 import * as indicacoes from './indicacoes.js';
 import * as resgate from './resgate.js';
+import * as orcAbertos from './orcAbertos.js';
 import * as metaSaude from './metaSaude.js';
 import * as indicacoesIA from './indicacoesIA.js';
 import * as aniversariantes from './aniversariantes.js';
@@ -1843,6 +1844,23 @@ app.get('/api/resgate', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ erro: err.message });
+  }
+});
+// modo 2 da aba: quadro "Orcamentos em aberto" (mesmo prefixo /api/resgate = mesma liberacao por cliente e mesmo operador responsavel)
+app.get('/api/resgate/aberto', async (req, res) => {
+  try {
+    const cfg = await resgate.obterConfig(req.tenantId);
+    res.json({ etapas: orcAbertos.ETAPAS, ultimaSync: cfg.ultima_sync, pacientes: await orcAbertos.listar(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/aberto/:id/etapa', async (req, res) => {
+  try {
+    await orcAbertos.moverEtapa(req.tenantId, req.params.id, req.body?.etapa);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
   }
 });
 app.post('/api/resgate/atualizar', async (req, res) => {

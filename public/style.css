@@ -3788,6 +3788,19 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 .res-rel-pag button.ativo { background: rgba(212, 175, 55, 0.18); border-color: var(--gold); color: var(--gold-bright); }
 .res-rel-pag button:disabled { opacity: .4; cursor: default; }
 .res-rel-total { font-size: 12.5px; }
+/* modo 2 da aba: Orcamentos em aberto (quadro no estilo do Clinicorp) */
+.res-modos { display: flex; gap: 8px; margin: 0 0 10px; }
+.res-modos .ind-sub { padding: 8px 16px; font-size: 13.5px; }
+.oa-card { gap: 6px; }
+.oa-linha, .oa-duas > div { display: flex; flex-direction: column; gap: 1px; font-size: 12.5px; color: var(--text); }
+.oa-rot { font-size: 11px; color: var(--text-dim); }
+.oa-duas { display: grid; grid-template-columns: auto 1fr; gap: 14px; }
+.oa-duas b { color: var(--gold-bright); }
+.oa-rodape { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--border); }
+.oa-idade { font-size: 11.5px; color: var(--text-dim); margin-right: auto; }
+.oa-head-dir { display: inline-flex; align-items: center; gap: 6px; }
+.oa-pilula { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.07); color: var(--text-dim); white-space: nowrap; }
+.oa-pilula.verde { background: rgba(34, 197, 94, 0.16); color: #7be0a4; }
 .res-coluna-a-parte { border-style: dashed; }
 .res-col-total { font-size: 11.5px; color: var(--gold-bright); min-height: 14px; margin-top: -4px; }
 .res-valor { font-size: 12.5px; font-weight: 700; color: var(--gold-bright); margin-top: 4px; }

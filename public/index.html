@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261118a" />
+  <link rel="stylesheet" href="style.css?v=20261118b" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -1101,7 +1101,11 @@
     </div>
 
     <div class="window-body tab-crm" id="tabResgate" hidden>
-      <div class="crm-board-wrap">
+      <div class="res-modos" id="resModos">
+        <button type="button" class="ind-sub ativo" data-modo="res" title="Aprovados que ficaram pela metade ou nunca começaram">Resgate (inacabados)</button>
+        <button type="button" class="ind-sub" data-modo="oa" title="Quadro igual ao CRC > Orçamentos em aberto do Clinicorp">Orçamentos em aberto</button>
+      </div>
+      <div class="crm-board-wrap" id="resModo1">
         <div class="crm-board-header">
           <span>Resgate de orçamentos: pacientes com orçamento aprovado que ficou pela metade (ou nunca começou). A equipe retoma o contato para fechar o restante.</span>
           <div class="crm-board-nav">
@@ -1149,10 +1153,45 @@
         <div class="crm-board" id="resBoard"><p class="agenda-vazia">Carregando...</p></div>
       </div>
 
+      <div class="crm-board-wrap" id="resModo2" hidden>
+        <div class="crm-board-header">
+          <span>Orçamentos em aberto: os orçamentos apresentados, da negociação ao fechamento, no mesmo formato do quadro do Clinicorp. Mova os cards conforme o andamento.</span>
+          <div class="crm-board-nav">
+            <input type="search" id="oaBusca" placeholder="Buscar pelo nome do paciente" class="ind-busca" />
+            <button type="button" id="oaRelBtn" title="Tabela completa dos orçamentos, com filtros, impressão e planilha">Relatório</button>
+            <button type="button" id="oaAtualizarBtn" title="Lê de novo os orçamentos no Clinicorp">Atualizar do Clinicorp</button>
+            <button type="button" id="oaRefresh">Atualizar tela</button>
+          </div>
+        </div>
+        <div class="res-filtros">
+          <select id="oaPeriodo" title="Período da data do orçamento">
+            <option value="todos">Todo o período</option>
+            <option value="7">Últimos 7 dias</option>
+            <option value="15">Últimos 15 dias</option>
+            <option value="30" selected>Últimos 30 dias</option>
+            <option value="mes">Este mês</option>
+            <option value="mes_passado">Mês passado</option>
+            <option value="custom">Data personalizada</option>
+          </select>
+          <span class="res-custom" id="oaCustom" hidden><input type="date" id="oaDe" title="De" /> <span>até</span> <input type="date" id="oaAte" title="Até" /></span>
+          <select id="oaEsp" title="Especialidade"></select>
+          <select id="oaProf" title="Profissional"></select>
+          <button type="button" class="ind-sub" id="oaLimpar">Limpar filtros</button>
+          <select id="oaOrdem" title="Ordem dos cards">
+            <option value="recentes">Orçamentos mais recentes</option>
+            <option value="antigos">Orçamentos mais antigos</option>
+            <option value="valor">Maior valor</option>
+          </select>
+        </div>
+        <p class="ind-resumo" id="oaResumo"></p>
+        <p class="ind-dica">💡 <b>Como usar:</b> os orçamentos entram sozinhos a partir do Clinicorp. Arraste o card entre as colunas (ou use a lista do card) conforme o contato avança: <b>Contato realizado</b>, <b>Retornar contato</b>, <b>Follow up</b>. Quando o orçamento for aprovado no Clinicorp, o card vai sozinho para <b>Aprovado</b>. O Clinicorp não informa à Lumia em qual coluna cada orçamento está, então no começo a posição vem do status (Em aberto / Follow up); mova os cards para refletir a equipe.</p>
+        <div class="crm-board" id="oaBoard"><p class="agenda-vazia">Carregando...</p></div>
+      </div>
+
       <div class="ct-modal" id="resRelModal" hidden>
         <div class="ct-caixa res-rel-caixa" id="resRelCaixa">
           <div class="ct-caixa-topo">
-            <strong>Relatório - Resgate de orçamentos</strong>
+            <strong id="resRelTitulo">Relatório - Resgate de orçamentos</strong>
             <button type="button" class="ct-fechar" data-fechar="resRelModal">✕</button>
           </div>
           <div class="res-rel-filtros">
@@ -2061,6 +2100,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261118a"></script>
+  <script src="app.js?v=20261118b"></script>
 </body>
 </html>

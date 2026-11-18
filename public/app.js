@@ -2163,7 +2163,7 @@ function mudarAba(aba) {
   } else if (aba === 'indicacoes') {
     carregarIndicacoes();
   } else if (aba === 'resgateOrcamentos') {
-    carregarResgate();
+    resCarregarModo();
   } else if (aba === 'relatorios') {
     carregarDestinatariosRelatorios();
     carregarConfigsRelatorios();
@@ -12331,8 +12331,9 @@ function resTel(t) {
   if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
   return d;
 }
-const resNomeEtapa = (id) => (resDados.etapas.find((e) => e.id === id) || {}).nome || id;
-const resIndiceEtapa = (id) => resDados.etapas.findIndex((e) => e.id === id);
+const resFonte = () => (resModo === 'oa' ? oaDados : resDados);
+const resNomeEtapa = (id) => (resFonte().etapas.find((e) => e.id === id) || {}).nome || id;
+const resIndiceEtapa = (id) => resFonte().etapas.findIndex((e) => e.id === id);
 const RES_REL_COLUNAS = [
   { k: 'orcamento_em', t: 'Data da Criação', v: (p) => (p.orcamento_em ? resData4(p.orcamento_em) : '–'), ord: (p) => new Date(p.orcamento_em || 0).getTime() },
   { k: 'ultima_interacao_em', t: 'Data Interação', v: (p) => (p.ultima_interacao_em ? resDataHora(p.ultima_interacao_em) : '–'), ord: (p) => new Date(p.ultima_interacao_em || 0).getTime() },
@@ -12345,11 +12346,12 @@ const RES_REL_COLUNAS = [
   { k: 'valor_total', t: 'Valor do orçamento', v: (p) => resMoeda2(p.valor_total), ord: (p) => p.valor_total || 0, cls: 'num' },
   { k: 'valor_pendente', t: 'Falta executar', v: (p) => resMoeda2(p.valor_pendente), ord: (p) => p.valor_pendente || 0, cls: 'num' },
 ];
+const resRelCols = () => (resModo === 'oa' ? RES_REL_COLUNAS.filter((c) => c.k !== 'valor_pendente') : RES_REL_COLUNAS);
 function resRelLinhas() {
   const q = resSemAcento(resRel.q.trim());
   const f = { periodo: resRel.periodo, de: resRel.de, ate: resRel.ate, esp: resRel.esp, prof: resRel.prof };
-  const lista = resDados.pacientes.filter((p) => resPassaFiltro(p, f) && (!resRel.etapa || p.etapa === resRel.etapa) && (!q || resSemAcento(`${p.nome} ${p.telefone || ''}`).includes(q)));
-  const col = RES_REL_COLUNAS.find((c) => c.k === resRel.col) || RES_REL_COLUNAS[0];
+  const lista = resFonte().pacientes.filter((p) => resPassaFiltro(p, f) && (!resRel.etapa || p.etapa === resRel.etapa) && (!q || resSemAcento(`${p.nome} ${p.telefone || ''}`).includes(q)));
+  const col = resRelCols().find((c) => c.k === resRel.col) || resRelCols()[0];
   lista.sort((a, b) => { const x = col.ord(a), y = col.ord(b); const r = typeof x === 'string' ? x.localeCompare(y, 'pt-BR') : x - y; return (r || a.id - b.id) * resRel.dir; });
   return lista;
 }
@@ -12367,17 +12369,17 @@ function resRelDesenhar() {
   const tabela = document.getElementById('resRelTabela');
   const thead = tabela.tHead; thead.textContent = '';
   const tr = thead.insertRow();
-  for (const c of RES_REL_COLUNAS) {
+  for (const c of resRelCols()) {
     const th = document.createElement('th'); th.textContent = c.t + (resRel.col === c.k ? (resRel.dir > 0 ? ' ▲' : ' ▼') : ''); th.className = resRel.col === c.k ? 'ord' : '';
     th.addEventListener('click', () => { if (resRel.col === c.k) resRel.dir = -resRel.dir; else { resRel.col = c.k; resRel.dir = c.k === 'nome' || c.k === 'telefone' || c.k === 'profissional' || c.k === 'especialidades' ? 1 : -1; } resRel.pag = 1; resRelDesenhar(); });
     tr.appendChild(th);
   }
   const tbody = tabela.tBodies[0]; tbody.textContent = '';
   const pagina = lista.slice((resRel.pag - 1) * resRel.porPag, resRel.pag * resRel.porPag);
-  if (!pagina.length) { const r = tbody.insertRow(); const td = r.insertCell(); td.colSpan = RES_REL_COLUNAS.length; td.className = 'res-rel-vazio'; td.textContent = 'Nenhum orçamento com esses filtros.'; }
+  if (!pagina.length) { const r = tbody.insertRow(); const td = r.insertCell(); td.colSpan = resRelCols().length; td.className = 'res-rel-vazio'; td.textContent = 'Nenhum orçamento com esses filtros.'; }
   for (const p of pagina) {
     const r = tbody.insertRow();
-    for (const c of RES_REL_COLUNAS) {
+    for (const c of resRelCols()) {
       const td = r.insertCell(); if (c.cls) td.className = c.cls;
       if (c.badge) { const b = document.createElement('span'); b.className = `res-badge e-${p.etapa}`; b.textContent = c.v(p); td.appendChild(b); } else td.textContent = c.v(p);
     }
@@ -12388,20 +12390,27 @@ function resRelDesenhar() {
   for (const n of resRelPaginas(paginas, resRel.pag)) { if (n === '…') { const s = document.createElement('span'); s.textContent = '…'; pag.appendChild(s); } else btn(String(n), n, { ativo: n === resRel.pag }); }
   btn('›', resRel.pag + 1, { off: resRel.pag >= paginas });
   const somaPend = lista.reduce((a, p) => a + (p.valor_pendente || 0), 0);
-  document.getElementById('resRelTotal').textContent = `${lista.length} orçamento(s) · falta executar ${resMoeda2(somaPend)}`;
+  document.getElementById('resRelTotal').textContent = resModo === 'oa'
+    ? `${lista.length} orçamento(s) · ${resMoeda2(lista.reduce((a, p) => a + (p.valor_total || 0), 0))} em valor`
+    : `${lista.length} orçamento(s) · falta executar ${resMoeda2(somaPend)}`;
 }
 function resRelPreencherSelects() {
   const ord = (a, b) => a.localeCompare(b, 'pt-BR');
-  const esps = [...new Set(resDados.pacientes.flatMap((p) => p.especialidades || []))].sort(ord);
-  const profs = [...new Set(resDados.pacientes.map((p) => p.profissional).filter(Boolean))].sort(ord);
+  const esps = [...new Set(resFonte().pacientes.flatMap((p) => p.especialidades || []))].sort(ord);
+  const profs = [...new Set(resFonte().pacientes.map((p) => p.profissional).filter(Boolean))].sort(ord);
   const et = document.getElementById('resRelEtapa'); et.textContent = ''; et.add(new Option('Todas as etapas', ''));
-  for (const e of resDados.etapas) et.add(new Option(e.nome, e.id));
+  for (const e of resFonte().etapas) et.add(new Option(e.nome, e.id));
   et.value = resRel.etapa;
   resPreencherSelect(document.getElementById('resRelEsp'), 'Todas as especialidades', esps, resRel.esp);
   resPreencherSelect(document.getElementById('resRelProf'), 'Todos os profissionais', profs, resRel.prof, ['__sem__', 'Sem profissional']);
   resRel.esp = document.getElementById('resRelEsp').value; resRel.prof = document.getElementById('resRelProf').value;
 }
-document.getElementById('resRelBtn').addEventListener('click', () => { resRelPreencherSelects(); resRelModal.hidden = false; resRelDesenhar(); });
+function resAbrirRelatorio() {
+  document.getElementById('resRelTitulo').textContent = resModo === 'oa' ? 'Relatório - CRC Orçamentos em aberto' : 'Relatório - Resgate de orçamentos';
+  resRelPreencherSelects(); resRelModal.hidden = false; resRelDesenhar();
+}
+document.getElementById('resRelBtn').addEventListener('click', resAbrirRelatorio);
+document.getElementById('oaRelBtn').addEventListener('click', resAbrirRelatorio);
 resRelModal.addEventListener('click', (e) => { if (e.target === resRelModal || e.target.closest('[data-fechar="resRelModal"]')) resRelModal.hidden = true; });
 function resRelLerFiltros() {
   Object.assign(resRel, { periodo: document.getElementById('resRelPeriodo').value, de: document.getElementById('resRelDe').value, ate: document.getElementById('resRelAte').value, etapa: document.getElementById('resRelEtapa').value, esp: document.getElementById('resRelEsp').value, prof: document.getElementById('resRelProf').value, pag: 1 });
@@ -12417,18 +12426,164 @@ document.getElementById('resRelImprimir').addEventListener('click', () => {
   const lista = resRelLinhas();
   const w = window.open('', '_blank');
   if (!w) { mostrarAviso('O navegador bloqueou a janela de impressão. Libere pop-ups para esta página.', 'erro'); return; }
-  const cab = RES_REL_COLUNAS.map((c) => `<th>${resEsc(c.t)}</th>`).join('');
-  const linhas = lista.map((p) => `<tr>${RES_REL_COLUNAS.map((c) => `<td>${resEsc(c.v(p))}</td>`).join('')}</tr>`).join('');
-  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório - Resgate de orçamentos</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:16px}h1{font-size:15px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:4px 6px;text-align:left}th{background:#eee}@page{size:landscape}</style></head><body><h1>Relatório - Resgate de orçamentos</h1><p>${lista.length} orçamento(s) · ${resEsc(new Date().toLocaleString('pt-BR'))}</p><table><thead><tr>${cab}</tr></thead><tbody>${linhas}</tbody></table></body></html>`);
+  const cab = resRelCols().map((c) => `<th>${resEsc(c.t)}</th>`).join('');
+  const linhas = lista.map((p) => `<tr>${resRelCols().map((c) => `<td>${resEsc(c.v(p))}</td>`).join('')}</tr>`).join('');
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${resEsc(document.getElementById('resRelTitulo').textContent)}</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:16px}h1{font-size:15px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:4px 6px;text-align:left}th{background:#eee}@page{size:landscape}</style></head><body><h1>${resEsc(document.getElementById('resRelTitulo').textContent)}</h1><p>${lista.length} orçamento(s) · ${resEsc(new Date().toLocaleString('pt-BR'))}</p><table><thead><tr>${cab}</tr></thead><tbody>${linhas}</tbody></table></body></html>`);
   w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
 });
 document.getElementById('resRelBaixar').addEventListener('click', () => {
   const lista = resRelLinhas();
   const cel = (t) => { let s = String(t); if (/^[=+\-@]/.test(s)) s = `'${s}`; return `"${s.replace(/"/g, '""')}"`; }; // aspas simples antes de = + - @ evita formula no Excel
-  const csv = '﻿' + [RES_REL_COLUNAS.map((c) => cel(c.t)).join(';'), ...lista.map((p) => RES_REL_COLUNAS.map((c) => cel(c.v(p))).join(';'))].join('\r\n');
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = `relatorio-resgate-${new Date().toISOString().slice(0, 10)}.csv`;
+  const csv = '﻿' + [resRelCols().map((c) => cel(c.t)).join(';'), ...lista.map((p) => resRelCols().map((c) => cel(c.v(p))).join(';'))].join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = `relatorio-${resModo === 'oa' ? 'orcamentos-em-aberto' : 'resgate'}-${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 });
+
+// ---------- Modo 2: Orçamentos em aberto (quadro igual ao CRC > Orçamentos em aberto do Clinicorp) ----------
+let resModo = 'res';
+try { if (localStorage.getItem('resModo') === 'oa') resModo = 'oa'; } catch { /* sem localStorage */ }
+let oaDados = { etapas: [], pacientes: [] };
+let oaFiltro = { periodo: '30', de: '', ate: '', esp: '', prof: '' };
+let oaArrastando = null;
+const oaBoard = document.getElementById('oaBoard');
+const oaMsgPadrao = 'Olá, {nome}! Aqui é da clínica. Seu orçamento está disponível e queremos ajudar você a começar o tratamento com todo o cuidado. Posso te passar os horários disponíveis?';
+
+function resAplicarModo() {
+  document.getElementById('resModo1').hidden = resModo !== 'res';
+  document.getElementById('resModo2').hidden = resModo !== 'oa';
+  for (const b of document.querySelectorAll('#resModos [data-modo]')) b.classList.toggle('ativo', b.dataset.modo === resModo);
+}
+function resCarregarModo() { resAplicarModo(); if (resModo === 'oa') oaCarregar(); else carregarResgate(); }
+for (const b of document.querySelectorAll('#resModos [data-modo]')) b.addEventListener('click', () => {
+  resModo = b.dataset.modo === 'oa' ? 'oa' : 'res';
+  try { localStorage.setItem('resModo', resModo); } catch { /* sem localStorage */ }
+  resCarregarModo();
+});
+
+function oaPreencherFiltros() {
+  const ord = (a, b) => a.localeCompare(b, 'pt-BR');
+  const esps = [...new Set(oaDados.pacientes.flatMap((p) => p.especialidades || []))].sort(ord);
+  const profs = [...new Set(oaDados.pacientes.map((p) => p.profissional).filter(Boolean))].sort(ord);
+  resPreencherSelect(document.getElementById('oaEsp'), 'Todas as especialidades', esps, oaFiltro.esp);
+  resPreencherSelect(document.getElementById('oaProf'), 'Todos os profissionais', profs, oaFiltro.prof, ['__sem__', 'Sem profissional']);
+  oaFiltro.esp = document.getElementById('oaEsp').value; oaFiltro.prof = document.getElementById('oaProf').value;
+}
+
+function oaAtivarSoltar(coluna, etapaId) {
+  coluna.addEventListener('dragover', (e) => { if (!oaArrastando) return; e.preventDefault(); coluna.classList.add('drag-over'); });
+  coluna.addEventListener('dragleave', () => coluna.classList.remove('drag-over'));
+  coluna.addEventListener('drop', async (e) => {
+    e.preventDefault(); coluna.classList.remove('drag-over');
+    const id = oaArrastando; if (!id) return;
+    await oaMover(id, etapaId);
+  });
+}
+async function oaMover(id, etapa) {
+  try {
+    const r = await fetch(`/api/resgate/aberto/${id}/etapa`, { method: 'POST', headers: resH(), body: JSON.stringify({ etapa }) });
+    if (!r.ok) mostrarAviso((await r.json().catch(() => ({}))).erro || 'Não consegui mover', 'erro');
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  oaCarregar();
+}
+
+function oaCriarCard(p) {
+  const card = document.createElement('div');
+  card.className = 'crm-card ind-card oa-card';
+  card.draggable = true;
+  card.addEventListener('dragstart', (e) => { oaArrastando = p.id; card.classList.add('dragging'); try { e.dataTransfer.setData('text/plain', String(p.id)); e.dataTransfer.effectAllowed = 'move'; } catch { /* sem dataTransfer */ } });
+  card.addEventListener('dragend', () => { card.classList.remove('dragging'); oaArrastando = null; });
+  const nome = document.createElement('div'); nome.className = 'crm-card-nome'; nome.textContent = p.nome || 'Sem nome'; card.appendChild(nome);
+  const par = (rot, val, forte) => { const d = document.createElement('div'); const r = document.createElement('span'); r.className = 'oa-rot'; r.textContent = rot; const v = document.createElement(forte ? 'b' : 'span'); v.textContent = val; d.append(r, v); return d; };
+  const linha1 = par('Data de Orçamento', p.orcamento_em ? resData4(p.orcamento_em) : '–'); linha1.className = 'oa-linha'; card.appendChild(linha1);
+  const duas = document.createElement('div'); duas.className = 'oa-duas';
+  duas.append(par('Valor', resMoeda2(p.valor), true), par('Profissional', p.profissional || '–'));
+  card.appendChild(duas);
+  if ((p.especialidades || []).length) { const t = document.createElement('div'); t.className = 'ind-tags'; const c = document.createElement('span'); c.className = 'ind-tag'; c.textContent = p.especialidades.slice(0, 2).join(' · ') + (p.especialidades.length > 2 ? ' +' : ''); t.appendChild(c); card.appendChild(t); }
+  const rodape = document.createElement('div'); rodape.className = 'oa-rodape';
+  const idade = document.createElement('span'); idade.className = 'oa-idade'; idade.title = 'Tempo nesta coluna'; idade.textContent = `⏱ ${p.dias_na_etapa ? p.dias_na_etapa + 'd' : 'Hoje'}`; rodape.appendChild(idade);
+  const sel = document.createElement('select'); sel.className = 'ind-etapa-sel'; sel.title = 'Mover para outra coluna';
+  for (const e of oaDados.etapas) sel.add(new Option(e.nome, e.id));
+  sel.value = p.etapa;
+  sel.addEventListener('change', () => oaMover(p.id, sel.value));
+  rodape.appendChild(sel);
+  if (p.telefone) {
+    const wa = document.createElement('a'); wa.className = 'ind-btn'; wa.target = '_blank'; wa.rel = 'noopener'; wa.textContent = 'WhatsApp';
+    const primeiro = String(p.nome || '').trim().split(/\s+/)[0] || '';
+    wa.href = `https://wa.me/${p.telefone}?text=${encodeURIComponent(oaMsgPadrao.split('{nome}').join(primeiro))}`;
+    rodape.appendChild(wa);
+  }
+  card.appendChild(rodape);
+  return card;
+}
+
+function oaDesenhar() {
+  const q = resSemAcento(document.getElementById('oaBusca').value.trim());
+  const ordem = document.getElementById('oaOrdem').value;
+  const cmp = { recentes: (a, b) => new Date(b.orcamento_em || 0) - new Date(a.orcamento_em || 0), antigos: (a, b) => new Date(a.orcamento_em || 0) - new Date(b.orcamento_em || 0), valor: (a, b) => b.valor - a.valor }[ordem];
+  const visiveis = oaDados.pacientes.filter((p) => resPassaFiltro(p, oaFiltro) && (!q || resSemAcento(`${p.nome} ${p.telefone || ''}`).includes(q)));
+  oaBoard.textContent = '';
+  let abertos = 0, valorAbertos = 0, aprov = 0, valorAprov = 0;
+  for (const e of oaDados.etapas) {
+    const doEtapa = visiveis.filter((p) => p.etapa === e.id).sort(cmp);
+    const total = doEtapa.reduce((a, p) => a + p.valor, 0);
+    if (e.id === 'aprovado') { aprov += doEtapa.length; valorAprov += total; } else { abertos += doEtapa.length; valorAbertos += total; }
+    const col = document.createElement('div'); col.className = 'crm-coluna';
+    oaAtivarSoltar(col, e.id);
+    const head = document.createElement('div'); head.className = 'crm-coluna-header';
+    const t = document.createElement('span'); t.textContent = e.nome;
+    const dir = document.createElement('span'); dir.className = 'oa-head-dir';
+    const val = document.createElement('span'); val.className = 'oa-pilula' + (e.id === 'aprovado' ? ' verde' : ''); val.textContent = resMoeda2(total);
+    const c = document.createElement('span'); c.className = 'crm-coluna-contagem'; c.textContent = doEtapa.length;
+    dir.append(val, c); head.append(t, dir); col.appendChild(head);
+    const cards = document.createElement('div'); cards.className = 'crm-coluna-cards';
+    if (!doEtapa.length) { const v = document.createElement('div'); v.className = 'crm-coluna-vazia'; v.textContent = e.id === 'contato_realizado' ? 'Orçamentos já contatados aparecem aqui.' : e.id === 'retornar_contato' ? 'Orçamentos para retornar aparecem aqui.' : 'Ninguém aqui'; cards.appendChild(v); }
+    for (const p of doEtapa.slice(0, 150)) cards.appendChild(oaCriarCard(p));
+    if (doEtapa.length > 150) { const m = document.createElement('div'); m.className = 'crm-coluna-vazia'; m.textContent = `+ ${doEtapa.length - 150} (use os filtros para ver)`; cards.appendChild(m); }
+    col.appendChild(cards); oaBoard.appendChild(col);
+  }
+  const quando = oaDados.ultimaSync ? `Última leitura do Clinicorp: ${resDH(oaDados.ultimaSync)}.` : 'Ainda não leu o Clinicorp.';
+  document.getElementById('oaResumo').textContent = `${abertos} orçamento(s) em aberto somando ${resMoeda2(valorAbertos)} · ${aprov} aprovado(s) somando ${resMoeda2(valorAprov)}. ${quando}`;
+}
+
+async function oaCarregar() {
+  try {
+    const res = await fetch('/api/resgate/aberto', { headers: resH() });
+    const d = await res.json();
+    if (!res.ok) { oaBoard.textContent = ''; const p = document.createElement('p'); p.className = 'agenda-vazia'; p.textContent = d.erro || 'Não consegui carregar.'; oaBoard.appendChild(p); return; }
+    // mesmo formato do relatório do Resgate (as colunas do relatório leem estes nomes)
+    oaDados = { etapas: d.etapas, ultimaSync: d.ultimaSync, pacientes: d.pacientes.map((p) => ({ ...p, ultima_interacao_em: p.interacao_em, valor_total: p.valor, aprovado_em: p.orcamento_em })) };
+    oaPreencherFiltros();
+    oaDesenhar();
+    if (!document.getElementById('resRelModal').hidden) resRelDesenhar();
+    if (!d.pacientes.length) document.getElementById('oaResumo').textContent = 'Nenhum orçamento ainda. A Lumia vai lendo o Clinicorp aos poucos (a cada 30 minutos); clique em "Atualizar do Clinicorp" para adiantar.';
+  } catch (err) { oaBoard.textContent = ''; const p = document.createElement('p'); p.className = 'agenda-vazia'; p.textContent = `Não consegui carregar: ${err.message}`; oaBoard.appendChild(p); }
+}
+function oaLerFiltros() {
+  oaFiltro = { periodo: document.getElementById('oaPeriodo').value, de: document.getElementById('oaDe').value, ate: document.getElementById('oaAte').value, esp: document.getElementById('oaEsp').value, prof: document.getElementById('oaProf').value };
+  document.getElementById('oaCustom').hidden = oaFiltro.periodo !== 'custom';
+  oaDesenhar();
+}
+for (const id of ['oaPeriodo', 'oaDe', 'oaAte', 'oaEsp', 'oaProf']) document.getElementById(id).addEventListener('change', oaLerFiltros);
+document.getElementById('oaOrdem').addEventListener('change', oaDesenhar);
+document.getElementById('oaBusca').addEventListener('input', oaDesenhar);
+document.getElementById('oaLimpar').addEventListener('click', () => {
+  document.getElementById('oaPeriodo').value = '30'; document.getElementById('oaDe').value = ''; document.getElementById('oaAte').value = '';
+  document.getElementById('oaEsp').value = ''; document.getElementById('oaProf').value = '';
+  oaLerFiltros();
+});
+document.getElementById('oaRefresh').addEventListener('click', oaCarregar);
+document.getElementById('oaAtualizarBtn').addEventListener('click', async () => {
+  const b = document.getElementById('oaAtualizarBtn'); b.disabled = true; b.textContent = 'Lendo o Clinicorp...';
+  try {
+    const r = await fetch('/api/resgate/atualizar', { method: 'POST', headers: resH() });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    mostrarAviso(d.resumo, 'ok');
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  b.disabled = false; b.textContent = 'Atualizar do Clinicorp';
+  oaCarregar();
+});
+resAplicarModo();
 
 // ---- registrar contato ----
 const resTentModal = document.getElementById('resTentModal');
