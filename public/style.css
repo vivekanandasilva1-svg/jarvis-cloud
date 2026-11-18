@@ -3753,7 +3753,41 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 .res-filtros { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; }
 .res-filtros-rotulo { font-size: 12.5px; color: var(--text-dim); margin-right: 2px; }
 .res-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); margin-left: 10px; cursor: pointer; }
-.res-filtros select { background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 5px 8px; font-size: 12px; margin-left: auto; }
+.res-filtros select { background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 5px 8px; font-size: 12px; }
+.res-filtros #resOrdem { margin-left: auto; }
+.res-custom { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-dim); }
+.res-custom input[type="date"] { background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 4px 6px; font-size: 12px; color-scheme: dark; }
+/* relatorio (janela com tabela, como o do Clinicorp) */
+.res-rel-caixa { width: min(1180px, 100%); height: min(720px, calc(100vh - 32px)); overflow: hidden; }
+.res-rel-caixa.res-rel-cheia { width: 100vw; height: 100vh; max-height: 100vh; border-radius: 0; }
+.res-rel-filtros, .res-rel-busca { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.res-rel-filtros select, .res-rel-busca input[type="search"], .res-rel-busca button, .res-rel-rodape select, .res-rel-rodape button { background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 7px 10px; font-size: 13px; }
+.res-rel-filtros select { min-width: 150px; }
+.res-rel-busca input[type="search"] { flex: 1 1 260px; }
+.res-rel-busca button, .res-rel-rodape button { cursor: pointer; }
+.res-rel-busca button:hover, .res-rel-rodape button:hover { border-color: var(--gold); }
+.res-rel-tabela-wrap { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.res-rel-tabela { width: 100%; border-collapse: collapse; font-size: 13px; }
+.res-rel-tabela th { position: sticky; top: 0; background: var(--superficie); text-align: left; font-weight: 600; font-size: 12px; color: var(--text-dim); padding: 9px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
+.res-rel-tabela th.ord { color: var(--gold-bright); }
+.res-rel-tabela td { padding: 9px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.res-rel-tabela td.res-rel-nome { font-weight: 700; color: var(--white); }
+.res-rel-tabela td.num { text-align: right; }
+.res-rel-tabela tbody tr:hover { background: rgba(255,255,255,0.03); }
+.res-rel-vazio { padding: 22px; text-align: center; color: var(--text-dim); }
+.res-badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: rgba(255,255,255,0.08); color: var(--text-dim); }
+.res-badge.e-sem_inicio, .res-badge.e-retomou { background: rgba(34, 197, 94, 0.16); color: #7be0a4; }
+.res-badge.e-novo { background: rgba(249, 115, 22, 0.16); color: #ffc48a; }
+.res-badge.e-tentativa1, .res-badge.e-tentativa2, .res-badge.e-tentativa3 { background: rgba(212, 175, 55, 0.16); color: var(--gold-bright); }
+.res-badge.e-agendou { background: rgba(59, 130, 246, 0.16); color: #9cc4ff; }
+.res-badge.e-sem_sucesso { background: rgba(229, 72, 77, 0.16); color: #ff9a9d; }
+.res-rel-rodape { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: var(--text-dim); }
+.res-rel-rodape label { display: inline-flex; align-items: center; gap: 8px; }
+.res-rel-pag { display: inline-flex; align-items: center; gap: 4px; }
+.res-rel-pag button { min-width: 34px; padding: 6px 8px; }
+.res-rel-pag button.ativo { background: rgba(212, 175, 55, 0.18); border-color: var(--gold); color: var(--gold-bright); }
+.res-rel-pag button:disabled { opacity: .4; cursor: default; }
+.res-rel-total { font-size: 12.5px; }
 .res-coluna-a-parte { border-style: dashed; }
 .res-col-total { font-size: 11.5px; color: var(--gold-bright); min-height: 14px; margin-top: -4px; }
 .res-valor { font-size: 12.5px; font-weight: 700; color: var(--gold-bright); margin-top: 4px; }

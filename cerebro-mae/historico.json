@@ -1180,5 +1180,13 @@
     "tipo": "melhoria",
     "titulo": "Nova etapa \"Não comprou\" no CRM (logo depois de \"Comprou\")",
     "conteudo": "Pedido do dono: o funil precisava de uma coluna para quem foi atendido e não fechou, separada de \"Perdido / Não respondeu\" (que é quem sumiu). Ajuste global do app: etapa id nao_comprou adicionada em ETAPAS (src/crm.js) logo após comprou, valendo para todos os clientes; a IA (cloudAgent) também aceita a etapa nas duas ferramentas que movem contato. Ninguém entra nela sozinho: só por arrasto manual ou pela IA. Contatos existentes não mudam de lugar; relatórios de agendados/compraram não são afetados. Pendente: decidir se algum fluxo automático (Follow Up, Resgate de orçamentos) deve mover para cá."
+  },
+  {
+    "chave": "resgate:filtros-e-relatorio",
+    "modulo": "resgate",
+    "data": "2026-11-18",
+    "tipo": "melhoria",
+    "titulo": "Resgate de orçamentos: filtros de período, especialidade e profissional + botão Relatório (como no Clinicorp)",
+    "conteudo": "Pedido do dono (com vídeo e print do quadro \"Orçamentos em aberto\" do Clinicorp): a Lumia precisava das mesmas opções de filtro e do relatório. Quadro: período da data do orçamento (últimos 7/15/30 dias, este mês, mês passado, data personalizada), especialidade e profissional (inclui \"Sem profissional\") e \"Limpar filtros\"; os totais em R$ por coluna já existiam. Relatório (botão no topo): janela com filtros de período/etapa/especialidade/profissional, busca por nome, tabela ordenável (Data da Criação, Data Interação, Paciente, Telefone, Etapa em selo, Dias na etapa, Especialidade, Profissional, Valor, Falta executar), linhas por página, paginação, tela cheia, Imprimir e Baixar planilha (CSV). Dados novos em res_pacientes: orcamento_em (Date do orçamento), especialidades (SpecialtyId dos procedimentos -> nome via /procedures/list_specialties, nomes em MAIÚSCULO para juntar duplicatas do Clinicorp; cache de 12h por causa do limite de 25 req/h) e etapa_desde (para Dias na etapa). Data Interação = último contato registrado na Lumia. Pendente: pacientes que já estavam carregados só ganham especialidade/data na próxima rodada de leitura do Clinicorp (o ciclo cobre 12 meses aos poucos)."
   }
 ]

@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261112h" />
+  <link rel="stylesheet" href="style.css?v=20261118a" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -1107,6 +1107,7 @@
           <div class="crm-board-nav">
             <select id="resOperador" title="Operador responsável por esta atividade (só o acesso principal escolhe)"></select>
             <input type="search" id="resBusca" placeholder="Buscar paciente" class="ind-busca" />
+            <button type="button" id="resRelBtn" title="Tabela completa dos orçamentos, com filtros, impressão e planilha">Relatório</button>
             <button type="button" id="resMsgBtn" title="Editar o texto da mensagem de WhatsApp">Mensagem</button>
             <button type="button" id="resAtualizarBtn" title="Lê de novo os orçamentos no Clinicorp">Atualizar do Clinicorp</button>
             <button type="button" id="resRefresh">Atualizar tela</button>
@@ -1127,9 +1128,67 @@
             <option value="recente">Aprovados mais recentes</option>
           </select>
         </div>
+        <div class="res-filtros" id="resFiltros2">
+          <span class="res-filtros-rotulo">Orçamentos de:</span>
+          <select id="resPeriodo" title="Período da data do orçamento">
+            <option value="todos">Todo o período</option>
+            <option value="7">Últimos 7 dias</option>
+            <option value="15">Últimos 15 dias</option>
+            <option value="30">Últimos 30 dias</option>
+            <option value="mes">Este mês</option>
+            <option value="mes_passado">Mês passado</option>
+            <option value="custom">Data personalizada</option>
+          </select>
+          <span class="res-custom" id="resCustom" hidden><input type="date" id="resDe" title="De" /> <span>até</span> <input type="date" id="resAte" title="Até" /></span>
+          <select id="resEsp" title="Especialidade"></select>
+          <select id="resProf" title="Profissional"></select>
+          <button type="button" class="ind-sub" id="resLimparFiltros">Limpar filtros</button>
+        </div>
         <p class="ind-resumo" id="resResumo"></p>
         <p class="ind-dica">💡 <b>Como usar:</b> os pacientes entram sozinhos a partir do Clinicorp: <b>Inacabados</b> são os que fizeram parte do orçamento e pararam; <b>Aprovado sem iniciar</b> são os que aprovaram e ainda não começaram. Os botões “Parado há” filtram essas duas primeiras colunas (os cards que a equipe já está trabalhando nunca somem). Clique em <b>Registrar contato</b> a cada tentativa, ou arraste o card entre as colunas. Quando o paciente voltar a executar um procedimento, o card vai sozinho para <b>Retomou o tratamento</b>. O botão <b>Mensagem</b> muda o texto do WhatsApp: use <b>{nome}</b> e <b>{pendentes}</b>.</p>
         <div class="crm-board" id="resBoard"><p class="agenda-vazia">Carregando...</p></div>
+      </div>
+
+      <div class="ct-modal" id="resRelModal" hidden>
+        <div class="ct-caixa res-rel-caixa" id="resRelCaixa">
+          <div class="ct-caixa-topo">
+            <strong>Relatório - Resgate de orçamentos</strong>
+            <button type="button" class="ct-fechar" data-fechar="resRelModal">✕</button>
+          </div>
+          <div class="res-rel-filtros">
+            <select id="resRelPeriodo" title="Período da data do orçamento">
+              <option value="todos">Todo o período</option>
+              <option value="7">Últimos 7 dias</option>
+              <option value="15">Últimos 15 dias</option>
+              <option value="30">Últimos 30 dias</option>
+              <option value="mes">Este mês</option>
+              <option value="mes_passado">Mês passado</option>
+              <option value="custom">Data personalizada</option>
+            </select>
+            <span class="res-custom" id="resRelCustom" hidden><input type="date" id="resRelDe" title="De" /> <span>até</span> <input type="date" id="resRelAte" title="Até" /></span>
+            <select id="resRelEtapa" title="Etapa"></select>
+            <select id="resRelEsp" title="Especialidade"></select>
+            <select id="resRelProf" title="Profissional"></select>
+          </div>
+          <div class="res-rel-busca">
+            <input type="search" id="resRelBusca" placeholder="Buscar por nome do paciente" />
+            <button type="button" id="resRelImprimir" title="Imprimir esta lista">🖨 Imprimir</button>
+            <button type="button" id="resRelBaixar" title="Baixar a lista em planilha (CSV, abre no Excel)">⬇ Baixar</button>
+          </div>
+          <div class="res-rel-tabela-wrap">
+            <table class="res-rel-tabela" id="resRelTabela"><thead></thead><tbody></tbody></table>
+          </div>
+          <div class="res-rel-rodape">
+            <label>Linhas por página
+              <select id="resRelPorPag"><option value="10">10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>
+            </label>
+            <div class="res-rel-pag" id="resRelPag"></div>
+            <span class="res-rel-total" id="resRelTotal"></span>
+            <span class="ct-espaco"></span>
+            <button type="button" id="resRelTelaCheia">⤢ Tela cheia</button>
+            <button type="button" data-fechar="resRelModal">Fechar</button>
+          </div>
+        </div>
       </div>
 
       <div class="ct-modal" id="resTentModal" hidden>
@@ -2002,6 +2061,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261112h"></script>
+  <script src="app.js?v=20261118a"></script>
 </body>
 </html>

@@ -77,6 +77,10 @@ async function garantirTabelas() {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS res_pacientes_tenant_idx ON res_pacientes (tenant_id, etapa)`);
+  // filtros por periodo/especialidade e relatorio: data do orcamento, especialidades dos procedimentos e quando entrou na etapa atual
+  await pool.query(`ALTER TABLE res_pacientes ADD COLUMN IF NOT EXISTS orcamento_em TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE res_pacientes ADD COLUMN IF NOT EXISTS especialidades JSONB NOT NULL DEFAULT '[]'::jsonb`);
+  await pool.query(`ALTER TABLE res_pacientes ADD COLUMN IF NOT EXISTS etapa_desde TIMESTAMPTZ`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS res_tentativas (
       id SERIAL PRIMARY KEY,
@@ -124,11 +128,28 @@ export function analisarOrcamento(o) {
     // sobrou so item de R$ 0 (ex.: tomografia de cortesia): nao e orcamento inacabado
     completo: faltam.length === 0 || valorPendente <= 0,
     categoria: feitos.length ? 'parcial' : 'sem_inicio',
+    especialidadeIds: [...new Set(procs.map((p) => String(p.SpecialtyId ?? '')).filter(Boolean))],
   };
 }
 
+// id da especialidade -> nome (MAIUSCULO, pra juntar "Implantodontia" e "IMPLANTODONTIA" que o Clinicorp cadastra separado).
+// Uma leitura por tenant a cada 12h (o Clinicorp limita 25 requisicoes/hora).
+const cacheEspecialidades = new Map();
+async function nomesEspecialidades(tenantId) {
+  const c = cacheEspecialidades.get(tenantId);
+  if (c && Date.now() - c.em < 12 * 3600000) return c.mapa;
+  try {
+    const lista = await clinicorp.listSpecialties(tenantId);
+    const arr = Array.isArray(lista) ? lista : [];
+    const mapa = new Map();
+    for (const e of arr) { const nome = texto(e.Description, 60); if (e.id !== undefined && nome) mapa.set(String(e.id), nome.toUpperCase()); }
+    if (mapa.size) cacheEspecialidades.set(tenantId, { em: Date.now(), mapa });
+    return mapa;
+  } catch { return c?.mapa || new Map(); } // sem o nome (limite/erro), mantem o que ja estava gravado
+}
+
 // grava/atualiza as linhas a partir dos orcamentos APROVADOS lidos do Clinicorp
-async function processarOrcamentos(tenantId, aprovados) {
+async function processarOrcamentos(tenantId, aprovados, nomesEsp = new Map()) {
   const r = { novos: 0, atualizados: 0, retomaram: 0, concluidos: 0 };
   for (const o of aprovados) {
     const a = analisarOrcamento(o);
@@ -137,16 +158,18 @@ async function processarOrcamentos(tenantId, aprovados) {
     const { rows: [ex] } = await pool.query('SELECT id, etapa, procs_feitos, concluido_em FROM res_pacientes WHERE tenant_id = $1 AND orcamento_id = $2', [tenantId, id]);
     if (a.completo) {
       // terminou o tratamento: se estava no resgate, vai pra "Retomou" e para de contar como pendente
-      if (ex && !ex.concluido_em) { await pool.query(`UPDATE res_pacientes SET concluido_em = now(), retomou_em = COALESCE(retomou_em, now()), etapa = 'retomou', valor_pendente = 0, procs_feitos = $2, atualizado_em = now() WHERE id = $1`, [ex.id, a.feitosN]); r.concluidos++; }
+      if (ex && !ex.concluido_em) { await pool.query(`UPDATE res_pacientes SET concluido_em = now(), retomou_em = COALESCE(retomou_em, now()), etapa = 'retomou', etapa_desde = CASE WHEN etapa IS DISTINCT FROM 'retomou' THEN now() ELSE etapa_desde END, valor_pendente = 0, procs_feitos = $2, atualizado_em = now() WHERE id = $1`, [ex.id, a.feitosN]); r.concluidos++; }
       continue;
     }
     const tel = normalizarTelefone(o.PatientMobilePhone);
     const dados = [String(o.PatientId || ''), texto(o.PatientName, 120), tel, texto(o.ProfessionalName, 120), o.ApprovedDate || o.Date || null, a.ultimaExecucao, a.totalProcs, a.feitosN, a.valorTotal, a.valorPendente, JSON.stringify(a.feitos), JSON.stringify(a.faltam), a.categoria];
+    const orcamentoEm = o.Date || o.CreateDate || null;
+    const esp = JSON.stringify([...new Set(a.especialidadeIds.map((i) => nomesEsp.get(i)).filter(Boolean))].sort());
     if (!ex) {
       await pool.query(
-        `INSERT INTO res_pacientes (tenant_id, orcamento_id, patient_id, nome, telefone, profissional, aprovado_em, ultima_execucao_em, procs_total, procs_feitos, valor_total, valor_pendente, feitos, faltam, categoria, etapa)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::jsonb,$15,$16)`,
-        [tenantId, id, ...dados, a.categoria === 'parcial' ? 'novo' : 'sem_inicio'],
+        `INSERT INTO res_pacientes (tenant_id, orcamento_id, patient_id, nome, telefone, profissional, aprovado_em, ultima_execucao_em, procs_total, procs_feitos, valor_total, valor_pendente, feitos, faltam, categoria, etapa, orcamento_em, especialidades, etapa_desde)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::jsonb,$15,$16,$17,$18::jsonb, now())`,
+        [tenantId, id, ...dados, a.categoria === 'parcial' ? 'novo' : 'sem_inicio', orcamentoEm, esp],
       );
       r.novos++;
     } else {
@@ -154,9 +177,13 @@ async function processarOrcamentos(tenantId, aprovados) {
       const retomou = a.feitosN > ex.procs_feitos && ex.etapa !== 'retomou';
       await pool.query(
         `UPDATE res_pacientes SET patient_id=$3, nome=$4, telefone=$5, profissional=$6, aprovado_em=$7, ultima_execucao_em=$8, procs_total=$9, procs_feitos=$10, valor_total=$11, valor_pendente=$12, feitos=$13::jsonb, faltam=$14::jsonb, categoria=$15,
-                etapa = CASE WHEN $16 THEN 'retomou' ELSE etapa END, retomou_em = CASE WHEN $16 THEN now() ELSE retomou_em END, atualizado_em = now()
+                etapa = CASE WHEN $16 THEN 'retomou' ELSE etapa END, retomou_em = CASE WHEN $16 THEN now() ELSE retomou_em END,
+                etapa_desde = CASE WHEN $16 THEN now() ELSE etapa_desde END,
+                orcamento_em = COALESCE($17, orcamento_em),
+                especialidades = CASE WHEN jsonb_array_length($18::jsonb) > 0 THEN $18::jsonb ELSE especialidades END,
+                atualizado_em = now()
          WHERE id = $1 AND tenant_id = $2`,
-        [ex.id, tenantId, ...dados, retomou],
+        [ex.id, tenantId, ...dados, retomou, orcamentoEm, esp],
       );
       r.atualizados++;
       if (retomou) r.retomaram++;
@@ -228,7 +255,8 @@ export async function sincronizar(tenantId, { janelas = 3 } = {}) {
       } catch (err) { erro = err.message; break; }
       await new Promise((res) => setTimeout(res, 600));
     }
-    const proc = await processarOrcamentos(tenantId, [...aprovados.values()]);
+    const nomesEsp = await nomesEspecialidades(tenantId);
+    const proc = await processarOrcamentos(tenantId, [...aprovados.values()], nomesEsp);
     let comConsulta = 0;
     if (!erro) { try { comConsulta = await marcarConsultas(tenantId); } catch (err) { erro = erro || err.message; } }
     const resumo = `${aprovados.size} orçamentos aprovados lidos (${lista.length} períodos): ${proc.novos} novos, ${proc.atualizados} atualizados, ${proc.retomaram} retomaram, ${proc.concluidos} concluídos${erro ? ` — parou com aviso: ${erro}` : ''}`;
@@ -283,7 +311,10 @@ export async function listar(tenantId) {
   const { rows } = await pool.query(
     `SELECT id, orcamento_id, patient_id, nome, telefone, profissional, aprovado_em, ultima_execucao_em, procs_total, procs_feitos, valor_total::float AS valor_total, valor_pendente::float AS valor_pendente,
             feitos, faltam, categoria, etapa, proxima_consulta_em, retorno_em, retorno_nota, retomou_em, concluido_em, criado_em, atualizado_em,
+            orcamento_em, especialidades,
             GREATEST(0, floor(extract(epoch FROM (now() - COALESCE(ultima_execucao_em, aprovado_em))) / 86400))::int AS dias_parado,
+            GREATEST(0, floor(extract(epoch FROM (now() - COALESCE(etapa_desde, criado_em))) / 86400))::int AS dias_na_etapa,
+            (SELECT max(t.feita_em) FROM res_tentativas t WHERE t.resgate_id = res_pacientes.id) AS ultima_interacao_em,
             (SELECT count(*)::int FROM res_notas n WHERE n.resgate_id = res_pacientes.id) AS qtd_notas
        FROM res_pacientes WHERE tenant_id = $1 ORDER BY valor_pendente DESC LIMIT 3000`,
     [tenantId],
@@ -301,7 +332,7 @@ export async function listar(tenantId) {
 export async function moverEtapa(tenantId, id, etapa) {
   if (!IDS_ETAPAS.has(etapa)) throw new Error('Etapa inválida.');
   await tabelasProntas;
-  const { rowCount } = await pool.query('UPDATE res_pacientes SET etapa = $3, atualizado_em = now() WHERE id = $1 AND tenant_id = $2', [Number(id), tenantId, etapa]);
+  const { rowCount } = await pool.query('UPDATE res_pacientes SET etapa = $3, etapa_desde = CASE WHEN etapa IS DISTINCT FROM $3 THEN now() ELSE etapa_desde END, atualizado_em = now() WHERE id = $1 AND tenant_id = $2', [Number(id), tenantId, etapa]);
   if (!rowCount) throw new Error('Paciente não encontrado.');
 }
 
@@ -322,7 +353,7 @@ export async function registrarTentativa(tenantId, id, { resultado, obs, ligacao
   if (resultado === 'agendou') etapa = 'agendou';
   else if (resultado === 'sem_interesse' || resultado === 'numero_errado') etapa = 'sem_sucesso';
   if (p.etapa === 'retomou') etapa = 'retomou';
-  await pool.query('UPDATE res_pacientes SET etapa = $3, retorno_em = $4, retorno_nota = $5, atualizado_em = now() WHERE id = $1 AND tenant_id = $2', [p.id, tenantId, etapa, retorno, retorno ? texto(obs, 500) : null]);
+  await pool.query('UPDATE res_pacientes SET etapa = $3, etapa_desde = CASE WHEN etapa IS DISTINCT FROM $3 THEN now() ELSE etapa_desde END, retorno_em = $4, retorno_nota = $5, atualizado_em = now() WHERE id = $1 AND tenant_id = $2', [p.id, tenantId, etapa, retorno, retorno ? texto(obs, 500) : null]);
   return { ok: true, n, etapa };
 }
 

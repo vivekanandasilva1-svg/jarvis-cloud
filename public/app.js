@@ -12084,6 +12084,8 @@ document.getElementById('indMsgPadrao').addEventListener('click', async () => {
 const resBoard = document.getElementById('resBoard');
 let resDados = { etapas: [], resultados: {}, pacientes: [], mensagem: '', operadores: [] };
 let resDiasMin = 15;
+// filtros do quadro (iguais aos do "Orçamentos em aberto" do Clinicorp): período da data do orçamento, especialidade e profissional
+let resFiltro = { periodo: 'todos', de: '', ate: '', esp: '', prof: '' };
 let resPollTimer = null;
 let resArrastando = null;
 const resH = () => ({ 'x-app-password': appPassword, 'Content-Type': 'application/json' });
@@ -12091,6 +12093,43 @@ const resMoeda = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currenc
 const resData = (iso) => new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
 const resDH = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 const resSemAcento = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+// intervalo [início, fim] do período escolhido (null = sem filtro de data)
+function resIntervalo(periodo, de, ate) {
+  const agora = new Date();
+  if (periodo === 'todos' || !periodo) return null;
+  if (periodo === 'custom') {
+    const a = de ? new Date(`${de}T00:00:00`) : null, b = ate ? new Date(`${ate}T23:59:59.999`) : null;
+    return a || b ? [a || new Date(0), b || agora] : null;
+  }
+  if (periodo === 'mes') return [new Date(agora.getFullYear(), agora.getMonth(), 1), agora];
+  if (periodo === 'mes_passado') return [new Date(agora.getFullYear(), agora.getMonth() - 1, 1), new Date(agora.getFullYear(), agora.getMonth(), 0, 23, 59, 59, 999)];
+  const n = Number(periodo); if (!n) return null;
+  return [new Date(new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).getTime() - n * 86400000), agora];
+}
+// a data do filtro é a data do orçamento (a mesma "Data de Orçamento" do Clinicorp)
+function resPassaFiltro(p, f) {
+  const iv = resIntervalo(f.periodo, f.de, f.ate);
+  if (iv) { const d = new Date(p.orcamento_em || p.aprovado_em); if (Number.isNaN(d.getTime()) || d < iv[0] || d > iv[1]) return false; }
+  if (f.prof === '__sem__') { if (p.profissional) return false; } else if (f.prof && p.profissional !== f.prof) return false;
+  if (f.esp && !(p.especialidades || []).includes(f.esp)) return false;
+  return true;
+}
+function resPreencherSelect(sel, rotuloTodos, valores, atual, extra) {
+  sel.textContent = '';
+  sel.add(new Option(rotuloTodos, ''));
+  if (extra) sel.add(new Option(extra[1], extra[0]));
+  for (const v of valores) sel.add(new Option(v, v));
+  sel.value = [...sel.options].some((o) => o.value === atual) ? atual : '';
+}
+function resPreencherFiltros() {
+  const ord = (a, b) => a.localeCompare(b, 'pt-BR');
+  const esps = [...new Set(resDados.pacientes.flatMap((p) => p.especialidades || []))].sort(ord);
+  const profs = [...new Set(resDados.pacientes.map((p) => p.profissional).filter(Boolean))].sort(ord);
+  resPreencherSelect(document.getElementById('resEsp'), 'Todas as especialidades', esps, resFiltro.esp);
+  resPreencherSelect(document.getElementById('resProf'), 'Todos os profissionais', profs, resFiltro.prof, ['__sem__', 'Sem profissional']);
+  resFiltro.esp = document.getElementById('resEsp').value; resFiltro.prof = document.getElementById('resProf').value;
+}
 
 function resNomePendentes(p) {
   const nomes = (p.faltam || []).map((f) => String(f.d || '').toLowerCase()).filter(Boolean);
@@ -12138,6 +12177,8 @@ function resCriarCard(p) {
   const parado = document.createElement('span'); parado.className = 'ind-tag' + (p.dias_parado >= 45 ? ' vermelho' : p.dias_parado >= 30 ? ' laranja' : ''); parado.textContent = p.categoria === 'sem_inicio' ? `Aprovado há ${p.dias_parado} dias` : `Parado há ${p.dias_parado} dias`; tags.appendChild(parado);
   if (p.proxima_consulta_em) { const c = document.createElement('span'); c.className = 'ind-tag ok'; c.textContent = `Consulta marcada ${resData(p.proxima_consulta_em)}`; tags.appendChild(c); }
   if (p.retomou_em) { const c = document.createElement('span'); c.className = 'ind-tag ok'; c.textContent = `Retomou em ${resData(p.retomou_em)}`; tags.appendChild(c); }
+  if (p.orcamento_em) { const c = document.createElement('span'); c.className = 'ind-tag'; c.textContent = `Orçamento de ${resData(p.orcamento_em)}`; tags.appendChild(c); }
+  if ((p.especialidades || []).length) { const c = document.createElement('span'); c.className = 'ind-tag'; c.textContent = p.especialidades.slice(0, 2).join(' · ') + (p.especialidades.length > 2 ? ' +' : ''); tags.appendChild(c); }
   card.appendChild(tags);
   // procedimentos (feitos x faltam)
   const det = document.createElement('details'); det.className = 'res-detalhes';
@@ -12185,7 +12226,7 @@ function resDesenhar() {
   const q = resSemAcento(document.getElementById('resBusca').value.trim());
   const ocultar = document.getElementById('resOcultarConsulta').checked;
   const ordem = document.getElementById('resOrdem').value;
-  const todos = resDados.pacientes.filter((p) => !q || resSemAcento(`${p.nome} ${p.telefone || ''}`).includes(q));
+  const todos = resDados.pacientes.filter((p) => resPassaFiltro(p, resFiltro) && (!q || resSemAcento(`${p.nome} ${p.telefone || ''}`).includes(q)));
   const entrada = (p) => p.etapa === 'sem_inicio' || p.etapa === 'novo';
   const passa = (p) => !entrada(p) || ((p.dias_parado >= resDiasMin) && !(ocultar && p.proxima_consulta_em));
   const cmp = { valor: (a, b) => b.valor_pendente - a.valor_pendente, parado: (a, b) => b.dias_parado - a.dias_parado, recente: (a, b) => new Date(b.aprovado_em) - new Date(a.aprovado_em) }[ordem];
@@ -12227,7 +12268,9 @@ async function carregarResgate() {
     sel.value = d.operadorId === null || d.operadorId === undefined ? '' : String(d.operadorId);
     sel.disabled = !d.podeEscolherOperador;
     sel.hidden = !d.operadores.length;
+    resPreencherFiltros();
     resDesenhar();
+    if (!document.getElementById('resRelModal').hidden) resRelDesenhar();
     // primeira carga: o servidor esta lendo o Clinicorp em segundo plano - volta a olhar sozinho
     if (d.carregando || !d.pacientes.length) {
       document.getElementById('resResumo').textContent = d.carregando ? 'Lendo os orçamentos no Clinicorp pela primeira vez... isso leva alguns minutos (o Clinicorp limita as consultas por hora). A tela atualiza sozinha.' : document.getElementById('resResumo').textContent;
@@ -12259,6 +12302,132 @@ document.getElementById('resAtualizarBtn').addEventListener('click', async () =>
   } catch (err) { mostrarAviso(err.message, 'erro'); }
   b.disabled = false; b.textContent = 'Atualizar do Clinicorp';
   carregarResgate();
+});
+
+// ---- filtros do quadro: período / especialidade / profissional ----
+function resLerFiltros() {
+  resFiltro = { periodo: document.getElementById('resPeriodo').value, de: document.getElementById('resDe').value, ate: document.getElementById('resAte').value, esp: document.getElementById('resEsp').value, prof: document.getElementById('resProf').value };
+  document.getElementById('resCustom').hidden = resFiltro.periodo !== 'custom';
+  resDesenhar();
+}
+for (const id of ['resPeriodo', 'resDe', 'resAte', 'resEsp', 'resProf']) document.getElementById(id).addEventListener('change', resLerFiltros);
+document.getElementById('resLimparFiltros').addEventListener('click', () => {
+  document.getElementById('resPeriodo').value = 'todos'; document.getElementById('resDe').value = ''; document.getElementById('resAte').value = '';
+  document.getElementById('resEsp').value = ''; document.getElementById('resProf').value = '';
+  resLerFiltros();
+});
+
+// ---- Relatório (tabela completa com filtros, impressão e planilha, como o relatório do Clinicorp) ----
+const resRelModal = document.getElementById('resRelModal');
+const resRel = { periodo: 'todos', de: '', ate: '', etapa: '', esp: '', prof: '', q: '', col: 'orcamento_em', dir: -1, pag: 1, porPag: 10 };
+const resData4 = (iso) => new Date(iso).toLocaleDateString('pt-BR');
+const resDataHora = (iso) => { const d = new Date(iso); return `${d.toLocaleDateString('pt-BR')} - ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`; };
+const resMoeda2 = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+function resTel(t) {
+  let d = String(t || '').replace(/\D/g, '');
+  if (!d) return '–';
+  if (d.startsWith('55') && d.length >= 12) d = d.slice(2);
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return d;
+}
+const resNomeEtapa = (id) => (resDados.etapas.find((e) => e.id === id) || {}).nome || id;
+const resIndiceEtapa = (id) => resDados.etapas.findIndex((e) => e.id === id);
+const RES_REL_COLUNAS = [
+  { k: 'orcamento_em', t: 'Data da Criação', v: (p) => (p.orcamento_em ? resData4(p.orcamento_em) : '–'), ord: (p) => new Date(p.orcamento_em || 0).getTime() },
+  { k: 'ultima_interacao_em', t: 'Data Interação', v: (p) => (p.ultima_interacao_em ? resDataHora(p.ultima_interacao_em) : '–'), ord: (p) => new Date(p.ultima_interacao_em || 0).getTime() },
+  { k: 'nome', t: 'Paciente', v: (p) => p.nome || 'Sem nome', ord: (p) => resSemAcento(p.nome), cls: 'res-rel-nome' },
+  { k: 'telefone', t: 'Telefone', v: (p) => resTel(p.telefone), ord: (p) => p.telefone || '' },
+  { k: 'etapa', t: 'Etapa', v: (p) => resNomeEtapa(p.etapa), ord: (p) => resIndiceEtapa(p.etapa), badge: true },
+  { k: 'dias_na_etapa', t: 'Dias na etapa', v: (p) => String(p.dias_na_etapa ?? 0), ord: (p) => p.dias_na_etapa || 0, cls: 'num' },
+  { k: 'especialidades', t: 'Especialidade', v: (p) => (p.especialidades || []).join(', ') || '–', ord: (p) => (p.especialidades || []).join(',') },
+  { k: 'profissional', t: 'Profissional', v: (p) => p.profissional || '–', ord: (p) => resSemAcento(p.profissional) },
+  { k: 'valor_total', t: 'Valor do orçamento', v: (p) => resMoeda2(p.valor_total), ord: (p) => p.valor_total || 0, cls: 'num' },
+  { k: 'valor_pendente', t: 'Falta executar', v: (p) => resMoeda2(p.valor_pendente), ord: (p) => p.valor_pendente || 0, cls: 'num' },
+];
+function resRelLinhas() {
+  const q = resSemAcento(resRel.q.trim());
+  const f = { periodo: resRel.periodo, de: resRel.de, ate: resRel.ate, esp: resRel.esp, prof: resRel.prof };
+  const lista = resDados.pacientes.filter((p) => resPassaFiltro(p, f) && (!resRel.etapa || p.etapa === resRel.etapa) && (!q || resSemAcento(`${p.nome} ${p.telefone || ''}`).includes(q)));
+  const col = RES_REL_COLUNAS.find((c) => c.k === resRel.col) || RES_REL_COLUNAS[0];
+  lista.sort((a, b) => { const x = col.ord(a), y = col.ord(b); const r = typeof x === 'string' ? x.localeCompare(y, 'pt-BR') : x - y; return (r || a.id - b.id) * resRel.dir; });
+  return lista;
+}
+function resRelPaginas(total, atual) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const nums = [...new Set([1, total, atual - 1, atual, atual + 1])].filter((n) => n >= 1 && n <= total).sort((a, b) => a - b);
+  const out = []; let ant = 0;
+  for (const n of nums) { if (n - ant > 1) out.push('…'); out.push(n); ant = n; }
+  return out;
+}
+function resRelDesenhar() {
+  const lista = resRelLinhas();
+  const paginas = Math.max(1, Math.ceil(lista.length / resRel.porPag));
+  if (resRel.pag > paginas) resRel.pag = paginas;
+  const tabela = document.getElementById('resRelTabela');
+  const thead = tabela.tHead; thead.textContent = '';
+  const tr = thead.insertRow();
+  for (const c of RES_REL_COLUNAS) {
+    const th = document.createElement('th'); th.textContent = c.t + (resRel.col === c.k ? (resRel.dir > 0 ? ' ▲' : ' ▼') : ''); th.className = resRel.col === c.k ? 'ord' : '';
+    th.addEventListener('click', () => { if (resRel.col === c.k) resRel.dir = -resRel.dir; else { resRel.col = c.k; resRel.dir = c.k === 'nome' || c.k === 'telefone' || c.k === 'profissional' || c.k === 'especialidades' ? 1 : -1; } resRel.pag = 1; resRelDesenhar(); });
+    tr.appendChild(th);
+  }
+  const tbody = tabela.tBodies[0]; tbody.textContent = '';
+  const pagina = lista.slice((resRel.pag - 1) * resRel.porPag, resRel.pag * resRel.porPag);
+  if (!pagina.length) { const r = tbody.insertRow(); const td = r.insertCell(); td.colSpan = RES_REL_COLUNAS.length; td.className = 'res-rel-vazio'; td.textContent = 'Nenhum orçamento com esses filtros.'; }
+  for (const p of pagina) {
+    const r = tbody.insertRow();
+    for (const c of RES_REL_COLUNAS) {
+      const td = r.insertCell(); if (c.cls) td.className = c.cls;
+      if (c.badge) { const b = document.createElement('span'); b.className = `res-badge e-${p.etapa}`; b.textContent = c.v(p); td.appendChild(b); } else td.textContent = c.v(p);
+    }
+  }
+  const pag = document.getElementById('resRelPag'); pag.textContent = '';
+  const btn = (txt, alvo, { ativo, off } = {}) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = txt; if (ativo) b.classList.add('ativo'); if (off) b.disabled = true; else b.addEventListener('click', () => { resRel.pag = alvo; resRelDesenhar(); }); pag.appendChild(b); };
+  btn('‹', resRel.pag - 1, { off: resRel.pag <= 1 });
+  for (const n of resRelPaginas(paginas, resRel.pag)) { if (n === '…') { const s = document.createElement('span'); s.textContent = '…'; pag.appendChild(s); } else btn(String(n), n, { ativo: n === resRel.pag }); }
+  btn('›', resRel.pag + 1, { off: resRel.pag >= paginas });
+  const somaPend = lista.reduce((a, p) => a + (p.valor_pendente || 0), 0);
+  document.getElementById('resRelTotal').textContent = `${lista.length} orçamento(s) · falta executar ${resMoeda2(somaPend)}`;
+}
+function resRelPreencherSelects() {
+  const ord = (a, b) => a.localeCompare(b, 'pt-BR');
+  const esps = [...new Set(resDados.pacientes.flatMap((p) => p.especialidades || []))].sort(ord);
+  const profs = [...new Set(resDados.pacientes.map((p) => p.profissional).filter(Boolean))].sort(ord);
+  const et = document.getElementById('resRelEtapa'); et.textContent = ''; et.add(new Option('Todas as etapas', ''));
+  for (const e of resDados.etapas) et.add(new Option(e.nome, e.id));
+  et.value = resRel.etapa;
+  resPreencherSelect(document.getElementById('resRelEsp'), 'Todas as especialidades', esps, resRel.esp);
+  resPreencherSelect(document.getElementById('resRelProf'), 'Todos os profissionais', profs, resRel.prof, ['__sem__', 'Sem profissional']);
+  resRel.esp = document.getElementById('resRelEsp').value; resRel.prof = document.getElementById('resRelProf').value;
+}
+document.getElementById('resRelBtn').addEventListener('click', () => { resRelPreencherSelects(); resRelModal.hidden = false; resRelDesenhar(); });
+resRelModal.addEventListener('click', (e) => { if (e.target === resRelModal || e.target.closest('[data-fechar="resRelModal"]')) resRelModal.hidden = true; });
+function resRelLerFiltros() {
+  Object.assign(resRel, { periodo: document.getElementById('resRelPeriodo').value, de: document.getElementById('resRelDe').value, ate: document.getElementById('resRelAte').value, etapa: document.getElementById('resRelEtapa').value, esp: document.getElementById('resRelEsp').value, prof: document.getElementById('resRelProf').value, pag: 1 });
+  document.getElementById('resRelCustom').hidden = resRel.periodo !== 'custom';
+  resRelDesenhar();
+}
+for (const id of ['resRelPeriodo', 'resRelDe', 'resRelAte', 'resRelEtapa', 'resRelEsp', 'resRelProf']) document.getElementById(id).addEventListener('change', resRelLerFiltros);
+document.getElementById('resRelBusca').addEventListener('input', (e) => { resRel.q = e.target.value; resRel.pag = 1; resRelDesenhar(); });
+document.getElementById('resRelPorPag').addEventListener('change', (e) => { resRel.porPag = Number(e.target.value) || 10; resRel.pag = 1; resRelDesenhar(); });
+document.getElementById('resRelTelaCheia').addEventListener('click', (e) => { const cheia = document.getElementById('resRelCaixa').classList.toggle('res-rel-cheia'); e.currentTarget.textContent = cheia ? '⤡ Sair da tela cheia' : '⤢ Tela cheia'; });
+const resEsc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+document.getElementById('resRelImprimir').addEventListener('click', () => {
+  const lista = resRelLinhas();
+  const w = window.open('', '_blank');
+  if (!w) { mostrarAviso('O navegador bloqueou a janela de impressão. Libere pop-ups para esta página.', 'erro'); return; }
+  const cab = RES_REL_COLUNAS.map((c) => `<th>${resEsc(c.t)}</th>`).join('');
+  const linhas = lista.map((p) => `<tr>${RES_REL_COLUNAS.map((c) => `<td>${resEsc(c.v(p))}</td>`).join('')}</tr>`).join('');
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório - Resgate de orçamentos</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:16px}h1{font-size:15px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:4px 6px;text-align:left}th{background:#eee}@page{size:landscape}</style></head><body><h1>Relatório - Resgate de orçamentos</h1><p>${lista.length} orçamento(s) · ${resEsc(new Date().toLocaleString('pt-BR'))}</p><table><thead><tr>${cab}</tr></thead><tbody>${linhas}</tbody></table></body></html>`);
+  w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
+});
+document.getElementById('resRelBaixar').addEventListener('click', () => {
+  const lista = resRelLinhas();
+  const cel = (t) => { let s = String(t); if (/^[=+\-@]/.test(s)) s = `'${s}`; return `"${s.replace(/"/g, '""')}"`; }; // aspas simples antes de = + - @ evita formula no Excel
+  const csv = '﻿' + [RES_REL_COLUNAS.map((c) => cel(c.t)).join(';'), ...lista.map((p) => RES_REL_COLUNAS.map((c) => cel(c.v(p))).join(';'))].join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); a.download = `relatorio-resgate-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 });
 
 // ---- registrar contato ----
