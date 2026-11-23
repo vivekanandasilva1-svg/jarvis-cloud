@@ -1204,5 +1204,13 @@
     "tipo": "melhoria",
     "titulo": "Clicar no nome do paciente copia o nome (CRM, Conversas, Contatos, Aniversariantes, Resgate, Indicações, Funil Follow Up)",
     "conteudo": "Pedido do dono: copiar o nome com um clique em qualquer lugar do app (e, depois, um botão para abrir o paciente no Clinicorp - esta segunda parte ficou de fora por depender do endereço de paciente do Clinicorp, que a API não informa; precisa de um exemplo de URL de paciente). Implementação: public/copiar-nome.js, um único ouvinte de clique no documento, sem tocar no app.js; não muda a ação que o clique já fazia (abrir conversa, editar), só copia também e mostra o aviso 'Nome copiado'. Cobre .crm-card-nome (CRM, Funil FU, Indicações, Resgate, Orçamentos em aberto), .aniv-nome, td.ct-nome, lista e cabeçalho de Conversas e o cabeçalho da conversa do CRM. Telas novas: basta o elemento do nome ter data-paciente. Fora por ora: Ligações e Disparos (o texto mistura nome e número), Agenda e listas do Follow Up. Ignora 'Sem nome', campos de digitação e quando o usuário está selecionando texto."
+  },
+  {
+    "chave": "resgate:colunas-compridas",
+    "modulo": "resgate",
+    "data": "2026-11-23",
+    "tipo": "correcao",
+    "titulo": "Resgate de orçamentos e Orçamentos em aberto: colunas compridas (vários pacientes por coluna)",
+    "conteudo": "Problema: com o cabeçalho, os filtros novos e o aviso Como usar, o quadro só ganhava o espaço que sobrava (~270px) e cada coluna mostrava um card por vez. Causa: .tab-crm tem overflow hidden e o quadro era flex 1 com min-height 0. Correção só em CSS e só nesta aba (#tabResgate, vale para os dois modos): a aba rola na vertical e o quadro tem altura própria de max(820px, 100vh-80px). Resultado num monitor 1577x762: coluna de ~800px, quase 3 cards do Resgate sem rolar a coluna (cada card tem ~270px por causa das tags e 3 linhas de botões; compactar o card é uma opção futura). Outras abas com quadro (CRM etc.) não mudam."
   }
 ]

@@ -3814,3 +3814,8 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 
 /* clicar no nome do paciente copia o nome (copiar-nome.js) */
 [data-paciente], .crm-card-nome, .aniv-nome, td.ct-nome, .cv-item-linha > strong, #cvNome, #crmConversaNome { cursor: copy; }
+
+/* Resgate de orcamentos e Orcamentos em aberto: colunas compridas (a pagina rola) para ver varios pacientes por coluna */
+#tabResgate { overflow-y: auto; }
+#tabResgate .crm-board-wrap { flex: 0 0 auto; min-height: auto; }
+#tabResgate .crm-board { flex: 0 0 auto; height: max(820px, calc(100vh - 80px)); }
