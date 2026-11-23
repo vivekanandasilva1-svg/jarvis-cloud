@@ -3819,3 +3819,20 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 #tabResgate { overflow-y: auto; }
 #tabResgate .crm-board-wrap { flex: 0 0 auto; min-height: auto; }
 #tabResgate .crm-board { flex: 0 0 auto; height: max(820px, calc(100vh - 80px)); }
+
+/* setinha para voltar ao topo (rolagem.js) */
+.voltar-topo { position: fixed; right: 92px; bottom: 26px; z-index: 55; width: 42px; height: 42px; padding: 0; border-radius: 50%; border: 1px solid var(--gold); background: rgba(20, 17, 15, 0.92); color: var(--gold-bright); font-size: 20px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45); }
+.voltar-topo[hidden] { display: none; }
+.voltar-topo:hover { background: var(--gold); color: #1b1608; }
+.voltar-topo-lista { width: 30px; height: 30px; font-size: 16px; right: auto; bottom: auto; z-index: 54; }
+
+/* celular, iPhone, Android e tablet: barras de botoes/filtros rolam de lado (arrastar) em vez de cortar os botoes */
+@media (max-width: 900px), (pointer: coarse) {
+  .voltar-topo:not(.voltar-topo-lista) { right: 16px; bottom: 104px; }
+  .crm-board-header { flex-direction: column; align-items: stretch; gap: 8px; }
+  :is(.crm-board-nav, .res-filtros, .res-modos, .res-rel-filtros, .ind-subnav, .ind-filtros, .cv-filtros, .aniv-nav, .ct-barra, .ct-acoes, .disp-botoes, .fui-topo) { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; max-width: 100%; margin-left: 0; padding-bottom: 6px; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+  :is(.crm-board-nav, .res-filtros, .res-modos, .res-rel-filtros, .ind-subnav, .ind-filtros, .cv-filtros, .aniv-nav, .ct-barra, .ct-acoes, .disp-botoes, .fui-topo) > * { flex: 0 0 auto; white-space: nowrap; }
+  .rolagem-h-tem-mais { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+  .rolagem-h-tem-antes { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
+  .rolagem-h-tem-mais.rolagem-h-tem-antes { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
+}

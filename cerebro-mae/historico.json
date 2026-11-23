@@ -1212,5 +1212,13 @@
     "tipo": "correcao",
     "titulo": "Resgate de orçamentos e Orçamentos em aberto: colunas compridas (vários pacientes por coluna)",
     "conteudo": "Problema: com o cabeçalho, os filtros novos e o aviso Como usar, o quadro só ganhava o espaço que sobrava (~270px) e cada coluna mostrava um card por vez. Causa: .tab-crm tem overflow hidden e o quadro era flex 1 com min-height 0. Correção só em CSS e só nesta aba (#tabResgate, vale para os dois modos): a aba rola na vertical e o quadro tem altura própria de max(820px, 100vh-80px). Resultado num monitor 1577x762: coluna de ~800px, quase 3 cards do Resgate sem rolar a coluna (cada card tem ~270px por causa das tags e 3 linhas de botões; compactar o card é uma opção futura). Outras abas com quadro (CRM etc.) não mudam."
+  },
+  {
+    "chave": "app:rolagem-topo-e-barras-celular",
+    "modulo": "app",
+    "data": "2026-11-23",
+    "tipo": "melhoria",
+    "titulo": "Rolagem: coluna não volta ao topo sozinha, setinha de voltar ao topo e barras de botões que rolam de lado no celular",
+    "conteudo": "Pedido do dono (vídeos + print do CRM no iPhone): (1) a lista de cada coluna voltava ao topo sozinha, (2) queria uma setinha para voltar ao topo e (3) no celular/tablet as barras de botões (ex.: CRM) ficavam cortadas sem como acessar os botões escondidos. Causa de (1): todos os quadros (CRM, Indicações, Resgate, Funil FU) se redesenham do zero a cada atualização e a coluna nova nasce no topo. Solução em public/rolagem.js (arquivo novo, não mexe no app.js): lembra a rolagem de cada coluna e a lateral do quadro e devolve após o redesenho (MutationObserver nos .crm-board); qualquer lista/aba que vá a 0 sozinha (sem roda/toque/clique/tecla nos últimos 700ms) volta para onde estava; setinha da página (canto inferior direito, acima do coruja no celular) e setinha por coluna/lista (no canto da própria coluna), com subida suave. CSS: em telas até 900px ou de toque (celular, iPhone, Android, tablet) as barras .crm-board-nav, .res-filtros, .res-modos, .ind-subnav, .ind-filtros, .cv-filtros, .aniv-nav, .ct-barra, .ct-acoes, .disp-botoes e .fui-topo ficam em linha única com rolagem lateral e sombra nas pontas quando há mais botões; .crm-board-header vira coluna. Desktop sem alteração. Limite: o preview do Claude fica oculto e não desenha quadros, então os testes de rolagem usaram eventos de rolagem disparados na mão; vale conferir no celular real."
   }
 ]
