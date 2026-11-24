@@ -25,6 +25,9 @@ const TAMANHO_MAX_ARQUIVO = 12 * 1024 * 1024; // base64 aumenta ~33% e o JSON do
 const MAX_ARQUIVOS = 5;
 const MENSAGEM_PADRAO = 'Oi, {nome}! 🎉 Hoje é o seu dia e a nossa equipe quis passar aqui pra te desejar um feliz aniversário, com muita saúde, alegria e motivos pra sorrir bastante! Um abraço de todos nós.';
 const HORA_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+// o WhatsApp respondeu {"exists":false}: o telefone nao tem conta no WhatsApp (nao adianta tentar de novo)
+const MSG_SEM_WHATSAPP = 'Número sem WhatsApp (o WhatsApp não reconhece este telefone). Confira o número no Clinicorp; se estiver certo, não há como enviar por aqui.';
+const ehSemWhatsapp = (err) => /"exists"\s*:\s*false/.test(String(err?.message || ''));
 
 async function garantirTabelas() {
   if (!pool) return;
@@ -81,6 +84,8 @@ async function garantirTabelas() {
   await pool.query(`ALTER TABLE aniversariantes_envios ADD COLUMN IF NOT EXISTS perfis JSONB;`);
   // numero (instancia do WhatsApp) escolhido pelo dono pra mandar os aniversarios; NULL = ainda nao escolheu = nao envia
   await pool.query(`ALTER TABLE aniversariantes_config ADD COLUMN IF NOT EXISTS instancia_envio TEXT;`);
+  // falhas antigas de "numero sem WhatsApp" (texto tecnico do Evolution) viram "pulado" com a mensagem clara: nao entram mais em lotes
+  await pool.query(`UPDATE aniversariantes_envios SET status = 'pulado', erro = $1 WHERE status = 'falhou' AND erro LIKE '%"exists":false%'`, [MSG_SEM_WHATSAPP]);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas dos Aniversariantes:', err.message);
@@ -486,6 +491,10 @@ export async function enviarEnvio(tenantId, id) {
     texto = await montarMensagem(tenantId, config, envio);
     await evolutionApi.enviarMensagemTextoPor(instancia, envio.telefone, texto);
   } catch (err) {
+    if (ehSemWhatsapp(err)) { // telefone sem WhatsApp: pula (nao fica como "falhou" pra nao ser retentado em todo lote)
+      await pool.query(`UPDATE aniversariantes_envios SET status = 'pulado', erro = $3 WHERE id = $1 AND tenant_id = $2`, [id, tenantId, MSG_SEM_WHATSAPP]);
+      const e = new Error(MSG_SEM_WHATSAPP); e.semWhatsapp = true; throw e;
+    }
     await pool.query(`UPDATE aniversariantes_envios SET status = 'falhou', erro = $3 WHERE id = $1 AND tenant_id = $2`, [id, tenantId, String(err.message).slice(0, 300)]);
     throw err;
   }
@@ -575,8 +584,8 @@ export function statusEnvio(tenantId) {
   const f = filas.get(tenantId);
   if (!f) return { ativo: false };
   return {
-    ativo: ATIVA.has(f.estado), estado: f.estado, origem: f.origem, instancia: f.instancia, total: f.total, enviados: f.enviados, falhas: f.falhas,
-    restantes: Math.max(0, f.total - f.enviados - f.falhas), erro: f.erro, iniciadoEm: f.iniciadoEm, terminouEm: f.terminouEm || null,
+    ativo: ATIVA.has(f.estado), estado: f.estado, origem: f.origem, instancia: f.instancia, total: f.total, enviados: f.enviados, falhas: f.falhas, semWhatsapp: f.semWhatsapp,
+    restantes: Math.max(0, f.total - f.enviados - f.falhas - f.semWhatsapp), erro: f.erro, iniciadoEm: f.iniciadoEm, terminouEm: f.terminouEm || null,
   };
 }
 export function pausarEnvio(tenantId) {
@@ -599,7 +608,7 @@ export function cancelarEnvio(tenantId) {
 }
 
 async function executarFila(tenantId, ids, { origem, pausaMs, instancia }) {
-  const f = { estado: 'rodando', origem, total: ids.length, enviados: 0, falhas: 0, cancelar: false, instancia, erro: null, iniciadoEm: new Date().toISOString(), terminouEm: null };
+  const f = { estado: 'rodando', origem, total: ids.length, enviados: 0, falhas: 0, semWhatsapp: 0, cancelar: false, instancia, erro: null, iniciadoEm: new Date().toISOString(), terminouEm: null };
   filas.set(tenantId, f);
   try {
     for (let i = 0; i < ids.length; i++) {
@@ -609,6 +618,7 @@ async function executarFila(tenantId, ids, { origem, pausaMs, instancia }) {
         await enviarEnvio(tenantId, ids[i]);
         f.enviados++;
       } catch (err) {
+        if (err.semWhatsapp) { f.semWhatsapp++; continue; } // nada foi enviado: segue pro proximo sem a pausa de 20-45s
         f.falhas++;
         console.error(`Aniversariantes: ${origem} ${ids[i]} (tenant ${tenantId}) falhou:`, err.message);
         if (paraOEnvio(err)) { f.erro = err.message; break; }
