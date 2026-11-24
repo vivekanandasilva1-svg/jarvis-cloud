@@ -10993,7 +10993,7 @@ function desenharEnvioAniv(s) {
   clearTimeout(anivEnvioEsconder);
   if (!s || (!s.ativo && !s.terminouEm)) { anivEnvioBarra.hidden = true; return; }
   const rotulo = { rodando: 'Enviando', pausado: 'Envio pausado', cancelando: 'Cancelando...', concluido: 'Envio concluído', cancelado: 'Envio cancelado', interrompido: 'Envio interrompido' }[s.estado] || 'Envio';
-  anivEnvioTexto.textContent = `${rotulo}: ${s.enviados} de ${s.total} enviados${s.falhas ? ` · ${s.falhas} falha(s)` : ''}${s.instancia ? ` · número ${s.instancia}` : ''}${s.erro ? ` · ${s.erro}` : ''}`;
+  anivEnvioTexto.textContent = `${rotulo}: ${s.enviados} de ${s.total} enviados${s.falhas ? ` · ${s.falhas} falha(s)` : ''}${s.semWhatsapp ? ` · ${s.semWhatsapp} sem WhatsApp (pulados)` : ''}${s.instancia ? ` · número ${s.instancia}` : ''}${s.erro ? ` · ${s.erro}` : ''}`;
   anivEnvioPausar.hidden = s.estado !== 'rodando';
   anivEnvioContinuar.hidden = s.estado !== 'pausado';
   anivEnvioCancelar.hidden = !s.ativo || s.estado === 'cancelando';
