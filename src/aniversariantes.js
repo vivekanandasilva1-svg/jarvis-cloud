@@ -26,7 +26,7 @@ const MAX_ARQUIVOS = 5;
 const MENSAGEM_PADRAO = 'Oi, {nome}! 🎉 Hoje é o seu dia e a nossa equipe quis passar aqui pra te desejar um feliz aniversário, com muita saúde, alegria e motivos pra sorrir bastante! Um abraço de todos nós.';
 const HORA_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 // o WhatsApp respondeu {"exists":false}: o telefone nao tem conta no WhatsApp (nao adianta tentar de novo)
-const MSG_SEM_WHATSAPP = 'Número sem WhatsApp (o WhatsApp não reconhece este telefone). Confira o número no Clinicorp; se estiver certo, não há como enviar por aqui.';
+const MSG_SEM_WHATSAPP = 'Número sem WhatsApp, confira no Clinicorp';
 const ehSemWhatsapp = (err) => /"exists"\s*:\s*false/.test(String(err?.message || ''));
 
 async function garantirTabelas() {
@@ -86,6 +86,8 @@ async function garantirTabelas() {
   await pool.query(`ALTER TABLE aniversariantes_config ADD COLUMN IF NOT EXISTS instancia_envio TEXT;`);
   // falhas antigas de "numero sem WhatsApp" (texto tecnico do Evolution) viram "pulado" com a mensagem clara: nao entram mais em lotes
   await pool.query(`UPDATE aniversariantes_envios SET status = 'pulado', erro = $1 WHERE status = 'falhou' AND erro LIKE '%"exists":false%'`, [MSG_SEM_WHATSAPP]);
+  // texto antigo (mais longo) desse mesmo aviso passa a usar o texto curto
+  await pool.query(`UPDATE aniversariantes_envios SET erro = $1 WHERE status = 'pulado' AND erro LIKE 'Número sem WhatsApp%' AND erro <> $1`, [MSG_SEM_WHATSAPP]);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas dos Aniversariantes:', err.message);

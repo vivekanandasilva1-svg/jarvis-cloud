@@ -1260,5 +1260,13 @@
     "tipo": "correcao",
     "titulo": "Aniversariantes: telefone sem WhatsApp vira 'pulado' com mensagem clara (não é mais retentado em todo lote)",
     "conteudo": "Dúvida do dono: o erro {\"jid\":\"558287121210@s.whatsapp.net\",\"exists\":false,\"number\":\"5582987121210\"} ao enviar aniversário. Significa que o WhatsApp (via Evolution) não tem conta nesse telefone - testou com e sem o 9 e nenhum existe (número errado no Clinicorp, fixo, trocado ou paciente sem WhatsApp). Antes o envio ficava como 'falhou', entrava em todo lote seguinte e gastava 20-45s por tentativa inútil. Agora: enviarEnvio reconhece exists:false, marca o envio como 'pulado' com a mensagem 'Número sem WhatsApp (o WhatsApp não reconhece este telefone). Confira o número no Clinicorp...' (aparece no card), a fila conta esses casos à parte (semWhatsapp, não entram em falhas) e segue para o próximo SEM a pausa de 20-45s; a barra de envio mostra 'N sem WhatsApp (pulados)'. Migração no boot: falhas antigas desse tipo viram 'pulado' (8 na Vitaly). O botão Reativar continua existindo caso o telefone seja corrigido. Teste: fila com envio simulado; reconhece o texto exato e não confunde com outros erros."
+  },
+  {
+    "chave": "aniversariantes:aviso-curto-sem-whatsapp",
+    "modulo": "aniversariantes",
+    "data": "2026-11-24",
+    "tipo": "melhoria",
+    "titulo": "Aniversariantes: aviso curto 'Número sem WhatsApp, confira no Clinicorp'",
+    "conteudo": "O texto de telefone sem WhatsApp (exists:false) estava longo e quebrava o card. Agora é só 'Número sem WhatsApp, confira no Clinicorp' (constante MSG_SEM_WHATSAPP em src/aniversariantes.js). Migração no boot troca o texto antigo, mais longo, dos já pulados pelo curto."
   }
 ]
