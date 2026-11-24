@@ -194,7 +194,7 @@ export function iniciarSchedulerClinicorpFollowUp() {
            )`);
       for (const { id } of rows) {
         try {
-          const r = await sincronizarTenant(id);
+          const r = await clinicorp.comoAutomatico(() => sincronizarTenant(id)); // automatico: respeita a reserva de consultas
           if (r.novos) console.log(`Clinicorp->Follow Up (tenant ${id}):`, JSON.stringify(r));
         } catch (err) {
           console.error(`Erro no sync Clinicorp->Follow Up do tenant ${id}:`, err.message);
