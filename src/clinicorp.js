@@ -2,6 +2,7 @@
 // por tenant (cada clinica tem a propria assinatura do Clinicorp), guardadas cifradas no
 // Postgres via tenantConfig.js, nunca mais em env var global. Tenant sem Clinicorp configurado
 // recebe um erro claro em vez de acidentalmente usar a config de outro cliente.
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as tenantConfig from './tenantConfig.js';
 import { mapEmLotes } from './lotes.js';
 
@@ -20,8 +21,62 @@ async function credenciais(tenantId) {
   };
 }
 
+// ---------- controle do limite de consultas (o Clinicorp aceita 25 requisicoes por hora por assinatura) ----------
+// Todas as chamadas passam por request(), que conta as consultas da ultima hora por assinatura (subscriber). As rotinas
+// automaticas (Follow Up, Resgate, Aniversariantes) rodam "comoAutomatico" e PARAM quando sobram poucas consultas: o resto
+// fica reservado pro que o usuario clica. Se o Clinicorp responder 429, as chamadas passam a falhar na hora (sem gastar
+// consulta) com uma mensagem clara, e uma consulta manual por minuto serve de sonda pra descobrir que o limite voltou.
+// O contador fica na memoria: reiniciar o servico zera a contagem (o 429 do Clinicorp continua protegendo).
+const LIMITE_HORA = 25;
+const RESERVA_MANUAL = 8;
+const JANELA_MS = 3600000;
+const BLOQUEIO_PADRAO_MS = 5 * 60000;
+const contexto = new AsyncLocalStorage();
+const consumo = new Map(); // subscriberId -> { usos: [timestamps], bloqueadoAte, ultimaSonda }
+
+// roda fn como rotina automatica (a cota de reserva fica pro uso manual)
+export function comoAutomatico(fn) { return contexto.run({ automatico: true }, fn); }
+
+function estadoDe(chave) {
+  let e = consumo.get(chave);
+  if (!e) { e = { usos: [], bloqueadoAte: 0, ultimaSonda: 0 }; consumo.set(chave, e); }
+  const corte = Date.now() - JANELA_MS;
+  while (e.usos.length && e.usos[0] < corte) e.usos.shift();
+  return e;
+}
+
+class ErroLimiteClinicorp extends Error {
+  constructor(mensagem) { super(mensagem); this.codigo = 'CLINICORP_LIMITE'; this.status = 429; }
+}
+const mensagemLimite = (minutos) => `O Clinicorp atingiu o limite de consultas por hora. Tente de novo em cerca de ${minutos} minuto(s).`;
+
+function reservarConsulta(chave) {
+  const e = estadoDe(chave);
+  const agora = Date.now();
+  const automatico = !!contexto.getStore()?.automatico;
+  if (e.bloqueadoAte > agora) {
+    const minutos = Math.max(1, Math.ceil((e.bloqueadoAte - agora) / 60000));
+    if (automatico || agora - e.ultimaSonda < 60000) throw new ErroLimiteClinicorp(mensagemLimite(minutos));
+    e.ultimaSonda = agora; // uso manual: deixa passar 1 consulta por minuto pra perceber que o limite voltou
+  }
+  if (automatico && e.usos.length >= LIMITE_HORA - RESERVA_MANUAL) {
+    throw new ErroLimiteClinicorp('Consulta automática do Clinicorp adiada: as consultas que restam na hora ficam reservadas para uso manual.');
+  }
+  e.usos.push(agora);
+}
+
+// quanto ja foi usado na ultima hora (pra diagnostico/tela)
+export async function consumoClinicorp(tenantId) {
+  const { subscriberId } = await credenciais(tenantId);
+  const e = estadoDe(String(subscriberId || tenantId));
+  const bloqueadoMin = e.bloqueadoAte > Date.now() ? Math.ceil((e.bloqueadoAte - Date.now()) / 60000) : 0;
+  return { usadas: e.usos.length, limite: LIMITE_HORA, reservaManual: RESERVA_MANUAL, restantes: Math.max(0, LIMITE_HORA - e.usos.length), bloqueadoMin };
+}
+
 async function request(tenantId, method, path, { query, body } = {}) {
-  const { authHeader } = await credenciais(tenantId);
+  const { authHeader, subscriberId } = await credenciais(tenantId);
+  const chaveConsumo = String(subscriberId || tenantId);
+  reservarConsulta(chaveConsumo); // conta a consulta (ou recusa se o limite/reserva pede)
   const url = new URL(BASE_URL + path);
   for (const [key, value] of Object.entries(query || {})) {
     if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, value);
@@ -51,6 +106,15 @@ async function request(tenantId, method, path, { query, body } = {}) {
   }
 
   const data = await res.json().catch(() => null);
+
+  if (res.status === 429) { // limite por hora do Clinicorp: bloqueia as proximas chamadas (sem gastar consulta) e avisa com clareza
+    const espera = Number(res.headers.get('retry-after'));
+    const ms = Number.isFinite(espera) && espera > 0 ? Math.min(espera * 1000, JANELA_MS) : BLOQUEIO_PADRAO_MS;
+    const est = estadoDe(chaveConsumo);
+    est.bloqueadoAte = Date.now() + ms;
+    est.ultimaSonda = Date.now(); // esta propria resposta foi a sonda do minuto
+    throw new ErroLimiteClinicorp(mensagemLimite(Math.max(1, Math.ceil(ms / 60000))));
+  }
 
   if (!res.ok) {
     // a API do Clinicorp as vezes devolve o erro em "Message" (string) e as vezes em
@@ -87,8 +151,19 @@ export async function getAvailableDays(tenantId, { from, to, includeHolidays, co
   });
 }
 
+const cachePaciente = new Map();
 export async function findPatient(tenantId, { patientId, name, document, phone, email } = {}) {
   const cfg = await credenciais(tenantId);
+  const chave = JSON.stringify([tenantId, patientId, name, document, phone, email]);
+  const guardado = cachePaciente.get(chave);
+  if (guardado && Date.now() - guardado.em < 5 * 60000) return guardado.dados;
+  const dados = await consultarPaciente(tenantId, cfg, { patientId, name, document, phone, email });
+  if (cachePaciente.size > 500) cachePaciente.clear();
+  cachePaciente.set(chave, { em: Date.now(), dados });
+  return dados;
+}
+
+async function consultarPaciente(tenantId, cfg, { patientId, name, document, phone, email }) {
   return request(tenantId, 'GET', '/patient/get', {
     query: {
       subscriber_id: cfg.subscriberId,

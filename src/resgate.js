@@ -136,7 +136,7 @@ export function analisarOrcamento(o) {
 // id da especialidade -> nome (MAIUSCULO, pra juntar "Implantodontia" e "IMPLANTODONTIA" que o Clinicorp cadastra separado).
 // Uma leitura por tenant a cada 12h (o Clinicorp limita 25 requisicoes/hora).
 const cacheEspecialidades = new Map();
-async function nomesEspecialidades(tenantId) {
+export async function nomesEspecialidades(tenantId) {
   const c = cacheEspecialidades.get(tenantId);
   if (c && Date.now() - c.em < 12 * 3600000) return c.mapa;
   try {
@@ -230,6 +230,12 @@ async function contaDonaDoClinicorp(tenantId) {
   return rows.length > 0;
 }
 
+// true se esta conta pode ler o Clinicorp (tem a integracao e e a dona dela - nao puxa pacientes de outra clinica)
+export async function podeLerClinicorp(tenantId) {
+  if (!pool) return false;
+  try { return !!(await tenantConfig.obterClinicorp(tenantId)) && (await contaDonaDoClinicorp(tenantId)); } catch { return false; }
+}
+
 const emSync = new Set();
 // uma rodada: periodo mais recente + alguns meses do historico (cursor circular) + agenda futura
 export async function sincronizar(tenantId, { janelas = 3 } = {}) {
@@ -278,7 +284,7 @@ export function iniciarSchedulerResgate() {
         try {
           const habilitadas = await tenantConfig.obterTabsHabilitadas(t);
           if (habilitadas && habilitadas.length && !habilitadas.includes('resgateOrcamentos')) continue; // aba nao liberada pra essa conta
-          await sincronizar(t, { janelas: 3 });
+          await clinicorp.comoAutomatico(() => sincronizar(t, { janelas: 3 })); // automatico: respeita a reserva de consultas
         } catch (err) { if (!/Clinicorp|dona dele|andamento/.test(err.message)) console.error('[resgate] sync tenant', t, err.message); }
       }
     } catch (err) { console.error('[resgate] scheduler:', err.message); }

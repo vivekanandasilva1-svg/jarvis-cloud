@@ -686,7 +686,7 @@ export function iniciarSchedulerAniversariantes() {
       );
       for (const { tenant_id: tenantId } of tenantsAtivos) {
         try {
-          await processarTenant(tenantId);
+          await clinicorp.comoAutomatico(() => processarTenant(tenantId)); // automatico: respeita a reserva de consultas
         } catch (err) {
           console.error(`Aniversariantes: erro no tenant ${tenantId}:`, err.message);
         }
