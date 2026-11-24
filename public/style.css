@@ -3836,3 +3836,16 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
   .rolagem-h-tem-antes { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
   .rolagem-h-tem-mais.rolagem-h-tem-antes { -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent); }
 }
+
+/* Aniversariantes: numero de envio e barra de controle do envio (pausar/continuar/cancelar) */
+.aniv-envio-config { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; }
+.aniv-envio-config select { background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 10px; font-size: 13px; min-width: 260px; }
+.aniv-envio-config small { color: var(--text-dim); }
+.aniv-envio-config small.aviso { color: #ffb74d; font-weight: 600; }
+.aniv-envio-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; padding: 10px 12px; border: 1px solid var(--gold); border-radius: 10px; background: rgba(212, 175, 55, 0.10); font-size: 13px; }
+.aniv-envio-barra span { flex: 1 1 260px; }
+.aniv-envio-barra.pausado { border-color: #ffb74d; background: rgba(255, 183, 77, 0.10); }
+.aniv-envio-barra.final { border-color: var(--border); background: rgba(255,255,255,0.04); }
+.aniv-envio-barra button { background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+.aniv-envio-barra button:hover { border-color: var(--gold); }
+.aniv-envio-barra .aniv-cancelar { border-color: rgba(229, 72, 77, 0.6); color: #ff9a9d; }

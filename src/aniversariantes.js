@@ -5,7 +5,9 @@
 // que a clinica subiu (imagem, audio, video curto, PDF). Tudo por tenant: configuracao, arquivos,
 // programacao e Clinicorp sao sempre os da clinica dona da conta.
 //
-// Regras de seguranca: so manda de instancia de WhatsApp ativa do tenant (a trava de conta
+// Regras de seguranca: so manda pelo NUMERO que o dono escolheu na tela (aniversariantes_config.instancia_envio; sem escolha nao
+// envia nada, e se o numero cair o envio e recusado - nunca usa outro sozinho). Envios em lote rodam numa fila que pode ser
+// pausada/cancelada na tela. (a trava de conta
 // desativada fica no evolutionApi), 1 envio por paciente por ano (UNIQUE), "reserva" a linha
 // (status 'enviando') antes de mandar pra dois ciclos do agendador nunca mandarem em duplicidade,
 // e pausa aleatoria entre pacientes pra nao parecer disparo em massa.
@@ -13,7 +15,7 @@ import { anthropic } from './anthropicClient.js';
 import * as clinicorp from './clinicorp.js';
 import { pool } from './db.js';
 import * as evolutionApi from './evolutionApi.js';
-import { tabelasProntas as tenantsProntos } from './tenants.js';
+import { tabelasProntas as tenantsProntos, listarInstanciasDoTenant } from './tenants.js';
 import { mapEmLotes } from './lotes.js';
 import { classificarPacientes, IDS_PERFIL, passaNoFiltro } from './aniversariantesPerfil.js';
 import * as whatsappInstances from './whatsappInstances.js';
@@ -77,6 +79,8 @@ async function garantirTabelas() {
   await pool.query(`ALTER TABLE aniversariantes_config ADD COLUMN IF NOT EXISTS meses_ativo INT NOT NULL DEFAULT 12;`);
   // perfis do paciente na ultima sincronizacao (ver aniversariantesPerfil.js); NULL = ainda nao classificado
   await pool.query(`ALTER TABLE aniversariantes_envios ADD COLUMN IF NOT EXISTS perfis JSONB;`);
+  // numero (instancia do WhatsApp) escolhido pelo dono pra mandar os aniversarios; NULL = ainda nao escolheu = nao envia
+  await pool.query(`ALTER TABLE aniversariantes_config ADD COLUMN IF NOT EXISTS instancia_envio TEXT;`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas dos Aniversariantes:', err.message);
@@ -96,15 +100,15 @@ const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- configuracao ----------
 
-const CONFIG_VAZIA = { ativo: false, horaEnvio: '09:00', mensagem: MENSAGEM_PADRAO, usarIa: false, instrucoesIa: '', ultimaSync: null, perfisFiltro: null, mesesAtivo: 12 };
+const CONFIG_VAZIA = { ativo: false, horaEnvio: '09:00', mensagem: MENSAGEM_PADRAO, usarIa: false, instrucoesIa: '', ultimaSync: null, perfisFiltro: null, mesesAtivo: 12, instanciaEnvio: null };
 
 export async function obterConfig(tenantId) {
   if (!pool) return CONFIG_VAZIA;
   await tabelasProntas;
-  const { rows } = await pool.query(`SELECT ativo, hora_envio, mensagem, usar_ia, instrucoes_ia, ultima_sync, perfis_filtro, meses_ativo FROM aniversariantes_config WHERE tenant_id = $1`, [tenantId]);
+  const { rows } = await pool.query(`SELECT ativo, hora_envio, mensagem, usar_ia, instrucoes_ia, ultima_sync, perfis_filtro, meses_ativo, instancia_envio FROM aniversariantes_config WHERE tenant_id = $1`, [tenantId]);
   if (!rows.length) return CONFIG_VAZIA;
   const r = rows[0];
-  return { ativo: !!r.ativo, horaEnvio: r.hora_envio || '09:00', mensagem: r.mensagem || MENSAGEM_PADRAO, usarIa: !!r.usar_ia, instrucoesIa: r.instrucoes_ia || '', ultimaSync: r.ultima_sync || null, perfisFiltro: Array.isArray(r.perfis_filtro) && r.perfis_filtro.length ? r.perfis_filtro : null, mesesAtivo: r.meses_ativo || 12 };
+  return { ativo: !!r.ativo, horaEnvio: r.hora_envio || '09:00', mensagem: r.mensagem || MENSAGEM_PADRAO, usarIa: !!r.usar_ia, instrucoesIa: r.instrucoes_ia || '', ultimaSync: r.ultima_sync || null, perfisFiltro: Array.isArray(r.perfis_filtro) && r.perfis_filtro.length ? r.perfis_filtro : null, mesesAtivo: r.meses_ativo || 12, instanciaEnvio: r.instancia_envio || null };
 }
 
 export async function salvarConfig(tenantId, { ativo, horaEnvio, mensagem, usarIa, instrucoesIa, perfisFiltro, mesesAtivo }) {
@@ -413,10 +417,54 @@ async function montarMensagem(tenantId, config, envio) {
   }
 }
 
+class ErroEnvio extends Error {
+  constructor(mensagem, codigo) { super(mensagem); this.codigo = codigo; }
+}
+const CODIGOS_QUE_PARAM = new Set(['CONTA_INATIVA', 'SEM_NUMERO', 'NUMERO_INVALIDO', 'NUMERO_DESCONECTADO']);
+const paraOEnvio = (err) => CODIGOS_QUE_PARAM.has(err?.codigo) || /Nenhum WhatsApp conectado/.test(err?.message || '');
+
+// situacao do numero no Evolution ('open' = conectado), com cache curto pra nao consultar a cada mensagem
+const cacheStatusNumero = new Map();
+async function statusDoNumero(nome) {
+  const c = cacheStatusNumero.get(nome);
+  if (c && Date.now() - c.em < 20000) return c.status;
+  const achada = (await evolutionApi.listarInstancias()).find((i) => i.nome === nome);
+  const status = achada ? achada.status : null;
+  cacheStatusNumero.set(nome, { em: Date.now(), status });
+  return status;
+}
+
+// o numero pelo qual o dono escolheu mandar. Sem escolha, numero de outra conta ou desconectado = nao envia (nunca cai em outro numero)
 async function instanciaDoTenant(tenantId) {
-  const { instanciaAtiva } = await whatsappInstances.obterConfig(tenantId);
-  if (!instanciaAtiva) throw new Error('Nenhum WhatsApp conectado - conecte um numero na aba WhatsApp.');
-  return instanciaAtiva;
+  const { instanciaEnvio } = await obterConfig(tenantId);
+  if (!instanciaEnvio) throw new ErroEnvio('Escolha o número pelo qual as mensagens de aniversário serão enviadas (campo "Enviar pelo número" na aba Aniversariantes).', 'SEM_NUMERO');
+  if (!(await listarInstanciasDoTenant(tenantId)).includes(instanciaEnvio)) throw new ErroEnvio('O número escolhido não pertence mais a esta conta. Escolha outro.', 'NUMERO_INVALIDO');
+  if ((await statusDoNumero(instanciaEnvio)) !== 'open') throw new ErroEnvio(`O número escolhido (${instanciaEnvio}) não está conectado no WhatsApp. Reconecte ou escolha outro.`, 'NUMERO_DESCONECTADO');
+  return instanciaEnvio;
+}
+
+// numeros conectados da conta (pro seletor da tela) e a escolha atual
+export async function listarNumeros(tenantId) {
+  if (!pool) return { numeros: [], escolhido: null };
+  const { instanciaEnvio } = await obterConfig(tenantId);
+  const permitidas = new Set(await listarInstanciasDoTenant(tenantId));
+  const numeros = (await evolutionApi.listarInstancias())
+    .filter((i) => permitidas.has(i.nome))
+    .map((i) => ({ nome: i.nome, numero: i.numero || null, conectado: i.status === 'open' }));
+  return { numeros, escolhido: instanciaEnvio };
+}
+
+export async function definirInstanciaEnvio(tenantId, nome) {
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  if (atrasadosEmEnvio(tenantId)) throw new Error('Há um envio em andamento. Cancele o envio antes de trocar o número.');
+  const n = String(nome || '').trim();
+  if (n && !(await listarInstanciasDoTenant(tenantId)).includes(n)) throw new Error('Esse número não pertence a esta conta.');
+  await pool.query(
+    `INSERT INTO aniversariantes_config (tenant_id, instancia_envio, atualizado_em) VALUES ($1, $2, now())
+     ON CONFLICT (tenant_id) DO UPDATE SET instancia_envio = $2, atualizado_em = now()`,
+    [tenantId, n || null],
+  );
 }
 
 // envia 1 paciente. "reserva" a linha antes (so uma chamada ganha) pra nunca mandar em duplicidade.
@@ -491,31 +539,97 @@ export async function processarTenant(tenantId, { pausaMs } = {}) {
     try { await sincronizarMes(tenantId, hoje.ano, hoje.mes); } catch (err) { console.error(`Aniversariantes: sincronizacao do tenant ${tenantId} falhou:`, err.message); }
   }
 
+  if (atrasadosEmEnvio(tenantId)) return { enviados: 0, foraDoFiltro: 0 }; // ja tem um envio em andamento (manual): nao atropela
+  let instancia;
+  try { instancia = await instanciaDoTenant(tenantId); } catch (err) {
+    avisarSemNumero(tenantId, err.message); // sem numero escolhido/conectado: nao envia nada
+    return { enviados: 0, foraDoFiltro: 0, semNumero: true };
+  }
   const { rows: pendentes } = await pool.query(
     `SELECT id, perfis FROM aniversariantes_envios WHERE tenant_id = $1 AND data_envio = $2::date AND status = 'pendente' AND telefone <> '' ORDER BY id`,
     [tenantId, hoje.iso],
   );
-  let enviados = 0;
-  let foraDoFiltro = 0;
-  for (const { id, perfis } of pendentes) {
-    if (!passaNoFiltro(perfis, config.perfisFiltro)) { foraDoFiltro++; continue; }
-    try {
-      await enviarEnvio(tenantId, id);
-      enviados++;
-    } catch (err) {
-      console.error(`Aniversariantes: envio ${id} (tenant ${tenantId}) falhou:`, err.message);
-      if (err.codigo === 'CONTA_INATIVA' || /Nenhum WhatsApp conectado/.test(err.message)) break;
+  const aEnviar = pendentes.filter((r) => passaNoFiltro(r.perfis, config.perfisFiltro)).map((r) => r.id);
+  const foraDoFiltro = pendentes.length - aEnviar.length;
+  if (!aEnviar.length) return { enviados: 0, foraDoFiltro };
+  const fila = await executarFila(tenantId, aEnviar, { origem: 'automatico', pausaMs, instancia });
+  return { enviados: fila.enviados, foraDoFiltro };
+}
+
+// avisa no log (no maximo 1x por hora por conta) que o automatico esta parado por falta de numero
+const avisosSemNumero = new Map();
+function avisarSemNumero(tenantId, mensagem) {
+  if (Date.now() - (avisosSemNumero.get(tenantId) || 0) < 3600000) return;
+  avisosSemNumero.set(tenantId, Date.now());
+  console.error(`Aniversariantes: envio automatico do tenant ${tenantId} parado - ${mensagem}`);
+}
+
+// ---------- fila de envio (pausar / continuar / cancelar) ----------
+// Um envio por conta por vez. Roda em segundo plano, 20-45s entre pacientes; o dono pode pausar, continuar ou cancelar pela tela.
+// Quem nao recebeu continua 'pendente'. O estado fica na memoria do servidor (reiniciar o servico interrompe a fila).
+const filas = new Map(); // tenantId -> { estado, origem, total, enviados, falhas, cancelar, instancia, erro, iniciadoEm, terminouEm }
+const ATIVA = new Set(['rodando', 'pausado', 'cancelando']);
+export function atrasadosEmEnvio(tenantId) { return ATIVA.has(filas.get(tenantId)?.estado); }
+
+export function statusEnvio(tenantId) {
+  const f = filas.get(tenantId);
+  if (!f) return { ativo: false };
+  return {
+    ativo: ATIVA.has(f.estado), estado: f.estado, origem: f.origem, instancia: f.instancia, total: f.total, enviados: f.enviados, falhas: f.falhas,
+    restantes: Math.max(0, f.total - f.enviados - f.falhas), erro: f.erro, iniciadoEm: f.iniciadoEm, terminouEm: f.terminouEm || null,
+  };
+}
+export function pausarEnvio(tenantId) {
+  const f = filas.get(tenantId);
+  if (!f || f.estado !== 'rodando') throw new Error('Não há envio em andamento para pausar.');
+  f.estado = 'pausado';
+  return statusEnvio(tenantId);
+}
+export function continuarEnvio(tenantId) {
+  const f = filas.get(tenantId);
+  if (!f || f.estado !== 'pausado') throw new Error('O envio não está pausado.');
+  f.estado = 'rodando';
+  return statusEnvio(tenantId);
+}
+export function cancelarEnvio(tenantId) {
+  const f = filas.get(tenantId);
+  if (!f || !ATIVA.has(f.estado)) throw new Error('Não há envio em andamento para cancelar.');
+  f.cancelar = true; f.estado = 'cancelando'; // a mensagem que ja esta saindo termina; as demais nao saem
+  return statusEnvio(tenantId);
+}
+
+async function executarFila(tenantId, ids, { origem, pausaMs, instancia }) {
+  const f = { estado: 'rodando', origem, total: ids.length, enviados: 0, falhas: 0, cancelar: false, instancia, erro: null, iniciadoEm: new Date().toISOString(), terminouEm: null };
+  filas.set(tenantId, f);
+  try {
+    for (let i = 0; i < ids.length; i++) {
+      while (f.estado === 'pausado' && !f.cancelar) await pausa(250);
+      if (f.cancelar) break;
+      try {
+        await enviarEnvio(tenantId, ids[i]);
+        f.enviados++;
+      } catch (err) {
+        f.falhas++;
+        console.error(`Aniversariantes: ${origem} ${ids[i]} (tenant ${tenantId}) falhou:`, err.message);
+        if (paraOEnvio(err)) { f.erro = err.message; break; }
+      }
+      if (i < ids.length - 1) { // 20-45s entre pacientes: nao parece disparo em massa (responde a cancelar)
+        const fim = Date.now() + (pausaMs ?? 20000 + Math.random() * 25000);
+        while (Date.now() < fim && !f.cancelar) await pausa(Math.min(500, Math.max(0, fim - Date.now())));
+      }
     }
-    await pausa(pausaMs ?? 20000 + Math.random() * 25000); // 20-45s entre pacientes: nao parece disparo em massa
+  } finally {
+    f.estado = f.cancelar ? 'cancelado' : f.erro ? 'interrompido' : 'concluido';
+    f.terminouEm = new Date().toISOString();
+    const t = setTimeout(() => { if (filas.get(tenantId) === f) filas.delete(tenantId); }, 2 * 60 * 1000);
+    t.unref?.();
   }
-  return { enviados, foraDoFiltro };
+  return f;
 }
 
 // Aniversarios que ja passaram sem a mensagem sair (a clinica ligou a automacao depois, WhatsApp caiu etc).
 // O agendador nunca manda dia passado sozinho; aqui e uma acao do dono: manda os pendentes de dias anteriores
-// do mes (que passam no filtro de perfil) em segundo plano, com a mesma pausa de 20-45s entre pacientes.
-const atrasadosRodando = new Set();
-export function atrasadosEmEnvio(tenantId) { return atrasadosRodando.has(tenantId); }
+// do mes (que passam no filtro de perfil) em segundo plano, pelo numero escolhido, com pausa de 20-45s entre pacientes.
 
 // Envia uma lista de aniversariantes escolhida na tela (coluna Do dia / Em atraso...) em segundo plano.
 // So manda quem esta pendente/falhou, tem telefone e passa no filtro de perfis; 20-45s entre pacientes.
@@ -524,9 +638,9 @@ export async function enviarLote(tenantId, ids, { pausaMs } = {}) {
   await tabelasProntas;
   const lista = [...new Set((Array.isArray(ids) ? ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 500);
   if (!lista.length) throw new Error('Nenhum aniversariante escolhido.');
-  if (atrasadosRodando.has(tenantId)) throw new Error('Ja existe um envio em andamento - aguarde terminar.');
+  if (atrasadosEmEnvio(tenantId)) throw new Error('Já existe um envio em andamento - aguarde terminar, ou use Pausar/Cancelar.');
   const config = await obterConfig(tenantId);
-  await instanciaDoTenant(tenantId);
+  const instancia = await instanciaDoTenant(tenantId); // exige numero escolhido e conectado
   const { rows } = await pool.query(
     `SELECT id, perfis FROM aniversariantes_envios WHERE tenant_id = $1 AND id = ANY($2::int[]) AND status IN ('pendente','falhou') AND telefone <> '' ORDER BY data_envio DESC, id`,
     [tenantId, lista],
@@ -534,27 +648,16 @@ export async function enviarLote(tenantId, ids, { pausaMs } = {}) {
   const aEnviar = rows.filter((r) => passaNoFiltro(r.perfis, config.perfisFiltro)).map((r) => r.id);
   const ignorados = lista.length - aEnviar.length;
   if (!aEnviar.length) return { total: 0, ignorados };
-  atrasadosRodando.add(tenantId);
-  (async () => {
-    try {
-      for (const id of aEnviar) {
-        try { await enviarEnvio(tenantId, id); } catch (err) {
-          console.error(`Aniversariantes: lote ${id} (tenant ${tenantId}) falhou:`, err.message);
-          if (err.codigo === 'CONTA_INATIVA' || /Nenhum WhatsApp conectado/.test(err.message)) break;
-        }
-        await pausa(pausaMs ?? 20000 + Math.random() * 25000);
-      }
-    } finally { atrasadosRodando.delete(tenantId); }
-  })();
-  return { total: aEnviar.length, ignorados };
+  executarFila(tenantId, aEnviar, { origem: 'lote', pausaMs, instancia }).catch((err) => console.error('Aniversariantes: fila:', err.message));
+  return { total: aEnviar.length, ignorados, instancia };
 }
 
 export async function enviarAtrasados(tenantId, ano, mes, { pausaMs } = {}) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   await tabelasProntas;
-  if (atrasadosRodando.has(tenantId)) throw new Error('Os atrasados ja estao sendo enviados - aguarde terminar.');
+  if (atrasadosEmEnvio(tenantId)) throw new Error('Já existe um envio em andamento - aguarde terminar, ou use Pausar/Cancelar.');
   const config = await obterConfig(tenantId);
-  await instanciaDoTenant(tenantId); // falha cedo se nao ha WhatsApp conectado
+  const instancia = await instanciaDoTenant(tenantId); // falha cedo se nao ha numero escolhido/conectado
   const hoje = hojeMaceio();
   const ini = `${ano}-${doisDig(mes)}-01`;
   const { rows } = await pool.query(
@@ -567,19 +670,8 @@ export async function enviarAtrasados(tenantId, ano, mes, { pausaMs } = {}) {
   const ids = rows.filter((r) => passaNoFiltro(r.perfis, config.perfisFiltro)).map((r) => r.id);
   const foraDoFiltro = rows.length - ids.length;
   if (!ids.length) return { total: 0, foraDoFiltro };
-  atrasadosRodando.add(tenantId);
-  (async () => {
-    try {
-      for (const id of ids) {
-        try { await enviarEnvio(tenantId, id); } catch (err) {
-          console.error(`Aniversariantes: atrasado ${id} (tenant ${tenantId}) falhou:`, err.message);
-          if (err.codigo === 'CONTA_INATIVA' || /Nenhum WhatsApp conectado/.test(err.message)) break;
-        }
-        await pausa(pausaMs ?? 20000 + Math.random() * 25000);
-      }
-    } finally { atrasadosRodando.delete(tenantId); }
-  })();
-  return { total: ids.length, foraDoFiltro };
+  executarFila(tenantId, ids, { origem: 'atrasados', pausaMs, instancia }).catch((err) => console.error('Aniversariantes: fila:', err.message));
+  return { total: ids.length, foraDoFiltro, instancia };
 }
 
 // a cada 5min, pra cada clinica com a automacao ligada

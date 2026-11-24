@@ -2519,6 +2519,32 @@ app.post('/api/aniversariantes/enviar-lote', async (req, res) => {
   }
 });
 
+// numero pelo qual os aniversarios saem (so os conectados da conta do cliente) e controle do envio em andamento
+app.get('/api/aniversariantes/numeros', async (req, res) => {
+  try {
+    res.json(await aniversariantes.listarNumeros(req.tenantId));
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/aniversariantes/numero', async (req, res) => {
+  try {
+    await aniversariantes.definirInstanciaEnvio(req.tenantId, req.body?.nome);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.get('/api/aniversariantes/envio', (req, res) => res.json(aniversariantes.statusEnvio(req.tenantId)));
+for (const [acao, fn] of [['pausar', aniversariantes.pausarEnvio], ['continuar', aniversariantes.continuarEnvio], ['cancelar', aniversariantes.cancelarEnvio]]) {
+  app.post(`/api/aniversariantes/envio/${acao}`, (req, res) => {
+    try {
+      res.json(fn(req.tenantId));
+    } catch (err) {
+      res.status(400).json({ erro: err.message });
+    }
+  });
+}
 app.post('/api/aniversariantes/teste', async (req, res) => {
   try {
     await aniversariantes.enviarTeste(req.tenantId, req.body?.numero);

@@ -10935,6 +10935,94 @@ async function anivChamar(url, opcoes = {}) {
   return data;
 }
 
+// ---- numero pelo qual os aniversarios saem + controle do envio em andamento (pausar / continuar / cancelar) ----
+const anivNumero = document.getElementById('anivNumero');
+const anivNumeroAviso = document.getElementById('anivNumeroAviso');
+const anivEnvioBarra = document.getElementById('anivEnvioBarra');
+const anivEnvioTexto = document.getElementById('anivEnvioTexto');
+const anivEnvioPausar = document.getElementById('anivEnvioPausar');
+const anivEnvioContinuar = document.getElementById('anivEnvioContinuar');
+const anivEnvioCancelar = document.getElementById('anivEnvioCancelar');
+let anivNumeroEscolhido = null;
+let anivEnvioTimer = null;
+let anivEnvioEstavaAtivo = false;
+let anivEnvioEsconder = null;
+
+function anivRotuloNumero() {
+  const o = anivNumero.selectedOptions[0];
+  return o && o.value ? o.textContent.replace(/\s+—\s+(conectado|desconectado)$/, '') : '';
+}
+// sem numero escolhido nada e enviado (o servidor tambem recusa)
+function anivExigeNumero() {
+  if (anivNumeroEscolhido) return true;
+  mostrarAviso('Escolha o número de envio antes de enviar (campo "Enviar pelo número").', 'erro');
+  anivNumero.focus();
+  return false;
+}
+
+async function carregarNumerosAniv() {
+  try {
+    const d = await anivChamar('/api/aniversariantes/numeros');
+    anivNumero.textContent = '';
+    anivNumero.add(new Option('Escolha o número...', ''));
+    for (const n of d.numeros) {
+      const o = new Option(`${n.nome}${n.numero ? ` · +${n.numero}` : ''} — ${n.conectado ? 'conectado' : 'desconectado'}`, n.nome);
+      o.disabled = !n.conectado && n.nome !== d.escolhido; // so da pra escolher numero conectado
+      anivNumero.add(o);
+    }
+    anivNumeroEscolhido = d.escolhido && d.numeros.some((n) => n.nome === d.escolhido) ? d.escolhido : null;
+    anivNumero.value = anivNumeroEscolhido || '';
+    const atual = d.numeros.find((n) => n.nome === d.escolhido);
+    anivNumeroAviso.textContent = !d.escolhido ? 'Nenhum número escolhido: nada é enviado até você escolher.'
+      : !atual ? 'O número escolhido não existe mais nesta conta. Escolha outro.'
+        : !atual.conectado ? 'O número escolhido está desconectado: reconecte na aba WhatsApp ou escolha outro.' : '';
+    anivNumeroAviso.classList.toggle('aviso', !!anivNumeroAviso.textContent);
+    if (!d.numeros.length) anivNumeroAviso.textContent = 'Nenhum WhatsApp conectado nesta conta. Conecte um número na aba WhatsApp.';
+  } catch (err) { anivNumeroAviso.textContent = err.message; anivNumeroAviso.classList.add('aviso'); }
+}
+anivNumero.addEventListener('change', async () => {
+  try {
+    await anivChamar('/api/aniversariantes/numero', { method: 'POST', body: JSON.stringify({ nome: anivNumero.value }) });
+    mostrarAviso(anivNumero.value ? 'Número de envio salvo' : 'Número de envio removido', 'ok');
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  carregarNumerosAniv();
+});
+
+function desenharEnvioAniv(s) {
+  clearTimeout(anivEnvioEsconder);
+  if (!s || (!s.ativo && !s.terminouEm)) { anivEnvioBarra.hidden = true; return; }
+  const rotulo = { rodando: 'Enviando', pausado: 'Envio pausado', cancelando: 'Cancelando...', concluido: 'Envio concluído', cancelado: 'Envio cancelado', interrompido: 'Envio interrompido' }[s.estado] || 'Envio';
+  anivEnvioTexto.textContent = `${rotulo}: ${s.enviados} de ${s.total} enviados${s.falhas ? ` · ${s.falhas} falha(s)` : ''}${s.instancia ? ` · número ${s.instancia}` : ''}${s.erro ? ` · ${s.erro}` : ''}`;
+  anivEnvioPausar.hidden = s.estado !== 'rodando';
+  anivEnvioContinuar.hidden = s.estado !== 'pausado';
+  anivEnvioCancelar.hidden = !s.ativo || s.estado === 'cancelando';
+  anivEnvioBarra.classList.toggle('final', !s.ativo);
+  anivEnvioBarra.classList.toggle('pausado', s.estado === 'pausado');
+  anivEnvioBarra.hidden = false;
+  if (!s.ativo) anivEnvioEsconder = setTimeout(() => { anivEnvioBarra.hidden = true; }, 20000);
+}
+async function atualizarEnvioAniv() {
+  clearTimeout(anivEnvioTimer);
+  try {
+    const s = await anivChamar('/api/aniversariantes/envio');
+    desenharEnvioAniv(s);
+    if (s.ativo) anivEnvioTimer = setTimeout(atualizarEnvioAniv, 3000);
+    if (anivEnvioEstavaAtivo && !s.ativo) carregarListaAniv(); // terminou: atualiza a lista
+    anivEnvioEstavaAtivo = !!s.ativo;
+  } catch { /* sem conexao: tenta de novo na proxima abertura */ }
+}
+async function anivControleEnvio(acao) {
+  try {
+    desenharEnvioAniv(await anivChamar(`/api/aniversariantes/envio/${acao}`, { method: 'POST' }));
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  atualizarEnvioAniv();
+}
+anivEnvioPausar.addEventListener('click', () => anivControleEnvio('pausar'));
+anivEnvioContinuar.addEventListener('click', () => anivControleEnvio('continuar'));
+anivEnvioCancelar.addEventListener('click', () => {
+  if (confirm('Cancelar o envio?\n\nQuem ainda não recebeu continua pendente e nada novo sai. A mensagem que já está saindo termina.')) anivControleEnvio('cancelar');
+});
+
 anivAtivo.addEventListener('change', () => { anivAtivoLabel.textContent = anivAtivo.checked ? 'Ativado' : 'Desativado'; });
 anivUsarIa.addEventListener('change', () => {
   anivUsarIaLabel.textContent = anivUsarIa.checked ? 'IA reescreve a mensagem pra cada paciente' : 'IA nao reescreve (todos recebem o texto acima)';
@@ -10942,6 +11030,8 @@ anivUsarIa.addEventListener('change', () => {
 
 async function carregarAniversariantes() {
   anivErro.hidden = true;
+  carregarNumerosAniv();
+  atualizarEnvioAniv();
   try {
     const config = await anivChamar('/api/aniversariantes/config');
     anivAtivo.checked = !!config.ativo;
@@ -11259,7 +11349,8 @@ function criarItemAniv(it) {
 
   if (['pendente', 'falhou'].includes(it.status) && it.telefone) {
     botao('Enviar agora', async () => {
-      if (!confirm(`Enviar agora a mensagem de aniversário para ${it.nome}?${fora ? '\n\nAtenção: esse paciente está FORA do filtro de perfis, mas o envio manual ignora o filtro.' : ''}`)) return;
+      if (!anivExigeNumero()) return;
+      if (!confirm(`Enviar agora a mensagem de aniversário para ${it.nome}, pelo número ${anivRotuloNumero()}?${fora ? '\n\nAtenção: esse paciente está FORA do filtro de perfis, mas o envio manual ignora o filtro.' : ''}`)) return;
       await anivChamar(`/api/aniversariantes/envios/${it.id}/enviar`, { method: 'POST' });
       await carregarListaAniv();
     });
@@ -11346,12 +11437,14 @@ const anivEnviavel = (it) => (it.status === 'pendente' || it.status === 'falhou'
 async function anivEnviarLote(itens, rotulo) {
   const ids = itens.filter(anivEnviavel).map((it) => it.id);
   if (!ids.length) { addBubble(`Ninguém ${rotulo} pode receber agora (sem telefone, já enviado ou fora do filtro de perfis).`, 'system'); return; }
-  if (!confirm(`Enviar a mensagem de aniversário para ${ids.length} paciente(s) (${rotulo})?\n\nSai em segundo plano, com 20 a 45 segundos entre cada um. Quem está fora do filtro de perfis não recebe.`)) return;
+  if (!anivExigeNumero()) return;
+  if (!confirm(`Enviar a mensagem de aniversário para ${ids.length} paciente(s) (${rotulo}) pelo número ${anivRotuloNumero()}?\n\nSai em segundo plano, com 20 a 45 segundos entre cada um. Quem está fora do filtro de perfis não recebe.`)) return;
   anivListaErro.hidden = true;
   try {
     const r = await anivChamar('/api/aniversariantes/enviar-lote', { method: 'POST', body: JSON.stringify({ ids }) });
     addBubble(r.total ? `Enviando ${r.total} mensagem(ns) em segundo plano${r.ignorados ? ` (${r.ignorados} ficaram de fora)` : ''}.` : 'Nenhum paciente pôde receber agora.', 'system');
     clearInterval(anivPollTimer);
+    atualizarEnvioAniv();
     let voltas = 0;
     if (r.total) anivPollTimer = setInterval(() => { carregarListaAniv(); if (++voltas >= 90) clearInterval(anivPollTimer); }, 20000);
   } catch (err) {

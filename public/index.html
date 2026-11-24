@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261123c" />
+  <link rel="stylesheet" href="style.css?v=20261124a" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -1790,6 +1790,17 @@
       </div>
 
       <div class="auto-coluna-dir">
+        <div class="aniv-envio-config">
+          <label for="anivNumero"><b>Enviar pelo número:</b></label>
+          <select id="anivNumero" title="Número de WhatsApp conectado desta conta pelo qual as mensagens de aniversário serão enviadas"><option value="">Carregando...</option></select>
+          <small id="anivNumeroAviso"></small>
+        </div>
+        <div class="aniv-envio-barra" id="anivEnvioBarra" hidden>
+          <span id="anivEnvioTexto"></span>
+          <button type="button" id="anivEnvioPausar">Pausar envio</button>
+          <button type="button" id="anivEnvioContinuar" hidden>Continuar envio</button>
+          <button type="button" id="anivEnvioCancelar" class="aniv-cancelar">Cancelar envio</button>
+        </div>
         <div class="aniv-nav">
           <button type="button" id="anivMesAnt" title="Mes anterior">‹</button>
           <strong id="anivMesLabel"></strong>
@@ -2100,7 +2111,7 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261118b"></script>
+  <script src="app.js?v=20261124a"></script>
   <script src="copiar-nome.js?v=20261123a"></script>
   <script src="rolagem.js?v=20261123b"></script>
 </body>
