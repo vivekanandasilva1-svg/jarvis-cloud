@@ -10,16 +10,16 @@ import { pool } from './db.js';
 import { tabelasProntas as tenantsProntos, listarInstanciasDoTenant } from './tenants.js';
 import * as crm from './crm.js';
 import * as whatsappInstances from './whatsappInstances.js';
+import * as clinicorp from './clinicorp.js';
 
+// colunas iguais as do quadro CRC > Alerta de retorno do Clinicorp (+ "Retornou" no fim, pra quem voltou de fato)
 export const ETAPAS = [
-  { id: 'novo', nome: 'Novos alertas' },
-  { id: 'tentativa1', nome: '1ª tentativa' },
-  { id: 'tentativa2', nome: '2ª tentativa' },
-  { id: 'tentativa3', nome: '3ª tentativa' },
-  { id: 'em_conversa', nome: 'Em conversa' },
-  { id: 'agendou', nome: 'Agendou o retorno' },
+  { id: 'novo', nome: 'A contatar' },
+  { id: 'em_contato', nome: 'Em contato' },
+  { id: 'retornar_novamente', nome: 'Retornar novamente' },
+  { id: 'agendou', nome: 'Agendado' },
   { id: 'retornou', nome: 'Retornou' },
-  { id: 'sem_sucesso', nome: 'Sem sucesso' },
+  { id: 'sem_sucesso', nome: 'Retorno recusado' },
 ];
 const IDS_ETAPAS = new Set(ETAPAS.map((e) => e.id));
 const FINAIS = new Set(['retornou', 'sem_sucesso']);
@@ -28,7 +28,7 @@ export const RESULTADOS = {
   vai_pensar: 'Falou, vai pensar',
   retornar: 'Pediu para retornar depois',
   agendou: 'Agendou o retorno',
-  sem_interesse: 'Sem interesse',
+  sem_interesse: 'Sem interesse (retorno recusado)',
   numero_errado: 'Número errado',
 };
 export const MSG_PADRAO = 'Olá, {nome}! Aqui é da clínica. Está chegando a hora do seu retorno{motivo}. Posso te passar os horários disponíveis?';
@@ -74,6 +74,11 @@ async function garantirTabelas() {
     );
   `);
   await pool.query('CREATE INDEX IF NOT EXISTS ret_pacientes_tenant_idx ON ret_pacientes (tenant_id, arquivado, etapa)');
+  // nome sem acento/caixa (acha o mesmo paciente vindo de outra planilha ou da tela colada) e controle da busca de telefone pelo nome
+  await pool.query('ALTER TABLE ret_pacientes ADD COLUMN IF NOT EXISTS nome_chave TEXT');
+  await pool.query('ALTER TABLE ret_pacientes ADD COLUMN IF NOT EXISTS fone_busca_em TIMESTAMPTZ');
+  await pool.query('ALTER TABLE ret_pacientes ADD COLUMN IF NOT EXISTS fone_busca_resultado TEXT');
+  await pool.query('CREATE INDEX IF NOT EXISTS ret_pacientes_nome_chave_idx ON ret_pacientes (tenant_id, nome_chave)');
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ret_tentativas (
       id SERIAL PRIMARY KEY,
@@ -86,7 +91,15 @@ async function garantirTabelas() {
     );
   `);
 }
-const tabelasProntas = garantirTabelas().catch((err) => console.error('[retorno] erro criando tabelas:', err.message));
+const tabelasProntas = garantirTabelas().then(() => migrarAntigos()).catch((err) => console.error('[retorno] erro criando tabelas:', err.message));
+
+// 1a versao tinha 1a/2a/3a tentativa e "Em conversa": agora tudo isso e a coluna "Em contato" (as tentativas ficam no card)
+export async function migrarAntigos() {
+  if (!pool) return;
+  await pool.query(`UPDATE ret_pacientes SET etapa = 'em_contato' WHERE etapa IN ('tentativa1', 'tentativa2', 'tentativa3', 'em_conversa')`);
+  const { rows } = await pool.query(`SELECT id, nome FROM ret_pacientes WHERE nome_chave IS NULL AND nome IS NOT NULL`);
+  for (const p of rows) await pool.query('UPDATE ret_pacientes SET nome_chave = $2 WHERE id = $1', [p.id, slug(p.nome)]);
+}
 
 // ---------- leitura tolerante das linhas importadas ----------
 
@@ -121,7 +134,8 @@ function limparLinha(l) {
   if (!nome && !telefone) return null;
   const extras = {};
   if (l.extras && typeof l.extras === 'object') for (const [k, v] of Object.entries(l.extras).slice(0, 20)) { const t = texto(v, 200); if (t) extras[String(k).slice(0, 60)] = t; }
-  return { nome, telefone, pacienteId, motivo: texto(l.motivo, 200), dataAlerta: lerData(l.dataAlerta), extras };
+  const etapa = IDS_ETAPAS.has(l.etapa) ? l.etapa : null;
+  return { nome, telefone, pacienteId, motivo: texto(l.motivo, 200), dataAlerta: lerData(l.dataAlerta), extras, etapa, vencida: typeof l.vencida === 'boolean' ? l.vencida : undefined };
 }
 // com ID do Clinicorp a chave e o ID; sem ID, telefone + nome (pessoas da mesma familia que dividem o numero NAO viram a mesma)
 const chaveDe = (l) => (l.pacienteId ? `id:${l.pacienteId}` : l.telefone ? `tel:${l.telefone}:${slug(l.nome)}` : `nome:${slug(l.nome)}`);
@@ -211,7 +225,7 @@ async function prenderContato(tenantId, contatoId) {
 
 // linhas: [{ nome, telefone, pacienteId, motivo, dataAlerta, extras }] ja mapeadas pela tela.
 // listaCompleta = true: o arquivo e a lista INTEIRA do Clinicorp; quem estava no funil e nao veio fica marcado "fora da lista do Clinicorp".
-export async function importar(tenantId, linhas, { listaCompleta = false } = {}) {
+export async function importar(tenantId, linhas, { listaCompleta = false, usarEtapaClinicorp = false } = {}) {
   await tabelasProntas;
   if (!Array.isArray(linhas) || !linhas.length) throw new Error('Nenhuma linha para importar.');
   if (linhas.length > LIMITE_IMPORTACAO) throw new Error(`Importe no máximo ${LIMITE_IMPORTACAO} pacientes por vez.`);
@@ -224,18 +238,26 @@ export async function importar(tenantId, linhas, { listaCompleta = false } = {})
     if (vistas.has(chave)) { r.ignorados++; continue; }
     vistas.add(chave);
     if (!l.telefone) r.semTelefone++;
+    if (l.vencida === true) l.extras.Vencida = 'sim';
+    const nomeChave = l.nome ? slug(l.nome) : null;
     let { rows: [ex] } = await pool.query('SELECT id, etapa, concluido_em, arquivado FROM ret_pacientes WHERE tenant_id = $1 AND chave = $2', [tenantId, chave]);
     // outra planilha pode trazer o mesmo paciente com outra forma de identificar (com/sem ID): acha pelo ID do Clinicorp
     // ou pelo mesmo telefone + mesmo nome, e atualiza o que ja existe em vez de duplicar
     if (!ex && l.pacienteId) ({ rows: [ex] } = await pool.query('SELECT id, etapa, concluido_em, arquivado FROM ret_pacientes WHERE tenant_id = $1 AND patient_id = $2 ORDER BY id LIMIT 1', [tenantId, l.pacienteId]));
+    // tela colada do Clinicorp nao traz telefone nem ID: acha pelo nome (so se houver UM paciente com esse nome)
+    if (!ex && !l.telefone && !l.pacienteId && nomeChave) {
+      const { rows: mesmoNome } = await pool.query('SELECT id, etapa, concluido_em, arquivado FROM ret_pacientes WHERE tenant_id = $1 AND nome_chave = $2', [tenantId, nomeChave]);
+      if (mesmoNome.length === 1) ex = mesmoNome[0];
+    }
     if (!ex && l.telefone && l.nome) {
       const { rows: mesmoFone } = await pool.query('SELECT id, nome, etapa, concluido_em, arquivado FROM ret_pacientes WHERE tenant_id = $1 AND telefone = $2', [tenantId, l.telefone]);
       ex = mesmoFone.find((x) => slug(x.nome) === slug(l.nome));
     }
     if (!ex) {
       await pool.query(
-        `INSERT INTO ret_pacientes (tenant_id, chave, patient_id, nome, telefone, motivo, data_alerta, extras) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
-        [tenantId, chave, l.pacienteId, l.nome, l.telefone, l.motivo, l.dataAlerta, JSON.stringify(l.extras)],
+        `INSERT INTO ret_pacientes (tenant_id, chave, patient_id, nome, nome_chave, telefone, motivo, data_alerta, extras, etapa, concluido_em)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10, CASE WHEN $10 = ANY($11::text[]) THEN now() END)`,
+        [tenantId, chave, l.pacienteId, l.nome, nomeChave, l.telefone, l.motivo, l.dataAlerta, JSON.stringify(l.extras), l.etapa || 'novo', [...FINAIS]],
       );
       r.novos++;
       continue;
@@ -245,11 +267,14 @@ export async function importar(tenantId, linhas, { listaCompleta = false } = {})
     const reabrir = FINAIS.has(ex.etapa) && l.dataAlerta && (!ex.concluido_em || l.dataAlerta > ex.concluido_em.toISOString().slice(0, 10));
     await pool.query(
       `UPDATE ret_pacientes SET nome = COALESCE($3, nome), telefone = CASE WHEN $4 <> '' THEN $4 ELSE telefone END, patient_id = COALESCE($5, patient_id),
-              motivo = COALESCE($6, motivo), data_alerta = COALESCE($7, data_alerta), extras = extras || $8::jsonb, na_lista = true, arquivado = false,
+              motivo = COALESCE($6, motivo), data_alerta = COALESCE($7, data_alerta), extras = (extras || $8::jsonb)${l.vencida === false ? " - 'Vencida'" : ''}, na_lista = true, arquivado = false,
+              nome_chave = COALESCE($9, nome_chave),
               ${reabrir ? "etapa = 'novo', etapa_desde = now(), concluido_em = NULL," : ''} atualizado_em = now()
        WHERE id = $1 AND tenant_id = $2`,
-      [ex.id, tenantId, l.nome, l.telefone, l.pacienteId, l.motivo, l.dataAlerta, JSON.stringify(l.extras)],
+      [ex.id, tenantId, l.nome, l.telefone, l.pacienteId, l.motivo, l.dataAlerta, JSON.stringify(l.extras), nomeChave],
     );
+    // espelhar a coluna do Clinicorp tambem pra quem ja estava no funil (so se o usuario escolher; senao vale o andamento feito na Lumia)
+    if (usarEtapaClinicorp && l.etapa && !reabrir && ex.etapa !== l.etapa) await moverEtapa(tenantId, ex.id, l.etapa);
     if (reabrir) r.reabertos++; else r.atualizados++;
   }
   if (listaCompleta) {
@@ -272,7 +297,7 @@ export async function listar(tenantId) {
   await tabelasProntas;
   const { rows } = await pool.query(
     `SELECT p.id, p.chave, p.patient_id, p.nome, p.telefone, p.motivo, to_char(p.data_alerta, 'YYYY-MM-DD') AS data_alerta, p.extras, p.etapa, p.etapa_desde,
-            p.contato_id, p.na_lista, p.retorno_em, p.retorno_nota, p.concluido_em, p.criado_em,
+            p.contato_id, p.na_lista, p.retorno_em, p.retorno_nota, p.concluido_em, p.criado_em, p.fone_busca_resultado,
             GREATEST(0, (now() AT TIME ZONE 'America/Maceio')::date - p.data_alerta)::int AS dias_atraso,
             c.numero, c.instancia, c.ultima_mensagem, c.ultima_mensagem_em, c.ultima_entrada_em, c.atendente_id, c.atendente_nome,
             (c.ultima_entrada_em IS NOT NULL AND (c.lido_em IS NULL OR c.ultima_entrada_em > c.lido_em)) AS nao_lida,
@@ -318,8 +343,8 @@ export async function registrarTentativa(tenantId, id, { resultado, obs, autor }
   await pool.query('INSERT INTO ret_tentativas (ret_id, n, resultado, obs, feita_por) VALUES ($1,$2,$3,$4,$5)', [p.id, num, resultado, texto(obs, 500), texto(autor, 80)]);
   const destino = resultado === 'agendou' ? 'agendou'
     : (resultado === 'sem_interesse' || resultado === 'numero_errado') ? 'sem_sucesso'
-      : resultado === 'vai_pensar' ? 'em_conversa'
-        : `tentativa${Math.min(num, 3)}`;
+      : resultado === 'retornar' ? 'retornar_novamente'
+        : 'em_contato';
   await moverEtapa(tenantId, p.id, destino);
   return { n: num, etapa: destino };
 }
@@ -359,4 +384,169 @@ export async function definirAtendente(tenantId, id, operadorId) {
   const p = await obter(tenantId, id);
   if (!p.contato_id) throw new Error('Esse paciente ainda não tem conversa vinculada.');
   await crm.definirAtendente(tenantId, p.contato_id, operadorId === '' ? null : operadorId);
+}
+
+// ---------- tela colada do Clinicorp (CRC > Alerta de retorno) ----------
+
+const COLUNAS_CLINICORP = [['a contatar', 'novo'], ['em contato', 'em_contato'], ['retornar novamente', 'retornar_novamente'], ['agendado', 'agendou'], ['retorno recusado', 'sem_sucesso']];
+const semAcento = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const ehChipDeTempo = (n) => /^(\d+\s*(d|h|min|m|s|sem|mes|meses|dias?|horas?))$/.test(n) || /^(no prazo|atrasad[oa]|vencid[oa]|hoje|amanha)$/.test(n);
+
+// Texto copiado da tela (Ctrl+A / Ctrl+C na tela "Alerta de Retorno"): cada card tem nome, "Previsão de retorno" + data,
+// "Profissional" + nome, "Motivo" + texto e o tempo ("11d", "No prazo"). A coluna vem do titulo (A contatar, Em contato...);
+// os cards depois de "Vencidas" sao as vencidas daquela coluna.
+export function lerTextoClinicorp(texto) {
+  const linhas = String(texto || '').split(/\r?\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  let etapa = 'novo';
+  let vencida = false;
+  const out = [];
+  const porColuna = {};
+  let truncados = 0;
+  for (let i = 0; i < linhas.length; i++) {
+    const n = semAcento(linhas[i]);
+    const col = COLUNAS_CLINICORP.find(([nome]) => n === nome);
+    if (col) { etapa = col[1]; vencida = false; continue; }
+    if (n === 'vencidas') { vencida = true; continue; }
+    if (n !== 'previsao de retorno') continue;
+    // card: o nome e a linha logo acima do rotulo
+    let nome = linhas[i - 1] || '';
+    const anterior = semAcento(nome);
+    if (!nome || anterior === 'previsao de retorno' || anterior === 'motivo' || anterior === 'profissional' || ehChipDeTempo(anterior) || /^\d+$/.test(anterior)) continue;
+    let j = i + 1;
+    let dataAlerta = null;
+    if (j < linhas.length && /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}/.test(linhas[j])) { dataAlerta = linhas[j]; j++; }
+    let profissional = null;
+    let motivo = null;
+    while (j < linhas.length) {
+      const m = semAcento(linhas[j]);
+      if (m === 'previsao de retorno' || COLUNAS_CLINICORP.some(([c]) => c === m) || m === 'vencidas') break;
+      if (m === 'profissional') { profissional = linhas[j + 1] || null; j += 2; continue; }
+      if (m === 'motivo') {
+        const partes = [];
+        j++;
+        while (j < linhas.length && !ehChipDeTempo(semAcento(linhas[j])) && !/^(profissional|motivo|previsao de retorno)$/.test(semAcento(linhas[j]))) {
+          // o proximo card comeca pelo nome seguido do rotulo: se a linha seguinte for o rotulo, esta linha e o nome do proximo
+          if (semAcento(linhas[j + 1] || '') === 'previsao de retorno') break;
+          partes.push(linhas[j]); j++;
+        }
+        motivo = partes.join(' ') || null;
+        continue;
+      }
+      if (ehChipDeTempo(m)) { j++; break; }
+      if (semAcento(linhas[j + 1] || '') === 'previsao de retorno') break; // nome do proximo card
+      j++;
+    }
+    const nomeTruncado = /(\.\.\.|…)$/.test(nome);
+    if (nomeTruncado) truncados++;
+    out.push({ nome, dataAlerta, motivo, etapa, vencida, extras: profissional ? { Profissional: profissional } : {} });
+    porColuna[etapa] = (porColuna[etapa] || 0) + 1;
+    i = Math.max(i, j - 1);
+  }
+  return { linhas: out, total: out.length, porColuna, vencidas: out.filter((l) => l.vencida).length, truncados };
+}
+
+// ---------- telefone pelo cadastro do Clinicorp (a tela colada nao traz telefone) ----------
+
+const CAMPOS_TELEFONE = ['MobilePhone', 'CellPhone', 'Cellphone', 'Mobile', 'WhatsApp', 'Whatsapp', 'Phone', 'Telephone', 'PhoneNumber', 'Celular', 'Telefone'];
+function pegar(obj, nomes) {
+  if (!obj || typeof obj !== 'object') return undefined;
+  const mapa = new Map(Object.keys(obj).map((k) => [k.toLowerCase().replace(/[_\s-]/g, ''), k]));
+  for (const n of nomes) {
+    const k = mapa.get(n.toLowerCase().replace(/[_\s-]/g, ''));
+    if (k !== undefined && obj[k] !== null && obj[k] !== undefined && String(obj[k]).trim() !== '') return obj[k];
+  }
+  return undefined;
+}
+const listaDeResposta = (r) => (Array.isArray(r) ? r : Array.isArray(r?.list) ? r.list : Array.isArray(r?.patients) ? r.patients : Array.isArray(r?.Patients) ? r.Patients : r?.Patient ? [r.Patient] : r && typeof r === 'object' ? [r] : []);
+
+const completando = new Set();
+
+// Procura no Clinicorp (por nome) o telefone dos pacientes que entraram sem telefone e cria a conversa. So aceita quando ha
+// UM paciente com exatamente esse nome. Respeita o limite de consultas do Clinicorp: automatico = para antes de gastar a reserva do uso manual.
+export async function completarTelefones(tenantId, { limite = 8, automatico = false } = {}) {
+  await tabelasProntas;
+  if (completando.has(tenantId)) return { ocupado: true };
+  completando.add(tenantId);
+  const res = { processados: 0, encontrados: 0, naoEncontrados: 0, ambiguos: 0, semTelefone: 0, truncados: 0, limiteAtingido: false, semClinicorp: false, restantes: 0 };
+  try {
+    const rodar = async () => {
+      const { rows } = await pool.query(
+        `SELECT id, nome FROM ret_pacientes WHERE tenant_id = $1 AND arquivado = false AND telefone = '' AND nome IS NOT NULL AND etapa <> ALL($2::text[])
+            AND (fone_busca_resultado IS NULL OR fone_busca_resultado = 'erro') ORDER BY id LIMIT $3`,
+        [tenantId, [...FINAIS], Math.max(1, Math.min(Number(limite) || 8, 30))],
+      );
+      let errosSeguidos = 0;
+      for (const p of rows) {
+        if (/(\.\.\.|…)$/.test(p.nome)) {
+          await pool.query(`UPDATE ret_pacientes SET fone_busca_resultado = 'nome_truncado', fone_busca_em = now() WHERE id = $1`, [p.id]);
+          res.truncados++; res.processados++;
+          continue;
+        }
+        let resultado;
+        let telefone = '';
+        let patientId = null;
+        try {
+          const lista = listaDeResposta(await clinicorp.findPatient(tenantId, { name: p.nome }));
+          const iguais = lista.filter((c) => slug(pegar(c, ['Name', 'PatientName', 'FullName', 'Nome'])) === slug(p.nome));
+          if (iguais.length > 1) resultado = 'ambiguo';
+          else if (!iguais.length) resultado = 'nao_encontrado';
+          else {
+            for (const campo of CAMPOS_TELEFONE) { telefone = crm.normalizarTelefone(pegar(iguais[0], [campo])) || ''; if (telefone) break; }
+            const id = pegar(iguais[0], ['PatientId', 'Patient_Id', 'PersonId', 'Id']);
+            patientId = id === undefined ? null : String(id);
+            resultado = telefone ? 'encontrado' : 'sem_telefone';
+          }
+          errosSeguidos = 0;
+        } catch (err) {
+          if (err.codigo === 'CLINICORP_LIMITE') { res.limiteAtingido = true; break; }
+          if (/nao tem o Clinicorp conectado|não tem o Clinicorp conectado/i.test(err.message)) { res.semClinicorp = true; break; }
+          await pool.query(`UPDATE ret_pacientes SET fone_busca_resultado = 'erro', fone_busca_em = now() WHERE id = $1`, [p.id]);
+          res.processados++;
+          if (++errosSeguidos >= 3) break;
+          continue;
+        }
+        await pool.query(
+          `UPDATE ret_pacientes SET telefone = CASE WHEN $2 <> '' THEN $2 ELSE telefone END, patient_id = COALESCE($3, patient_id), fone_busca_resultado = $4, fone_busca_em = now(), atualizado_em = now() WHERE id = $1`,
+          [p.id, telefone, patientId, resultado],
+        );
+        res.processados++;
+        if (resultado === 'encontrado') res.encontrados++;
+        else if (resultado === 'ambiguo') res.ambiguos++;
+        else if (resultado === 'sem_telefone') res.semTelefone++;
+        else res.naoEncontrados++;
+      }
+    };
+    await (automatico ? clinicorp.comoAutomatico(rodar) : rodar());
+    if (res.encontrados) await vincularContatos(tenantId);
+    const { rows: [{ n }] } = await pool.query(
+      `SELECT count(*)::int AS n FROM ret_pacientes WHERE tenant_id = $1 AND arquivado = false AND telefone = '' AND nome IS NOT NULL AND etapa <> ALL($2::text[]) AND (fone_busca_resultado IS NULL OR fone_busca_resultado = 'erro')`,
+      [tenantId, [...FINAIS]],
+    );
+    res.restantes = n;
+    return res;
+  } finally {
+    completando.delete(tenantId);
+  }
+}
+
+// a cada 20 min completa alguns telefones pendentes (em lotes pequenos, pra nao gastar o limite de consultas do Clinicorp)
+export function iniciarSchedulerRetorno() {
+  if (!pool) return;
+  const rodada = async () => {
+    try {
+      await tabelasProntas;
+      const { rows } = await pool.query(
+        `SELECT DISTINCT p.tenant_id FROM ret_pacientes p JOIN tenants t ON t.id = p.tenant_id
+          WHERE p.arquivado = false AND p.telefone = '' AND p.nome IS NOT NULL AND (p.fone_busca_resultado IS NULL OR p.fone_busca_resultado = 'erro') AND (t.ativo OR t.super_admin)`,
+      );
+      for (const { tenant_id: tenantId } of rows) {
+        const r = await completarTelefones(tenantId, { limite: 8, automatico: true }).catch((err) => { console.error('[retorno] completar telefones:', err.message); return null; });
+        if (r && r.limiteAtingido) continue;
+      }
+    } catch (err) {
+      console.error('[retorno] agendador:', err.message);
+    }
+  };
+  setTimeout(rodada, 60 * 1000).unref();
+  setInterval(rodada, 20 * 60 * 1000).unref();
 }

@@ -1886,7 +1886,31 @@ app.get('/api/resgate/retorno', async (req, res) => {
 app.post('/api/resgate/retorno/importar', async (req, res) => {
   try {
     if (soDonoRetorno(req, res)) return;
-    res.json({ ok: true, resumo: await retorno.importar(req.tenantId, req.body?.linhas, { listaCompleta: req.body?.listaCompleta === true }) });
+    const resumo = await retorno.importar(req.tenantId, req.body?.linhas, { listaCompleta: req.body?.listaCompleta === true, usarEtapaClinicorp: req.body?.usarEtapaClinicorp === true });
+    res.json({ ok: true, resumo });
+    // quem entrou so com o nome (tela colada): ja busca um primeiro lote de telefones no Clinicorp, em segundo plano
+    if (resumo.semTelefone) retorno.completarTelefones(req.tenantId, { limite: 8, automatico: true }).catch((err) => console.error('[retorno] completar telefones:', err.message));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+// le o texto copiado da tela "Alerta de Retorno" do Clinicorp (Ctrl+A / Ctrl+C) e devolve os pacientes encontrados (sem gravar nada)
+app.post('/api/resgate/retorno/interpretar', async (req, res) => {
+  try {
+    const texto = String(req.body?.texto || '');
+    if (texto.length > 400000) return res.status(400).json({ erro: 'O texto colado é grande demais.' });
+    const lido = retorno.lerTextoClinicorp(texto);
+    if (!lido.total) return res.status(400).json({ erro: 'Não encontrei nenhum alerta no texto. Abra CRC > Alerta de retorno no Clinicorp, aperte Ctrl+A, Ctrl+C e cole aqui.' });
+    res.json({ ok: true, ...lido, etapas: retorno.ETAPAS });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+// busca no cadastro do Clinicorp o telefone de quem entrou so com o nome (lote pequeno por causa do limite de consultas)
+app.post('/api/resgate/retorno/completar-telefones', async (req, res) => {
+  try {
+    if (soDonoRetorno(req, res)) return;
+    res.json({ ok: true, ...(await retorno.completarTelefones(req.tenantId, { limite: 8, automatico: false })) });
   } catch (err) {
     res.status(400).json({ erro: err.message });
   }
@@ -3874,6 +3898,7 @@ followUpInteligente.iniciarSchedulerFollowUpInteligente();
 funilFU.iniciarSchedulerFunilFollowUp();
 indicacoes.iniciarSchedulerIndicacoes();
 resgate.iniciarSchedulerResgate();
+retorno.iniciarSchedulerRetorno();
 metaSaude.iniciarSchedulerMetaSaude();
 crm.iniciarVarreduraRepetidos();
 // Disparos (campanhas de mensagens em massa) - so envia campanhas que o dono iniciou/agendou na aba Disparos
