@@ -471,6 +471,22 @@
     "conteudo": "O dono achou que o filtro de data não valia pras métricas do Meta (o filtro do painel ficava longe do bloco). Verificado em produção, só leitura, rodando painelVendas dentro do container: o período já chegava ao Meta (HOJE 16/11: R$ 215,91 e 42 conversas na conta Aquecidos, coerente com o Gerenciador R$ 204,86 e 40 tirado mais cedo; 7 dias R$ 1.591,79). Agora o bloco Anúncios tem filtro próprio (Igual ao painel, Hoje, Ontem, 7 dias, Este mês, Mês passado, 30 dias, personalizado) via parâmetros metaDe/metaAte em /api/gestao/setor/vendas; mostra as datas exatas e a hora da consulta ao Meta. Custo por venda usa as vendas de anúncio do MESMO período das métricas. O Meta pode atrasar minutos em relação ao Gerenciador, então comparar no mesmo instante. Pendente: se ainda divergir no mesmo período e horário, checar janela de atribuição do relatório do Gerenciador."
   },
   {
+    "chave": "mod:retorno",
+    "hub": true,
+    "modulo": "retorno",
+    "tipo": "contexto",
+    "titulo": "Módulo: Alertas de retorno (modo 3 da aba Resgate)",
+    "conteudo": "Funil dos pacientes do CRM > Alertas de retorno do Clinicorp, dentro da Lumia, com conversa de WhatsApp espelhada. Só a equipe atende (IA pausada). Lista entra por importação do relatório exportado (o Clinicorp não expõe esses alertas por API)."
+  },
+  {
+    "chave": "retorno:fase1",
+    "modulo": "retorno",
+    "data": "2026-11-24",
+    "tipo": "decisao",
+    "titulo": "Alertas de retorno: funil com importação, vínculo ao CRM e conversa espelhada (fase 1)",
+    "conteudo": "Spec pública do Clinicorp (49 caminhos) não tem endpoint de alerta de retorno/CRM, então a lista entra por importação de planilha/CSV com mapeamento de colunas na tela (auto-detecta nome, telefone, data do alerta, motivo, ID) ou cadastro manual. Cada paciente com telefone vira/reaproveita um contato do CRM com crm_contatos.funil = retorno e auto_pausado = true: o quadro principal do CRM e as contagens de leads/origem os ignoram (funil IS NULL), mas a conversa aparece em Conversas, notas e operador são os do CRM. Funil próprio: Novos alertas, 1ª/2ª/3ª tentativa, Em conversa, Agendou, Retornou, Sem sucesso; etapa final devolve o contato ao CRM normal; alerta mais novo reabre. Identificação: ID do Clinicorp; sem ID, telefone+nome (família que divide número não vira a mesma pessoa). Rotas em /api/resgate/retorno/* (mesma liberação da aba Resgate); importar/config/remover só o acesso principal. Decisão do dono: pacientes só no funil de retorno, conversa também em Conversas. Pendente: conversa embutida dentro do próprio funil (hoje o botão Conversa abre em Conversas), avisos no sino de lembrete de retorno, indicador de taxa de retorno no app de Gestão, pedir endpoint ao suporte do Clinicorp."
+  },
+  {
     "chave": "mod:aniversariantes",
     "hub": true,
     "modulo": "aniversariantes",

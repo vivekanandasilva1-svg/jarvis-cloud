@@ -100,6 +100,9 @@ async function garantirTabelas() {
   // alerta de retorno: o lead pediu pra retomar o contato mais tarde. retorno_em = quando; ao criar,
   // o card vai pra "Em negociacao"; na hora, o verificador (server.js) devolve pra "Em atendimento"
   // e a IA retoma (retorno_disparado_em marca que ja disparou). Limpa quando o lead responde.
+  // funil exclusivo (ex: 'retorno' = Alertas de retorno da aba Resgate): fora do quadro principal do CRM e das contagens de leads;
+  // a conversa continua aparecendo em Conversas. NULL = contato normal do CRM.
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS funil TEXT;`);
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS retorno_em TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS retorno_nota TEXT;`);
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS retorno_origem TEXT;`);
@@ -211,6 +214,8 @@ async function garantirTabelas() {
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas do CRM:', err.message);
 });
+// outros modulos (ex: retorno.js) aguardam as tabelas do CRM antes de criar as proprias
+export const crmTabelasProntas = tabelasProntas;
 
 // guarda que o contato entrou numa etapa agora (best-effort: falha aqui nunca derruba a acao principal)
 async function registrarEventoEtapa(tenantId, contatoId, instancia, etapa) {
@@ -354,7 +359,7 @@ export async function listarContatos(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento, atendente_id, atendente_nome, origem_fonte, origem_campanha, origem_titulo,
+    `SELECT id, numero, instancia, nome, etapa, funil, ultima_mensagem, ultima_mensagem_em, criado_em, auto_pausado, pre_agendamento, atendente_id, atendente_nome, origem_fonte, origem_campanha, origem_titulo,
             retorno_em, retorno_nota, retorno_origem, retorno_disparado_em,
             (retorno_em IS NOT NULL AND (retorno_em AT TIME ZONE 'America/Maceio')::date <= (now() AT TIME ZONE 'America/Maceio')::date) AS retorno_hoje,
             (ultima_entrada_em IS NOT NULL AND (lido_em IS NULL OR ultima_entrada_em > lido_em)) AS nao_lida,
@@ -981,7 +986,7 @@ export async function resultadosAtendimento(tenantId, { de, ate, instancia = nul
     // funil: onde estao HOJE os contatos que chegaram no periodo
     pool.query(
       `SELECT etapa, count(*)::int AS total FROM crm_contatos
-       WHERE tenant_id = $1 AND oculto = false AND ultima_mensagem_em IS NOT NULL AND criado_em >= $2 AND criado_em < $3 AND ${filtroInst}
+       WHERE tenant_id = $1 AND oculto = false AND funil IS NULL AND ultima_mensagem_em IS NOT NULL AND criado_em >= $2 AND criado_em < $3 AND ${filtroInst}
        GROUP BY etapa`,
       p,
     ),
@@ -1486,7 +1491,7 @@ export async function relatorioOrigem(tenantId, { de, ate }) {
             (count(*) FILTER (WHERE etapa IN ('agendado','compareceu','comprou')))::int AS agendados,
             (count(*) FILTER (WHERE etapa = 'comprou'))::int AS compraram,
             (count(*) FILTER (WHERE etapa IN ('perdido')))::int AS perdidos
-     FROM crm_contatos WHERE tenant_id = $1 AND oculto = false AND ultima_mensagem_em IS NOT NULL AND criado_em >= $2 AND criado_em < $3
+     FROM crm_contatos WHERE tenant_id = $1 AND oculto = false AND funil IS NULL AND ultima_mensagem_em IS NOT NULL AND criado_em >= $2 AND criado_em < $3
      GROUP BY 1, 2 ORDER BY leads DESC`,
     [tenantId, inicio, fim],
   );

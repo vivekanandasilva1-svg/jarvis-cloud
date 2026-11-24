@@ -2873,7 +2873,8 @@ async function carregarCrm() {
     crmCarregarFuiClinicorp();
     preencherSeletorEtapaConversa(data.etapas || []);
     await carregarOperadoresCrm();
-    renderizarCrmBoard(data.etapas || [], crmFiltrarPorOperador(data.contatos || []));
+    // pacientes dos Alertas de retorno (funil) ficam so no funil deles - a conversa continua em Conversas
+    renderizarCrmBoard(data.etapas || [], crmFiltrarPorOperador((data.contatos || []).filter((c) => !c.funil)));
     if (crmContatoAberto) {
       const atualizado = (data.contatos || []).find((c) => c.id === crmContatoAberto.id);
       if (atualizado) {
@@ -12534,7 +12535,7 @@ document.getElementById('resRelBaixar').addEventListener('click', () => {
 
 // ---------- Modo 2: Orçamentos em aberto (quadro igual ao CRC > Orçamentos em aberto do Clinicorp) ----------
 let resModo = 'res';
-try { if (localStorage.getItem('resModo') === 'oa') resModo = 'oa'; } catch { /* sem localStorage */ }
+try { const salvo = localStorage.getItem('resModo'); if (salvo === 'oa' || salvo === 'ret') resModo = salvo; } catch { /* sem localStorage */ }
 let oaDados = { etapas: [], pacientes: [] };
 let oaFiltro = { periodo: '30', de: '', ate: '', esp: '', prof: '' };
 let oaArrastando = null;
@@ -12544,11 +12545,12 @@ const oaMsgPadrao = 'Olá, {nome}! Aqui é da clínica. Seu orçamento está dis
 function resAplicarModo() {
   document.getElementById('resModo1').hidden = resModo !== 'res';
   document.getElementById('resModo2').hidden = resModo !== 'oa';
+  document.getElementById('resModo3').hidden = resModo !== 'ret';
   for (const b of document.querySelectorAll('#resModos [data-modo]')) b.classList.toggle('ativo', b.dataset.modo === resModo);
 }
-function resCarregarModo() { resAplicarModo(); if (resModo === 'oa') oaCarregar(); else carregarResgate(); }
+function resCarregarModo() { resAplicarModo(); if (resModo === 'oa') oaCarregar(); else if (resModo === 'ret') retCarregar(); else carregarResgate(); }
 for (const b of document.querySelectorAll('#resModos [data-modo]')) b.addEventListener('click', () => {
-  resModo = b.dataset.modo === 'oa' ? 'oa' : 'res';
+  resModo = b.dataset.modo === 'oa' || b.dataset.modo === 'ret' ? b.dataset.modo : 'res';
   try { localStorage.setItem('resModo', resModo); } catch { /* sem localStorage */ }
   resCarregarModo();
 });

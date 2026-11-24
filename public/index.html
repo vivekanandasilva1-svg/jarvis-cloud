@@ -1104,6 +1104,7 @@
       <div class="res-modos" id="resModos">
         <button type="button" class="ind-sub ativo" data-modo="res" title="Aprovados que ficaram pela metade ou nunca começaram">Resgate (inacabados)</button>
         <button type="button" class="ind-sub" data-modo="oa" title="Quadro igual ao CRC > Orçamentos em aberto do Clinicorp">Orçamentos em aberto</button>
+        <button type="button" class="ind-sub" data-modo="ret" title="Alertas de retorno do Clinicorp, com funil e conversa de WhatsApp">Alertas de retorno</button>
       </div>
       <div class="crm-board-wrap" id="resModo1">
         <div class="crm-board-header">
@@ -1227,6 +1228,118 @@
             <button type="button" id="resRelTelaCheia">⤢ Tela cheia</button>
             <button type="button" data-fechar="resRelModal">Fechar</button>
           </div>
+        </div>
+      </div>
+
+      <div class="crm-board-wrap" id="resModo3" hidden>
+        <div class="crm-board-header">
+          <span>Alertas de retorno: a lista de CRM &gt; Alertas de retorno do Clinicorp, em funil. A conversa de WhatsApp de cada paciente fica aqui e também em Conversas.</span>
+          <div class="crm-board-nav">
+            <input type="search" id="retBusca" placeholder="Buscar paciente ou telefone" class="ind-busca" />
+            <button type="button" id="retImportarBtn" title="Sobe a lista exportada do Clinicorp (planilha ou CSV)">Importar lista do Clinicorp</button>
+            <button type="button" id="retAddBtn" title="Cadastrar um paciente na mão">Adicionar paciente</button>
+            <button type="button" id="retCfgBtn" title="Número de WhatsApp, operador padrão e mensagem">Configurações</button>
+            <button type="button" id="retRefresh">Atualizar tela</button>
+          </div>
+        </div>
+        <div class="res-filtros">
+          <span class="res-filtros-rotulo">Mostrar:</span>
+          <button type="button" class="ind-sub ret-ver ativo" data-ver="todos">Todos</button>
+          <button type="button" class="ind-sub ret-ver" data-ver="atrasados">Alerta atrasado</button>
+          <button type="button" class="ind-sub ret-ver" data-ver="responderam">Responderam</button>
+          <button type="button" class="ind-sub ret-ver" data-ver="sem_conversa">Sem conversa</button>
+          <label class="res-check"><input type="checkbox" id="retOcultarFora" /> Esconder quem saiu da lista do Clinicorp</label>
+        </div>
+        <p class="ind-resumo" id="retResumo"></p>
+        <p class="ind-dica">💡 <b>Como usar:</b> o Clinicorp não libera os alertas de retorno por integração, então a lista entra por <b>Importar lista do Clinicorp</b> (exporte a tela CRM &gt; Alertas de retorno e suba o arquivo; quem já está aqui é atualizado, sem duplicar). Cada paciente vira uma conversa de WhatsApp espelhada: use <b>Conversa</b> para falar pela Lumia. Eles ficam <b>só neste funil</b> (fora do funil principal do CRM) e a IA não responde.</p>
+        <div class="crm-board" id="retBoard"><p class="agenda-vazia">Carregando...</p></div>
+      </div>
+
+      <div class="ct-modal" id="retImpModal" hidden>
+        <div class="ct-caixa ret-imp-caixa">
+          <div class="ct-caixa-topo">
+            <strong>Importar alertas de retorno do Clinicorp</strong>
+            <button type="button" class="ct-fechar" data-fechar="retImpModal">✕</button>
+          </div>
+          <div id="retImpPasso1">
+            <p class="ct-info">No Clinicorp, abra <b>CRM &gt; Alertas de retorno</b>, exporte a lista (planilha ou CSV) e escolha o arquivo aqui. Você confere quais colunas são o nome, o telefone e a data do alerta antes de importar.</p>
+            <input type="file" id="retImpArquivo" accept=".csv,.txt,.xlsx,.xls" />
+          </div>
+          <div id="retImpPasso2" hidden>
+            <p class="ct-info" id="retImpInfo"></p>
+            <div class="ret-imp-mapa" id="retImpMapa"></div>
+            <label class="res-check"><input type="checkbox" id="retImpCompleta" /> Este arquivo é a lista <b>inteira</b> do Clinicorp (quem estiver no funil e não vier no arquivo fica marcado como "saiu da lista")</label>
+            <div class="ret-imp-previa" id="retImpPrevia"></div>
+            <p class="crm-conversa-erro" id="retImpErro" hidden></p>
+            <div class="ct-rodape"><button type="button" id="retImpVoltar" class="crm-btn-secundario">Escolher outro arquivo</button><span class="ct-espaco"></span><button type="button" id="retImpConfirmar" class="relatorio-config-enviar">Importar</button></div>
+          </div>
+          <div id="retImpResultado" hidden></div>
+        </div>
+      </div>
+
+      <div class="ct-modal" id="retAddModal" hidden>
+        <form class="ct-caixa" id="retAddForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Adicionar paciente ao funil de retorno</strong>
+            <button type="button" class="ct-fechar" data-fechar="retAddModal">✕</button>
+          </div>
+          <label class="ct-campo">Nome<input id="retAddNome" maxlength="120" required /></label>
+          <label class="ct-campo">Telefone (com DDD)<input id="retAddTel" maxlength="30" /></label>
+          <label class="ct-campo">Motivo do retorno <small>(procedimento, revisão...)</small><input id="retAddMotivo" maxlength="200" /></label>
+          <label class="ct-campo">Data do alerta<input type="date" id="retAddData" /></label>
+          <p class="crm-conversa-erro" id="retAddErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="retAddSalvar" class="relatorio-config-enviar">Adicionar</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="retCfgModal" hidden>
+        <form class="ct-caixa" id="retCfgForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Configurações dos alertas de retorno</strong>
+            <button type="button" class="ct-fechar" data-fechar="retCfgModal">✕</button>
+          </div>
+          <label class="ct-campo">Número de WhatsApp das conversas <small>(só números conectados desta conta)</small><select id="retCfgInstancia"></select></label>
+          <label class="ct-campo">Operador responsável padrão <small>(recebe os pacientes novos)</small><select id="retCfgOperador"></select></label>
+          <label class="ct-campo">Mensagem do botão WhatsApp <small>(use {nome} e {motivo})</small><textarea id="retCfgMensagem" maxlength="1000"></textarea></label>
+          <p class="crm-conversa-erro" id="retCfgErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="retCfgSalvar" class="relatorio-config-enviar">Salvar</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="retTentModal" hidden>
+        <form class="ct-caixa" id="retTentForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong id="retTentTitulo">Registrar contato</strong>
+            <button type="button" class="ct-fechar" data-fechar="retTentModal">✕</button>
+          </div>
+          <label class="ct-campo">Resultado do contato<select id="retTentResultado"></select></label>
+          <label class="ct-campo">Observação <small>(o que foi falado)</small><textarea id="retTentObs" maxlength="500"></textarea></label>
+          <p class="crm-conversa-erro" id="retTentErro" hidden></p>
+          <div class="ct-rodape"><span class="ct-espaco"></span><button type="submit" id="retTentSalvar" class="relatorio-config-enviar">Salvar contato</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="retRetModal" hidden>
+        <form class="ct-caixa" id="retRetForm" autocomplete="off">
+          <div class="ct-caixa-topo">
+            <strong>Lembrete de retorno</strong>
+            <button type="button" class="ct-fechar" data-fechar="retRetModal">✕</button>
+          </div>
+          <p class="ct-info">O card fica destacado quando chegar a data e a hora combinadas.</p>
+          <label class="ct-campo">Data e hora<input type="datetime-local" id="retRetData" /></label>
+          <label class="ct-campo">Nota <small>(o que combinou)</small><textarea id="retRetNota" maxlength="500"></textarea></label>
+          <p class="crm-conversa-erro" id="retRetErro" hidden></p>
+          <div class="ct-rodape"><button type="button" id="retRetRemover" class="crm-btn-secundario">Remover lembrete</button><span class="ct-espaco"></span><button type="submit" id="retRetSalvar" class="relatorio-config-enviar">Salvar</button></div>
+        </form>
+      </div>
+
+      <div class="ct-modal" id="retNotasModal" hidden>
+        <div class="ct-caixa">
+          <div class="ct-caixa-topo">
+            <strong id="retNotasTitulo">Anotações</strong>
+            <button type="button" class="ct-fechar" data-fechar="retNotasModal">✕</button>
+          </div>
+          <div class="notas-painel notas-fixo" id="retNotasPainel"></div>
         </div>
       </div>
 
@@ -2114,5 +2227,6 @@
   <script src="app.js?v=20261124a"></script>
   <script src="copiar-nome.js?v=20261123a"></script>
   <script src="rolagem.js?v=20261123b"></script>
+  <script src="retorno.js?v=20261124a"></script>
 </body>
 </html>

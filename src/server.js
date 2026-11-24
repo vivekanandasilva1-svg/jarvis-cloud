@@ -38,6 +38,7 @@ import * as funilFU from './funilFollowUp.js';
 import * as indicacoes from './indicacoes.js';
 import * as resgate from './resgate.js';
 import * as orcAbertos from './orcAbertos.js';
+import * as retorno from './retorno.js';
 import * as metaSaude from './metaSaude.js';
 import * as indicacoesIA from './indicacoesIA.js';
 import * as aniversariantes from './aniversariantes.js';
@@ -1858,6 +1859,124 @@ app.get('/api/resgate/aberto', async (req, res) => {
 app.post('/api/resgate/aberto/:id/etapa', async (req, res) => {
   try {
     await orcAbertos.moverEtapa(req.tenantId, req.params.id, req.body?.etapa);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+// modo 3 da aba: Alertas de retorno (espelha CRM > Alertas de retorno do Clinicorp; lista por importacao). Mesmo prefixo /api/resgate:
+// mesma liberacao por cliente e mesmo operador responsavel. Importar, trocar numero/operador padrao e tirar do funil: so o acesso principal.
+const soDonoRetorno = (req, res) => { if (req.operadorId > 0) { res.status(403).json({ erro: 'so o acesso principal da conta pode fazer isso' }); return true; } return false; };
+app.get('/api/resgate/retorno', async (req, res) => {
+  try {
+    const cfg = await retorno.obterConfig(req.tenantId);
+    const operadores = (await crm.listarOperadores(req.tenantId).catch(() => [])).filter((o) => o.id > 0);
+    res.json({
+      etapas: retorno.ETAPAS, resultados: retorno.RESULTADOS,
+      mensagem: cfg.msg_whatsapp || retorno.MSG_PADRAO, mensagemPersonalizada: !!cfg.msg_whatsapp,
+      instancia: cfg.instancia, instancias: await tenants.listarInstanciasDoTenant(req.tenantId).catch(() => []),
+      operadorId: cfg.operador_id, operadores, podeConfigurar: !(req.operadorId > 0),
+      ultimaImportacao: cfg.ultima_importacao, resumo: cfg.ultimo_resumo ? JSON.parse(cfg.ultimo_resumo) : null,
+      pacientes: await retorno.listar(req.tenantId),
+    });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/retorno/importar', async (req, res) => {
+  try {
+    if (soDonoRetorno(req, res)) return;
+    res.json({ ok: true, resumo: await retorno.importar(req.tenantId, req.body?.linhas, { listaCompleta: req.body?.listaCompleta === true }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/retorno/manual', async (req, res) => {
+  try {
+    const { nome, telefone, motivo, dataAlerta } = req.body || {};
+    res.json({ ok: true, resumo: await retorno.importar(req.tenantId, [{ nome, telefone, motivo, dataAlerta }], {}) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.put('/api/resgate/retorno/config', async (req, res) => {
+  try {
+    if (soDonoRetorno(req, res)) return;
+    const { operadorId, instancia, mensagem } = req.body || {};
+    await retorno.salvarConfig(req.tenantId, { operadorId, instancia, mensagem }, await crm.listarOperadores(req.tenantId));
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/retorno/:id/etapa', async (req, res) => {
+  try {
+    await retorno.moverEtapa(req.tenantId, req.params.id, req.body?.etapa);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/retorno/:id/tentativa', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json(await retorno.registrarTentativa(req.tenantId, req.params.id, { ...(req.body || {}), autor: perfil?.nome }));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/retorno/:id/retorno', async (req, res) => {
+  try {
+    await retorno.definirRetorno(req.tenantId, req.params.id, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/resgate/retorno/:id/retorno', async (req, res) => {
+  try {
+    await retorno.limparRetorno(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.get('/api/resgate/retorno/:id/notas', async (req, res) => {
+  try {
+    res.json({ notas: await retorno.listarNotas(req.tenantId, req.params.id), euId: req.operadorId || 0 });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/retorno/:id/notas', async (req, res) => {
+  try {
+    const perfil = await tenants.obterPerfil(req.tenantId, req.operadorId || 0).catch(() => null);
+    res.json({ ok: true, nota: await retorno.criarNota(req.tenantId, req.params.id, { texto: req.body?.texto, autorId: req.operadorId || 0, autorNome: perfil?.nome }) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/resgate/retorno/notas/:id', async (req, res) => {
+  try {
+    await retorno.apagarNota(req.tenantId, Number(req.params.id), req.operadorId || 0);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.post('/api/resgate/retorno/:id/atendente', async (req, res) => {
+  try {
+    if (soDonoRetorno(req, res)) return;
+    await retorno.definirAtendente(req.tenantId, req.params.id, req.body?.operadorId ?? null);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.delete('/api/resgate/retorno/:id', async (req, res) => {
+  try {
+    if (soDonoRetorno(req, res)) return;
+    await retorno.arquivar(req.tenantId, req.params.id);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });

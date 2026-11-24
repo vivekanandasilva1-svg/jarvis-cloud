@@ -3849,3 +3849,13 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 .aniv-envio-barra button { background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
 .aniv-envio-barra button:hover { border-color: var(--gold); }
 .aniv-envio-barra .aniv-cancelar { border-color: rgba(229, 72, 77, 0.6); color: #ff9a9d; }
+
+/* Alertas de retorno (modo 3 da aba Resgate) */
+.ret-fora { opacity: 0.6; }
+.ret-nao-lida { border-color: var(--gold, #d4af37); }
+.ret-motivo { font-size: 12px; color: var(--text-dim, #9a968a); margin-top: 2px; }
+.ret-imp-caixa { max-width: 720px; }
+.ret-imp-mapa { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 10px 0; }
+.ret-imp-previa { margin: 10px 0; overflow-x: auto; }
+.ret-imp-tab { border-collapse: collapse; font-size: 12px; width: 100%; }
+.ret-imp-tab th, .ret-imp-tab td { border: 1px solid var(--border-soft, #3f4247); padding: 4px 8px; text-align: left; }
