@@ -1284,5 +1284,13 @@
     "tipo": "melhoria",
     "titulo": "Cérebro: neurônios do app de Gestão em cinza neon (LED)",
     "conteudo": "Pedido do dono: diferenciar no grafo do Cérebro as memórias do app Lumia Gestão Geral. Antes a cor mostrava só a IA que salvou, então tudo da gestão saía laranja (Claude), misturado. Agora memórias com a tag gestao (entradas do módulo gestao do cerebro-mae) ou projeto com 'Gestão' no nome viram neurônios cinza neon (#a3adbb) com brilho de LED forte e pulsação mais rápida; chip 'App de Gestão' na barra de filtros liga/desliga esses neurônios; tooltip e painel mostram 'App de Gestão · <IA>'. Formato (tipo), ligações e lobo da IA não mudam. O grafo (/api/cerebro/grafo) passou a mandar as tags. Tom ajustado de quase branco para cinza para não confundir com o branco de selecionado/novo. Pendente: nada."
+  },
+  {
+    "chave": "cerebro:neuronio-gestao-regiao",
+    "modulo": "cerebro",
+    "data": "2026-11-25",
+    "tipo": "correcao",
+    "titulo": "Cérebro: região própria 'Gestão' e LED sempre aceso nos neurônios do app de Gestão",
+    "conteudo": "Depois do cinza neon, o dono mostrou que no Cérebro real (centenas de memórias) os neurônios de gestão sumiam: ficavam dentro da bola do Claude (a região é da IA que salvou) e o modo leve (mais de 500 memórias, LOD 0) tira o halo de brilho de todos. Correção: as memórias de gestão ganharam região própria no grafo (centro [0,20,100], rótulo GESTÃO em cinza), ficam 2,2x maiores e mantêm o halo de LED pulsando mesmo no modo leve (são poucas, custo mínimo). Halo suavizado para ficar cinza e não branco."
   }
 ]

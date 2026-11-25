@@ -23,7 +23,7 @@
   };
   // memorias do app Lumia Gestao Geral (tag "gestao" do cerebro-mae ou projeto com "Gestao" no nome):
   // neuronio proprio em cinza neon, com brilho de LED mais forte, para nao misturar com as das IAs
-  const GESTAO = { nome: 'App de Gestão', cor: '#a3adbb' };
+  const GESTAO = { nome: 'App de Gestão', rotulo: 'Gestão', cor: '#a3adbb' };
   const ehGestao = (n) => (Array.isArray(n.tags) && n.tags.includes('gestao')) || /gest[aã]o/i.test(n.projeto || '');
   const TIPOS = { decisao: 'Decisão', fato: 'Fato', preferencia: 'Preferência', tarefa: 'Tarefa', contexto: 'Contexto', aprendizado: 'Aprendizado' };
 
@@ -233,7 +233,7 @@
       grafo.graphData({ nodes: nos, links });
     }
     el.vazio.hidden = nos.length > 0;
-    for (const [k, l] of Object.entries(lobos)) { const tem = nos.some((n) => chaveOrigem(n.origem) === k); l.neb.visible = tem; l.rotulo.visible = tem; }
+    for (const [k, l] of Object.entries(lobos)) { const tem = nos.some((n) => chaveRegiao(n) === k); l.neb.visible = tem; l.rotulo.visible = tem; }
     if (!nos.length) el.vazio.textContent = dados.nos.length ? 'Nenhuma memória com esses filtros.' : 'O cérebro ainda está vazio. Conecte uma IA em "Conectar IAs" (ela vai salvando sozinha o que for importante) ou crie a primeira memória em "+ Memória".';
   }
 
@@ -245,7 +245,7 @@
     if (selecionado === n.id || ehNovo(n)) return '#ffffff';
     return corDe(n);
   }
-  const tamanhoNo = (n) => (1.5 + Math.min(n.grau || 0, 12) * 0.6) * (ehNovo(n) ? 2.4 : 1);
+  const tamanhoNo = (n) => (1.5 + Math.min(n.grau || 0, 12) * 0.6) * (ehNovo(n) ? 2.4 : 1) * (ehGestao(n) ? 2.2 : 1);
 
   function atualizarCores() {
     if (!grafo) return;
@@ -303,8 +303,11 @@
   const CENTROS = {
     claude: [-85, 38, 30], chatgpt: [85, 38, 30], cursor: [-72, -42, -30], gemini: [72, -42, -30],
     lumia: [0, 72, -10], manual: [0, -62, 45], outra: [0, 6, -88],
+    gestao: [0, 20, 100], // regiao propria das memorias do app de gestao (na frente, fora da bola das IAs)
   };
   const chaveOrigem = (o) => (ORIGENS[o] ? o : 'outra');
+  const chaveRegiao = (n) => (ehGestao(n) ? 'gestao' : chaveOrigem(n.origem));
+  const infoRegiao = (k) => (k === 'gestao' ? { nome: GESTAO.rotulo, cor: GESTAO.cor } : ORIGENS[k]);
   const cacheArvore = new Map();
   const cacheNeuronio = new Map();
   const cacheGeoSoma = {};
@@ -435,7 +438,7 @@
     if (tipo === 'soma') m = new T.MeshPhongMaterial({ color: c, emissive: c, emissiveIntensity: led ? 0.7 : 0.3, shininess: led ? 80 : 30, transparent: dim, opacity: dim ? 0.18 : 1 });
     else if (tipo === 'linhas') m = new T.LineBasicMaterial({ color: C(forte ? '#ffffff' : clarear(cor, 0.3)), transparent: true, opacity: dim ? 0.08 : 0.8, blending: T.AdditiveBlending, depthWrite: false });
     else if (tipo === 'pontas') m = new T.PointsMaterial({ color: C(clarear(cor, 0.55)), size: 0.55, sizeAttenuation: true, transparent: true, opacity: dim ? 0.1 : 0.95, blending: T.AdditiveBlending, depthWrite: false });
-    else m = new T.SpriteMaterial({ map: texturaGlow(), color: c, transparent: true, opacity: dim ? 0.05 : (forte ? 0.8 : (led ? 0.85 : 0.5)), blending: T.AdditiveBlending, depthWrite: false });
+    else m = new T.SpriteMaterial({ map: texturaGlow(), color: c, transparent: true, opacity: dim ? 0.05 : (forte ? 0.8 : (led ? 0.6 : 0.5)), blending: T.AdditiveBlending, depthWrite: false });
     m.userData = { fase: (parseInt(cor.slice(1), 16) % 628) / 100, led };
     matCache.set(k, m);
     return m;
@@ -465,7 +468,8 @@
     g.add(soma);
     g.userData = { soma, fase: (Number(n.id) % 97) * 0.37, est: '', r: 0, glowBase: 7 };
     if (lod >= 1) adicionarDendritos(g, n);
-    if (lod === 2) {
+    // o LED do app de gestao fica aceso mesmo no modo leve (cerebro grande): sao poucos neuronios
+    if (lod === 2 || ehGestao(n)) {
       const glow = new T.Sprite(matCompartilhado('glow', '#888888', 'normal'));
       g.add(glow);
       g.userData.glow = glow;
@@ -513,7 +517,7 @@
         if (!k.endsWith('|normal')) continue;
         const onda = 0.5 + 0.5 * Math.sin(t * (m.userData.led ? 3.2 : 1.5) + m.userData.fase);
         if (k.startsWith('soma|')) m.emissiveIntensity = m.userData.led ? 0.4 + 0.55 * onda : 0.2 + 0.2 * onda;
-        else if (m.userData.led && k.startsWith('glow|')) m.opacity = 0.45 + 0.35 * onda;
+        else if (m.userData.led && k.startsWith('glow|')) m.opacity = 0.3 + 0.3 * onda;
       }
       if (lod === 2) {
         for (const g of cacheNeuronio.values()) {
@@ -531,7 +535,7 @@
     const T = window.THREE;
     const cena = grafo.scene();
     for (const [k, c] of Object.entries(CENTROS)) {
-      const cor = ORIGENS[k].cor;
+      const cor = infoRegiao(k).cor;
       const neb = new T.Sprite(new T.SpriteMaterial({ map: texturaGlow(), color: new T.Color(cor).convertSRGBToLinear(), transparent: true, opacity: 0.2, blending: T.AdditiveBlending, depthWrite: false }));
       neb.scale.set(190, 190, 1);
       neb.position.set(c[0], c[1], c[2]);
@@ -543,7 +547,7 @@
       x.textBaseline = 'middle';
       x.shadowColor = cor; x.shadowBlur = 24;
       x.fillStyle = cor;
-      x.fillText(ORIGENS[k].nome.toUpperCase(), 256, 64);
+      x.fillText(infoRegiao(k).nome.toUpperCase(), 256, 64);
       const rotulo = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(cv), transparent: true, opacity: 0.85, depthWrite: false }));
       rotulo.scale.set(64, 16, 1);
       rotulo.position.set(c[0], c[1] + 62, c[2]);
@@ -557,7 +561,7 @@
     const f = (alpha) => {
       const k = 0.35 * alpha;
       for (const n of ns) {
-        const c = CENTROS[chaveOrigem(n.origem)];
+        const c = CENTROS[chaveRegiao(n)];
         n.vx += (c[0] - n.x) * k;
         n.vy += (c[1] - n.y) * k;
         if (n.vz !== undefined) n.vz += (c[2] - n.z) * k;
