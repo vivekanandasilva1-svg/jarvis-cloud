@@ -17,7 +17,8 @@ const retData = (iso) => (iso ? new Date(String(iso).length === 10 ? `${iso}T12:
 const retDH = (iso) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 const retSemAcento = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const RET_FINAIS = new Set(['retornou', 'sem_sucesso']);
-const RET_ABERTAS = new Set(['novo', 'tentativa1', 'tentativa2', 'tentativa3']);
+const RET_ABERTAS = new Set(['novo', 'em_contato', 'retornar_novamente']);
+let retPeriodo = { tipo: 'todos', de: '', ate: '' };
 
 async function retChamar(url, metodo = 'GET', corpo) {
   const r = await fetch(url, { method: metodo, headers: resH(), body: corpo === undefined ? undefined : JSON.stringify(corpo) });
@@ -47,11 +48,33 @@ async function retCarregar() {
   }
 }
 
+const retHoje = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Maceio' });
+const retSomar = (iso, n) => new Date(new Date(`${iso}T00:00:00Z`).getTime() + n * 86400000).toISOString().slice(0, 10);
+
+// filtro pela Previsao de retorno (data do alerta), como o "Vencidas" e os prazos do Clinicorp
+function retPassaPeriodo(p) {
+  const t = retPeriodo.tipo;
+  if (t === 'todos') return true;
+  if (t === 'vencidas') return p.extras?.Vencida === 'sim';
+  const d = p.data_alerta;
+  if (!d) return false;
+  const hoje = retHoje();
+  if (t === 'atrasados') return d < hoje;
+  if (/^atraso\d+$/.test(t)) return d <= retSomar(hoje, -Number(t.slice(6)));
+  if (t === 'hoje') return d === hoje;
+  if (t === 'prox7') return d >= hoje && d <= retSomar(hoje, 7);
+  if (t === 'prox30') return d >= hoje && d <= retSomar(hoje, 30);
+  if (t === 'mes') return d.slice(0, 7) === hoje.slice(0, 7);
+  if (t === 'mes_passado') return d.slice(0, 7) === retSomar(`${hoje.slice(0, 7)}-01`, -1).slice(0, 7);
+  if (t === 'custom') return (!retPeriodo.de || d >= retPeriodo.de) && (!retPeriodo.ate || d <= retPeriodo.ate);
+  return true;
+}
+
 function retPassa(p, q) {
+  if (!retPassaPeriodo(p)) return false;
   if (document.getElementById('retOcultarFora').checked && p.na_lista === false) return false;
   if (q && !retSemAcento(`${p.nome} ${p.telefone || ''} ${p.motivo || ''}`).includes(q)) return false;
   const ativo = !RET_FINAIS.has(p.etapa);
-  if (retVer === 'atrasados') return ativo && p.dias_atraso > 0;
   if (retVer === 'responderam') return ativo && (p.nao_lida || (p.respondeu && RET_ABERTAS.has(p.etapa)));
   if (retVer === 'sem_conversa') return ativo && !p.contato_id;
   return true;
@@ -83,9 +106,13 @@ function retDesenhar() {
   const responderam = ativos.filter((p) => p.nao_lida || (p.respondeu && RET_ABERTAS.has(p.etapa))).length;
   const semConversa = ativos.filter((p) => p.telefone && !p.contato_id).length;
   const semTelefone = ativos.filter((p) => !p.telefone).length;
+  const vencidas = ativos.filter((p) => p.extras?.Vencida === 'sim').length;
+  const buscando = ativos.filter((p) => !p.telefone && (!p.fone_busca_resultado || p.fone_busca_resultado === 'erro')).length;
+  document.getElementById('retFoneBtn').hidden = !(retDados.podeConfigurar && buscando);
+  document.getElementById('retFoneBtn').textContent = `Completar telefones (${buscando})`;
   const quando = retDados.ultimaImportacao ? `Última importação: ${retDH(retDados.ultimaImportacao)}.` : 'Nenhuma lista importada ainda.';
   const aviso = semConversa && !retDados.instancia ? ' Escolha o número de WhatsApp em Configurações para criar as conversas.' : '';
-  document.getElementById('retResumo').textContent = `${ativos.length} em andamento · ${atrasados} com alerta atrasado · ${responderam} responderam · ${semConversa} aguardando conversa${semTelefone ? ` · ${semTelefone} sem telefone` : ''}. ${quando}${aviso}`;
+  document.getElementById('retResumo').textContent = `${ativos.length} em andamento · ${atrasados} com alerta atrasado${vencidas ? ` (${vencidas} vencidas no Clinicorp)` : ''} · ${responderam} responderam · ${semConversa} aguardando conversa${semTelefone ? ` · ${semTelefone} sem telefone${buscando ? ` (${buscando} sendo buscados no Clinicorp)` : ''}` : ''}. ${quando}${aviso}`;
 }
 
 // ---------------------------------------------------------------- arrastar entre colunas
@@ -111,6 +138,15 @@ async function retMover(id, etapa) {
 
 // ---------------------------------------------------------------- card
 
+const RET_SEM_FONE = {
+  pendente: 'Buscando o telefone no Clinicorp...',
+  erro: 'Falha ao buscar o telefone (a Lumia tenta de novo)',
+  nao_encontrado: 'Telefone não encontrado no Clinicorp (confira o nome)',
+  ambiguo: 'Há mais de um cadastro com esse nome no Clinicorp',
+  sem_telefone: 'Sem telefone no cadastro do Clinicorp',
+  nome_truncado: 'Nome cortado na cópia: cole de novo a tela completa',
+};
+
 function retNomePrimeiro(p) { return String(p.nome || '').trim().split(/\s+/)[0] || ''; }
 
 function retCriarCard(p) {
@@ -119,6 +155,7 @@ function retCriarCard(p) {
   card.appendChild(retEl('div', 'crm-card-nome', p.nome || 'Sem nome'));
   card.appendChild(retEl('div', 'crm-card-numero', `${p.telefone ? resTel(p.telefone) : 'sem telefone'}${p.atendente_nome ? ` · ${p.atendente_nome}` : ''}`));
   if (p.motivo) card.appendChild(retEl('div', 'ret-motivo', p.motivo));
+  if (p.extras?.Profissional) card.appendChild(retEl('div', 'ret-motivo', `Profissional: ${p.extras.Profissional}`));
   const tags = retEl('div', 'ind-tags');
   if (p.data_alerta) {
     const atras = p.dias_atraso > 0 && !RET_FINAIS.has(p.etapa);
@@ -126,8 +163,9 @@ function retCriarCard(p) {
   }
   if (p.nao_lida) tags.appendChild(retEl('span', 'ind-tag ok', 'Mensagem nova'));
   else if (p.respondeu && RET_ABERTAS.has(p.etapa)) tags.appendChild(retEl('span', 'ind-tag ok', 'Respondeu'));
+  if (p.extras?.Vencida === 'sim') tags.appendChild(retEl('span', 'ind-tag vermelho', 'Vencida no Clinicorp'));
   if (p.na_lista === false) tags.appendChild(retEl('span', 'ind-tag', 'Saiu da lista do Clinicorp'));
-  if (!p.telefone) tags.appendChild(retEl('span', 'ind-tag laranja', 'Sem telefone'));
+  if (!p.telefone) tags.appendChild(retEl('span', 'ind-tag laranja', RET_SEM_FONE[p.fone_busca_resultado || 'pendente'] || 'Sem telefone'));
   else if (!p.contato_id) tags.appendChild(retEl('span', 'ind-tag laranja', 'Sem conversa (escolha o número em Configurações)'));
   card.appendChild(tags);
   if (p.ultima_mensagem) card.appendChild(retEl('div', 'ind-obs', `💬 ${String(p.ultima_mensagem).slice(0, 90)}${p.ultima_mensagem_em ? ` · ${retDH(p.ultima_mensagem_em)}` : ''}`));
@@ -326,6 +364,7 @@ function retImpPasso(n) {
   document.getElementById('retImpPasso1').hidden = n !== 1;
   document.getElementById('retImpPasso2').hidden = n !== 2;
   document.getElementById('retImpResultado').hidden = n !== 3;
+  document.getElementById('retImpPassoTexto').hidden = n !== 4;
 }
 document.getElementById('retImportarBtn').addEventListener('click', () => {
   document.getElementById('retImpArquivo').value = '';
@@ -431,7 +470,7 @@ function retMostrarResumo(r) {
   const itens = [];
   if (r.criados) itens.push(`${r.criados} conversa(s) criada(s) no CRM para os pacientes novos.`);
   if (r.jaExistiam) itens.push(`${r.jaExistiam} paciente(s) já estavam no CRM e passaram para este funil (saíram do funil principal).`);
-  if (r.semTelefone) itens.push(`${r.semTelefone} sem telefone válido: ficam no funil, mas sem conversa até você corrigir no Clinicorp e importar de novo.`);
+  if (r.semTelefone) itens.push(`${r.semTelefone} sem telefone: a Lumia procura o telefone de cada um no cadastro do Clinicorp, pelo nome, aos poucos (o Clinicorp limita as consultas por hora). Quando achar, cria a conversa sozinha. Pelo botão "Completar telefones" você acelera um pouco.`);
   if (r.semNumero) itens.push(`${r.semNumero} aguardando o número de WhatsApp: escolha em Configurações para criar as conversas.`);
   if (r.foraDaLista) itens.push(`${r.foraDaLista} saíram da lista do Clinicorp (ficam marcados).`);
   if (r.ignorados) itens.push(`${r.ignorados} linha(s) ignorada(s) (vazias ou repetidas).`);
@@ -442,6 +481,74 @@ function retMostrarResumo(r) {
   fechar.addEventListener('click', () => { retImpModal.hidden = true; });
   box.appendChild(fechar);
   retImpPasso(3);
+}
+
+// ---- colar a tela do Clinicorp (CRC > Alerta de retorno)
+let retTextoLido = null;
+document.getElementById('retImportarBtn').addEventListener('click', () => { document.getElementById('retImpTexto').value = ''; });
+document.getElementById('retImpLerTexto').addEventListener('click', async () => {
+  const texto = document.getElementById('retImpTexto').value;
+  if (!texto.trim()) { retErro('retImpErro', 'Cole primeiro o texto copiado da tela do Clinicorp.'); return; }
+  const b = document.getElementById('retImpLerTexto'); b.disabled = true;
+  try {
+    retTextoLido = await retChamar('/api/resgate/retorno/interpretar', 'POST', { texto });
+    retErro('retImpErro', '');
+    const nomes = Object.fromEntries(retTextoLido.etapas.map((e) => [e.id, e.nome]));
+    const porCol = Object.entries(retTextoLido.porColuna).map(([id, n]) => `${nomes[id] || id}: ${n}`).join(' · ');
+    document.getElementById('retImpTextoInfo').textContent = `${retTextoLido.total} alerta(s) lido(s) (${porCol})${retTextoLido.vencidas ? `, ${retTextoLido.vencidas} vencido(s)` : ''}.${retTextoLido.truncados ? ` Atenção: ${retTextoLido.truncados} nome(s) vieram cortados com "..." - cole de novo copiando com Ctrl+A.` : ''}`;
+    const box = document.getElementById('retImpTextoPrevia'); box.textContent = '';
+    const tab = document.createElement('table'); tab.className = 'ret-imp-tab';
+    const th = tab.insertRow();
+    for (const t of ['Paciente', 'Previsão', 'Profissional', 'Motivo', 'Coluna']) th.appendChild(retEl('th', '', t));
+    for (const l of retTextoLido.linhas.slice(0, 8)) {
+      const r = tab.insertRow();
+      for (const v of [l.nome, l.dataAlerta, l.extras?.Profissional, l.motivo, `${nomes[l.etapa] || l.etapa}${l.vencida ? ' (vencida)' : ''}`]) r.insertCell().textContent = v || '—';
+    }
+    box.appendChild(tab);
+    if (retTextoLido.total > 8) box.appendChild(retEl('div', 'dim', `... e mais ${retTextoLido.total - 8}.`));
+    document.getElementById('retImpUsarEtapa').checked = false;
+    retErro('retImpTextoErro', '');
+    retImpPasso(4);
+  } catch (err) { retErro('retImpErro', err.message); }
+  b.disabled = false;
+});
+document.getElementById('retImpTextoVoltar').addEventListener('click', () => retImpPasso(1));
+document.getElementById('retImpTextoConfirmar').addEventListener('click', async () => {
+  const b = document.getElementById('retImpTextoConfirmar'); b.disabled = true; b.textContent = 'Importando...';
+  try {
+    const { resumo } = await retChamar('/api/resgate/retorno/importar', 'POST', { linhas: retTextoLido.linhas, usarEtapaClinicorp: document.getElementById('retImpUsarEtapa').checked });
+    retMostrarResumo(resumo);
+    retCarregar();
+  } catch (err) { retErro('retImpTextoErro', err.message); }
+  b.disabled = false; b.textContent = 'Importar';
+});
+
+// ---- completar telefones pelo cadastro do Clinicorp
+document.getElementById('retFoneBtn').addEventListener('click', async () => {
+  const b = document.getElementById('retFoneBtn'); b.disabled = true;
+  try {
+    const r = await retChamar('/api/resgate/retorno/completar-telefones', 'POST');
+    if (r.ocupado) mostrarAviso('Já está buscando os telefones. Aguarde um instante.', 'ok');
+    else if (r.semClinicorp) mostrarAviso('Esta conta não tem o Clinicorp conectado (aba Integrações).', 'erro');
+    else if (r.limiteAtingido && !r.processados) mostrarAviso('O Clinicorp está no limite de consultas por hora. A Lumia continua sozinha mais tarde.', 'erro');
+    else mostrarAviso(`${r.encontrados} telefone(s) encontrado(s) de ${r.processados} buscados${r.restantes ? `; ${r.restantes} ainda na fila (a Lumia continua sozinha aos poucos)` : ''}.`, 'ok');
+  } catch (err) { mostrarAviso(err.message, 'erro'); }
+  b.disabled = false;
+  retCarregar();
+});
+
+// ---- filtro por data do alerta
+document.getElementById('retPeriodo').addEventListener('change', () => {
+  retPeriodo.tipo = document.getElementById('retPeriodo').value;
+  document.getElementById('retCustom').hidden = retPeriodo.tipo !== 'custom';
+  if (retDados.etapas.length) retDesenhar();
+});
+for (const id of ['retDe', 'retAte']) {
+  document.getElementById(id).addEventListener('change', () => {
+    retPeriodo.de = document.getElementById('retDe').value;
+    retPeriodo.ate = document.getElementById('retAte').value;
+    if (retDados.etapas.length) retDesenhar();
+  });
 }
 
 // ---------------------------------------------------------------- controles do topo
