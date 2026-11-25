@@ -45,6 +45,7 @@ import * as aniversariantes from './aniversariantes.js';
 import * as gestao from './gestao.js';
 import * as gestaoStore from './gestaoStore.js';
 import * as gestaoIa from './gestaoIa.js';
+import * as gestaoRotina from './gestaoRotina.js';
 import { iniciarSchedulerSecretaria } from './secretaria.js';
 import { iniciarCerebroMae } from './cerebroMae.js';
 import { ehErroDeCredito, creditoEsgotado, registrarFalhaCredito } from './alertaCreditos.js';
@@ -2475,6 +2476,7 @@ const mesDaQuery = (q) => {
 // Lumia Gestao Geral (app separado do gestor): leitura dos indicadores de cada setor. So o acesso
 // principal da conta (rota gerencial) e so quem tem a ferramenta "gestaoGeral" liberada.
 const gestaoErro = (res, err) => res.status(400).json({ erro: err.message });
+const rotinaGestao = gestaoRotina.criarRotina(gestaoStore);
 
 // painel de um setor (vendas tem calculo proprio; os demais usam a definicao de indicadores)
 app.get('/api/gestao/setor/:setor', async (req, res) => {
@@ -2564,6 +2566,18 @@ app.put('/api/gestao/lancamentos', async (req, res) => {
     const { setor, indicador, valor, semana } = req.body || {};
     await gestaoStore.salvarLancamento(req.tenantId, setor, indicador, valor, semana, gestao.indicadoresManuais(setor));
     res.json({ ok: true });
+  } catch (err) { gestaoErro(res, err); }
+});
+
+// rotina do gestor: checklist diario por setor, dia de cada setor, CRCs, metas em faixas, resultados do
+// Comercial e o painel geral. Mesma logica do app (gestaoRotina.js), gravando no Postgres por tenant.
+app.all(/^\/api\/gestao\/(dias|checklist\/[a-z]+(\/itens)?|comercial(\/(lancamento|crcs|metas))?|painel)$/, async (req, res) => {
+  try {
+    const caminho = req.path.slice('/api/gestao/'.length);
+    const r = await gestaoRotina.rotearRotina(rotinaGestao, req.tenantId, req.method, caminho, req.query, req.body);
+    if (r === undefined) return res.status(405).json({ erro: 'Metodo nao permitido.' });
+    if (caminho === 'painel') r.indicadoresSemana = await gestao.resumoSemanalManual(req.tenantId).catch(() => ({}));
+    res.json(r);
   } catch (err) { gestaoErro(res, err); }
 });
 
