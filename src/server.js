@@ -662,6 +662,21 @@ app.post('/api/admin/tenants/:id/integracoes/metaads', exigirSuperAdmin, async (
   }
 });
 
+// adiciona UMA conta de anuncio sem apagar as outras; confere o token no Meta antes de guardar e devolve as contas que ele enxerga
+app.post('/api/admin/tenants/:id/integracoes/metaads/adicionar', exigirSuperAdmin, async (req, res) => {
+  try {
+    const { label, token } = req.body || {};
+    const tokenLimpo = String(token || '').trim();
+    if (!String(label || '').trim() || !tokenLimpo) return res.status(400).json({ erro: 'Informe o nome da conta e o token.' });
+    const contas = await metaAds.verificarToken(tokenLimpo);
+    if (!contas.length) return res.status(400).json({ erro: 'O token é válido, mas não enxerga nenhuma conta de anúncios. Confira se a conta foi atribuída ao usuário do sistema no BM.' });
+    const r = await tenantConfig.adicionarMetaAdsToken(Number(req.params.id), label, tokenLimpo);
+    res.json({ ok: true, contas, ...r });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
 app.post('/api/admin/tenants/:id/integracoes/trello', exigirSuperAdmin, async (req, res) => {
   const { apiKey, token } = req.body || {};
   if (!apiKey || !token) return res.status(400).json({ erro: 'apiKey e token sao obrigatorios' });

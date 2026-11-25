@@ -7,6 +7,15 @@ import * as tenantConfig from './tenantConfig.js';
 const API_VERSION = 'v20.0';
 const BASE_URL = `https://graph.facebook.com/${API_VERSION}`;
 
+// confere um token no Meta ANTES de guardar: devolve as contas de anuncio que ele enxerga (ou lanca o erro do Meta)
+export async function verificarToken(token) {
+  const url = `${BASE_URL}/me/adaccounts?fields=name,account_id,account_status&limit=100&access_token=${encodeURIComponent(token)}`;
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.error) throw new Error(`O Meta recusou este token: ${data?.error?.message || `erro ${res.status}`}`);
+  return (data.data || []).map((c) => ({ id: `act_${c.account_id}`, nome: c.name, ativa: c.account_status === 1 }));
+}
+
 async function tokenSets(tenantId) {
   return tenantConfig.obterMetaAdsTokens(tenantId);
 }
