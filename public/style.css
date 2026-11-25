@@ -3859,3 +3859,7 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 .ret-imp-previa { margin: 10px 0; overflow-x: auto; }
 .ret-imp-tab { border-collapse: collapse; font-size: 12px; width: 100%; }
 .ret-imp-tab th, .ret-imp-tab td { border: 1px solid var(--border-soft, #3f4247); padding: 4px 8px; text-align: left; }
+.ret-imp-texto { width: 100%; min-height: 130px; margin-top: 8px; background: var(--campo, #2a2c31); border: 1px solid var(--border, #4b4e55); border-radius: 8px; color: var(--text, #ecebe7); font: inherit; font-size: 12px; padding: 8px; resize: vertical; }
+#resModo3 .crm-board-header { flex-wrap: wrap; row-gap: 8px; }
+#resModo3 .crm-board-header > span { flex: 1 1 100%; }
+#resModo3 .crm-board-nav { flex-wrap: wrap; }
