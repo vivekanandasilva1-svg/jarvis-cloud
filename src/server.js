@@ -670,8 +670,15 @@ app.post('/api/admin/tenants/:id/integracoes/metaads/adicionar', exigirSuperAdmi
     if (!String(label || '').trim() || !tokenLimpo) return res.status(400).json({ erro: 'Informe o nome da conta e o token.' });
     const contas = await metaAds.verificarToken(tokenLimpo);
     if (!contas.length) return res.status(400).json({ erro: 'O token é válido, mas não enxerga nenhuma conta de anúncios. Confira se a conta foi atribuída ao usuário do sistema no BM.' });
+    // nao deixa duplicar: se todas as contas deste token ja estao conectadas por outro token, recusa
+    const existentes = await metaAds.contasJaConectadas(Number(req.params.id), { ignorarLabel: label });
+    const repetidas = contas.filter((c) => existentes.has(c.id));
+    if (repetidas.length === contas.length) {
+      const donos = [...new Set(repetidas.map((c) => existentes.get(c.id)))];
+      return res.status(400).json({ erro: `Essas contas já estão conectadas (${repetidas.map((c) => c.nome).join('; ')}), pelo token "${donos.join('", "')}". Não adicionei para não duplicar.` });
+    }
     const r = await tenantConfig.adicionarMetaAdsToken(Number(req.params.id), label, tokenLimpo);
-    res.json({ ok: true, contas, ...r });
+    res.json({ ok: true, contas, jaExistiam: repetidas.map((c) => c.nome), ...r });
   } catch (err) {
     res.status(400).json({ erro: err.message });
   }

@@ -8398,7 +8398,7 @@ async function selecionarCliente(id, nome, username) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
       maAddToken.value = '';
-      maAddMsg.textContent = `✓ ${data.substituiu ? 'Token da conta atualizado' : 'Conta adicionada'}. Este token enxerga: ${data.contas.map((c) => `${c.nome} (${c.id})`).join('; ')}. Agora são ${data.labels.length} conta(s) conectada(s).`;
+      maAddMsg.textContent = `✓ ${data.substituiu ? 'Token da conta atualizado' : 'Conta adicionada'}. Este token enxerga: ${data.contas.map((c) => `${c.nome} (${c.id})`).join('; ')}.${(data.jaExistiam || []).length ? ` Já existiam por outro token (não duplicam): ${data.jaExistiam.join('; ')}.` : ''} Agora são ${data.labels.length} token(s) conectado(s).`;
       metaAdsStatus.textContent = `${data.labels.length} conta(s) conectada(s): ${data.labels.join(', ')}`;
     } catch (err) {
       maAddMsg.textContent = `Não salvei: ${err.message}`;

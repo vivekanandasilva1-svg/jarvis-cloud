@@ -164,6 +164,8 @@ export async function adicionarMetaAdsToken(tenantId, label, token) {
   if (t.length < 20) throw new Error('O token parece incompleto. Cole o token inteiro.');
   const atuais = await obterMetaAdsTokens(tenantId);
   const resto = atuais.filter((x) => String(x.label || '').trim().toLowerCase() !== nome.toLowerCase());
+  const igual = resto.find((x) => x.token === t);
+  if (igual) throw new Error(`Este token já está cadastrado com o nome "${igual.label}". Não adicionei para não duplicar.`);
   await salvarMetaAdsTokens(tenantId, [...resto, { label: nome, token: t }]);
   return { substituiu: resto.length !== atuais.length, labels: [...resto.map((x) => x.label), nome] };
 }

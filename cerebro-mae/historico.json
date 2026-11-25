@@ -1308,5 +1308,13 @@
     "tipo": "melhoria",
     "titulo": "Meta Ads: botão 'Adicionar conta' (não apaga as outras) que confere o token no Meta antes de salvar",
     "conteudo": "Pedido do dono: relatórios da conta de anúncios 'Sorria Rio Macaé 01', de um BM novo. A Lumia só enxergava 'CA - Sorria Rio Macaé' (BM antigo 'Sorria Rio - Macaé') pelo token 'Sorria Rio Macae' (tenant 1); cada BM precisa do próprio token de usuário do sistema (ou compartilhar a conta com o BM antigo). Problema: o campo Meta Ads do painel de cliente SUBSTITUÍA a lista inteira (12 tokens na conta 1) e a lista atual não aparece, então colar só o token novo apagaria as outras contas. Solução: Admin > Clientes > Integrações > Meta Ads ganhou 'Adicionar uma conta (NÃO apaga as outras)': nome + token (campo de senha). POST /api/admin/tenants/:id/integracoes/metaads/adicionar confere o token na Graph API (metaAds.verificarToken -> contas que ele enxerga), recusa token inválido ou sem contas, e só então grava via tenantConfig.adicionarMetaAdsToken (mesmo nome, sem diferenciar maiúsculas, só troca o token daquela conta). A tela mostra quais contas o token enxerga. Depois de adicionada, a conta entra nos relatórios diários do Meta (07h e 18h) e no monitor de saúde, que percorrem todos os tokens do tenant. Atenção: usar nome diferente de 'Sorria Rio Macae' (o do BM antigo) para não trocar aquele token."
+  },
+  {
+    "chave": "metaads:sem-contas-duplicadas",
+    "modulo": "ads",
+    "data": "2026-11-25",
+    "tipo": "correcao",
+    "titulo": "Meta Ads: conta de anúncio não duplica mais (lista, relatórios e ao adicionar token)",
+    "conteudo": "Problema: ao adicionar o token 'Sorria Rio - Macaé', as contas 'Sorri Rio Macaé 01' e 'CA - Sorria Rio Macaé' passaram a aparecer em dobro (o token antigo 'Sorria Rio Macae' já as enxergava - o BM novo era o mesmo BM 'Sorria Rio - Macaé'). Causa: metaads.listAdAccounts juntava as contas de todos os tokens sem tirar repetidas - duplicava a lista de Integrações e podia somar a mesma conta duas vezes nos relatórios automáticos (o monitor metaSaude já deduplicava). Correção: (1) listAdAccounts conta cada conta uma vez só (vale o primeiro token); (2) ao adicionar, o servidor consulta quais contas os tokens atuais já enxergam (metaAds.contasJaConectadas, tolera token vencido) e RECUSA o token se todas as contas dele já estão conectadas, citando por qual token; token com algumas contas novas e outras repetidas é aceito e a tela avisa quais já existiam; (3) o mesmo token sob outro nome também é recusado. Pendente: o token redundante 'Sorria Rio - Macaé' continua guardado (sem efeito) até o dono pedir para remover; o painel não tem botão de remover uma conta só."
   }
 ]
