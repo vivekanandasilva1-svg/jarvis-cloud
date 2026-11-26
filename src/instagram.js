@@ -146,13 +146,38 @@ async function contaPorIgUserId(igUserId) {
 const tokenDa = (conta) => decrypt(conta.token);
 const instanciaDa = (conta) => `ig:${conta.username || conta.ig_user_id}`;
 
+// o link da foto do perfil que o Instagram devolve expira em dias (da 403) - busca o link atual e
+// devolve a foto embutida (data URI), guardada em memoria por 6h
+const cacheFoto = new Map();
+async function fotoAtual(conta) {
+  const c = cacheFoto.get(conta.tenant_id);
+  if (c && Date.now() - c.em < 6 * 3600 * 1000) return c.uri;
+  try {
+    const perfil = await chamarGraph('GET', '/me', { token: tokenDa(conta), params: { fields: 'profile_picture_url' } });
+    if (!perfil.profile_picture_url) throw new Error('sem foto');
+    const res = await fetch(perfil.profile_picture_url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error(`foto ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (!buf.length || buf.length > 500 * 1024) throw new Error('foto invalida');
+    const uri = `data:${res.headers.get('content-type') || 'image/jpeg'};base64,${buf.toString('base64')}`;
+    cacheFoto.set(conta.tenant_id, { uri, em: Date.now() });
+    pool.query('UPDATE instagram_contas SET foto_url = $1 WHERE tenant_id = $2', [perfil.profile_picture_url, conta.tenant_id]).catch(() => {});
+    return uri;
+  } catch (err) {
+    console.error('Instagram: nao consegui atualizar a foto do perfil:', err.message);
+    cacheFoto.set(conta.tenant_id, { uri: null, em: Date.now() - 5.5 * 3600 * 1000 }); // tenta de novo em ~30 min
+    return null;
+  }
+}
+
 export async function status(tenantId) {
   const conta = await obterConta(tenantId);
+  const foto = conta ? await fotoAtual(conta) : null;
   return {
     configurado: configurado(),
     conectado: !!conta,
     conta: conta ? {
-      username: conta.username, nome: conta.nome, fotoUrl: conta.foto_url, tokenExpiraEm: conta.token_expira_em,
+      username: conta.username, nome: conta.nome, fotoUrl: foto, tokenExpiraEm: conta.token_expira_em,
       dmIaAtiva: conta.dm_ia_ativa, conectadoEm: conta.conectado_em, instancia: instanciaDa(conta),
     } : null,
   };

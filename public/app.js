@@ -4993,13 +4993,20 @@ function igRenderizarConta() {
     linha.append(info, btn);
   } else {
     const c = s.conta;
+    // sem foto (ou foto que falhou): bolinha com a inicial, em vez da imagem quebrada
+    const inicial = document.createElement('span');
+    inicial.className = 'ig-foto ig-foto-inicial';
+    inicial.textContent = String(c.nome || c.username || '?').trim().charAt(0).toUpperCase();
     if (c.fotoUrl) {
       const img = document.createElement('img');
       img.className = 'ig-foto';
       img.src = c.fotoUrl;
       img.alt = '';
       img.referrerPolicy = 'no-referrer';
+      img.addEventListener('error', () => img.replaceWith(inicial));
       linha.appendChild(img);
+    } else {
+      linha.appendChild(inicial);
     }
     titulo.textContent = `@${c.username}${c.nome ? ` · ${c.nome}` : ''}`;
     sub.textContent = `Conectado desde ${new Date(c.conectadoEm).toLocaleDateString('pt-BR', { timeZone: 'America/Maceio' })}. O acesso renova sozinho.`;
