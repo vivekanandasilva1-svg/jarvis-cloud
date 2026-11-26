@@ -3391,6 +3391,7 @@ body.lumien-em-conversas .lumien-btn { bottom: 92px; }
 .ig-conta-info h3 { margin: 0 0 2px; }
 .ig-conta-info .rs-sub { margin: 0; line-height: 1.5; }
 .ig-foto { width: 52px; height: 52px; border-radius: 50%; border: 2px solid var(--gold); object-fit: cover; }
+.ig-foto-inicial { display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px; color: var(--gold); background: var(--superficie); flex: none; }
 .ig-abas, .ig-tipos { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--borda); border-radius: 8px; overflow: hidden; align-self: flex-start; }
 .ig-abas button, .ig-tipos button {
   background: var(--superficie);

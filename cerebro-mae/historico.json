@@ -1332,5 +1332,13 @@
     "tipo": "correcao",
     "titulo": "Relatorio Meta Ads: uma mensagem por conta, conexao com problema nao derruba tudo e nada some em silencio",
     "conteudo": "Queixa do dono: o relatorio da conta Sorri Rio Macae 01 nao chegava. Diagnostico em producao (somente leitura): a conta estava ativa, com 3 campanhas e gasto normal, e o bloco dela ESTAVA no texto - o problema era o formato: o relatorio de 8 contas saia como UMA mensagem de WhatsApp de 34 mil caracteres (a conta ficava perdida no meio). Correcoes: (1) relatoriosProgramados.dividirRelatorio manda cada conta numa mensagem propria (limite 6000 caracteres, ordem mantida, pausa de 1,5s); (2) metaads.listAdAccountsDetalhado - um token vencido/revogado nao derruba mais a listagem de todas as contas (devolve {contas, falhas}); (3) o relatorio nao omite mais em silencio: conexao com falha, erro ao ler conta/campanha e conta sem entrega viram aviso no fim do proprio relatorio; (4) aba Integracoes mostra aviso quando alguma conexao falha; (5) verificarToken passou a seguir a paginacao (BM com mais de 100 contas). 17 verificacoes com Meta e WhatsApp simulados. Observacao: os tokens 'Sorria Rio Macae' e 'Sorria Rio - Macae' enxergam as mesmas 2 contas (duplicado, nao removido - decisao do dono). Pendente: conferir no WhatsApp real a proxima entrega (07h)."
+  },
+  {
+    "chave": "instagram:foto-perfil-renovada",
+    "modulo": "instagram",
+    "data": "2026-11-26",
+    "tipo": "correcao",
+    "titulo": "Instagram: foto do perfil aparecia quebrada",
+    "conteudo": "O link da foto que o Instagram devolve expira em dias (403) e o app guardava o da conexão. Agora o status busca a foto atual no Graph, embute como data URI com cache de 6h e atualiza o link guardado; se falhar, a tela mostra uma bolinha com a inicial. Diagnóstico junto: conexão/token/cota de publicação OK em produção, mas nenhuma publicação foi tentada e nenhuma DM/comentário chegou ao webhook desde a conexão — pendente conferir no painel da Meta se a URL do webhook está cadastrada e o app está em modo Live."
   }
 ]
