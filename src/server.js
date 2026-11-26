@@ -17,6 +17,7 @@ import { enviarMensagemTexto } from './evolutionApi.js';
 import * as agenda from './agenda.js';
 import * as googleCalendar from './googleCalendar.js';
 import * as instagram from './instagram.js';
+import * as empresa from './empresa.js';
 import * as whatsappInstances from './whatsappInstances.js';
 import * as autoAtendimento from './autoAtendimento.js';
 import * as autoArquivos from './autoAtendimentoArquivos.js';
@@ -109,6 +110,7 @@ const TAB_ROTA_PREFIXO = {
   geradorRelatorios: '/api/gerador-relatorios',
   integracoes: '/api/integracoes',
   instagram: '/api/instagram',
+  empresa: '/api/empresa',
 };
 
 // endpoint MCP do Cerebro (Claude/ChatGPT/Cursor conectam aqui) - registrado ANTES do auth geral
@@ -3071,6 +3073,9 @@ const rotaIg = (fn) => async (req, res) => {
     res.status(400).json({ erro: err.message });
   }
 };
+
+// "Minha Empresa" (escritorio 3D): quem esta trabalhando agora e os numeros do dia - so leitura
+app.get('/api/empresa/estado', rotaIg(async (req, res) => res.json(await empresa.estado(req.tenantId))));
 
 app.get('/api/instagram/status', rotaIg(async (req, res) => res.json(await instagram.status(req.tenantId))));
 app.post('/api/instagram/desconectar', rotaIg(async (req, res) => { await instagram.desconectar(req.tenantId); res.json({ ok: true }); }));

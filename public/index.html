@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261126a" />
+  <link rel="stylesheet" href="style.css?v=20261126c" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -122,6 +122,11 @@
         <button type="button" class="nav-btn" id="tabBtnAniversariantes" data-tab="aniversariantes">
           <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2c.8 1.2 1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 .7-1.8 1.5-3zM5 11h14a2 2 0 0 1 2 2v2.5c-.9 0-1.5-.5-2-1-.6.7-1.3 1-2 1s-1.4-.3-2-1c-.6.7-1.3 1-2 1s-1.4-.3-2-1c-.6.7-1.3 1-2 1s-1.4-.3-2-1c-.5.5-1.1 1-2 1V13a2 2 0 0 1 2-2zm-2 6.5c1 0 1.7-.4 2.3-1 .6.6 1.3 1 2.2 1s1.6-.4 2.3-1c.6.6 1.3 1 2.2 1s1.6-.4 2.3-1c.6.6 1.3 1 2.2 1s1.3-.4 2.5-1V21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3.5z"/></svg>
           <span>Aniversariantes</span>
+        </button>
+        <div class="nav-grupo">Minha Empresa</div>
+        <button type="button" class="nav-btn" id="tabBtnEmpresa" data-tab="empresa">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 21V9l9-6 9 6v12h-6v-6H9v6H3zm4-9h2v2H7v-2zm8 0h2v2h-2v-2z"/></svg>
+          <span>Escritório</span>
         </button>
         <div class="nav-grupo">Redes sociais</div>
         <button type="button" class="nav-btn" id="tabBtnInstagram" data-tab="instagram">
@@ -621,6 +626,8 @@
         </div>
       </section>
     </div>
+
+    <div class="window-body tab-empresa" id="tabEmpresa" hidden></div>
 
     <div class="window-body tab-instagram" id="tabInstagram" hidden>
       <section class="rs-card ig-conta" id="igConta">
@@ -2314,7 +2321,7 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261126a"></script>
+  <script src="app.js?v=20261126c"></script>
   <script src="copiar-nome.js?v=20261123a"></script>
   <script src="rolagem.js?v=20261123b"></script>
   <script src="retorno.js?v=20261124a"></script>
