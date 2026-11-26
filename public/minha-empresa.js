@@ -26,6 +26,10 @@ let audioCtx = null;
 let ultCriticos = null;
 const histCache = new Map();
 const ativCache = new Map();
+let kyanSel = '';
+let kyanDados = null;
+let kyanSelEl = null;
+let kyanBusca = 0;
 const ativTexto = (id) => ativCache.get(id)?.[0]?.texto || '';
 
 // ---------- utilidades ----------
@@ -475,7 +479,7 @@ function desenharTela(t) {
   g.fillStyle = '#0d1b24'; g.fillRect(0, 0, cv.width, cv.height);
   g.textBaseline = 'middle'; g.textAlign = 'center';
   g.fillStyle = t.cor; g.font = `700 ${Math.round(cv.height * 0.14)}px "Segoe UI", system-ui, sans-serif`;
-  g.fillText(t.titulo, cv.width / 2, cv.height * 0.15);
+  g.fillText(typeof t.titulo === 'function' ? t.titulo() : t.titulo, cv.width / 2, cv.height * 0.15);
   const top = cv.height * 0.3;
   const passo = (cv.height - top - 8) / Math.max(L.length, 1);
   L.forEach(([rot, val, cor], i) => {
@@ -586,6 +590,64 @@ function construirFinanceiro() {
   for (const [x, z] of [[8, 4.4], [6.8, 9.6]]) pendente(C, x0 + x, z0 + z);
 }
 
+const reais2 = (v) => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`;
+const nomeCurto = (n, max = 20) => (String(n).length > max ? `${String(n).slice(0, max - 1)}…` : String(n));
+function kyanLinhas(parte) {
+  if (!kyanSel) return parte === 0 ? linhasDe('kyan', 0, 2) : parte === 1 ? linhasDe('kyan', 2, 3) : linhasDe('kyan', 3, 4);
+  const d = kyanDados;
+  if (!d) return [['Carregando…', '', '#8b8d92']];
+  const crit = d.alertas.some((a) => a.nivel === 'critico');
+  if (parte === 0) return [['Campanhas ativas', d.campanhasAtivas, '#4cc3d9'], ['Alertas abertos', d.alertas.length, crit ? '#ff5252' : '#3ddc84']];
+  if (parte === 1) return [['Hoje', reais2(d.hoje.gasto), '#e0c04a'], ['Últimos 7 dias', reais2(d.d7.gasto), '#e0c04a']];
+  return [['Resultados hoje', d.hoje.resultados, '#3ddc84'], ['Custo por resultado', d.hoje.cpl == null ? '—' : reais2(d.hoje.cpl), '#4cc3d9'], ['Resultados em 7 dias', d.d7.resultados, '#5b8def']];
+}
+const kyanTitulo = (base) => (kyanSel && kyanDados ? `${base} · ${nomeCurto(kyanDados.nome.replace(/ \(\d+ contas?\)$/, ''), 14)}` : base);
+function kyanExtras() {
+  const d = kyanDados;
+  return [
+    ['Cliente / BM', d.nome], ['Gasto hoje', reais2(d.hoje.gasto)], ['Resultados hoje', String(d.hoje.resultados)],
+    ['Custo por resultado', d.hoje.cpl == null ? '—' : reais2(d.hoje.cpl)], ['Gasto em 7 dias', reais2(d.d7.gasto)],
+    ['Resultados em 7 dias', String(d.d7.resultados)], ['CTR (7 dias)', d.d7.ctr == null ? '—' : `${String(d.d7.ctr).replace('.', ',')}%`],
+    ['Campanhas ativas', String(d.campanhasAtivas)], ['Alertas deste cliente', String(d.alertas.length)],
+  ];
+}
+async function carregarKyanContas() {
+  try {
+    const r = await ctx.api('/api/empresa/kyan/contas');
+    if (!r.grupos?.length) { kyanSelEl.hidden = true; return; }
+    kyanSelEl.textContent = '';
+    kyanSelEl.add(new Option('Kyan: visão geral', ''));
+    for (const g of r.grupos) {
+      const og = document.createElement('optgroup');
+      og.label = g.grupo;
+      if (g.contas.length > 1) og.appendChild(new Option(`BM · ${g.grupo} (${g.contas.length} contas)`, `bm:${g.grupo}`));
+      for (const c of g.contas) og.appendChild(new Option(c.nome + (c.ativa ? '' : ' (inativa)'), c.id));
+      kyanSelEl.add(og);
+    }
+    kyanSelEl.value = kyanSel;
+    if (kyanSelEl.value !== kyanSel) { kyanSel = ''; kyanSelEl.value = ''; }
+    kyanSelEl.hidden = false;
+    if (kyanSel) carregarKyanCliente();
+  } catch { kyanSelEl.hidden = true; }
+}
+async function carregarKyanCliente() {
+  if (!kyanSel) { kyanDados = null; desenharTelas(); atualizarPainel(); return; }
+  const eu = ++kyanBusca;
+  try {
+    const d = await ctx.api(`/api/empresa/kyan/cliente?sel=${encodeURIComponent(kyanSel)}`);
+    if (eu !== kyanBusca) return;
+    kyanDados = d;
+  } catch (err) {
+    if (eu !== kyanBusca) return;
+    kyanDados = null;
+    const tit = painelEl?.querySelector('.emp-p-graf small');
+    if (tit && selecionado?.id === 'kyan') tit.textContent = `Não consegui ler esse cliente: ${err.message}`;
+  }
+  desenharTelas();
+  atualizarPainel();
+  if (selecionado?.id === 'kyan') { histCache.delete('kyan'); carregarHistorico(selecionado); carregarAtividade(selecionado); }
+}
+
 const animados = [];
 function construirTrafego() {
   const x0 = 36; const z0 = 0;
@@ -601,9 +663,9 @@ function construirTrafego() {
   bloco(C, x0 + 4.6, 0.01, z0 + 1.8, x0 + 11.4, 0.04, z0 + 6.6, '#bff1fa', { transparent: true, opacity: 0.55 });
   // 3 telas de dados holograficas nos fundos
   const painel = (cx, titulo, linhas, cor) => novaTela(C, { x: x0 + cx, y: 1.95, z: z0 + 0.2, w: 3.9, h: 1.4, titulo, linhas, cor });
-  painel(3.5, 'CAMPANHAS', () => linhasDe('kyan', 0, 2), CIANO);
-  painel(8, 'GASTO HOJE', () => linhasDe('kyan', 2, 3), '#e0c04a');
-  painel(12.5, 'RESULTADOS', () => linhasDe('kyan', 3, 4), '#3ddc84');
+  painel(3.5, () => kyanTitulo('CAMPANHAS'), () => kyanLinhas(0), CIANO);
+  painel(8, () => kyanTitulo('GASTO'), () => kyanLinhas(1), '#e0c04a');
+  painel(12.5, () => kyanTitulo('RESULTADOS'), () => kyanLinhas(2), '#3ddc84');
   // mesa branca com tampo de vidro e 3 monitores
   cadeira(C, x0 + 8, z0 + 3.4, '#dfe7ee');
   mesaTrabalho(C, x0 + 8, z0 + 4.6, 6.0, '#f7fafc', '#cfeff6');
@@ -758,6 +820,7 @@ async function buscarEstado() {
     const crit = Number(estado?.agentes?.kyan?.extras?.[1]?.[1]);
     if (Number.isFinite(crit)) { if (somLigado && ultCriticos !== null && crit > ultCriticos) tocarAlerta(); ultCriticos = crit; }
     atualizarPainel();
+    if (kyanSel) carregarKyanCliente();
     if (selecionado) carregarAtividade(selecionado);
     for (const [id, d] of Object.entries(estado?.agentes || {})) if (d.ativa && id !== selecionado?.id) carregarAtividade({ id });
     desenharTelaComercial();
@@ -807,22 +870,30 @@ const quandoCurto = (iso) => {
   return hoje ? d.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' })
     : d.toLocaleString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 };
+function renderAtividade(a, itens) {
+  if (selecionado !== a || !painelEl) return;
+  const ul = painelEl.querySelector('.emp-p-ativ ul');
+  ul.textContent = '';
+  if (!itens.length) { const li = document.createElement('li'); li.className = 'vazio'; li.textContent = 'Nada registrado ainda.'; ul.appendChild(li); return; }
+  for (const it of itens) {
+    const li = document.createElement('li');
+    if (it.nivel === 'critico') li.className = 'crit';
+    const h = document.createElement('em'); h.textContent = quandoCurto(it.quando);
+    const t = document.createElement('span'); t.textContent = it.texto;
+    li.append(h, t);
+    ul.appendChild(li);
+  }
+}
 async function carregarAtividade(a) {
+  if (a.id === 'kyan' && kyanSel) {
+    const itens = (kyanDados?.alertas || []).map((x) => ({ quando: x.quando, texto: `${x.titulo}${x.conta ? ` · ${x.conta}` : ''}`, nivel: x.nivel }));
+    renderAtividade(a, itens);
+    return;
+  }
   try {
     const { itens } = await ctx.api(`/api/empresa/atividade?agente=${a.id}`);
     ativCache.set(a.id, itens);
-    if (selecionado !== a || !painelEl) return;
-    const ul = painelEl.querySelector('.emp-p-ativ ul');
-    ul.textContent = '';
-    if (!itens.length) { const li = document.createElement('li'); li.className = 'vazio'; li.textContent = 'Nada registrado ainda.'; ul.appendChild(li); return; }
-    for (const it of itens) {
-      const li = document.createElement('li');
-      if (it.nivel === 'critico') li.className = 'crit';
-      const h = document.createElement('em'); h.textContent = quandoCurto(it.quando);
-      const t = document.createElement('span'); t.textContent = it.texto;
-      li.append(h, t);
-      ul.appendChild(li);
-    }
+    renderAtividade(a, itens);
   } catch { /* mantem o que ja estava na tela */ }
 }
 
@@ -847,6 +918,11 @@ async function carregarHistorico(a) {
     }
     if (!h.pontos.length) tit.textContent = `${h.titulo} — sem dados ainda`;
   };
+  if (a.id === 'kyan' && kyanSel) {
+    if (kyanDados) return desenhar({ titulo: `Gasto por dia · ${nomeCurto(kyanDados.nome, 30)} (R$)`, pontos: kyanDados.dias });
+    tit.textContent = 'Carregando dados do cliente…'; barras.textContent = '';
+    return;
+  }
   const c = histCache.get(a.id);
   if (c && Date.now() - c.em < 60000) return desenhar(c.h);
   tit.textContent = 'Carregando histórico…'; barras.textContent = '';
@@ -866,7 +942,9 @@ function atualizarPainel() {
   if (!a) return;
   const d = estado?.agentes?.[a.id];
   const ativa = !!d?.ativa;
-  const alerta = d?.alerta || null;
+  const kyanCliente = a.id === 'kyan' && kyanSel && kyanDados;
+  const nCrit = kyanCliente ? kyanDados.alertas.filter((x) => x.nivel === 'critico').length : 0;
+  const alerta = kyanCliente ? (nCrit ? `${nCrit} alerta(s) crítico(s) deste cliente` : null) : d?.alerta || null;
   painelEl.querySelector('.emp-p-nome').textContent = a.nome;
   painelEl.querySelector('.emp-p-funcao').textContent = a.funcao;
   const st = painelEl.querySelector('.emp-p-status');
@@ -876,7 +954,7 @@ function atualizarPainel() {
   if (alerta) linhas.push(['Alerta', alerta]);
   if (!['lay', 'mya', 'kyan'].includes(a.id)) linhas.push(['Mensagens enviadas hoje', d ? String(d.hoje) : '—']);
   linhas.push([['lay', 'mya'].includes(a.id) ? 'Último lançamento' : 'Última atividade', d ? tempoAtras(d.ultimaEm) : '—']);
-  for (const [k, v] of d?.extras || []) linhas.push([k, v]);
+  for (const [k, v] of (kyanCliente ? kyanExtras() : d?.extras) || []) linhas.push([k, v]);
   if (a.id === 'liz') linhas.push(['Consultas na agenda hoje', estado?.pacientesHoje == null ? 'agenda não conectada' : String(estado.pacientesHoje)]);
   painelEl.querySelector('.emp-p-dados').innerHTML = linhas.map(([k, v]) => `<div><span>${k}</span><strong></strong></div>`).join('');
   painelEl.querySelectorAll('.emp-p-dados strong').forEach((el, i) => { el.textContent = linhas[i][1]; });
@@ -1086,6 +1164,7 @@ function montarInterface() {
   painelEl = raiz.querySelector('.emp-painel');
   chipsEl = raiz.querySelector('.emp-chips');
   try { somLigado = localStorage.getItem('empresaSom') === '1'; } catch { somLigado = false; }
+  try { kyanSel = localStorage.getItem('empresaKyanSel') || ''; } catch { kyanSel = ''; }
   dicaEl = raiz.querySelector('.emp-dica');
   painelEl.querySelector('.emp-p-fechar').addEventListener('click', () => { selecionado = null; atualizarPainel(); });
   const setores = [
@@ -1103,6 +1182,20 @@ function montarInterface() {
     b.addEventListener('click', () => irPara(s.x, s.z, 1));
     chipsEl.appendChild(b);
   }
+  kyanSelEl = document.createElement('select');
+  kyanSelEl.className = 'emp-chip emp-kyan-sel';
+  kyanSelEl.hidden = true;
+  kyanSelEl.title = 'Escolha um cliente ou BM para o Kyan mostrar os dados básicos das campanhas';
+  kyanSelEl.addEventListener('change', () => {
+    kyanSel = kyanSelEl.value;
+    try { localStorage.setItem('empresaKyanSel', kyanSel); } catch { /* sem armazenamento */ }
+    kyanDados = null;
+    desenharTelas();
+    carregarKyanCliente();
+    selecionar('kyan');
+  });
+  chipsEl.appendChild(kyanSelEl);
+  carregarKyanContas();
   const som = document.createElement('button');
   som.type = 'button';
   som.className = 'emp-chip emp-som';

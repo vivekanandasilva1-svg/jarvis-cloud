@@ -1404,5 +1404,13 @@
     "tipo": "melhoria",
     "titulo": "Minha Empresa: Kyan branco/futurista e agentes sincronizados com os dados reais do app",
     "conteudo": "(1) Kyan agora e todo branco com visor, headset e cinto/nucleo de luz ciano (opcao neon do criarPessoa) e a sala Trafego Pago virou branca e futurista (piso claro, linhas de luz ciano no chao, mesa de vidro, globo holografico e anel girando, telas de dados, rack branco); brancos ganham leve emissive pra nao ficarem acinzentados. (2) Painel de cada agente mostra 'Atividade recente' com dados reais via GET /api/empresa/atividade?agente=<id> (primeiro nome do lead/paciente + acao: Bia/Liz = quem a IA respondeu; Lua = follow-ups; Anne = mensagens dos funis; Lorena = parabens enviados; Lay/Mya = ultimos lancamentos do Gestao; Kyan = alertas abertos das campanhas, criticos em vermelho). O balao do agente ativo passa a mostrar a acao real ('Respondeu Julia...') em vez de frase generica. (3) Lua e Anne agora sao separadas de verdade: nova coluna crm_mensagens.agente gravada por followUp.js ('lua') e followUpInteligente.js ('anne'); mensagens antigas sem marca vao pra Anne se o contato esta num funil do Follow Up Inteligente e nao no Follow Up simples, senao pra Lua. O autor 'followup' continua igual (Resultados nao muda). Pendente: Lorena ainda nao conta resgates/disparos; Liz x Bia continua pela etapa ATUAL do contato."
+  },
+  {
+    "chave": "empresa:kyan-seletor-de-cliente",
+    "modulo": "empresa",
+    "data": "2026-11-26",
+    "tipo": "funcao",
+    "titulo": "Minha Empresa: Kyan com seletor de cliente/BM e dados basicos das campanhas",
+    "conteudo": "Pedido do dono: escolher qualquer cliente ou BM e o Kyan mostrar os dados da campanha dele. Select 'Kyan' na barra do escritorio (valor guardado em localStorage 'empresaKyanSel'): 'visao geral' (comportamento anterior) ou, por conexao/BM (rotulo do token), 'BM - todas as contas' e cada conta de anuncio. Endpoints GET /api/empresa/kyan/contas e /api/empresa/kyan/cliente?sel=bm:<grupo>|act_<id> (src/empresa.js: kyanContas, kyanCliente). Dados: gasto/resultados/custo por resultado/CTR de hoje e dos ultimos 7 dias, gasto por dia (7 dias), campanhas ativas e alertas abertos do cliente (meta_saude_alertas filtrado pelas contas escolhidas). As 3 telas da sala, o painel, o grafico e a atividade do Kyan passam a refletir o cliente escolhido. Seguranca/multi-tenant: so aceita ids da lista de contas do PROPRIO tenant (testado: id invalido e id de outro tenant sao recusados). Custo: cache de 10 min por selecao (ate 12 contas, 4 chamadas ao Meta por conta), 1a carga de um BM leva ~2 s. Pendente: comparar dois clientes lado a lado e filtro por periodo."
   }
 ]

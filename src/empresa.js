@@ -302,3 +302,92 @@ export async function atividade(tenantId, agente) {
   }
   return { itens };
 }
+
+// ---------- Kyan: escolher um cliente (conta de anuncio) ou BM e ver os dados basicos da campanha ----------
+// cache que espera a 1a carga (varias chamadas ao Meta) e depois responde na hora, atualizando em segundo plano
+const cacheA = new Map();
+async function obterCache(chave, ttlMs, carregar) {
+  let c = cacheA.get(chave);
+  if (!c) { c = { em: 0, dados: null, erro: null, promessa: null }; cacheA.set(chave, c); }
+  if (Date.now() - c.em > ttlMs && !c.promessa) {
+    c.promessa = carregar()
+      .then((d) => { c.dados = d; c.erro = null; c.em = Date.now(); })
+      .catch((e) => { c.erro = e.message; c.em = Date.now() - ttlMs + 30000; }) // tenta de novo em 30 s
+      .finally(() => { c.promessa = null; });
+  }
+  if (!c.dados && c.promessa) await c.promessa;
+  if (!c.dados && c.erro) throw new Error(c.erro);
+  return c.dados;
+}
+
+async function listaContasMeta(tenantId) {
+  return obterCache(`kyan:contas:${tenantId}`, 10 * 60 * 1000, async () => {
+    const { contas } = await metaAds.listAdAccountsDetalhado(tenantId);
+    return contas.map((c) => ({ id: c.id, nome: c.name, grupo: c.empresa || c.business_name || 'Contas', ativa: c.account_status === 1 }));
+  });
+}
+
+export async function kyanContas(tenantId) {
+  let lista;
+  try { lista = await listaContasMeta(tenantId); } catch (err) { return { grupos: [], aviso: err.message }; }
+  const mapa = new Map();
+  for (const c of lista) { if (!mapa.has(c.grupo)) mapa.set(c.grupo, []); mapa.get(c.grupo).push({ id: c.id, nome: c.nome, ativa: c.ativa }); }
+  return { grupos: [...mapa.entries()].map(([grupo, contas]) => ({ grupo, contas })) };
+}
+
+const somaLinhas = (linhas) => {
+  const t = { gasto: 0, resultados: 0, impressoes: 0, cliques: 0 };
+  for (const l of linhas || []) {
+    t.gasto += Number(l.spend) || 0; t.impressoes += Number(l.impressions) || 0; t.cliques += Number(l.clicks) || 0;
+    t.resultados += metaAds.extractResultsAndCPA(l).resultados || 0;
+  }
+  return t;
+};
+const fechar = (t) => ({
+  gasto: Math.round(t.gasto * 100) / 100, resultados: t.resultados, impressoes: t.impressoes, cliques: t.cliques,
+  cpl: t.resultados > 0 ? Math.round((t.gasto / t.resultados) * 100) / 100 : null,
+  ctr: t.impressoes > 0 ? Math.round((t.cliques / t.impressoes) * 10000) / 100 : null,
+});
+
+export async function kyanCliente(tenantId, sel) {
+  const lista = await listaContasMeta(tenantId); // so as contas DESTE cliente da Lumia: nunca aceita id de fora
+  const selecionadas = String(sel || '').startsWith('bm:')
+    ? lista.filter((c) => c.grupo === String(sel).slice(3))
+    : lista.filter((c) => c.id === sel);
+  if (!selecionadas.length) throw new Error('Cliente ou BM não encontrado.');
+  const alvo = selecionadas.slice(0, 12);
+  const nome = String(sel).startsWith('bm:') ? `${String(sel).slice(3)} (${selecionadas.length} conta${selecionadas.length > 1 ? 's' : ''})` : selecionadas[0].nome;
+  const dias = ultimosDias(7);
+
+  const dados = await obterCache(`kyan:cliente:${tenantId}:${sel}`, 10 * 60 * 1000, async () => {
+    const hoje = { gasto: 0, resultados: 0, impressoes: 0, cliques: 0 };
+    const d7 = { gasto: 0, resultados: 0, impressoes: 0, cliques: 0 };
+    const porDiaGasto = new Map();
+    let campanhasAtivas = 0;
+    const falhas = [];
+    for (const c of alvo) {
+      try {
+        const [h, w, serie, camps] = await Promise.all([
+          metaAds.getInsights(tenantId, { objectId: c.id, datePreset: 'today' }),
+          metaAds.getInsights(tenantId, { objectId: c.id, datePreset: 'last_7d' }),
+          metaAds.getSpendReport(tenantId, { accountId: c.id, since: dias[0], until: dias[6], timeIncrement: '1' }),
+          metaAds.listCampaigns(tenantId, { accountId: c.id }),
+        ]);
+        for (const [alvoSoma, linhas] of [[hoje, h], [d7, w]]) { const t = somaLinhas(linhas); for (const k of Object.keys(alvoSoma)) alvoSoma[k] += t[k]; }
+        for (const r of serie) for (const pt of r.porPeriodo || []) porDiaGasto.set(pt.inicio, (porDiaGasto.get(pt.inicio) || 0) + pt.gasto);
+        campanhasAtivas += (camps || []).filter((x) => x.effective_status === 'ACTIVE').length;
+      } catch (err) { falhas.push(`${c.nome}: ${err.message}`); }
+    }
+    return {
+      hoje: fechar(hoje), d7: fechar(d7), campanhasAtivas, falhas,
+      dias: dias.map((d) => ({ rotulo: rotuloDia(d), valor: Math.round((porDiaGasto.get(d) || 0) * 100) / 100 })),
+      atualizadoEm: new Date().toISOString(),
+    };
+  });
+
+  const ids = new Set(alvo.map((c) => String(c.id).replace('act_', '')));
+  const abertos = (await ler('alertas Meta (cliente)', () => metaSaude.listarAbertos(tenantId))) || [];
+  const alertas = abertos.filter((a) => ids.has(String(a.conta_id).replace('act_', '')))
+    .map((a) => ({ titulo: a.titulo, conta: a.conta_nome, nivel: a.nivel, quando: a.atualizado_em }));
+  return { sel, nome, contas: alvo.length, ...dados, alertas };
+}

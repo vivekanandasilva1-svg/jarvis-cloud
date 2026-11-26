@@ -4120,3 +4120,6 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 .tab-empresa .emp-p-ativ li em { font-style: normal; color: var(--silver-dim); flex: none; min-width: 46px; }
 .tab-empresa .emp-p-ativ li.crit span { color: #ff6b6b; }
 .tab-empresa .emp-p-ativ li.vazio { color: var(--silver-dim); }
+.tab-empresa .emp-kyan-sel { flex: none; max-width: 250px; cursor: pointer; border-color: #4cc3d9; color: #bff1fa; }
+.tab-empresa .emp-kyan-sel option, .tab-empresa .emp-kyan-sel optgroup { background: #1b1d22; color: #f0ede4; }
+.tab-empresa .emp-painel { max-height: calc(100% - 70px); overflow-y: auto; }
