@@ -1340,5 +1340,13 @@
     "tipo": "correcao",
     "titulo": "Instagram: foto do perfil aparecia quebrada",
     "conteudo": "O link da foto que o Instagram devolve expira em dias (403) e o app guardava o da conexão. Agora o status busca a foto atual no Graph, embute como data URI com cache de 6h e atualiza o link guardado; se falhar, a tela mostra uma bolinha com a inicial. Diagnóstico junto: conexão/token/cota de publicação OK em produção, mas nenhuma publicação foi tentada e nenhuma DM/comentário chegou ao webhook desde a conexão — pendente conferir no painel da Meta se a URL do webhook está cadastrada e o app está em modo Live."
+  },
+  {
+    "chave": "crm:resultados-painel-gamificado",
+    "modulo": "crm",
+    "data": "2026-11-26",
+    "tipo": "melhoria",
+    "titulo": "Resultados virou painel gamificado e interativo (etapa 1)",
+    "conteudo": "Pedido do dono: aba Resultados no mesmo padrao do app de gestao geral (graficos, gamificacao, interatividade) e com visao completa da clinica. Etapa 1 (so dados que ja existiam, GET /api/crm/resultados so ganhou campos novos): sub-abas Visao geral/Atendimento/Funil/Conquistas; nota de saude 0-100 (velocidade 35, ninguem esquecido 25, automacao 15, conversao 25, renormalizada se faltar dado) com nivel bronze-diamante; sequencia de dias com 80%+ respondidos em 5 min; medidor da 1a resposta; KPIs com mini-grafico e clique; mapa de calor dia x hora; rosca de quem respondeu; faixas de tempo de resposta; lista de conversas esperando agora (abre a conversa); funil clicavel (leva a Contatos filtrado); 8 conquistas com confete so quando surge uma nova. Continua so para o acesso principal (CRM). PENDENTE etapa 2: agenda/comparecimento, recuperacao (follow-up inteligente, resgate, retorno, indicacoes, orcamentos em aberto em R$), origem dos leads, Meta Ads/Instagram, metas mensais."
   }
 ]

@@ -725,36 +725,98 @@
         <select id="rsInstancia" hidden aria-label="Número de WhatsApp"></select>
       </div>
       <p class="crm-conversa-erro" id="rsErro" hidden></p>
+      <div class="rs-subabas" id="rsSubabas" role="tablist">
+        <button type="button" data-sub="geral" class="ativo">Visão geral</button>
+        <button type="button" data-sub="atendimento">Atendimento</button>
+        <button type="button" data-sub="funil">Funil</button>
+        <button type="button" data-sub="conquistas">Conquistas</button>
+      </div>
       <div class="rs-resumo" id="rsResumo">Carregando...</div>
-      <div class="rs-kpis" id="rsKpis"></div>
-      <section class="rs-card">
-        <div class="rs-card-topo">
-          <div>
-            <h3>Mensagens recebidas por dia</h3>
-            <p class="rs-sub">Passe o mouse em cada dia para ver enviadas e novos contatos</p>
-          </div>
-          <button type="button" id="rsTabelaBtn" class="ct-link">Ver em tabela</button>
+
+      <div class="rs-painel" data-sub="geral">
+        <div class="rs-hero">
+          <section class="rs-card rs-inclina rs-score">
+            <div class="rs-cab">Saúde do atendimento</div>
+            <div class="rs-score-corpo">
+              <div class="rs-anel" id="rsScoreAnel"></div>
+              <div class="rs-score-lado">
+                <div class="rs-nivel" id="rsNivel"></div>
+                <p class="rs-sub" id="rsNivelDica"></p>
+              </div>
+            </div>
+            <div class="rs-score-lista" id="rsScoreLista"></div>
+          </section>
+          <section class="rs-card rs-inclina rs-seq">
+            <div class="rs-cab">Sequência</div>
+            <div id="rsSeq"></div>
+          </section>
+          <section class="rs-card rs-inclina rs-medidor-card">
+            <div class="rs-cab">Velocidade da 1ª resposta</div>
+            <div id="rsMedidor"></div>
+          </section>
         </div>
-        <div class="rs-grafico" id="rsGraficoDias"></div>
-        <div class="ct-tabela-wrap ct-previa rs-tabela" id="rsTabelaDias" hidden></div>
-      </section>
-      <div class="rs-duas">
+        <div class="rs-kpis" id="rsKpis"></div>
+        <section class="rs-card">
+          <div class="rs-card-topo">
+            <div>
+              <h3>Mensagens recebidas por dia</h3>
+              <p class="rs-sub">Passe o mouse em cada dia para ver enviadas e novos contatos</p>
+            </div>
+            <button type="button" id="rsTabelaBtn" class="ct-link">Ver em tabela</button>
+          </div>
+          <div class="rs-grafico" id="rsGraficoDias"></div>
+          <div class="ct-tabela-wrap ct-previa rs-tabela" id="rsTabelaDias" hidden></div>
+        </section>
+      </div>
+
+      <div class="rs-painel" data-sub="atendimento" hidden>
+        <div class="rs-duas">
+          <section class="rs-card">
+            <h3>Quando seus pacientes chamam</h3>
+            <p class="rs-sub">Mapa de calor: dia da semana × hora (mensagens recebidas)</p>
+            <div id="rsCalor"></div>
+            <p class="rs-dica" id="rsCalorDica"></p>
+          </section>
+          <section class="rs-card">
+            <h3>Quem respondeu</h3>
+            <p class="rs-sub">Mensagens enviadas no período</p>
+            <div id="rsAutores"></div>
+          </section>
+        </div>
+        <div class="rs-duas">
+          <section class="rs-card">
+            <h3>Em quanto tempo você responde</h3>
+            <p class="rs-sub">Contatos que começaram a conversa, por faixa de tempo até a 1ª resposta</p>
+            <div class="rs-barras" id="rsFaixas"></div>
+          </section>
+          <section class="rs-card rs-aguardando-card">
+            <h3>Esperando resposta agora</h3>
+            <p class="rs-sub" id="rsAguardandoSub"></p>
+            <div id="rsAguardando"></div>
+          </section>
+        </div>
         <section class="rs-card">
           <h3>Horários de pico</h3>
           <p class="rs-sub">Mensagens recebidas por hora do dia</p>
           <div class="rs-grafico" id="rsGraficoHoras"></div>
         </section>
+      </div>
+
+      <div class="rs-painel" data-sub="funil" hidden>
         <section class="rs-card">
-          <h3>Quem respondeu</h3>
-          <p class="rs-sub">Mensagens enviadas no período</p>
-          <div class="rs-barras" id="rsAutores"></div>
+          <h3>Funil dos contatos que chegaram no período</h3>
+          <p class="rs-sub">Etapa em que cada um está hoje. Clique numa etapa para ver os contatos.</p>
+          <div class="rs-funil" id="rsFunil"></div>
         </section>
       </div>
-      <section class="rs-card">
-        <h3>Funil dos contatos que chegaram no período</h3>
-        <p class="rs-sub">Etapa em que cada um está hoje</p>
-        <div class="rs-barras" id="rsFunil"></div>
-      </section>
+
+      <div class="rs-painel" data-sub="conquistas" hidden>
+        <section class="rs-card">
+          <h3>Conquistas do atendimento</h3>
+          <p class="rs-sub" id="rsMedalhasSub"></p>
+          <div class="rs-medalhas" id="rsMedalhas"></div>
+        </section>
+      </div>
       <div class="rs-tooltip" id="rsTooltip" hidden></div>
     </div>
 

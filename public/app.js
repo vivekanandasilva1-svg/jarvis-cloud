@@ -3684,6 +3684,7 @@ const CT_CAMPOS_IMPORTACAO = [
 
 let ctContatos = [];
 let ctEtapas = [];
+let ctEtapaPendente = null; // etapa pedida pela aba Resultados antes dos contatos carregarem
 let ctInstancias = [];
 let ctLimite = CT_POR_PAGINA;
 let ctEditando = null;
@@ -3723,7 +3724,8 @@ async function carregarContatos() {
     ctEtapa.textContent = '';
     ctEtapa.appendChild(new Option('Todas as etapas', ''));
     for (const e of ctEtapas) ctEtapa.appendChild(new Option(e.nome, e.id));
-    ctEtapa.value = etapaAtual;
+    ctEtapa.value = ctEtapaPendente || etapaAtual;
+    ctEtapaPendente = null;
 
     const etiquetas = new Map();
     for (const c of ctContatos) for (const t of c.etiquetas || []) if (!etiquetas.has(t.toLowerCase())) etiquetas.set(t.toLowerCase(), t);
@@ -4364,6 +4366,420 @@ function rsVariacao(atual, anterior, menorMelhor = false) {
   return { texto: `${subiu ? '▲' : '▼'} ${Math.abs(pct)}% vs período anterior`, classe: bom ? 'bom' : 'ruim' };
 }
 
+// ---------- painel gamificado: helpers visuais ----------
+const RS_NS = 'http://www.w3.org/2000/svg';
+function rsSvg(tag, attrs = {}, pai = null) {
+  const n = document.createElementNS(RS_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (pai) pai.appendChild(n);
+  return n;
+}
+function rsEl(tag, classe, texto) {
+  const n = document.createElement(tag);
+  if (classe) n.className = classe;
+  if (texto != null) n.textContent = texto;
+  return n;
+}
+function rsDicaMostrar(alvo, linhas) {
+  rsTooltip.textContent = '';
+  linhas.forEach((l, j) => rsTooltip.appendChild(rsEl('div', j === 0 ? 'rs-tooltip-titulo' : '', l)));
+  rsTooltip.hidden = false;
+  const c = alvo.getBoundingClientRect();
+  const tw = rsTooltip.offsetWidth;
+  rsTooltip.style.left = `${Math.min(Math.max(8, c.left + c.width / 2 - tw / 2), window.innerWidth - tw - 8)}px`;
+  rsTooltip.style.top = `${Math.max(8, c.top - rsTooltip.offsetHeight - 8)}px`;
+}
+function rsDicaLigar(alvo, linhas) {
+  alvo.addEventListener('mouseenter', () => rsDicaMostrar(alvo, linhas));
+  alvo.addEventListener('mouseleave', () => { rsTooltip.hidden = true; });
+}
+function rsContar(el, final, formatar = rsNum) {
+  const t0 = performance.now();
+  const passo = (agora) => {
+    const p = Math.min(1, (agora - t0) / 800);
+    el.textContent = formatar(Math.round(final * (1 - (1 - p) ** 3)));
+    if (p < 1) requestAnimationFrame(passo);
+  };
+  requestAnimationFrame(passo);
+}
+function rsConfete(origem) {
+  const c = origem.getBoundingClientRect();
+  const cores = ['#f0cf6b', '#d4af37', '#3fd68a', '#3ec5e0', '#f5f5f2'];
+  for (let i = 0; i < 46; i++) {
+    const p = rsEl('div', 'rs-confete');
+    p.style.left = `${c.left + c.width / 2}px`;
+    p.style.top = `${c.top + 20}px`;
+    p.style.background = cores[i % cores.length];
+    p.style.setProperty('--dx', `${(Math.random() - 0.5) * 520}px`);
+    p.style.setProperty('--dy', `${-120 - Math.random() * 160}px`);
+    p.style.setProperty('--rot', `${Math.random() * 720}deg`);
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 1500);
+  }
+}
+const rsClasseTempo = (seg) => (seg == null ? '' : seg <= 60 ? 'f-alto' : seg <= 300 ? 'f-medio' : seg <= 1800 ? 'f-baixo' : 'f-abaixo');
+const rsClassePct = (p) => (p >= 80 ? 'f-alto' : p >= 55 ? 'f-medio' : p >= 30 ? 'f-baixo' : 'f-abaixo');
+const RS_CONVERTIDOS = new Set(['agendado', 'compareceu', 'comprou']);
+
+// ---------- nota de saude do atendimento (0-100), cada parte explicada ----------
+function rsCalcularScore(d, pct5) {
+  const a = d.atual;
+  const totalFunil = d.funil.reduce((s, f) => s + f.total, 0);
+  const conv = d.funil.filter((f) => RS_CONVERTIDOS.has(f.id)).reduce((s, f) => s + f.total, 0);
+  const partes = [];
+  if (a.contatos_iniciados) {
+    partes.push({ nome: 'Velocidade', peso: 35, valor: pct5, dica: `${pct5}% dos contatos respondidos em até 5 min` });
+    const cob = Math.round((a.respondidos / a.contatos_iniciados) * 100);
+    partes.push({ nome: 'Ninguém esquecido', peso: 25, valor: cob, dica: `${rsNum(a.respondidos)} de ${rsNum(a.contatos_iniciados)} contatos receberam resposta` });
+  }
+  if (a.enviadas) {
+    const auto = Math.round(((a.enviadas_ia + a.enviadas_followup) / a.enviadas) * 100);
+    partes.push({ nome: 'Automação', peso: 15, valor: auto, dica: `${auto}% das mensagens enviadas pela IA e pelo follow-up` });
+  }
+  if (totalFunil) {
+    const taxa = Math.round((conv / totalFunil) * 100);
+    partes.push({ nome: 'Conversão', peso: 25, valor: Math.min(100, Math.round((taxa / 30) * 100)), dica: `${taxa}% dos contatos viraram agendamento ou mais (meta: 30%)` });
+  }
+  if (!partes.length) return null;
+  const peso = partes.reduce((s, p) => s + p.peso, 0);
+  const score = Math.round(partes.reduce((s, p) => s + p.valor * p.peso, 0) / peso);
+  const nivel = score >= 85 ? { id: 'diamante', nome: 'Diamante', prox: null } : score >= 65 ? { id: 'ouro', nome: 'Ouro', prox: 85, proxNome: 'Diamante' }
+    : score >= 40 ? { id: 'prata', nome: 'Prata', prox: 65, proxNome: 'Ouro' } : { id: 'bronze', nome: 'Bronze', prox: 40, proxNome: 'Prata' };
+  return { score, partes, nivel };
+}
+
+function rsDesenharScore(d, pct5) {
+  const s = rsCalcularScore(d, pct5);
+  const anel = document.getElementById('rsScoreAnel');
+  const lista = document.getElementById('rsScoreLista');
+  const nivelEl = document.getElementById('rsNivel');
+  const dica = document.getElementById('rsNivelDica');
+  anel.textContent = '';
+  lista.textContent = '';
+  const r = 56;
+  const circ = 2 * Math.PI * r;
+  const svg = rsSvg('svg', { width: 132, height: 132, viewBox: '0 0 132 132' }, anel);
+  rsSvg('circle', { cx: 66, cy: 66, r, fill: 'none', 'stroke-width': 10, class: 'rs-anel-trilho' }, svg);
+  const val = rsSvg('circle', { cx: 66, cy: 66, r, fill: 'none', 'stroke-width': 10, 'stroke-linecap': 'round', class: 'rs-anel-valor', transform: 'rotate(-90 66 66)', 'stroke-dasharray': circ, 'stroke-dashoffset': circ }, svg);
+  const meio = rsEl('div', 'rs-anel-meio');
+  const num = rsEl('strong', '', s ? '0' : '—');
+  meio.append(num, rsEl('small', '', 'de 100'));
+  anel.appendChild(meio);
+  if (!s) {
+    nivelEl.className = 'rs-nivel';
+    nivelEl.textContent = 'Sem dados ainda';
+    dica.textContent = 'Quando chegarem conversas no período, a nota aparece aqui.';
+    return;
+  }
+  requestAnimationFrame(() => requestAnimationFrame(() => val.setAttribute('stroke-dashoffset', circ * (1 - s.score / 100))));
+  rsContar(num, s.score, String);
+  nivelEl.className = `rs-nivel n-${s.nivel.id}`;
+  nivelEl.textContent = '';
+  nivelEl.append(rsEl('span', 'rs-gema'), document.createTextNode(` ${s.nivel.nome}`));
+  dica.textContent = s.nivel.prox ? `Faltam ${s.nivel.prox - s.score} pontos para ${s.nivel.proxNome}.` : 'Nível máximo! Atendimento de elite.';
+  for (const p of s.partes) {
+    const linha = rsEl('div', 'rs-score-item');
+    const trilho = rsEl('div', 'rs-mini-trilho');
+    const barra = rsEl('div', rsClassePct(p.valor));
+    trilho.appendChild(barra);
+    linha.append(rsEl('span', 'nome', p.nome), trilho, rsEl('strong', '', `${p.valor}%`));
+    rsDicaLigar(linha, [p.nome, p.dica, `Vale ${p.peso} pontos na nota`]);
+    lista.appendChild(linha);
+    requestAnimationFrame(() => requestAnimationFrame(() => { barra.style.width = `${p.valor}%`; }));
+  }
+}
+
+// ---------- sequencia: dias seguidos com 80%+ respondidos em ate 5 min ----------
+function rsCalcularSequencia(d) {
+  const hoje = rsHojeMaceio();
+  const dias = d.porDia.map((x) => {
+    if (!x.iniciados) return { dia: x.dia, estado: 'vazio' };
+    return { dia: x.dia, estado: x.em_5min / x.iniciados >= 0.8 ? 'bom' : 'ruim' };
+  });
+  let seq = 0;
+  for (let i = dias.length - 1; i >= 0; i--) {
+    if (dias[i].estado === 'vazio') continue;
+    if (dias[i].estado === 'ruim' && dias[i].dia === hoje) continue; // hoje ainda esta em andamento
+    if (dias[i].estado === 'bom') seq++;
+    else break;
+  }
+  return { seq, dias: dias.slice(-14) };
+}
+
+function rsDesenharSequencia(d) {
+  const { seq, dias } = rsCalcularSequencia(d);
+  const box = document.getElementById('rsSeq');
+  box.textContent = '';
+  const chama = rsEl('div', `rs-chama${seq ? ' acesa' : ''}`);
+  const svg = rsSvg('svg', { width: 54, height: 66, viewBox: '0 0 54 66' }, chama);
+  rsSvg('path', { class: 'rs-chama-fora', d: 'M27 2c3 12 18 20 18 38a18 18 0 0 1-36 0c0-8 4-13 8-17 1 5 3 8 6 9-2-12 0-22 4-30z' }, svg);
+  rsSvg('path', { class: 'rs-chama-dentro', d: 'M27 30c2 7 10 11 10 21a10 10 0 0 1-20 0c0-6 3-9 6-12 1 3 2 4 4 4-1-6-1-9 0-13z' }, svg);
+  const grade = rsEl('div', 'rs-seq-dias');
+  for (const x of dias) {
+    const q = rsEl('span', x.estado);
+    rsDicaLigar(q, [rsDataCurta(x.dia), x.estado === 'bom' ? 'Meta batida (80%+ em até 5 min)' : x.estado === 'ruim' ? 'Abaixo da meta' : 'Sem contatos novos']);
+    grade.appendChild(q);
+  }
+  const num = rsEl('div', 'rs-seq-num', '0');
+  box.append(chama, num, rsEl('p', 'rs-sub', seq ? (seq === 1 ? 'dia seguido na meta' : 'dias seguidos na meta') : 'Responda 80% dos contatos em até 5 min para acender a chama'), grade);
+  rsContar(num, seq, String);
+  return seq;
+}
+
+// ---------- medidor da velocidade de 1a resposta ----------
+function rsDesenharMedidor(d) {
+  const box = document.getElementById('rsMedidor');
+  box.textContent = '';
+  const seg = d.atual.mediana_seg;
+  const wrap = rsEl('div', 'rs-medidor');
+  const svg = rsSvg('svg', { viewBox: '0 0 200 122' }, wrap);
+  const cx = 100, cy = 100, R = 80;
+  const classes = ['f-alto', 'f-medio', 'f-baixo', 'f-abaixo'];
+  const ponto = (graus) => [cx + R * Math.cos((graus * Math.PI) / 180), cy + R * Math.sin((graus * Math.PI) / 180)];
+  classes.forEach((c, i) => {
+    const a0 = 180 + i * 45 + 1.5, a1 = 180 + (i + 1) * 45 - 1.5;
+    const [x0, y0] = ponto(a0), [x1, y1] = ponto(a1);
+    rsSvg('path', { class: `rs-arco ${c}`, d: `M${x0},${y0} A${R},${R} 0 0 1 ${x1},${y1}` }, svg);
+  });
+  const limites = [0, 60, 300, 1800, 7200];
+  [['1 min', 1], ['5 min', 2], ['30 min', 3]].forEach(([t, i]) => {
+    const ang = ((180 + i * 45) * Math.PI) / 180;
+    const [x, y] = [cx + (R + 17) * Math.cos(ang), cy + (R + 17) * Math.sin(ang)];
+    const tx = rsSvg('text', { x, y: y + 3, 'text-anchor': i === 1 ? 'end' : i === 3 ? 'start' : 'middle', class: 'rs-eixo-txt' }, svg);
+    tx.textContent = t;
+  });
+  const g = rsSvg('g', { class: 'rs-ponteiro' }, svg);
+  rsSvg('line', { x1: 100, y1: 100, x2: 100, y2: 32 }, g);
+  rsSvg('circle', { cx: 100, cy: 100, r: 6 }, g);
+  g.style.transform = 'rotate(-90deg)';
+  let t = 0;
+  if (seg != null) {
+    let i = limites.findIndex((b, k) => k > 0 && seg <= b);
+    if (i < 0) i = 4;
+    i = Math.max(1, i);
+    t = i >= 4 && seg > limites[4] ? 1 : (i - 1 + (seg - limites[i - 1]) / (limites[i] - limites[i - 1])) / 4;
+  }
+  requestAnimationFrame(() => requestAnimationFrame(() => { g.style.transform = `rotate(${-90 + 180 * (seg == null ? 0 : t)}deg)`; }));
+  const valor = rsEl('div', `rs-medidor-valor ${rsClasseTempo(seg)}`, rsFormatarTempo(seg));
+  const leg = rsEl('div', 'rs-medidor-leg', seg == null ? 'Sem conversas iniciadas no período' : seg <= 60 ? 'Resposta relâmpago' : seg <= 300 ? 'Rápido' : seg <= 1800 ? 'Dá para melhorar' : 'Pacientes esperando demais');
+  wrap.append(valor, leg);
+  box.appendChild(wrap);
+}
+
+// ---------- KPIs com mini grafico, comparacao e clique que leva ao detalhe ----------
+function rsSpark(valores) {
+  const svg = rsSvg('svg', { class: 'rs-spark', viewBox: '0 0 100 34', preserveAspectRatio: 'none' });
+  if (valores.length < 2 || !valores.some((v) => v > 0)) return null;
+  const max = Math.max(...valores, 1);
+  const pts = valores.map((v, i) => [(i / (valores.length - 1)) * 100, 31 - (v / max) * 28]);
+  const linha = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  rsSvg('path', { class: 'area', d: `${linha} L100,34 L0,34 Z` }, svg);
+  rsSvg('path', { class: 'linha', d: linha, 'vector-effect': 'non-scaling-stroke' }, svg);
+  return svg;
+}
+
+function rsDesenharKpis(d, tiles) {
+  rsKpis.textContent = '';
+  tiles.forEach((t, i) => {
+    const el = rsEl('div', `rs-kpi ${t.classe || ''}`);
+    el.style.setProperty('--i', i);
+    el.tabIndex = 0;
+    const val = rsEl('strong', 'rs-kpi-valor', t.valor);
+    el.append(rsEl('span', 'rs-kpi-rotulo', t.rotulo), val, rsEl('span', 'rs-kpi-sub', t.sub));
+    if (t.variacao) el.appendChild(rsEl('span', `rs-kpi-var ${t.variacao.classe}`, t.variacao.texto));
+    if (t.serie) { const sp = rsSpark(t.serie); if (sp) el.appendChild(sp); }
+    if (t.num != null && t.num > 0) rsContar(val, t.num, t.formatar || rsNum);
+    const ir = () => rsIrSub(t.sub_aba || 'atendimento');
+    el.addEventListener('click', ir);
+    el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') ir(); });
+    rsKpis.appendChild(el);
+  });
+}
+
+// ---------- mapa de calor ----------
+function rsDesenharCalor(d) {
+  const box = document.getElementById('rsCalor');
+  box.textContent = '';
+  const max = Math.max(1, ...d.calor.flat());
+  const grade = rsEl('div', 'rs-calor');
+  grade.appendChild(rsEl('span'));
+  for (let h = 0; h < 24; h++) grade.appendChild(rsEl('span', 'rs-calor-h', h % 3 === 0 ? `${h}h` : ''));
+  const nomes = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  let melhor = { v: 0, dow: 0, h: 0 };
+  [1, 2, 3, 4, 5, 6, 0].forEach((dow) => {
+    grade.appendChild(rsEl('span', 'rs-calor-d', nomes[dow]));
+    for (let h = 0; h < 24; h++) {
+      const v = d.calor[dow][h];
+      if (v > melhor.v) melhor = { v, dow, h };
+      const c = rsEl('div', 'rs-calor-c');
+      if (v) { const i = rsEl('i'); i.style.setProperty('--o', (0.14 + 0.86 * (v / max)).toFixed(2)); c.appendChild(i); }
+      rsDicaLigar(c, [`${nomes[dow]}, ${h}h às ${(h + 1) % 24}h`, `${rsNum(v)} ${v === 1 ? 'mensagem recebida' : 'mensagens recebidas'}`]);
+      grade.appendChild(c);
+    }
+  });
+  box.appendChild(grade);
+  const dicaEl = document.getElementById('rsCalorDica');
+  const nomesLongos = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+  dicaEl.textContent = melhor.v ? `Pico: ${nomesLongos[melhor.dow]} das ${melhor.h}h às ${(melhor.h + 1) % 24}h (${rsNum(melhor.v)} mensagens). Deixe a equipe e a IA afiadas nessa janela.` : 'Sem mensagens recebidas no período.';
+}
+
+// ---------- rosca: quem respondeu ----------
+function rsDesenharRosca(d) {
+  const box = document.getElementById('rsAutores');
+  box.textContent = '';
+  const a = d.atual;
+  const sem = Math.max(0, a.enviadas - a.enviadas_ia - a.enviadas_followup - a.enviadas_humano);
+  const itens = [
+    { nome: 'IA (auto atendimento)', total: a.enviadas_ia, cor: '#f0cf6b' },
+    { nome: 'Follow Up automático', total: a.enviadas_followup, cor: '#3ec5e0' },
+    { nome: 'Equipe', total: a.enviadas_humano, cor: '#3fd68a' },
+    { nome: 'Sem registro de autor', total: sem, cor: '#6b6e75' },
+  ].filter((x) => x.total > 0);
+  if (!a.enviadas) { box.appendChild(rsEl('p', 'rs-vazio', 'Nenhuma mensagem enviada no período.')); return; }
+  const corpo = rsEl('div', 'rs-rosca-corpo');
+  const wrap = rsEl('div', 'rs-rosca');
+  const svg = rsSvg('svg', { viewBox: '0 0 150 150' }, wrap);
+  const r = 50, circ = 2 * Math.PI * r;
+  let acum = 0;
+  for (const it of itens) {
+    const len = (it.total / a.enviadas) * circ;
+    const c = rsSvg('circle', { class: 'seg', cx: 75, cy: 75, r, stroke: it.cor, transform: 'rotate(-90 75 75)', 'stroke-dasharray': `0 ${circ}`, 'stroke-dashoffset': -acum }, svg);
+    requestAnimationFrame(() => requestAnimationFrame(() => { c.style.transition = 'stroke-dasharray 1.1s cubic-bezier(0.2,0.8,0.2,1), stroke-width 0.2s'; c.setAttribute('stroke-dasharray', `${Math.max(0, len - 2)} ${circ}`); }));
+    rsDicaLigar(c, [it.nome, `${rsNum(it.total)} mensagens · ${Math.round((it.total / a.enviadas) * 100)}%`]);
+    acum += len;
+  }
+  const tx = rsSvg('text', { x: 75, y: 82, 'text-anchor': 'middle', class: 'rs-rosca-centro' }, svg);
+  tx.textContent = rsNum(a.enviadas);
+  const leg = rsEl('div', 'rs-rosca-leg');
+  for (const it of itens) {
+    const l = rsEl('div');
+    const q = rsEl('i'); q.style.background = it.cor;
+    l.append(q, rsEl('span', '', it.nome), rsEl('b', '', `${rsNum(it.total)} · ${Math.round((it.total / a.enviadas) * 100)}%`));
+    leg.appendChild(l);
+  }
+  corpo.append(wrap, leg);
+  box.appendChild(corpo);
+}
+
+// ---------- conversas esperando resposta agora ----------
+function rsDesenharAguardando(d) {
+  const box = document.getElementById('rsAguardando');
+  const sub = document.getElementById('rsAguardandoSub');
+  box.textContent = '';
+  const ag = d.aguardando || { total: 0, lista: [] };
+  if (!ag.total) {
+    sub.textContent = 'Últimos 30 dias';
+    box.appendChild(rsEl('div', 'rs-ag-ok', 'Tudo respondido! Nenhum paciente esperando.'));
+    return;
+  }
+  sub.textContent = `${rsNum(ag.total)} ${ag.total === 1 ? 'conversa aguardando' : 'conversas aguardando'} (últimos 30 dias) · as mais antigas primeiro`;
+  const lista = rsEl('div', 'rs-aguardando-lista');
+  for (const c of ag.lista) {
+    const b = rsEl('button', 'rs-ag-item');
+    b.type = 'button';
+    const min = c.esperando_min || 0;
+    const tempo = rsEl('span', `rs-ag-tempo ${min <= 5 ? 'f-alto' : min <= 60 ? 'f-baixo' : 'f-abaixo'}`, rsFormatarTempo(min * 60));
+    b.append(rsEl('span', 'rs-ag-nome', c.nome || c.numero), tempo);
+    b.addEventListener('click', () => { mudarAba('conversas'); try { abrirConversa({ ...c }); } catch { /* abre so a aba */ } });
+    lista.appendChild(b);
+  }
+  box.appendChild(lista);
+}
+
+// ---------- funil clicavel ----------
+function rsDesenharFunil(d) {
+  const box = document.getElementById('rsFunil');
+  box.textContent = '';
+  const total = d.funil.reduce((s, f) => s + f.total, 0);
+  if (!total) { box.appendChild(rsEl('p', 'rs-vazio', 'Nenhum contato novo com conversa no período.')); return; }
+  const maior = Math.max(...d.funil.map((f) => f.total), 1);
+  let i = 0;
+  for (const f of d.funil.filter((x) => x.total > 0)) {
+    const et = rsEl('div', 'rs-funil-etapa');
+    const classe = RS_CONVERTIDOS.has(f.id) ? 'f-alto' : ['nao_compareceu', 'nao_comprou', 'perdido'].includes(f.id) ? 'f-abaixo' : '';
+    const b = rsEl('button', `rs-funil-barra ${classe}`);
+    b.type = 'button';
+    b.style.setProperty('--w', `${Math.max(30, (f.total / maior) * 100)}%`);
+    b.style.setProperty('--i', i++);
+    b.append(rsEl('span', '', f.nome), rsEl('strong', '', `${rsNum(f.total)} · ${Math.round((f.total / total) * 100)}%`));
+    b.title = `Ver os contatos em "${f.nome}"`;
+    b.addEventListener('click', () => {
+      ctEtapaPendente = f.id;
+      mudarAba('contatos');
+      if (ctEtapa.querySelector(`option[value="${f.id}"]`)) { ctEtapa.value = f.id; ctEtapa.dispatchEvent(new Event('change')); }
+    });
+    et.appendChild(b);
+    box.appendChild(et);
+  }
+  const conv = d.funil.filter((f) => RS_CONVERTIDOS.has(f.id)).reduce((s, f) => s + f.total, 0);
+  box.appendChild(rsEl('p', 'rs-dica', `${rsNum(conv)} de ${rsNum(total)} (${Math.round((conv / total) * 100)}%) já estão agendados, compareceram ou compraram.`));
+}
+
+// ---------- conquistas ----------
+function rsDesenharMedalhas(d, pct5, seq) {
+  const a = d.atual;
+  const totalFunil = d.funil.reduce((s, f) => s + f.total, 0);
+  const conv = d.funil.filter((f) => RS_CONVERTIDOS.has(f.id)).reduce((s, f) => s + f.total, 0);
+  const pctIa = a.enviadas ? Math.round(((a.enviadas_ia + a.enviadas_followup) / a.enviadas) * 100) : 0;
+  const taxa = totalFunil ? Math.round((conv / totalFunil) * 100) : 0;
+  const lista = [
+    { id: 'relampago', icone: '⚡', nome: 'Resposta relâmpago', desc: 'Tempo mediano de 1ª resposta de até 1 minuto', ganha: a.mediana_seg != null && a.mediana_seg <= 60, prog: `Hoje: ${rsFormatarTempo(a.mediana_seg)}` },
+    { id: 'cinco', icone: '⏱️', nome: '90% em 5 minutos', desc: '90% ou mais dos contatos respondidos em até 5 min', ganha: pct5 != null && pct5 >= 90, prog: `Hoje: ${pct5 ?? 0}%` },
+    { id: 'vacuo', icone: '🤝', nome: 'Ninguém no vácuo', desc: 'Todos os contatos que chamaram foram respondidos', ganha: a.contatos_iniciados > 0 && a.respondidos === a.contatos_iniciados, prog: `${rsNum(a.respondidos)} de ${rsNum(a.contatos_iniciados)}` },
+    { id: 'semana', icone: '🔥', nome: 'Semana impecável', desc: '7 dias seguidos na meta de velocidade', ganha: seq >= 7, prog: `Sequência: ${seq} ${seq === 1 ? 'dia' : 'dias'}` },
+    { id: 'ia', icone: '🤖', nome: 'Automação no comando', desc: '70% ou mais das mensagens enviadas pela IA e pelo follow-up', ganha: a.enviadas > 0 && pctIa >= 70, prog: `Hoje: ${pctIa}%` },
+    { id: 'agenda', icone: '📈', nome: 'Agenda em alta', desc: 'Mais agendamentos que no período anterior', ganha: a.agendamentos > 0 && a.agendamentos > d.anterior.agendamentos, prog: `${rsNum(a.agendamentos)} agora · ${rsNum(d.anterior.agendamentos)} antes` },
+    { id: 'funil', icone: '🎯', nome: 'Funil que converte', desc: '20% ou mais dos contatos já agendados, atendidos ou compradores', ganha: taxa >= 20, prog: `Hoje: ${taxa}%` },
+    { id: 'movimento', icone: '🏥', nome: 'Clínica movimentada', desc: '50 ou mais contatos novos no período', ganha: a.novos >= 50, prog: `${rsNum(a.novos)} de 50` },
+  ];
+  const box = document.getElementById('rsMedalhas');
+  box.textContent = '';
+  lista.forEach((m, i) => {
+    const el = rsEl('div', `rs-medalha${m.ganha ? ' ganha' : ''}`);
+    el.style.setProperty('--i', i);
+    el.append(rsEl('div', 'rs-medalha-icone', m.icone), rsEl('strong', '', m.nome), rsEl('p', '', m.desc), rsEl('p', '', m.ganha ? `Conquistada! ${m.prog}` : `Falta: ${m.prog}`));
+    box.appendChild(el);
+  });
+  const ganhas = lista.filter((m) => m.ganha);
+  document.getElementById('rsMedalhasSub').textContent = `${ganhas.length} de ${lista.length} conquistas neste período`;
+  // confete so quando aparece conquista nova (a primeira visita so registra, sem festa)
+  try {
+    const chave = 'rs_medalhas_vistas';
+    const salvas = localStorage.getItem(chave);
+    const vistas = new Set(salvas ? JSON.parse(salvas) : []);
+    const novas = ganhas.filter((m) => !vistas.has(m.id));
+    if (salvas && novas.length) { rsConfete(document.getElementById('rsSubabas')); rsMostrarAviso(`Nova conquista: ${novas.map((m) => m.nome).join(', ')}`); }
+    for (const m of ganhas) vistas.add(m.id);
+    localStorage.setItem(chave, JSON.stringify([...vistas]));
+  } catch { /* sem armazenamento: so nao comemora */ }
+}
+function rsMostrarAviso(texto) {
+  rsResumo.textContent = `🏆 ${texto}. ${rsResumo.textContent}`;
+}
+
+// ---------- sub-abas ----------
+function rsIrSub(sub) {
+  for (const b of document.getElementById('rsSubabas').querySelectorAll('button')) b.classList.toggle('ativo', b.dataset.sub === sub);
+  for (const p of tabResultados.querySelectorAll('.rs-painel')) p.hidden = p.dataset.sub !== sub;
+  rsDesenharGraficos();
+}
+document.getElementById('rsSubabas').addEventListener('click', (ev) => {
+  const b = ev.target.closest('button[data-sub]');
+  if (b) rsIrSub(b.dataset.sub);
+});
+// cartoes principais inclinam em 3D acompanhando o mouse
+tabResultados.addEventListener('mousemove', (ev) => {
+  const c = ev.target.closest?.('.rs-inclina');
+  if (!c) return;
+  const r = c.getBoundingClientRect();
+  c.style.setProperty('--rx', `${(-((ev.clientY - r.top) / r.height - 0.5) * 5).toFixed(2)}deg`);
+  c.style.setProperty('--ry', `${(((ev.clientX - r.left) / r.width - 0.5) * 6).toFixed(2)}deg`);
+});
+tabResultados.addEventListener('mouseout', (ev) => {
+  const c = ev.target.closest?.('.rs-inclina');
+  if (c && !c.contains(ev.relatedTarget)) { c.style.setProperty('--rx', '0deg'); c.style.setProperty('--ry', '0deg'); }
+});
+
 function renderizarResultados() {
   const d = rsDados;
   if (!d) return;
@@ -4377,62 +4793,45 @@ function renderizarResultados() {
   const avisoAutor = !autorDesde ? 'registrando a partir de agora' : autorDesde > inicioPeriodo ? `registrado desde ${dataBR(autorDesde)}` : '';
   const pctIa = a.enviadas ? Math.round((a.enviadas_ia / a.enviadas) * 100) : null;
   const pct5 = a.contatos_iniciados ? Math.round((a.em_5min / a.contatos_iniciados) * 100) : null;
-  // a comparacao so vale quando o registro ja existia no periodo anterior inteiro
   const comparaEtapas = etapasDesde && etapasDesde <= new Date(d.periodo.anteriorInicio);
+  const ag = d.aguardando?.total || 0;
 
   const tiles = [
-    { rotulo: 'Novos contatos', valor: rsNum(a.novos), sub: 'chegaram pelo WhatsApp', variacao: rsVariacao(a.novos, b.novos) },
-    { rotulo: 'Conversas com movimento', valor: rsNum(a.conversas), sub: `${rsNum(a.recebidas)} recebidas · ${rsNum(a.enviadas)} enviadas`, variacao: rsVariacao(a.conversas, b.conversas) },
-    { rotulo: 'Mensagens recebidas', valor: rsNum(a.recebidas), sub: 'dos contatos', variacao: rsVariacao(a.recebidas, b.recebidas) },
+    { rotulo: 'Novos contatos', valor: rsNum(a.novos), num: a.novos, sub: 'chegaram pelo WhatsApp', variacao: rsVariacao(a.novos, b.novos), serie: d.porDia.map((x) => x.novos), sub_aba: 'funil' },
+    { rotulo: 'Conversas com movimento', valor: rsNum(a.conversas), num: a.conversas, sub: `${rsNum(a.recebidas)} recebidas · ${rsNum(a.enviadas)} enviadas`, variacao: rsVariacao(a.conversas, b.conversas), serie: d.porDia.map((x) => x.recebidas + x.enviadas) },
+    { rotulo: 'Mensagens recebidas', valor: rsNum(a.recebidas), num: a.recebidas, sub: 'dos contatos', variacao: rsVariacao(a.recebidas, b.recebidas), serie: d.porDia.map((x) => x.recebidas) },
     {
-      rotulo: 'Tempo de 1ª resposta', valor: rsFormatarTempo(a.mediana_seg),
+      rotulo: 'Tempo de 1ª resposta', valor: rsFormatarTempo(a.mediana_seg), classe: rsClasseTempo(a.mediana_seg),
       sub: pct5 == null ? 'sem conversas iniciadas' : `mediana · ${pct5}% respondidos em até 5 min`,
-      variacao: rsVariacao(a.mediana_seg, b.mediana_seg, true),
+      variacao: rsVariacao(a.mediana_seg, b.mediana_seg, true), serie: d.porDia.map((x) => (x.iniciados ? Math.round((x.em_5min / x.iniciados) * 100) : 0)),
     },
     {
-      rotulo: 'Agendamentos', valor: rsNum(a.agendamentos),
+      rotulo: 'Agendamentos', valor: rsNum(a.agendamentos), num: a.agendamentos,
       sub: [a.pre_agendamentos ? `+ ${rsNum(a.pre_agendamentos)} pré-agendamentos` : '', avisoEtapas].filter(Boolean).join(' · ') || 'contatos que foram para Agendado',
-      variacao: comparaEtapas ? rsVariacao(a.agendamentos, b.agendamentos) : null,
+      variacao: comparaEtapas ? rsVariacao(a.agendamentos, b.agendamentos) : null, sub_aba: 'funil',
     },
     {
-      rotulo: 'Respondido pela IA', valor: pctIa == null ? '—' : `${pctIa}%`,
+      rotulo: 'Respondido pela IA', valor: pctIa == null ? '—' : `${pctIa}%`, classe: pctIa == null ? '' : rsClassePct(pctIa),
       sub: [a.enviadas ? `${rsNum(a.enviadas_ia)} de ${rsNum(a.enviadas)} enviadas` : 'nenhuma mensagem enviada', avisoAutor].filter(Boolean).join(' · '),
       variacao: null,
     },
+    { rotulo: 'Esperando resposta agora', valor: rsNum(ag), num: ag, classe: ag === 0 ? 'f-alto' : ag <= 3 ? 'f-baixo' : 'f-abaixo', sub: ag ? 'clique para ver quem é' : 'ninguém esperando', variacao: null },
   ];
-  rsKpis.textContent = '';
-  for (const t of tiles) {
-    const el = document.createElement('div');
-    el.className = 'rs-kpi';
-    const rot = document.createElement('span');
-    rot.className = 'rs-kpi-rotulo';
-    rot.textContent = t.rotulo;
-    const val = document.createElement('strong');
-    val.className = 'rs-kpi-valor';
-    val.textContent = t.valor;
-    const sub = document.createElement('span');
-    sub.className = 'rs-kpi-sub';
-    sub.textContent = t.sub;
-    el.append(rot, val, sub);
-    if (t.variacao) {
-      const v = document.createElement('span');
-      v.className = `rs-kpi-var ${t.variacao.classe}`;
-      v.textContent = t.variacao.texto;
-      el.appendChild(v);
-    }
-    rsKpis.appendChild(el);
-  }
+  rsDesenharKpis(d, tiles);
+  rsDesenharScore(d, pct5);
+  const seq = rsDesenharSequencia(d);
+  rsDesenharMedidor(d);
 
   rsResumo.textContent = rsMontarResumo(d, pct5);
   rsDesenharGraficos();
-  rsRenderizarBarras(rsAutores, [
-    { nome: 'IA (auto atendimento)', total: a.enviadas_ia },
-    { nome: 'Follow Up automático', total: a.enviadas_followup },
-    { nome: 'Equipe', total: a.enviadas_humano },
-    { nome: 'Sem registro de autor', total: Math.max(0, a.enviadas - a.enviadas_ia - a.enviadas_followup - a.enviadas_humano) },
-  ].filter((x) => x.total || x.nome !== 'Sem registro de autor'), a.enviadas, 'Nenhuma mensagem enviada no período.');
-  const totalFunil = d.funil.reduce((s, f) => s + f.total, 0);
-  rsRenderizarBarras(rsFunil, d.funil, totalFunil, 'Nenhum contato novo com conversa no período.');
+  rsDesenharCalor(d);
+  rsDesenharRosca(d);
+  rsRenderizarBarras(document.getElementById('rsFaixas'), d.faixasTempo.map((f) => ({
+    nome: f.nome, total: f.total, classe: { f_1min: 'f-alto', f_5min: 'f-medio', f_30min: 'f-baixo', f_2h: 'f-abaixo', f_mais: 'f-abaixo', f_sem: 'f-abaixo' }[f.id],
+  })), d.faixasTempo.reduce((s, f) => s + f.total, 0), 'Nenhum contato iniciou conversa no período.');
+  rsDesenharAguardando(d);
+  rsDesenharFunil(d);
+  rsDesenharMedalhas(d, pct5, seq);
   rsRenderizarTabelaDias();
 }
 
@@ -4482,7 +4881,7 @@ function rsRenderizarBarras(container, itens, total, vazio) {
     const trilho = document.createElement('div');
     trilho.className = 'rs-barra-trilho';
     const barra = document.createElement('div');
-    barra.className = 'rs-barra';
+    barra.className = `rs-barra ${item.classe || ''}`;
     barra.style.width = item.total ? `max(4px, ${(item.total / maior) * 100}%)` : '0';
     trilho.appendChild(barra);
     const valor = document.createElement('span');

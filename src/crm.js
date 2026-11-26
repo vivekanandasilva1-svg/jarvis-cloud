@@ -966,7 +966,55 @@ export async function resultadosAtendimento(tenantId, { de, ate, instancia = nul
   const p = [tenantId, inicio, fim, instancia];
   const filtroInst = '($4::text IS NULL OR instancia = $4)';
 
-  const [atual, anterior, { rows: dias }, { rows: novosDia }, { rows: horas }, { rows: funil }, { rows: [desde] }] = await Promise.all([
+  // por dia: quantos contatos comecaram a falar, quantos foram respondidos em ate 5 min e nas faixas
+  // de tempo (mesma regra de "tempo de 1a resposta" dos indicadores) - base da sequencia e dos graficos
+  const detalheRespostas = pool.query(
+    `WITH m AS (
+       SELECT numero, instancia, direcao, criado_em,
+              lag(direcao) OVER (PARTITION BY numero, instancia ORDER BY criado_em) AS dir_anterior
+       FROM crm_mensagens
+       WHERE tenant_id = $1 AND criado_em >= $2::timestamptz - interval '2 days' AND criado_em < $3 AND ${filtroInst}
+     ), inicios AS (
+       SELECT numero, instancia, criado_em FROM m
+       WHERE direcao = 'entrada' AND dir_anterior IS DISTINCT FROM 'entrada' AND criado_em >= $2 AND criado_em < $3
+     ), r AS (
+       SELECT i.criado_em,
+              extract(epoch FROM (SELECT min(s.criado_em) FROM crm_mensagens s
+                 WHERE s.tenant_id = $1 AND s.numero = i.numero AND s.instancia = i.instancia AND s.direcao = 'saida' AND s.criado_em >= i.criado_em) - i.criado_em) AS seg
+       FROM inicios i
+     )
+     SELECT to_char((criado_em AT TIME ZONE 'America/Maceio')::date, 'YYYY-MM-DD') AS dia,
+            count(*)::int AS iniciados,
+            (count(*) FILTER (WHERE seg IS NOT NULL))::int AS respondidos,
+            (count(*) FILTER (WHERE seg <= 300))::int AS em_5min,
+            (count(*) FILTER (WHERE seg <= 60))::int AS f_1min,
+            (count(*) FILTER (WHERE seg > 60 AND seg <= 300))::int AS f_5min,
+            (count(*) FILTER (WHERE seg > 300 AND seg <= 1800))::int AS f_30min,
+            (count(*) FILTER (WHERE seg > 1800 AND seg <= 7200))::int AS f_2h,
+            (count(*) FILTER (WHERE seg > 7200))::int AS f_mais,
+            (count(*) FILTER (WHERE seg IS NULL))::int AS f_sem
+     FROM r GROUP BY 1`,
+    p,
+  );
+  // mapa de calor: dia da semana x hora das mensagens recebidas
+  const mapaCalor = pool.query(
+    `SELECT extract(dow FROM criado_em AT TIME ZONE 'America/Maceio')::int AS dow,
+            extract(hour FROM criado_em AT TIME ZONE 'America/Maceio')::int AS hora, count(*)::int AS total
+     FROM crm_mensagens WHERE tenant_id = $1 AND direcao = 'entrada' AND criado_em >= $2 AND criado_em < $3 AND ${filtroInst} GROUP BY 1, 2`,
+    p,
+  );
+  // conversas esperando resposta AGORA (nao depende do periodo escolhido)
+  const aguardandoAgora = pool.query(
+    `SELECT id, nome, numero, instancia, etapa, auto_pausado,
+            round(extract(epoch FROM now() - ultima_entrada_em) / 60)::int AS esperando_min
+     FROM crm_contatos
+     WHERE tenant_id = $1 AND oculto = false AND ultima_entrada_em IS NOT NULL AND ultima_entrada_em >= ultima_mensagem_em
+       AND ultima_entrada_em >= now() - interval '30 days' AND ($2::text IS NULL OR instancia = $2)
+     ORDER BY ultima_entrada_em ASC LIMIT 200`,
+    [tenantId, instancia],
+  );
+
+  const [atual, anterior, { rows: dias }, { rows: novosDia }, { rows: horas }, { rows: funil }, { rows: [desde] }, { rows: respDias }, { rows: calorRows }, { rows: aguardando }] = await Promise.all([
     indicadoresDoIntervalo(tenantId, inicio, fim, instancia),
     indicadoresDoIntervalo(tenantId, anteriorInicio, inicio, instancia),
     pool.query(
@@ -1000,16 +1048,31 @@ export async function resultadosAtendimento(tenantId, { de, ate, instancia = nul
               (SELECT min(em) FROM crm_etapa_eventos WHERE tenant_id = $1) AS etapas_desde`,
       [tenantId],
     ),
+    detalheRespostas,
+    mapaCalor,
+    aguardandoAgora,
   ]);
 
   const porDiaMapa = new Map(dias.map((d) => [d.dia, d]));
   const novosMapa = new Map(novosDia.map((d) => [d.dia, d.novos]));
+  const respMapa = new Map(respDias.map((r) => [r.dia, r]));
   const porDia = [];
   for (let t = inicio.getTime(); t < fim.getTime(); t += 86400000) {
     const dia = new Date(t - 3 * 3600000).toISOString().slice(0, 10);
     const d = porDiaMapa.get(dia);
-    porDia.push({ dia, recebidas: d?.recebidas || 0, enviadas: d?.enviadas || 0, novos: novosMapa.get(dia) || 0 });
+    const r = respMapa.get(dia);
+    porDia.push({
+      dia, recebidas: d?.recebidas || 0, enviadas: d?.enviadas || 0, novos: novosMapa.get(dia) || 0,
+      iniciados: r?.iniciados || 0, respondidos: r?.respondidos || 0, em_5min: r?.em_5min || 0,
+    });
   }
+  // distribuicao do tempo de 1a resposta no periodo inteiro
+  const faixasTempo = [
+    { id: 'f_1min', nome: 'Até 1 min' }, { id: 'f_5min', nome: '1 a 5 min' }, { id: 'f_30min', nome: '5 a 30 min' },
+    { id: 'f_2h', nome: '30 min a 2h' }, { id: 'f_mais', nome: 'Mais de 2h' }, { id: 'f_sem', nome: 'Sem resposta' },
+  ].map((f) => ({ ...f, total: respDias.reduce((s, r) => s + (r[f.id] || 0), 0) }));
+  const calor = Array.from({ length: 7 }, () => Array(24).fill(0));
+  for (const c of calorRows) calor[c.dow][c.hora] = c.total;
   const horasMapa = new Map(horas.map((h) => [h.hora, h.recebidas]));
   const funilMapa = new Map(funil.map((f) => [f.etapa, f.total]));
 
@@ -1021,6 +1084,9 @@ export async function resultadosAtendimento(tenantId, { de, ate, instancia = nul
     porHora: Array.from({ length: 24 }, (_, h) => ({ hora: h, recebidas: horasMapa.get(h) || 0 })),
     funil: ETAPAS.map((e) => ({ id: e.id, nome: e.nome, total: funilMapa.get(e.id) || 0 })),
     registroDesde: { autor: desde.autor_desde, etapas: desde.etapas_desde },
+    faixasTempo,
+    calor,
+    aguardando: { total: aguardando.length, lista: aguardando.slice(0, 8) },
   };
 }
 
