@@ -481,3 +481,21 @@ export async function painelSetor(tenantId, setor, { de, ate } = {}) {
     decidirHoje: decidirHoje.slice(0, 6), perguntas: def.perguntas, avisos,
   };
 }
+
+// resumo da semana dos indicadores MANUAIS (lancados pelo gestor) de cada setor - so banco, sem Clinicorp,
+// pra o painel do gestor abrir rapido e nao gastar o limite de consultas do Clinicorp.
+export async function resumoSemanalManual(tenantId) {
+  const hoje = hojeMaceio();
+  const saida = {};
+  for (const [setor, def] of Object.entries(DEFS)) {
+    const manuais = Object.entries(def.indicadores).filter(([, d]) => !d.auto);
+    if (!manuais.length) continue;
+    const padroes = Object.fromEntries(manuais.map(([id, d]) => [id, { meta: d.meta, melhor: d.melhor }]));
+    const [metas, lanc] = await Promise.all([store.metasDoSetor(tenantId, setor, padroes), store.lancamentosDoSetor(tenantId, setor, hoje)]);
+    saida[setor] = manuais.map(([id, d]) => {
+      const valor = lanc[id]?.atual ?? null;
+      return { id, rotulo: d.rotulo, formato: d.formato, valor, meta: metas[id].meta, status: semaforo(valor, metas[id].meta, d.melhor) };
+    });
+  }
+  return saida;
+}

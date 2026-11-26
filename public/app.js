@@ -2199,7 +2199,7 @@ function abrirCerebro() {
   if (!cerebroCarregando) {
     cerebroCarregando = new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = '/cerebro.js?v=13';
+      s.src = '/cerebro.js?v=15';
       s.onload = resolve;
       s.onerror = () => { cerebroCarregando = null; reject(new Error('falha ao carregar o Cerebro')); };
       document.head.appendChild(s);
@@ -8376,6 +8376,37 @@ async function selecionarCliente(id, nome, username) {
   });
   metaAdsForm.append(maAviso, maTextarea, maSalvar);
   clienteIntegracoesPainel.appendChild(metaAdsForm);
+
+  // adicionar 1 conta SEM apagar as outras (o servidor confere o token no Meta antes de guardar)
+  const maAddForm = document.createElement('div');
+  maAddForm.className = 'cliente-form';
+  const maAddAviso = document.createElement('p');
+  maAddAviso.className = 'agenda-vazia';
+  maAddAviso.textContent = 'Adicionar uma conta (NÃO apaga as outras). Se o nome já existir, só troca o token dessa conta.';
+  const maAddNome = document.createElement('input'); maAddNome.type = 'text'; maAddNome.placeholder = 'Nome da conta (ex: Sorria Rio Macaé 01)';
+  const maAddToken = document.createElement('input'); maAddToken.type = 'password'; maAddToken.placeholder = 'Cole aqui o token de acesso'; maAddToken.autocomplete = 'off';
+  const maAddBtn = document.createElement('button'); maAddBtn.type = 'button'; maAddBtn.textContent = 'Adicionar conta';
+  const maAddMsg = document.createElement('p'); maAddMsg.className = 'agenda-vazia'; maAddMsg.hidden = true;
+  maAddBtn.addEventListener('click', async () => {
+    maAddBtn.disabled = true; maAddMsg.hidden = false; maAddMsg.textContent = 'Conferindo o token no Meta...';
+    try {
+      const res = await fetch(`/api/admin/tenants/${id}/integracoes/metaads/adicionar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+        body: JSON.stringify({ label: maAddNome.value, token: maAddToken.value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+      maAddToken.value = '';
+      maAddMsg.textContent = `✓ ${data.substituiu ? 'Token da conta atualizado' : 'Conta adicionada'}. Este token enxerga: ${data.contas.map((c) => `${c.nome} (${c.id})`).join('; ')}.${(data.jaExistiam || []).length ? ` Já existiam por outro token (não duplicam): ${data.jaExistiam.join('; ')}.` : ''} Agora são ${data.labels.length} token(s) conectado(s).`;
+      metaAdsStatus.textContent = `${data.labels.length} conta(s) conectada(s): ${data.labels.join(', ')}`;
+    } catch (err) {
+      maAddMsg.textContent = `Não salvei: ${err.message}`;
+    }
+    maAddBtn.disabled = false;
+  });
+  maAddForm.append(maAddAviso, maAddNome, maAddToken, maAddBtn, maAddMsg);
+  clienteIntegracoesPainel.appendChild(maAddForm);
 
   // ---- Trello ----
   const trelloLabel = document.createElement('label'); trelloLabel.className = 'auto-label'; trelloLabel.textContent = 'Trello';

@@ -56,6 +56,30 @@ async function garantirTabelas() {
       PRIMARY KEY (tenant_id, setor, indicador, semana)
     );
   `);
+  // checklist diario: a linha existir = item feito naquele dia
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gestao_checklist (
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      setor TEXT NOT NULL,
+      dia DATE NOT NULL,
+      item TEXT NOT NULL,
+      feito_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (tenant_id, setor, dia, item)
+    );
+  `);
+  // lancamentos diarios (Comercial: por CRC; crc '' = geral do setor)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gestao_diario (
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      setor TEXT NOT NULL,
+      dia DATE NOT NULL,
+      crc TEXT NOT NULL DEFAULT '',
+      indicador TEXT NOT NULL,
+      valor NUMERIC NOT NULL,
+      atualizado_em TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (tenant_id, setor, dia, crc, indicador)
+    );
+  `);
 }
 const tabelasProntas = garantirTabelas().catch((err) => console.error('Erro criando tabelas da gestao:', err.message));
 
@@ -237,5 +261,59 @@ export async function salvarConfig(tenantId, chave, valor) {
     `INSERT INTO gestao_config (tenant_id, chave, valor) VALUES ($1, $2, $3::jsonb)
      ON CONFLICT (tenant_id, chave) DO UPDATE SET valor = $3::jsonb, atualizado_em = now()`,
     [tenantId, chave, JSON.stringify(valor)],
+  );
+}
+
+// ---------- checklist diario e lancamentos diarios (usados pela rotina: gestaoRotina.js) ----------
+
+export async function marcasChecklist(tenantId, setor, de, ate) {
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT setor, to_char(dia,'YYYY-MM-DD') AS dia, item, feito_em AS em FROM gestao_checklist
+     WHERE tenant_id = $1 AND ($2::text IS NULL OR setor = $2) AND dia BETWEEN $3::date AND $4::date`,
+    [tenantId, setor, de, ate],
+  );
+  return rows;
+}
+
+export async function marcarChecklist(tenantId, setor, dia, item, feito) {
+  checarSetor(setor);
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  if (feito) {
+    await pool.query(
+      `INSERT INTO gestao_checklist (tenant_id, setor, dia, item) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
+      [tenantId, setor, dia, item],
+    );
+  } else {
+    await pool.query('DELETE FROM gestao_checklist WHERE tenant_id = $1 AND setor = $2 AND dia = $3 AND item = $4', [tenantId, setor, dia, item]);
+  }
+}
+
+export async function diarioDoPeriodo(tenantId, setor, de, ate) {
+  checarSetor(setor);
+  if (!pool) return [];
+  await tabelasProntas;
+  const { rows } = await pool.query(
+    `SELECT to_char(dia,'YYYY-MM-DD') AS dia, crc, indicador, valor FROM gestao_diario
+     WHERE tenant_id = $1 AND setor = $2 AND dia BETWEEN $3::date AND $4::date`,
+    [tenantId, setor, de, ate],
+  );
+  return rows.map((r) => ({ ...r, valor: Number(r.valor) }));
+}
+
+export async function salvarDiario(tenantId, setor, dia, crc, indicador, valor) {
+  checarSetor(setor);
+  if (!pool) throw new Error('Precisa do Postgres configurado.');
+  await tabelasProntas;
+  if (valor === null) {
+    await pool.query('DELETE FROM gestao_diario WHERE tenant_id = $1 AND setor = $2 AND dia = $3 AND crc = $4 AND indicador = $5', [tenantId, setor, dia, crc, indicador]);
+    return;
+  }
+  await pool.query(
+    `INSERT INTO gestao_diario (tenant_id, setor, dia, crc, indicador, valor) VALUES ($1,$2,$3,$4,$5,$6)
+     ON CONFLICT (tenant_id, setor, dia, crc, indicador) DO UPDATE SET valor = $6, atualizado_em = now()`,
+    [tenantId, setor, dia, crc, indicador, valor],
   );
 }

@@ -1278,6 +1278,46 @@
     "conteudo": "O texto de telefone sem WhatsApp (exists:false) estava longo e quebrava o card. Agora é só 'Número sem WhatsApp, confira no Clinicorp' (constante MSG_SEM_WHATSAPP em src/aniversariantes.js). Migração no boot troca o texto antigo, mais longo, dos já pulados pelo curto."
   },
   {
+    "chave": "gestao:painel-gestor-checklist-comercial",
+    "modulo": "gestao",
+    "data": "2026-11-24",
+    "tipo": "funcao",
+    "titulo": "Gestão Geral: Painel do gestor, checklist diário por setor e Resultados do Comercial (CRCs e metas em faixas)",
+    "conteudo": "Pedido do dono: tela inicial com visão geral da clínica (gamificada, LEDs, 3D, movimento) e acompanhamento diário com um setor prioritário por dia. Feito: (1) Painel do gestor: pontuação do dia com nível, sequência de dias com checklist completo, semana em LEDs, medidores do Comercial no dia, réguas do mês com projeção, gráfico dia a dia, ranking dos CRCs e cartões de todos os setores (só banco, não gasta o limite do Clinicorp). (2) Checklist diário em toda aba de setor, com ✓ verde por dia, itens editáveis e o dia da semana de cada setor escolhido na própria aba (a barra lateral segue essa escolha). Comercial já vem com os 6 itens do dono. (3) Comercial ganhou a sub-aba Resultados e metas: lançamento diário por CRC (ligações, leads trabalhados, leads falados, agendamentos), geral do dia (agendamentos = soma dos CRCs se o geral não foi lançado, comparecimentos, fechamentos) e do mês (segunda a sábado, com projeção e quanto falta por dia para o médio). Metas em 3 faixas (baixo/médio/alto) editáveis, já com os números do dono. CRCs editáveis; quem sai fica desativado e o histórico continua no mês. Por que lançamento manual por CRC: a Lumia não registra ligações por atendente. Técnico: lógica única em src/gestaoRotina.js (cópia idêntica de lumia-gestao/src/rotina.js), tabelas gestao_checklist e gestao_diario e chaves em gestao_config, tudo por tenant; rotas /api/gestao/dias, /checklist/:setor, /checklist/:setor/itens, /comercial, /comercial/lancamento, /comercial/crcs, /comercial/metas e /painel. Pendente: checklists e metas dos outros setores com o dono; per-CRC comparecimento (item 5 do checklist cita, mas não está nas metas individuais)."
+  },
+  {
+    "chave": "cerebro:neuronio-gestao-neon",
+    "modulo": "cerebro",
+    "data": "2026-11-25",
+    "tipo": "melhoria",
+    "titulo": "Cérebro: neurônios do app de Gestão em cinza neon (LED)",
+    "conteudo": "Pedido do dono: diferenciar no grafo do Cérebro as memórias do app Lumia Gestão Geral. Antes a cor mostrava só a IA que salvou, então tudo da gestão saía laranja (Claude), misturado. Agora memórias com a tag gestao (entradas do módulo gestao do cerebro-mae) ou projeto com 'Gestão' no nome viram neurônios cinza neon (#a3adbb) com brilho de LED forte e pulsação mais rápida; chip 'App de Gestão' na barra de filtros liga/desliga esses neurônios; tooltip e painel mostram 'App de Gestão · <IA>'. Formato (tipo), ligações e lobo da IA não mudam. O grafo (/api/cerebro/grafo) passou a mandar as tags. Tom ajustado de quase branco para cinza para não confundir com o branco de selecionado/novo. Pendente: nada."
+  },
+  {
+    "chave": "cerebro:neuronio-gestao-regiao",
+    "modulo": "cerebro",
+    "data": "2026-11-25",
+    "tipo": "correcao",
+    "titulo": "Cérebro: região própria 'Gestão' e LED sempre aceso nos neurônios do app de Gestão",
+    "conteudo": "Depois do cinza neon, o dono mostrou que no Cérebro real (centenas de memórias) os neurônios de gestão sumiam: ficavam dentro da bola do Claude (a região é da IA que salvou) e o modo leve (mais de 500 memórias, LOD 0) tira o halo de brilho de todos. Correção: as memórias de gestão ganharam região própria no grafo (centro [0,20,100], rótulo GESTÃO em cinza), ficam 2,2x maiores e mantêm o halo de LED pulsando mesmo no modo leve (são poucas, custo mínimo). Halo suavizado para ficar cinza e não branco."
+  },
+  {
+    "chave": "metaads:adicionar-conta-sem-apagar",
+    "modulo": "ads",
+    "data": "2026-11-25",
+    "tipo": "melhoria",
+    "titulo": "Meta Ads: botão 'Adicionar conta' (não apaga as outras) que confere o token no Meta antes de salvar",
+    "conteudo": "Pedido do dono: relatórios da conta de anúncios 'Sorria Rio Macaé 01', de um BM novo. A Lumia só enxergava 'CA - Sorria Rio Macaé' (BM antigo 'Sorria Rio - Macaé') pelo token 'Sorria Rio Macae' (tenant 1); cada BM precisa do próprio token de usuário do sistema (ou compartilhar a conta com o BM antigo). Problema: o campo Meta Ads do painel de cliente SUBSTITUÍA a lista inteira (12 tokens na conta 1) e a lista atual não aparece, então colar só o token novo apagaria as outras contas. Solução: Admin > Clientes > Integrações > Meta Ads ganhou 'Adicionar uma conta (NÃO apaga as outras)': nome + token (campo de senha). POST /api/admin/tenants/:id/integracoes/metaads/adicionar confere o token na Graph API (metaAds.verificarToken -> contas que ele enxerga), recusa token inválido ou sem contas, e só então grava via tenantConfig.adicionarMetaAdsToken (mesmo nome, sem diferenciar maiúsculas, só troca o token daquela conta). A tela mostra quais contas o token enxerga. Depois de adicionada, a conta entra nos relatórios diários do Meta (07h e 18h) e no monitor de saúde, que percorrem todos os tokens do tenant. Atenção: usar nome diferente de 'Sorria Rio Macae' (o do BM antigo) para não trocar aquele token."
+  },
+  {
+    "chave": "metaads:sem-contas-duplicadas",
+    "modulo": "ads",
+    "data": "2026-11-25",
+    "tipo": "correcao",
+    "titulo": "Meta Ads: conta de anúncio não duplica mais (lista, relatórios e ao adicionar token)",
+    "conteudo": "Problema: ao adicionar o token 'Sorria Rio - Macaé', as contas 'Sorri Rio Macaé 01' e 'CA - Sorria Rio Macaé' passaram a aparecer em dobro (o token antigo 'Sorria Rio Macae' já as enxergava - o BM novo era o mesmo BM 'Sorria Rio - Macaé'). Causa: metaads.listAdAccounts juntava as contas de todos os tokens sem tirar repetidas - duplicava a lista de Integrações e podia somar a mesma conta duas vezes nos relatórios automáticos (o monitor metaSaude já deduplicava). Correção: (1) listAdAccounts conta cada conta uma vez só (vale o primeiro token); (2) ao adicionar, o servidor consulta quais contas os tokens atuais já enxergam (metaAds.contasJaConectadas, tolera token vencido) e RECUSA o token se todas as contas dele já estão conectadas, citando por qual token; token com algumas contas novas e outras repetidas é aceito e a tela avisa quais já existiam; (3) o mesmo token sob outro nome também é recusado. Pendente: o token redundante 'Sorria Rio - Macaé' continua guardado (sem efeito) até o dono pedir para remover; o painel não tem botão de remover uma conta só."
+  },
+  {
     "chave": "followup:inicio-imediato",
     "modulo": "followup",
     "data": "2026-11-26",

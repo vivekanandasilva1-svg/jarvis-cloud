@@ -7,6 +7,28 @@ import * as tenantConfig from './tenantConfig.js';
 const API_VERSION = 'v20.0';
 const BASE_URL = `https://graph.facebook.com/${API_VERSION}`;
 
+// confere um token no Meta ANTES de guardar: devolve as contas de anuncio que ele enxerga (ou lanca o erro do Meta)
+export async function verificarToken(token) {
+  const url = `${BASE_URL}/me/adaccounts?fields=name,account_id,account_status&limit=100&access_token=${encodeURIComponent(token)}`;
+  const res = await fetch(url);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.error) throw new Error(`O Meta recusou este token: ${data?.error?.message || `erro ${res.status}`}`);
+  return (data.data || []).map((c) => ({ id: `act_${c.account_id}`, nome: c.name, ativa: c.account_status === 1 }));
+}
+
+// mapa id da conta -> rotulo do token que ja a enxerga (ignora o token com o rotulo informado, que esta sendo substituido)
+export async function contasJaConectadas(tenantId, { ignorarLabel } = {}) {
+  const ign = String(ignorarLabel || '').trim().toLowerCase();
+  const sets = (await tokenSets(tenantId)).filter((st) => String(st.label || '').trim().toLowerCase() !== ign);
+  const resultados = await Promise.allSettled(sets.map((st) => verificarToken(st.token)));
+  const mapa = new Map();
+  resultados.forEach((r, i) => {
+    if (r.status !== 'fulfilled') return; // token vencido/invalido nao conta
+    for (const c of r.value) if (!mapa.has(c.id)) mapa.set(c.id, sets[i].label);
+  });
+  return mapa;
+}
+
 async function tokenSets(tenantId) {
   return tenantConfig.obterMetaAdsTokens(tenantId);
 }
@@ -129,6 +151,7 @@ export async function listAdAccounts(tenantId, { apenasAtivas = false } = {}) {
   if (sets.length === 0) throw new Error('Esse cliente nao tem nenhuma conta de anuncio (Meta Ads) conectada.');
 
   const all = [];
+  const vistas = new Set(); // a mesma conta de anuncio pode ser vista por mais de um token: conta uma vez so (vale o primeiro token)
   for (const set of sets) {
     let path = '/me/adaccounts';
     let query = {
@@ -140,6 +163,8 @@ export async function listAdAccounts(tenantId, { apenasAtivas = false } = {}) {
     while (true) {
       const data = await callWithToken(set.token, 'GET', path, { query });
       for (const acc of data.data) {
+        if (vistas.has(acc.id)) continue;
+        vistas.add(acc.id);
         accountTokenCache.set(chaveCache(tenantId, acc.id), set.token);
         all.push({
           ...acc,

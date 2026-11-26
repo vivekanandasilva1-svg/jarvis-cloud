@@ -21,6 +21,10 @@
     manual: { nome: 'Manual', cor: '#35e0ea' },
     outra: { nome: 'Outra', cor: '#ff4fa3' },
   };
+  // memorias do app Lumia Gestao Geral (tag "gestao" do cerebro-mae ou projeto com "Gestao" no nome):
+  // neuronio proprio em cinza neon, com brilho de LED mais forte, para nao misturar com as das IAs
+  const GESTAO = { nome: 'App de Gestão', rotulo: 'Gestão', cor: '#a3adbb' };
+  const ehGestao = (n) => (Array.isArray(n.tags) && n.tags.includes('gestao')) || /gest[aã]o/i.test(n.projeto || '');
   const TIPOS = { decisao: 'Decisão', fato: 'Fato', preferencia: 'Preferência', tarefa: 'Tarefa', contexto: 'Contexto', aprendizado: 'Aprendizado' };
 
   let raiz = null;
@@ -29,6 +33,7 @@
   let dados = { nos: [], links: [], total: 0, limite: 0 };
   let filtroOrigens = new Set(Object.keys(ORIGENS));
   let filtroProjeto = '';
+  let filtroGestao = true;
   let destaque = null; // Set de ids em destaque (resultado de busca) ou null
   let selecionado = null;
   let libCarregando = null;
@@ -41,6 +46,8 @@
 
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const corOrigem = (o) => (ORIGENS[o] || ORIGENS.outra).cor;
+  const corDe = (n) => (ehGestao(n) ? GESTAO.cor : corOrigem(n.origem));
+  const nomeDe = (n) => (ehGestao(n) ? `${GESTAO.nome} · ${(ORIGENS[n.origem] || ORIGENS.outra).nome}` : (ORIGENS[n.origem] || ORIGENS.outra).nome);
   const dataBr = (d) => (d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }) : '');
 
   async function api(caminho, opcoes = {}) {
@@ -79,6 +86,10 @@
         border: 1px solid var(--border-soft); color: var(--text); cursor: pointer; user-select: none; background: rgba(255,255,255,.02); }
       .crb-chip i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
       .crb-chip.off { opacity: .35; }
+      .crb-chip-gestao { border-color: rgba(163,173,187,.45); }
+      .crb-chip-gestao i { background: #a3adbb; box-shadow: 0 0 4px #fff, 0 0 10px #a3adbb, 0 0 18px rgba(163,173,187,.7); animation: crbLed 1.6s ease-in-out infinite; }
+      @keyframes crbLed { 50% { opacity: .55; box-shadow: 0 0 2px #fff, 0 0 5px #a3adbb; } }
+      @media (prefers-reduced-motion: reduce) { .crb-chip-gestao i { animation: none; } }
       .crb-corpo { flex: 1 1 auto; min-height: 0; display: flex; gap: 12px; }
       .crb-grafo { position: relative; flex: 1 1 auto; min-width: 0; min-height: 0; border: 1px solid var(--border-soft); border-radius: 12px;
         overflow: hidden; background: radial-gradient(ellipse at 30% 20%, #1c1240 0%, #0b0720 45%, #04030a 80%); }
@@ -159,6 +170,12 @@
       });
       el.filtros.appendChild(chip);
     }
+    const chipG = document.createElement('span');
+    chipG.className = 'crb-chip crb-chip-gestao';
+    chipG.innerHTML = `<i></i>${esc(GESTAO.nome)}`;
+    chipG.title = 'Memórias do app de gestão (neurônios cinza neon)';
+    chipG.addEventListener('click', () => { filtroGestao = !filtroGestao; chipG.classList.toggle('off', !filtroGestao); aplicarFiltros(); });
+    el.filtros.appendChild(chipG);
     el.legenda.innerHTML = '<b>Formato = tipo da memória</b>' + Object.entries(FORMAS).map(([k, f]) => `<span><i>${f.glifo}</i>${f.nome} <small>${f.desc}</small></span>`).join('');
     el.formBusca.addEventListener('submit', (e) => { e.preventDefault(); buscar(); });
     el.busca.addEventListener('input', () => { if (!el.busca.value.trim() && destaque) { destaque = null; atualizarCores(); painelInicial(); } });
@@ -198,7 +215,7 @@
   // ---------- dados / grafo ----------
 
   function nosVisiveis() {
-    return dados.nos.filter((n) => filtroOrigens.has(ORIGENS[n.origem] ? n.origem : 'outra') && (!filtroProjeto || n.projeto === filtroProjeto));
+    return dados.nos.filter((n) => (ehGestao(n) ? filtroGestao : filtroOrigens.has(ORIGENS[n.origem] ? n.origem : 'outra')) && (!filtroProjeto || n.projeto === filtroProjeto));
   }
 
   function aplicarFiltros() {
@@ -216,19 +233,19 @@
       grafo.graphData({ nodes: nos, links });
     }
     el.vazio.hidden = nos.length > 0;
-    for (const [k, l] of Object.entries(lobos)) { const tem = nos.some((n) => chaveOrigem(n.origem) === k); l.neb.visible = tem; l.rotulo.visible = tem; }
+    for (const [k, l] of Object.entries(lobos)) { const tem = nos.some((n) => chaveRegiao(n) === k); l.neb.visible = tem; l.rotulo.visible = tem; }
     if (!nos.length) el.vazio.textContent = dados.nos.length ? 'Nenhuma memória com esses filtros.' : 'O cérebro ainda está vazio. Conecte uma IA em "Conectar IAs" (ela vai salvando sozinha o que for importante) ou crie a primeira memória em "+ Memória".';
   }
 
-  const rotuloNo = (n) => `<div class="crb-tooltip"><b>${esc(n.titulo || TIPOS[n.tipo] || 'Memória')}</b><br><span style="color:${corOrigem(n.origem)}">● ${esc((ORIGENS[n.origem] || ORIGENS.outra).nome)}</span> · ${esc(TIPOS[n.tipo] || n.tipo)}<br>${esc(n.resumo)}</div>`;
+  const rotuloNo = (n) => `<div class="crb-tooltip"><b>${esc(n.titulo || TIPOS[n.tipo] || 'Memória')}</b><br><span style="color:${corDe(n)}">● ${esc(nomeDe(n))}</span> · ${esc(TIPOS[n.tipo] || n.tipo)}<br>${esc(n.resumo)}</div>`;
   const ehNovo = (n) => (novos.get(n.id) || 0) > Date.now();
 
   function corNo(n) {
     if (destaque && !destaque.has(n.id)) return 'rgba(120,120,140,0.18)';
     if (selecionado === n.id || ehNovo(n)) return '#ffffff';
-    return corOrigem(n.origem);
+    return corDe(n);
   }
-  const tamanhoNo = (n) => (1.5 + Math.min(n.grau || 0, 12) * 0.6) * (ehNovo(n) ? 2.4 : 1);
+  const tamanhoNo = (n) => (1.5 + Math.min(n.grau || 0, 12) * 0.6) * (ehNovo(n) ? 2.4 : 1) * (ehGestao(n) ? 2.2 : 1);
 
   function atualizarCores() {
     if (!grafo) return;
@@ -286,8 +303,11 @@
   const CENTROS = {
     claude: [-85, 38, 30], chatgpt: [85, 38, 30], cursor: [-72, -42, -30], gemini: [72, -42, -30],
     lumia: [0, 72, -10], manual: [0, -62, 45], outra: [0, 6, -88],
+    gestao: [0, 20, 100], // regiao propria das memorias do app de gestao (na frente, fora da bola das IAs)
   };
   const chaveOrigem = (o) => (ORIGENS[o] ? o : 'outra');
+  const chaveRegiao = (n) => (ehGestao(n) ? 'gestao' : chaveOrigem(n.origem));
+  const infoRegiao = (k) => (k === 'gestao' ? { nome: GESTAO.rotulo, cor: GESTAO.cor } : ORIGENS[k]);
   const cacheArvore = new Map();
   const cacheNeuronio = new Map();
   const cacheGeoSoma = {};
@@ -358,7 +378,7 @@
   function estadoNo(n) {
     const dim = !!(destaque && !destaque.has(n.id));
     const forte = selecionado === n.id || ehNovo(n);
-    return { cor: dim ? '#7a7a8c' : corOrigem(n.origem), dim, forte };
+    return { cor: dim ? '#7a7a8c' : corDe(n), dim, forte };
   }
 
   function geoSoma(tipo) {
@@ -414,11 +434,12 @@
     // senao as cores saem lavadas (quase brancas)
     const C = (css) => new T.Color(css).convertSRGBToLinear();
     const c = C(forte ? '#ffffff' : cor);
-    if (tipo === 'soma') m = new T.MeshPhongMaterial({ color: c, emissive: c, emissiveIntensity: 0.3, shininess: 30, transparent: dim, opacity: dim ? 0.18 : 1 });
+    const led = cor === GESTAO.cor; // neuronio do app de gestao: LED cinza neon (brilha mais e pisca mais rapido)
+    if (tipo === 'soma') m = new T.MeshPhongMaterial({ color: c, emissive: c, emissiveIntensity: led ? 0.7 : 0.3, shininess: led ? 80 : 30, transparent: dim, opacity: dim ? 0.18 : 1 });
     else if (tipo === 'linhas') m = new T.LineBasicMaterial({ color: C(forte ? '#ffffff' : clarear(cor, 0.3)), transparent: true, opacity: dim ? 0.08 : 0.8, blending: T.AdditiveBlending, depthWrite: false });
     else if (tipo === 'pontas') m = new T.PointsMaterial({ color: C(clarear(cor, 0.55)), size: 0.55, sizeAttenuation: true, transparent: true, opacity: dim ? 0.1 : 0.95, blending: T.AdditiveBlending, depthWrite: false });
-    else m = new T.SpriteMaterial({ map: texturaGlow(), color: c, transparent: true, opacity: dim ? 0.05 : (forte ? 0.8 : 0.5), blending: T.AdditiveBlending, depthWrite: false });
-    m.userData = { fase: (parseInt(cor.slice(1), 16) % 628) / 100 };
+    else m = new T.SpriteMaterial({ map: texturaGlow(), color: c, transparent: true, opacity: dim ? 0.05 : (forte ? 0.8 : (led ? 0.6 : 0.5)), blending: T.AdditiveBlending, depthWrite: false });
+    m.userData = { fase: (parseInt(cor.slice(1), 16) % 628) / 100, led };
     matCache.set(k, m);
     return m;
   }
@@ -447,7 +468,8 @@
     g.add(soma);
     g.userData = { soma, fase: (Number(n.id) % 97) * 0.37, est: '', r: 0, glowBase: 7 };
     if (lod >= 1) adicionarDendritos(g, n);
-    if (lod === 2) {
+    // o LED do app de gestao fica aceso mesmo no modo leve (cerebro grande): sao poucos neuronios
+    if (lod === 2 || ehGestao(n)) {
       const glow = new T.Sprite(matCompartilhado('glow', '#888888', 'normal'));
       g.add(glow);
       g.userData.glow = glow;
@@ -465,7 +487,7 @@
       if (lod === 0 && forte && !u.linhas) adicionarDendritos(g, n); // detalhe so no selecionado
       if (u.linhas) { u.linhas.material = matCompartilhado('linhas', cor, est); u.linhas.visible = lod >= 1 || forte; }
       if (u.botoes) u.botoes.material = matCompartilhado('pontas', cor, est);
-      if (u.glow) { u.glow.material = matCompartilhado('glow', cor, est); u.glowBase = forte ? 11 : 7; u.glow.scale.set(u.glowBase, u.glowBase, 1); }
+      if (u.glow) { u.glow.material = matCompartilhado('glow', cor, est); u.glowBase = forte ? 11 : (cor === GESTAO.cor ? 9 : 7); u.glow.scale.set(u.glowBase, u.glowBase, 1); }
       u.dim = dim;
     }
     const r = raioNo(n);
@@ -492,7 +514,10 @@
       if (!grafo || modo2d || document.hidden || !raiz || raiz.offsetParent === null) return;
       const t = agora / 1000;
       for (const [k, m] of matCache) {
-        if (k.startsWith('soma|') && k.endsWith('|normal')) m.emissiveIntensity = 0.2 + 0.2 * (0.5 + 0.5 * Math.sin(t * 1.5 + m.userData.fase));
+        if (!k.endsWith('|normal')) continue;
+        const onda = 0.5 + 0.5 * Math.sin(t * (m.userData.led ? 3.2 : 1.5) + m.userData.fase);
+        if (k.startsWith('soma|')) m.emissiveIntensity = m.userData.led ? 0.4 + 0.55 * onda : 0.2 + 0.2 * onda;
+        else if (m.userData.led && k.startsWith('glow|')) m.opacity = 0.3 + 0.3 * onda;
       }
       if (lod === 2) {
         for (const g of cacheNeuronio.values()) {
@@ -510,7 +535,7 @@
     const T = window.THREE;
     const cena = grafo.scene();
     for (const [k, c] of Object.entries(CENTROS)) {
-      const cor = ORIGENS[k].cor;
+      const cor = infoRegiao(k).cor;
       const neb = new T.Sprite(new T.SpriteMaterial({ map: texturaGlow(), color: new T.Color(cor).convertSRGBToLinear(), transparent: true, opacity: 0.2, blending: T.AdditiveBlending, depthWrite: false }));
       neb.scale.set(190, 190, 1);
       neb.position.set(c[0], c[1], c[2]);
@@ -522,7 +547,7 @@
       x.textBaseline = 'middle';
       x.shadowColor = cor; x.shadowBlur = 24;
       x.fillStyle = cor;
-      x.fillText(ORIGENS[k].nome.toUpperCase(), 256, 64);
+      x.fillText(infoRegiao(k).nome.toUpperCase(), 256, 64);
       const rotulo = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(cv), transparent: true, opacity: 0.85, depthWrite: false }));
       rotulo.scale.set(64, 16, 1);
       rotulo.position.set(c[0], c[1] + 62, c[2]);
@@ -536,7 +561,7 @@
     const f = (alpha) => {
       const k = 0.35 * alpha;
       for (const n of ns) {
-        const c = CENTROS[chaveOrigem(n.origem)];
+        const c = CENTROS[chaveRegiao(n)];
         n.vx += (c[0] - n.x) * k;
         n.vy += (c[1] - n.y) * k;
         if (n.vz !== undefined) n.vz += (c[2] - n.z) * k;
@@ -549,7 +574,7 @@
   const origemDoLink = (l, ponta) => {
     const x = l[ponta];
     const n = typeof x === 'object' ? x : dados.nos.find((m) => m.id === x);
-    return n ? corOrigem(n.origem) : '#9a8cff';
+    return n ? corDe(n) : '#9a8cff';
   };
 
   let ligChave = '';
@@ -760,7 +785,7 @@
     const d = document.createElement('div');
     d.className = 'crb-mem';
     d.innerHTML = `
-      <div class="crb-mem-cab"><i style="background:${corOrigem(m.origem)}"></i>${esc((ORIGENS[m.origem] || ORIGENS.outra).nome)}
+      <div class="crb-mem-cab"><i style="background:${corDe(m)}"></i>${esc(nomeDe(m))}
         · ${esc(TIPOS[m.tipo] || m.tipo)}${m.projeto ? ` · ${esc(m.projeto)}` : ''} · ${dataBr(m.criado_em)}</div>
       ${m.titulo ? `<div class="crb-mem-tit">${esc(m.titulo)}</div>` : ''}
       <div class="crb-mem-txt">${esc((m.conteudo || m.resumo || '').slice(0, 220))}</div>`;
@@ -787,7 +812,7 @@
       const m = await api(`/api/cerebro/memorias/${id}`);
       if (selecionado !== id) return;
       el.painel.innerHTML = `
-        <div class="crb-mem-cab"><i style="width:9px;height:9px;border-radius:50%;background:${corOrigem(m.origem)}"></i>
+        <div class="crb-mem-cab"><i style="width:9px;height:9px;border-radius:50%;background:${corDe(m)}"></i>
           #${m.id} · salvo por ${esc((ORIGENS[m.origem] || ORIGENS.outra).nome)} · ${esc(TIPOS[m.tipo] || m.tipo)} · ${dataBr(m.criado_em)}</div>
         ${m.titulo ? `<h4>${esc(m.titulo)}</h4>` : ''}
         ${m.projeto ? `<p>Projeto: <b style="color:var(--text)">${esc(m.projeto)}</b></p>` : ''}

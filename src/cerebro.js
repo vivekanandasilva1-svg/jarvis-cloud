@@ -402,7 +402,7 @@ export async function grafo(tenantId) {
   exigirBanco();
   await tabelasProntas;
   const { rows: nos } = await pool.query(
-    `SELECT id, titulo, left(conteudo, 140) AS resumo, tipo, projeto, origem, criado_em FROM cerebro_memorias
+    `SELECT id, titulo, left(conteudo, 140) AS resumo, tipo, projeto, origem, tags, criado_em FROM cerebro_memorias
      WHERE tenant_id = $1 AND NOT arquivada ORDER BY criado_em DESC LIMIT ${MAX_NOS_GRAFO}`,
     [tenantId],
   );

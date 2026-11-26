@@ -156,6 +156,20 @@ export async function salvarMetaAdsTokens(tenantId, tokens) {
   );
 }
 
+// acrescenta (ou atualiza, se o nome ja existir) UMA conta sem apagar as outras - salvarMetaAdsTokens substitui a lista inteira
+export async function adicionarMetaAdsToken(tenantId, label, token) {
+  const nome = String(label || '').trim().slice(0, 80);
+  const t = String(token || '').trim();
+  if (!nome) throw new Error('Informe o nome da conta (ex: Sorria Rio Macaé 01).');
+  if (t.length < 20) throw new Error('O token parece incompleto. Cole o token inteiro.');
+  const atuais = await obterMetaAdsTokens(tenantId);
+  const resto = atuais.filter((x) => String(x.label || '').trim().toLowerCase() !== nome.toLowerCase());
+  const igual = resto.find((x) => x.token === t);
+  if (igual) throw new Error(`Este token já está cadastrado com o nome "${igual.label}". Não adicionei para não duplicar.`);
+  await salvarMetaAdsTokens(tenantId, [...resto, { label: nome, token: t }]);
+  return { substituiu: resto.length !== atuais.length, labels: [...resto.map((x) => x.label), nome] };
+}
+
 // ---------- Meta Ads: quais contas ficam de fora dos relatorios automaticos ----------
 // (a conta continua conectada e utilizavel pelo chat normalmente - ver metaads.js listAdAccounts)
 
