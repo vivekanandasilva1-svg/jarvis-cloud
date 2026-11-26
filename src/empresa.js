@@ -1,46 +1,74 @@
 // "Minha Empresa": dados reais pra animar o escritorio 3D (quem esta trabalhando agora e os
-// numeros do dia). So leitura, sempre filtrada pelo tenant. Fase 1: atividade das IAs sai das
-// mensagens que elas enviaram (crm_mensagens.autor = 'ia' | 'followup' | 'disparo').
+// numeros do dia). So leitura, sempre filtrada pelo tenant. De onde sai a atividade de cada agente:
+//  - Liz  = respostas da IA (autor 'ia') em contatos que ja passaram do atendimento inicial
+//  - Bia  = respostas da IA em leads novos/em conversa (etapas novo_lead, em_atendimento, em_negociacao, pre_agendado)
+//  - Lua  = Follow Up (follow_up_contatos)
+//  - Anne = funis do Follow Up Inteligente (fui_execucoes)
+//  - Lorena = aniversariantes enviados (aniversariantes_envios)
 import { pool } from './db.js';
 import * as agenda from './agenda.js';
 
 const FUSO = 'America/Maceio';
+const HOJE_INI = `(date_trunc('day', now() AT TIME ZONE $2)) AT TIME ZONE $2`;
+const ETAPAS_BIA = ['novo_lead', 'em_atendimento', 'em_negociacao', 'pre_agendado'];
 
-// de qual "autor" de mensagem cada agente vive (Bia/Liz dividem 'ia' ate a Fase 2 separar por etapa;
-// Lua/Anne dividem 'followup'; Lorena = disparos/aniversariantes)
-const AUTOR_DO_AGENTE = { liz: 'ia', bia: 'ia', lua: 'followup', anne: 'followup', lorena: 'disparo' };
+const vazio = () => ({ hoje: 0, recentes: 0, ultimaEm: null, ativa: false, extras: [] });
+const ativaPor = (ultima) => !!ultima && Date.now() - new Date(ultima).getTime() < 3 * 60 * 1000; // mexeu nos ultimos 3 min
+
+async function ler(rotulo, fn) {
+  try { return await fn(); } catch (err) { console.error(`Empresa: erro lendo ${rotulo}:`, err.message); return null; }
+}
 
 export async function estado(tenantId) {
   const agora = new Date();
-  const agentes = {};
-  for (const k of Object.keys(AUTOR_DO_AGENTE)) agentes[k] = { hoje: 0, recentes: 0, ultimaEm: null, ativa: false };
+  const agentes = { liz: vazio(), bia: vazio(), lua: vazio(), anne: vazio(), lorena: vazio() };
   let pacientesHoje = null;
   if (!pool) return { agora: agora.toISOString(), agentes, pacientesHoje };
+  const q = (sql) => pool.query(sql, [tenantId, FUSO]);
 
-  try {
-    const { rows } = await pool.query(
-      `SELECT autor,
-              count(*) FILTER (WHERE criado_em > now() - interval '10 minutes')::int AS recentes,
-              count(*) FILTER (WHERE criado_em >= (date_trunc('day', now() AT TIME ZONE $2)) AT TIME ZONE $2)::int AS hoje,
-              max(criado_em) AS ultima
-         FROM crm_mensagens
-        WHERE tenant_id = $1 AND direcao = 'saida' AND autor IN ('ia', 'followup', 'disparo')
-          AND criado_em > now() - interval '2 days'
-        GROUP BY autor`,
-      [tenantId, FUSO],
-    );
-    const porAutor = new Map(rows.map((r) => [r.autor, r]));
-    for (const [k, autor] of Object.entries(AUTOR_DO_AGENTE)) {
-      const r = porAutor.get(autor);
-      if (!r) continue;
-      agentes[k] = {
-        hoje: r.hoje, recentes: r.recentes, ultimaEm: r.ultima,
-        ativa: !!r.ultima && Date.now() - new Date(r.ultima).getTime() < 3 * 60 * 1000, // mandou algo nos ultimos 3 min
-      };
-    }
-  } catch (err) {
-    console.error('Empresa: erro lendo atividade das IAs:', err.message);
+  // Liz e Bia: mesma IA de atendimento, separadas pela etapa em que o contato esta
+  const ia = await ler('IA de atendimento', async () => (await pool.query(
+    `SELECT CASE WHEN COALESCE(c.etapa, 'novo_lead') = ANY($3::text[]) THEN 'bia' ELSE 'liz' END AS ag,
+            count(*) FILTER (WHERE m.criado_em >= ${HOJE_INI})::int AS hoje,
+            count(*) FILTER (WHERE m.criado_em > now() - interval '10 minutes')::int AS recentes,
+            count(DISTINCT m.numero) FILTER (WHERE m.criado_em >= ${HOJE_INI})::int AS pessoas,
+            max(m.criado_em) AS ultima
+       FROM crm_mensagens m
+       LEFT JOIN crm_contatos c ON c.tenant_id = m.tenant_id AND c.numero = m.numero AND c.instancia = m.instancia
+      WHERE m.tenant_id = $1 AND m.direcao = 'saida' AND m.autor = 'ia' AND m.criado_em > now() - interval '2 days'
+      GROUP BY 1`,
+    [tenantId, FUSO, ETAPAS_BIA],
+  )).rows);
+  for (const r of ia || []) {
+    const a = agentes[r.ag];
+    a.hoje = r.hoje; a.recentes = r.recentes; a.ultimaEm = r.ultima; a.ativa = ativaPor(r.ultima);
+    a.extras = [[r.ag === 'bia' ? 'Leads atendidos hoje' : 'Pacientes atendidos hoje', String(r.pessoas)]];
   }
+
+  const lua = await ler('Follow Up', async () => (await q(
+    `SELECT count(*) FILTER (WHERE ultima_etapa_enviada_em >= ${HOJE_INI})::int AS hoje,
+            count(*) FILTER (WHERE ultima_etapa_enviada_em > now() - interval '10 minutes')::int AS recentes,
+            count(*) FILTER (WHERE NOT finalizado)::int AS ativos, max(ultima_etapa_enviada_em) AS ultima
+       FROM follow_up_contatos WHERE tenant_id = $1`,
+  )).rows[0]);
+  if (lua) agentes.lua = { hoje: lua.hoje, recentes: lua.recentes, ultimaEm: lua.ultima, ativa: ativaPor(lua.ultima), extras: [['Leads no follow-up agora', String(lua.ativos)]] };
+
+  const anne = await ler('Follow Up Inteligente', async () => (await q(
+    `SELECT count(*) FILTER (WHERE ultima_em >= ${HOJE_INI})::int AS hoje,
+            count(*) FILTER (WHERE ultima_em > now() - interval '10 minutes')::int AS recentes,
+            count(*) FILTER (WHERE NOT finalizado)::int AS ativos, max(ultima_em) AS ultima
+       FROM fui_execucoes WHERE tenant_id = $1`,
+  )).rows[0]);
+  if (anne) agentes.anne = { hoje: anne.hoje, recentes: anne.recentes, ultimaEm: anne.ultima, ativa: ativaPor(anne.ultima), extras: [['Leads nos funis agora', String(anne.ativos)]] };
+
+  const lorena = await ler('Aniversariantes', async () => (await q(
+    `SELECT count(*) FILTER (WHERE status = 'enviado' AND enviado_em >= ${HOJE_INI})::int AS hoje,
+            count(*) FILTER (WHERE status = 'enviado' AND enviado_em > now() - interval '10 minutes')::int AS recentes,
+            count(*) FILTER (WHERE status = 'pendente' AND data_envio = (now() AT TIME ZONE $2)::date)::int AS pendentes,
+            max(enviado_em) AS ultima
+       FROM aniversariantes_envios WHERE tenant_id = $1`,
+  )).rows[0]);
+  if (lorena) agentes.lorena = { hoje: lorena.hoje, recentes: lorena.recentes, ultimaEm: lorena.ultima, ativa: ativaPor(lorena.ultima), extras: [['Aniversários na fila', String(lorena.pendentes)]] };
 
   try {
     const ini = new Date(agora.toLocaleDateString('en-CA', { timeZone: FUSO }) + 'T00:00:00-03:00');

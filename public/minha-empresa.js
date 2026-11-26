@@ -125,7 +125,7 @@ function criarPessoa({ pele = '#f1c9a5', cabelo = '#4a3426', camisa = '#2f7f86',
 function animarPessoa(p, dt, t) {
   const andando = p.modo === 'andando';
   p.andaF += ((andando ? 1 : 0) - p.andaF) * Math.min(1, dt * 10);
-  p.sentadoF += ((p.modo === 'sentado' ? 1 : 0) - p.sentadoF) * Math.min(1, dt * 8);
+  p.sentadoF += (((p.modo === 'sentado' || p.sentada) ? 1 : 0) - p.sentadoF) * Math.min(1, dt * 8);
   const w = p.andaF;
   const s = p.sentadoF;
   const fase = t * 9 + (p.fase || 0);
@@ -350,6 +350,92 @@ function construirRecepcao() {
   for (const a of [...s1, ...s2, ...pol]) ASSENTOS.push({ ...a, ocupado: false });
 }
 
+function cadeira(pai, x, z, cor = '#2c3038') {
+  caixa(pai, x, 0, z, 0.1, 0.25, 0.1, '#14161a');
+  caixa(pai, x, 0.25, z, 0.7, 0.14, 0.7, cor);
+  caixa(pai, x, 0.39, z - 0.34, 0.7, 0.6, 0.1, cor);
+}
+function mesaTrabalho(pai, x, z, larg = 3.2, cor = '#f4f1ea') {
+  caixa(pai, x, 0, z, larg, 0.95, 0.9, cor);
+  caixa(pai, x, 0.95, z, larg + 0.1, 0.1, 1.0, '#2c3038');
+  caixa(pai, x, 0.3, z + 0.46, larg - 0.1, 0.06, 0.02, '#d4af37');
+}
+
+let telaComercial = null;
+function desenharTelaComercial() {
+  if (!telaComercial) return;
+  const { g, tex } = telaComercial;
+  const d = estado?.agentes || {};
+  g.fillStyle = '#0d1b24'; g.fillRect(0, 0, 512, 256);
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#4cc3d9'; g.font = '700 34px "Segoe UI", system-ui, sans-serif';
+  g.fillText('HOJE NO COMERCIAL', 256, 40);
+  const linhas = [
+    ['Leads atendidos', d.bia?.extras?.[0]?.[1] ?? '—', '#d1626b'],
+    ['Follow-ups enviados', d.lua ? String(d.lua.hoje) : '—', '#9b7ede'],
+    ['Aniversários enviados', d.lorena ? String(d.lorena.hoje) : '—', '#e0c04a'],
+    ['Funis rodando hoje', d.anne ? String(d.anne.hoje) : '—', '#5cae7f'],
+  ];
+  linhas.forEach(([t, v, cor], i) => {
+    const y = 95 + i * 42;
+    g.fillStyle = cor; g.fillRect(34, y - 14, 10, 28);
+    g.textAlign = 'left'; g.fillStyle = '#e8eef2'; g.font = '500 26px "Segoe UI", system-ui, sans-serif'; g.fillText(t, 58, y);
+    g.textAlign = 'right'; g.fillStyle = '#ffffff'; g.font = '700 30px "Segoe UI", system-ui, sans-serif'; g.fillText(String(v), 480, y);
+  });
+  tex.needsUpdate = true;
+}
+
+function construirComercial() {
+  const x0 = 18;
+  const C = new THREE.Group();
+  scene.add(C);
+  lajeBase(C, x0, 0, 16, 12, '#e6e1ea', '#dcd6e2');
+  const parede = '#f3efe8';
+  bloco(C, x0 - 0.3, 0, -0.3, x0 + 16, 1.0, 0, parede);
+  bloco(C, x0 - 0.3, 3.2, -0.3, x0 + 16, 3.4, 0, '#2c3038');
+  bloco(C, x0 - 0.3, 3.4, -0.3, x0 + 16, 3.46, 0, '#d4af37');
+  bloco(C, x0, 1.0, -0.12, x0 + 16, 3.2, -0.04, '#a9d8f5', { transparent: true, opacity: 0.22 });
+  for (const x of [0, 5.3, 10.6, 16]) bloco(C, x0 + x - 0.07, 0, -0.14, x0 + x + 0.07, 3.2, 0.02, '#2c3038');
+  // painel central dos fundos + placa
+  bloco(C, x0 + 4.5, 1.0, 0, x0 + 11.5, 3.2, 0.12, '#2c3038');
+  placa(C, 'COMERCIAL', 5.4, 0.9, { x: x0 + 8, y: 2.65, z: 0.14, sub: 'CRCs · atendimento e relacionamento', tam: 0.8 });
+  bloco(C, x0 + 4.7, 1.2, 0.12, x0 + 11.3, 1.26, 0.16, '#d4af37');
+  // TV com os numeros do dia (atualiza com os dados reais)
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 256;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  telaComercial = { g: cv.getContext('2d'), tex };
+  bloco(C, x0 + 4.9, 1.1, 0.12, x0 + 11.1, 2.1, 0.17, '#14161a');
+  const tv = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 0.9), new THREE.MeshBasicMaterial({ map: tex }));
+  tv.position.set(x0 + 8, 1.6, 0.18); C.add(tv);
+  desenharTelaComercial();
+  // parede esquerda de madeira + quadro do funil
+  bloco(C, x0 - 0.3, 0, 0, x0, 3.4, 12.3, '#c9a27a');
+  for (let z = 0.4; z < 12; z += 0.55) bloco(C, x0, 0.9, z, x0 + 0.07, 3.3, z + 0.12, '#b78d63');
+  bloco(C, x0 - 0.3, 3.4, 0, x0, 3.46, 12.3, '#d4af37');
+  bloco(C, x0, 1.3, 3.0, x0 + 0.1, 3.0, 9.0, '#f6f3ee');
+  const cores = ['#2f7f86', '#5b8def', '#9b7ede', '#e0c04a', '#5cae7f'];
+  cores.forEach((cor, i) => bloco(C, x0 + 0.1, 1.55, 3.3 + i * 1.1, x0 + 0.14, 1.55 + 1.2 - i * 0.2, 3.3 + i * 1.1 + 0.9, cor));
+  placa(C, 'FUNIL', 1.6, 0.4, { x: x0 + 0.16, y: 2.75, z: 6.0, ry: Math.PI / 2, fundo: '#f6f3ee', cor: '#2c3038', tam: 0.7 });
+  // estacoes: agente sentada olhando pra camera, mesa a frente
+  for (const [px, pz] of [[4, 3.2], [11.5, 3.2], [4, 8.2], [11.5, 8.2]]) {
+    cadeira(C, x0 + px, pz - 0.2);
+    mesaTrabalho(C, x0 + px, pz + 1.2);
+    monitor(C, x0 + px - 0.7, 1.05, pz + 1.2, Math.PI);
+    caixa(C, x0 + px + 0.6, 1.05, pz + 1.15, 0.5, 0.03, 0.2, '#d8dbe0');
+    caixa(C, x0 + px + 1.15, 1.05, pz + 1.1, 0.2, 0.25, 0.2, '#e9e4da');
+  }
+  // tapete, plantas, bebedouro, estante
+  bloco(C, x0 + 6.2, 0.01, 5.2, x0 + 9.8, 0.05, 7.4, '#2f6f78');
+  bloco(C, x0 + 6.4, 0.05, 5.4, x0 + 9.6, 0.06, 7.2, '#d9c58f');
+  planta(C, x0 + 1.0, 0.9, 1.3); planta(C, x0 + 15.0, 1.1, 1.2); planta(C, x0 + 15.0, 10.9, 1.5); planta(C, x0 + 7.8, 11.0, 1.0);
+  caixa(C, x0 + 15.2, 0, 5.0, 0.6, 1.0, 0.6, '#e9e4da');
+  caixa(C, x0 + 15.2, 1.0, 5.0, 0.5, 0.55, 0.5, '#7cc7e8', { transparent: true, opacity: 0.7 });
+  bloco(C, x0 + 0.6, 0, 9.6, x0 + 1.5, 1.7, 11.6, '#8a5a3b');
+  for (let i = 0; i < 4; i++) bloco(C, x0 + 0.5, 0.35 + i * 0.4, 9.7, x0 + 1.6, 0.4 + i * 0.4, 11.5, '#2c3038');
+  for (const [x, z] of [[4, 4.4], [11.5, 4.4], [4, 9.4], [11.5, 9.4], [8, 6.3]]) pendente(C, x0 + x, z);
+  return C;
+}
+
 function construirSalaEmBreve(nome, x0, z0, w, d) {
   const g = new THREE.Group();
   scene.add(g);
@@ -370,6 +456,7 @@ function criarAgente(def) {
   p.grupo.position.set(def.x, 0, def.z);
   p.yaw = p.yawAlvo = def.yaw || 0;
   p.fase = def.fase || 0;
+  p.sentada = !!def.sentada;
   scene.add(p.grupo);
   const tag = document.createElement('button');
   tag.type = 'button';
@@ -381,11 +468,12 @@ function criarAgente(def) {
   bolha.className = 'emp-bolha';
   bolha.hidden = true;
   tagsEl.append(bolha, tag);
-  const a = { ...def, pessoa: p, tag, bolha, dot: tag.querySelector('.emp-tag-dot'), ocupada: false, bolhaAte: 0 };
+  const a = { ...def, pessoa: p, tag, bolha, dot: tag.querySelector('.emp-tag-dot'), ocupada: false, bolhaAte: 0, tagY: def.tagY || 2.15 };
   agentes.push(a);
   return a;
 }
 
+const FRASES = { bia: 'Respondendo lead novo…', lua: 'Enviando follow-up…', lorena: 'Enviando aniversário…', anne: 'Conduzindo o funil…' };
 const PELES = ['#f1c9a5', '#e0ac82', '#c68a63', '#8d5a3b', '#f6d7b8'];
 const CABELOS = ['#2a1e17', '#4a3426', '#6b4a2f', '#1b1b1f', '#a37b45', '#7a2e2e'];
 const CAMISAS = ['#d98b5f', '#5b8def', '#9b7ede', '#e0c04a', '#5cae7f', '#d1626b', '#7d8896', '#eeeeee'];
@@ -464,6 +552,7 @@ async function buscarEstado() {
   try {
     estado = await ctx.api('/api/empresa/estado');
     atualizarPainel();
+    desenharTelaComercial();
   } catch { /* mantem o ultimo estado */ }
 }
 
@@ -500,6 +589,7 @@ function atualizarPainel() {
   const linhas = [];
   linhas.push(['Mensagens enviadas hoje', d ? String(d.hoje) : '—']);
   linhas.push(['Última atividade', d ? tempoAtras(d.ultimaEm) : '—']);
+  for (const [k, v] of d?.extras || []) linhas.push([k, v]);
   if (a.id === 'liz') linhas.push(['Consultas na agenda hoje', estado?.pacientesHoje == null ? 'agenda não conectada' : String(estado.pacientesHoje)]);
   painelEl.querySelector('.emp-p-dados').innerHTML = linhas.map(([k, v]) => `<div><span>${k}</span><strong></strong></div>`).join('');
   painelEl.querySelectorAll('.emp-p-dados strong').forEach((el, i) => { el.textContent = linhas[i][1]; });
@@ -649,6 +739,11 @@ function quadro(agora) {
       else if (real || atendendoBalcao || (relogio % 34) < 9) p.modo = 'digitando';
       else p.modo = 'parado';
       if (real && relogio > a.bolhaAte && (Math.floor(relogio) % 14 === 0)) falar(a, 'Atendendo no WhatsApp…', 4);
+    } else {
+      // agentes da mesa: digitam quando ha atividade real; sem atividade, alternam trabalho e pausa
+      p.modo = real || ((relogio + (p.fase || 0) * 7) % 30) < 11 ? 'digitando' : 'parado';
+      const frase = FRASES[a.id];
+      if (real && frase && relogio > a.bolhaAte && (Math.floor(relogio + (p.fase || 0)) % 16 === 0)) falar(a, frase, 4);
     }
     a.dot.className = `emp-tag-dot ${real ? 'on' : ''}`;
     animarPessoa(p, dt, relogio);
@@ -661,7 +756,7 @@ function quadro(agora) {
   const v = new THREE.Vector3();
   for (const a of agentes) {
     a.pessoa.grupo.getWorldPosition(v);
-    v.y += 2.15;
+    v.y += a.tagY;
     v.project(camera);
     const x = ((v.x + 1) / 2) * r.width;
     const y = ((1 - v.y) / 2) * r.height;
@@ -697,7 +792,7 @@ function montarInterface() {
   painelEl.querySelector('.emp-p-fechar').addEventListener('click', () => { selecionado = null; atualizarPainel(); });
   const setores = [
     { nome: 'Recepção', x: 8, z: 6, pronto: true },
-    { nome: 'Comercial', x: 26, z: 6 },
+    { nome: 'Comercial', x: 26, z: 6, pronto: true },
     { nome: 'Laboratório', x: 8, z: 20 },
     { nome: 'Financeiro', x: 26, z: 20 },
     { nome: 'Tráfego Pago', x: 44, z: 6 },
@@ -725,7 +820,7 @@ export function iniciar(container, contexto) {
   scene.add(sol);
 
   construirRecepcao();
-  construirSalaEmBreve('Comercial', 18, 0, 16, 12);
+  construirComercial();
   construirSalaEmBreve('Laboratório', 0, 14, 16, 12);
   construirSalaEmBreve('Financeiro', 18, 14, 16, 12);
   construirSalaEmBreve('Tráfego Pago', 36, 0, 16, 12);
@@ -734,6 +829,11 @@ export function iniciar(container, contexto) {
     id: 'liz', nome: 'Liz', funcao: 'Recepção · IA de autoatendimento', x: 8.5, z: 2.0, yaw: 0, fase: 1,
     visual: { pele: '#f1c9a5', cabelo: '#5a3a2a', camisa: '#2f7f86', calca: '#2c3038', longo: true },
   });
+  const mesa = (id, nome, funcao, x, z, visual, fase) => criarAgente({ id, nome, funcao, x: 18 + x, z, yaw: 0, fase, sentada: true, tagY: 1.85, visual });
+  mesa('bia', 'Bia', 'Comercial · atende os leads novos', 4, 3.2, { pele: '#c68a63', cabelo: '#1b1b1f', camisa: '#d1626b', calca: '#2c3038', longo: true }, 2);
+  mesa('lua', 'Lua', 'Comercial · follow-up', 11.5, 3.2, { pele: '#f1c9a5', cabelo: '#a37b45', camisa: '#9b7ede', calca: '#2c3038', longo: false }, 3);
+  mesa('lorena', 'Lorena', 'Comercial · resgates e aniversariantes', 4, 8.2, { pele: '#e0ac82', cabelo: '#7a2e2e', camisa: '#e0c04a', calca: '#3b4a6b', longo: true }, 4);
+  mesa('anne', 'Anne', 'Comercial · funis do Follow Up Inteligente', 11.5, 8.2, { pele: '#f6d7b8', cabelo: '#4a3426', camisa: '#5cae7f', calca: '#2c3038', longo: false }, 5);
   novoPaciente(true); novoPaciente(true); novoPaciente(true);
   spawnEm = 3;
 
