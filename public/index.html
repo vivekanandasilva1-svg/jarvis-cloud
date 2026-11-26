@@ -729,7 +729,10 @@
         <button type="button" data-sub="geral" class="ativo">Visão geral</button>
         <button type="button" data-sub="atendimento">Atendimento</button>
         <button type="button" data-sub="funil">Funil</button>
-        <button type="button" data-sub="conquistas">Conquistas</button>
+        <button type="button" data-sub="agenda">Agenda</button>
+        <button type="button" data-sub="recuperacao">Recuperação</button>
+        <button type="button" data-sub="origem">Origem e anúncios</button>
+        <button type="button" data-sub="conquistas">Metas e conquistas</button>
       </div>
       <div class="rs-resumo" id="rsResumo">Carregando...</div>
 
@@ -810,7 +813,21 @@
         </section>
       </div>
 
+      <div class="rs-painel" data-sub="agenda" hidden><div class="rs-carregando" id="rsAgenda"></div></div>
+      <div class="rs-painel" data-sub="recuperacao" hidden><div class="rs-carregando" id="rsRecup"></div></div>
+      <div class="rs-painel" data-sub="origem" hidden><div class="rs-carregando" id="rsOrigem"></div></div>
+
       <div class="rs-painel" data-sub="conquistas" hidden>
+        <section class="rs-card">
+          <div class="rs-card-topo">
+            <div>
+              <h3>Metas do mês</h3>
+              <p class="rs-sub" id="rsMetasSub">Defina quanto quer alcançar e acompanhe a projeção até o fim do mês.</p>
+            </div>
+            <button type="button" id="rsMetasEditar" class="ct-link">Definir metas</button>
+          </div>
+          <div id="rsMetas"></div>
+        </section>
         <section class="rs-card">
           <h3>Conquistas do atendimento</h3>
           <p class="rs-sub" id="rsMedalhasSub"></p>

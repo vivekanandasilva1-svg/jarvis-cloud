@@ -907,7 +907,7 @@ export async function enviarMidiaContato(tenantId, numero, instancia, { tipo, mi
 
 // numeros de um intervalo [inicio, fim) - usado pro periodo escolhido e pro periodo anterior de
 // mesmo tamanho (comparacao). instancia null = todos os numeros do tenant
-async function indicadoresDoIntervalo(tenantId, inicio, fim, instancia) {
+export async function indicadoresDoIntervalo(tenantId, inicio, fim, instancia) {
   const p = [tenantId, inicio, fim, instancia];
   const filtroInst = '($4::text IS NULL OR instancia = $4)';
   const [{ rows: [base] }, { rows: [resp] }] = await Promise.all([

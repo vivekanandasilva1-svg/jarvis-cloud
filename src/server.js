@@ -28,6 +28,7 @@ import * as relatoriosProgramados from './relatoriosProgramados.js';
 import * as tenants from './tenants.js';
 import * as tenantConfig from './tenantConfig.js';
 import * as metaAds from './metaads.js';
+import * as resultadosClinica from './resultadosClinica.js';
 import * as propostas from './propostas.js';
 import * as relatorioGerador from './relatorioGerador.js';
 import * as followUp from './followUp.js';
@@ -166,7 +167,8 @@ app.use(async (req, res, next) => {
         || (req.method !== 'GET' && (req.path.startsWith('/api/crm/distribuicao') || req.path.startsWith('/api/crm/clinicorp-followup')))
         || (req.method !== 'GET' && /^\/api\/whatsapp\/instancias\/[^/]+\/operador$/.test(req.path))
         || (req.method !== 'GET' && req.path === '/api/indicacoes/config')
-        || (req.method !== 'GET' && req.path === '/api/resgate/config');
+        || (req.method !== 'GET' && req.path === '/api/resgate/config')
+        || (req.method !== 'GET' && req.path === '/api/crm/resultados-metas');
       if (soDono) return res.status(403).json({ erro: 'so o acesso principal da conta pode fazer isso' });
     }
     const abaProtegida = Object.entries(TAB_ROTA_PREFIXO).find(([, prefixo]) => req.path.startsWith(prefixo));
@@ -3115,6 +3117,47 @@ app.get('/api/crm/resultados', async (req, res) => {
     if (instancia && !instancias.includes(instancia)) return res.status(400).json({ erro: 'Numero de WhatsApp invalido pra essa conta.' });
     const dados = await crm.resultadosAtendimento(req.tenantId, { de, ate, instancia: instancia || null });
     res.json({ ...dados, instancias, etapas: crm.ETAPAS });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// etapa 2 da aba Resultados: agenda, recuperacao, origem dos leads (blocos isolados), anuncios e metas
+const resultadosDatas = (req, res) => {
+  const { de, ate } = req.query;
+  const ok = (d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
+  if (!ok(de) || !ok(ate)) { res.status(400).json({ erro: 'de e ate (AAAA-MM-DD) sao obrigatorios' }); return null; }
+  return { de, ate };
+};
+app.get('/api/crm/resultados-clinica', async (req, res) => {
+  const datas = resultadosDatas(req, res);
+  if (!datas) return;
+  try {
+    res.json(await resultadosClinica.resultadosClinica(req.tenantId, datas));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.get('/api/crm/resultados-anuncios', async (req, res) => {
+  const datas = resultadosDatas(req, res);
+  if (!datas) return;
+  try {
+    res.json(await resultadosClinica.resultadosAnuncios(req.tenantId, datas));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.get('/api/crm/resultados-metas', async (req, res) => {
+  try {
+    res.json(await resultadosClinica.metasDoMes(req.tenantId));
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+app.put('/api/crm/resultados-metas', async (req, res) => {
+  try {
+    await resultadosClinica.salvarMetas(req.tenantId, req.body?.metas);
+    res.json(await resultadosClinica.metasDoMes(req.tenantId));
   } catch (err) {
     res.status(400).json({ erro: err.message });
   }

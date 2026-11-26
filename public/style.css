@@ -4012,3 +4012,36 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 @media (prefers-reduced-motion: reduce) { .tab-resultados *, .tab-resultados *::before { animation: none !important; transition: none !important; } .rs-spark path.linha { stroke-dashoffset: 0; } }
 
 .rs-medidor .rs-eixo-txt { fill: var(--text-dim); font-size: 9.5px; }
+
+/* etapa 2: agenda, recuperacao, origem/anuncios, metas */
+.rs-pilha { display: flex; flex-direction: column; gap: 14px; }
+.rs-carregando { color: var(--text-dim); padding: 24px 4px; }
+.rs-grade2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.rs-grade2 > .rs-card { display: flex; flex-direction: column; gap: 4px; }
+.rs-mini-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 4px 0; }
+.rs-dinheiro { text-align: center; padding: 22px 18px; background: linear-gradient(160deg, rgba(212, 175, 55, 0.22), rgba(42, 44, 49, 0.96) 60%); border: 1px solid rgba(240, 207, 107, 0.45); }
+.rs-dinheiro-valor { font-size: clamp(34px, 7vw, 56px); font-weight: 800; color: var(--gold-bright); text-shadow: var(--brilho-ouro); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.rs-dinheiro .rs-cab { justify-content: center; }
+.rs-dinheiro .rs-sub { margin-bottom: 0; }
+.rs-dinheiro-medio { font-size: 28px; font-weight: 800; color: var(--gold-bright); font-variant-numeric: tabular-nums; }
+.rs-card .rs-barras { margin-top: 6px; }
+.rs-card .rs-barra-linha { grid-template-columns: minmax(100px, 150px) minmax(0, 1fr) auto; }
+.rs-selo { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(62, 197, 224, 0.5); color: var(--f-medio); white-space: nowrap; align-self: flex-start; }
+.rs-selo.ok { border-color: rgba(63, 214, 138, 0.55); color: var(--f-alto); }
+.rs-selo.alerta { border-color: rgba(224, 165, 38, 0.55); color: var(--f-baixo); }
+.rs-origens { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+.rs-origem-linha { display: flex; flex-direction: column; gap: 4px; animation: rs-subir 0.5s both; animation-delay: calc(var(--i) * 60ms); }
+.rs-origem-topo { display: flex; align-items: center; gap: 8px; }
+.rs-origem-topo strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-origem-n { font-variant-numeric: tabular-nums; color: var(--text-dim); font-size: 13px; }
+.rs-metas-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.rs-meta { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 14px; border: 1px solid var(--border-soft); background: var(--campo); animation: rs-subir 0.5s both; animation-delay: calc(var(--i) * 70ms); }
+.rs-meta.bateu { border-color: rgba(63, 214, 138, 0.6); box-shadow: 0 0 22px rgba(63, 214, 138, 0.15); }
+.rs-anel-meta { width: 92px; height: 92px; }
+.rs-meta-lado { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.rs-meta-valor { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.rs-metas-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; align-items: end; }
+.rs-metas-campo { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-dim); }
+.rs-metas-campo input { background: var(--campo); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; color: var(--text); font: inherit; }
+.rs-metas-campo input:focus { outline: none; border-color: var(--gold); }
+@media (max-width: 860px) { .rs-grade2 { grid-template-columns: 1fr; } .rs-card .rs-barra-linha { grid-template-columns: minmax(0, 1fr) auto; } .rs-card .rs-barra-trilho { grid-column: 1 / -1; grid-row: 2; } }

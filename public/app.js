@@ -4343,6 +4343,9 @@ async function carregarResultados() {
     rsInstancia.value = (data.instancias || []).includes(atual) ? atual : '';
     rsInstancia.hidden = (data.instancias || []).length < 2;
     renderizarResultados();
+    rsClinicaChave = null;
+    rsAnunciosChave = null;
+    if (RS_SUBS_CLINICA.has(rsSubAtual)) rsCarregarClinica();
   } catch (err) {
     if (pedido === rsPedido) rsMostrarErro(`Não consegui carregar os resultados: ${err.message}`);
   } finally {
@@ -4397,7 +4400,7 @@ function rsContar(el, final, formatar = rsNum) {
   const t0 = performance.now();
   const passo = (agora) => {
     const p = Math.min(1, (agora - t0) / 800);
-    el.textContent = formatar(Math.round(final * (1 - (1 - p) ** 3)));
+    el.textContent = formatar(p < 1 ? Math.round(final * (1 - (1 - p) ** 3)) : final);
     if (p < 1) requestAnimationFrame(passo);
   };
   requestAnimationFrame(passo);
@@ -4757,11 +4760,382 @@ function rsMostrarAviso(texto) {
   rsResumo.textContent = `🏆 ${texto}. ${rsResumo.textContent}`;
 }
 
+// ---------- etapa 2: agenda, recuperacao, origem/anuncios e metas (carregam sob demanda) ----------
+const rsMoeda = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+const rsMoeda2 = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const RS_SUBS_CLINICA = new Set(['agenda', 'recuperacao', 'origem']);
+let rsSubAtual = 'geral';
+let rsClinica = null;
+let rsClinicaChave = null;
+let rsClinicaPedido = 0;
+let rsAnuncios = null;
+let rsAnunciosChave = null;
+let rsMetasDados = null;
+
+async function rsGet(url) {
+  const res = await fetch(url, { headers: { 'x-app-password': appPassword } });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
+  return data;
+}
+
+function rsCartao(titulo, sub, extraClasse = '') {
+  const c = rsEl('section', `rs-card ${extraClasse}`);
+  c.appendChild(rsEl('h3', '', titulo));
+  if (sub) c.appendChild(rsEl('p', 'rs-sub', sub));
+  return c;
+}
+function rsIndisponivel(c, texto = 'Sem dados deste módulo para a sua clínica ainda.') {
+  c.appendChild(rsEl('p', 'rs-vazio', texto));
+  return c;
+}
+// numero grande que conta de 0 ate o valor
+function rsNumeroGrande(rotulo, valor, sub, { formatar = rsNum, classe = '' } = {}) {
+  const el = rsEl('div', `rs-kpi ${classe}`);
+  const v = rsEl('strong', 'rs-kpi-valor', '0');
+  el.append(rsEl('span', 'rs-kpi-rotulo', rotulo), v);
+  if (sub) el.appendChild(rsEl('span', 'rs-kpi-sub', sub));
+  if (valor == null) v.textContent = '—'; else rsContar(v, valor, formatar);
+  el.style.cursor = 'default';
+  return el;
+}
+// barras horizontais: itens { nome, valor, texto, classe }
+function rsBarrasLista(itens, vazio) {
+  const box = rsEl('div', 'rs-barras');
+  const maior = Math.max(...itens.map((i) => i.valor), 0);
+  if (!maior) { box.appendChild(rsEl('p', 'rs-vazio', vazio)); return box; }
+  for (const it of itens) {
+    const linha = rsEl('div', 'rs-barra-linha');
+    const trilho = rsEl('div', 'rs-barra-trilho');
+    const barra = rsEl('div', `rs-barra ${it.classe || ''}`);
+    barra.style.width = '0';
+    trilho.appendChild(barra);
+    linha.append(rsEl('span', 'rs-barra-nome', it.nome), trilho, rsEl('span', 'rs-barra-valor', it.texto));
+    box.appendChild(linha);
+    requestAnimationFrame(() => requestAnimationFrame(() => { barra.style.width = it.valor ? `max(4px, ${(it.valor / maior) * 100}%)` : '0'; }));
+  }
+  return box;
+}
+const RS_NOMES_ETAPA = {
+  em_aberto: 'Em aberto', contato_realizado: 'Contato realizado', retornar_contato: 'Retornar contato', follow_up: 'Follow up',
+  sem_inicio: 'Aprovado sem iniciar', novo: 'Novo', tentativa1: '1ª tentativa', tentativa2: '2ª tentativa', tentativa3: '3ª tentativa',
+  agendou: 'Agendou', retomou: 'Retomou', sem_sucesso: 'Sem sucesso', em_contato: 'Em contato', retornar_novamente: 'Retornar novamente', retornou: 'Retornou',
+};
+const rsPorEtapa = (lista, ordem, campoValor = 'qtd') => ordem.map((id) => ({ id, nome: RS_NOMES_ETAPA[id] || id, valor: lista.find((e) => e.etapa === id)?.[campoValor] || 0, qtd: lista.find((e) => e.etapa === id)?.qtd || 0 }));
+
+async function rsCarregarClinica(forcar = false) {
+  const { de, ate } = rsIntervalo();
+  if (!de || !ate || de > ate) return;
+  const chave = `${de}|${ate}`;
+  if (!forcar && rsClinicaChave === chave && rsClinica) return rsDesenharSubAtual();
+  const pedido = ++rsClinicaPedido;
+  for (const id of ['rsAgenda', 'rsRecup', 'rsOrigem']) { const el = document.getElementById(id); if (!rsClinica) el.textContent = 'Carregando...'; }
+  try {
+    const dados = await rsGet(`/api/crm/resultados-clinica?${new URLSearchParams({ de, ate })}`);
+    if (pedido !== rsClinicaPedido) return;
+    rsClinica = dados;
+    rsClinicaChave = chave;
+    rsDesenharSubAtual();
+  } catch (err) {
+    if (pedido === rsClinicaPedido) for (const id of ['rsAgenda', 'rsRecup', 'rsOrigem']) document.getElementById(id).textContent = `Não consegui carregar: ${err.message}`;
+  }
+}
+function rsDesenharSubAtual() {
+  if (!rsClinica) return;
+  if (rsSubAtual === 'agenda') rsDesenharAgenda(rsClinica.agenda);
+  else if (rsSubAtual === 'recuperacao') rsDesenharRecuperacao(rsClinica.recuperacao);
+  else if (rsSubAtual === 'origem') { rsDesenharOrigem(rsClinica.origem); rsCarregarAnuncios(); }
+}
+
+// ----- agenda -----
+function rsDesenharAgenda(a) {
+  const box = document.getElementById('rsAgenda');
+  box.className = 'rs-pilha';
+  box.textContent = '';
+  if (!a.disponivel) { box.appendChild(rsIndisponivel(rsCartao('Agenda e comparecimento'), 'Não consegui ler os dados da agenda agora.')); return; }
+  const grade = rsEl('div', 'rs-kpis');
+  grade.append(
+    rsNumeroGrande('Pré-agendamentos', a.preAgendados, 'no período'),
+    rsNumeroGrande('Agendamentos', a.agendados, 'contatos que foram para Agendado'),
+    rsNumeroGrande('Comparecimento', a.taxaComparecimento, a.compareceu + a.faltou ? `${rsNum(a.compareceu)} vieram · ${rsNum(a.faltou)} faltaram` : 'ainda sem comparecimentos registrados', { formatar: (n) => `${n}%`, classe: a.taxaComparecimento == null ? '' : rsClassePct(a.taxaComparecimento) }),
+    rsNumeroGrande('Faltas', a.faltou, 'não compareceram', { classe: a.faltou ? 'f-abaixo' : 'f-alto' }),
+    rsNumeroGrande('Fechamento', a.taxaFechamento, a.comprou + a.naoComprou ? `${rsNum(a.comprou)} compraram · ${rsNum(a.naoComprou)} não` : 'ainda sem fechamentos registrados', { formatar: (n) => `${n}%`, classe: a.taxaFechamento == null ? '' : rsClassePct(a.taxaFechamento) }),
+  );
+  box.appendChild(grade);
+
+  const duas = rsEl('div', 'rs-duas');
+  const c1 = rsCartao('Do agendamento ao fechamento', 'Contatos que passaram por cada etapa no período');
+  c1.appendChild(rsBarrasLista([
+    { nome: 'Pré-agendados', valor: a.preAgendados, texto: rsNum(a.preAgendados) },
+    { nome: 'Agendados', valor: a.agendados, texto: rsNum(a.agendados), classe: 'f-medio' },
+    { nome: 'Compareceram', valor: a.compareceu, texto: rsNum(a.compareceu), classe: 'f-alto' },
+    { nome: 'Faltaram', valor: a.faltou, texto: rsNum(a.faltou), classe: 'f-abaixo' },
+    { nome: 'Compraram', valor: a.comprou, texto: rsNum(a.comprou), classe: 'f-alto' },
+  ], 'Nenhum agendamento registrado no período.'));
+  if (a.faltou && a.taxaComparecimento != null && a.taxaComparecimento < 80) c1.appendChild(rsEl('p', 'rs-dica', `${rsNum(a.faltou)} faltas no período. Confirmações e lembretes automáticos costumam reduzir isso.`));
+  const c2 = rsCartao('Próximos 7 dias na agenda', 'Compromissos cadastrados na Agenda do app');
+  const dias = [];
+  for (let i = 0; i < 7; i++) {
+    const iso = rsSomarDias(rsHojeMaceio(), i);
+    dias.push({ nome: i === 0 ? 'Hoje' : `${RS_DIAS_SEMANA[new Date(`${iso}T12:00:00Z`).getUTCDay()]} ${rsDataCurta(iso)}`, valor: a.proximos7.find((p) => p.dia === iso)?.total || 0 });
+  }
+  c2.appendChild(rsBarrasLista(dias.map((d) => ({ ...d, texto: String(d.valor), classe: 'f-medio' })), 'Nenhum compromisso nos próximos 7 dias.'));
+  duas.append(c1, c2);
+  box.appendChild(duas);
+}
+
+// ----- recuperacao -----
+function rsDesenharRecuperacao(r) {
+  const box = document.getElementById('rsRecup');
+  box.className = 'rs-pilha';
+  box.textContent = '';
+  const din = r.dinheiroRecuperado;
+  const hero = rsEl('section', 'rs-card rs-inclina rs-dinheiro');
+  hero.appendChild(rsEl('div', 'rs-cab', 'Dinheiro que voltou no período'));
+  const grande = rsEl('div', 'rs-dinheiro-valor', rsMoeda(0));
+  hero.appendChild(grande);
+  rsContar(grande, Math.round(din.valor), rsMoeda);
+  hero.appendChild(rsEl('p', 'rs-sub', din.valor ? `${rsMoeda(din.orcamentosAprovados)} em orçamentos aprovados + ${rsMoeda(din.resgatesRetomados)} em tratamentos retomados` : 'Quando orçamentos forem aprovados ou tratamentos retomados, o valor aparece aqui.'));
+  box.appendChild(hero);
+
+  const grade = rsEl('div', 'rs-grade2');
+  // orcamentos em aberto
+  const co = rsCartao('Orçamentos em aberto', 'Dinheiro esperando decisão do paciente (Clinicorp)');
+  if (!r.orcamentos.disponivel) rsIndisponivel(co); else {
+    const o = r.orcamentos;
+    co.appendChild(rsEl('div', 'rs-dinheiro-medio', rsMoeda(o.emAberto.valor)));
+    co.appendChild(rsEl('p', 'rs-sub', `${rsNum(o.emAberto.qtd)} orçamentos${o.parados30.qtd ? ` · ${rsNum(o.parados30.qtd)} parados há mais de 30 dias (${rsMoeda(o.parados30.valor)})` : ''}`));
+    co.appendChild(rsBarrasLista(rsPorEtapa(o.porEtapa, ['em_aberto', 'contato_realizado', 'retornar_contato', 'follow_up'], 'valor').map((e) => ({ nome: e.nome, valor: e.valor, texto: `${rsMoeda(e.valor)} · ${e.qtd}`, classe: e.id === 'em_aberto' ? 'f-abaixo' : 'f-medio' })), 'Nenhum orçamento em aberto.'));
+    if (o.aprovadosNoPeriodo.qtd) co.appendChild(rsEl('p', 'rs-dica', `${rsNum(o.aprovadosNoPeriodo.qtd)} aprovados no período: ${rsMoeda(o.aprovadosNoPeriodo.valor)}`));
+  }
+  // resgate
+  const cr = rsCartao('Resgate de orçamentos', 'Aprovados que pararam no meio do tratamento');
+  if (!r.resgate.disponivel) rsIndisponivel(cr); else {
+    const g = r.resgate;
+    cr.appendChild(rsEl('div', 'rs-dinheiro-medio', rsMoeda(g.pendente.valor)));
+    cr.appendChild(rsEl('p', 'rs-sub', `${rsNum(g.pendente.qtd)} pacientes com tratamento por concluir · ${rsNum(g.tentativas)} contatos feitos no período`));
+    cr.appendChild(rsBarrasLista(rsPorEtapa(g.porEtapa, ['sem_inicio', 'novo', 'tentativa1', 'tentativa2', 'tentativa3', 'agendou', 'retomou', 'sem_sucesso']).map((e) => ({ nome: e.nome, valor: e.valor, texto: rsNum(e.valor), classe: e.id === 'retomou' ? 'f-alto' : e.id === 'sem_sucesso' ? 'f-abaixo' : '' })), 'Nenhum paciente no resgate.'));
+    if (g.retomouNoPeriodo.qtd) cr.appendChild(rsEl('p', 'rs-dica', `${rsNum(g.retomouNoPeriodo.qtd)} retomaram o tratamento no período (${rsMoeda(g.retomouNoPeriodo.valor)}).`));
+  }
+  // retorno
+  const ct = rsCartao('Retorno de pacientes', 'Manutenções e retornos que ninguém pode esquecer');
+  if (!r.retorno.disponivel) rsIndisponivel(ct); else {
+    const t = r.retorno;
+    ct.appendChild(rsBarrasLista(rsPorEtapa(t.porEtapa, ['novo', 'em_contato', 'retornar_novamente', 'agendou', 'retornou', 'sem_sucesso']).map((e) => ({ nome: { novo: 'A contatar', agendou: 'Agendado', retornou: 'Retornou', sem_sucesso: 'Retorno recusado' }[e.id] || e.nome, valor: e.valor, texto: rsNum(e.valor), classe: ['agendou', 'retornou'].includes(e.id) ? 'f-alto' : e.id === 'sem_sucesso' ? 'f-abaixo' : '' })), 'Nenhum paciente na lista de retorno.'));
+    ct.appendChild(rsEl('p', 'rs-dica', `${rsNum(t.recuperadosNoPeriodo)} pacientes agendaram ou voltaram no período · ${rsNum(t.tentativas)} contatos feitos.`));
+  }
+  // indicacoes
+  const ci = rsCartao('Indicações', 'Pacientes que trouxeram novos pacientes');
+  if (!r.indicacoes.disponivel) rsIndisponivel(ci); else {
+    const n = r.indicacoes;
+    ci.appendChild(rsBarrasLista([
+      { nome: 'Indicados recebidos', valor: n.novos, texto: rsNum(n.novos) },
+      { nome: 'Agendaram', valor: n.agendados, texto: rsNum(n.agendados), classe: 'f-medio' },
+      { nome: 'Compareceram', valor: n.compareceram, texto: rsNum(n.compareceram), classe: 'f-alto' },
+    ], 'Nenhuma indicação no período.'));
+    ci.appendChild(rsEl('p', 'rs-dica', `${rsNum(n.indicadores)} ${n.indicadores === 1 ? 'paciente já indicou' : 'pacientes já indicaram'} alguém.`));
+  }
+  // follow-up
+  const cf = rsCartao('Follow-up automático', 'A Lumia insistindo por você');
+  if (!r.followUp.disponivel) rsIndisponivel(cf); else {
+    const f = r.followUp;
+    const taxa = f.contatos ? Math.round((f.voltaramAResponder / f.contatos) * 100) : null;
+    const g2 = rsEl('div', 'rs-mini-kpis');
+    g2.append(rsNumeroGrande('Contatos acionados', f.contatos, `${rsNum(f.mensagens)} mensagens enviadas`), rsNumeroGrande('Voltaram a responder', f.voltaramAResponder, taxa == null ? '' : `${taxa}% em até 3 dias`, { classe: taxa == null ? '' : rsClassePct(Math.min(100, taxa * 3)) }));
+    cf.appendChild(g2);
+    cf.appendChild(rsEl('p', 'rs-dica', `${rsNum(f.entraram)} contatos entraram nos funis de follow-up no período.`));
+  }
+  // aniversariantes
+  const ca = rsCartao('Relacionamento', 'Mensagens de aniversário enviadas');
+  if (!r.aniversariantes.disponivel) rsIndisponivel(ca); else ca.appendChild(rsNumeroGrande('Aniversariantes lembrados', r.aniversariantes.enviados, 'mensagens enviadas no período'));
+  grade.append(co, cr, ct, ci, cf, ca);
+  box.appendChild(grade);
+}
+
+// ----- origem e anuncios -----
+function rsDesenharOrigem(o) {
+  const box = document.getElementById('rsOrigem');
+  box.className = 'rs-pilha';
+  box.textContent = '';
+  const c = rsCartao('De onde vêm os pacientes', 'Contatos novos do período por campanha ou origem, e quantos já agendaram ou compraram');
+  if (!o.disponivel) { box.appendChild(rsIndisponivel(c, 'Não consegui ler a origem dos contatos agora.')); return; }
+  if (!o.total) c.appendChild(rsEl('p', 'rs-vazio', 'Nenhum contato novo no período.'));
+  else {
+    const lista = rsEl('div', 'rs-origens');
+    const maior = Math.max(...o.lista.map((x) => x.leads), 1);
+    o.lista.forEach((x, i) => {
+      const linha = rsEl('div', 'rs-origem-linha');
+      linha.style.setProperty('--i', i);
+      const topo = rsEl('div', 'rs-origem-topo');
+      topo.append(rsEl('strong', '', x.origem), x.anuncio ? rsEl('span', 'rs-selo', 'anúncio') : rsEl('span'), rsEl('span', 'rs-origem-n', `${rsNum(x.leads)} · ${Math.round((x.leads / o.total) * 100)}%`));
+      const trilho = rsEl('div', 'rs-barra-trilho');
+      const barra = rsEl('div', 'rs-barra');
+      barra.style.width = '0';
+      trilho.appendChild(barra);
+      requestAnimationFrame(() => requestAnimationFrame(() => { barra.style.width = `max(4px, ${(x.leads / maior) * 100}%)`; }));
+      const conv = x.leads ? Math.round((x.convertidos / x.leads) * 100) : 0;
+      linha.append(topo, trilho, rsEl('small', 'rs-sub', `${rsNum(x.convertidos)} já agendaram ou vieram (${conv}%)${x.comprou ? ` · ${rsNum(x.comprou)} compraram` : ''}`));
+      lista.appendChild(linha);
+    });
+    c.appendChild(lista);
+  }
+  box.appendChild(c);
+  const anuncios = rsEl('div', 'rs-pilha');
+  anuncios.id = 'rsAnunciosBox';
+  box.appendChild(anuncios);
+  rsDesenharAnuncios();
+}
+
+async function rsCarregarAnuncios() {
+  const { de, ate } = rsIntervalo();
+  const chave = `${de}|${ate}`;
+  if (rsAnunciosChave === chave && rsAnuncios) return;
+  rsAnuncios = null;
+  rsDesenharAnuncios('Buscando os números do Meta Ads...');
+  try {
+    const dados = await rsGet(`/api/crm/resultados-anuncios?${new URLSearchParams({ de, ate })}`);
+    if (`${rsIntervalo().de}|${rsIntervalo().ate}` !== chave) return;
+    rsAnuncios = dados;
+    rsAnunciosChave = chave;
+  } catch (err) {
+    rsAnuncios = { conectado: true, erro: err.message, contas: [] };
+  }
+  rsDesenharAnuncios();
+}
+
+function rsDesenharAnuncios(carregando) {
+  const box = document.getElementById('rsAnunciosBox');
+  if (!box) return;
+  box.textContent = '';
+  const c = rsCartao('Anúncios (Meta Ads)', 'Investimento e resultado no período');
+  box.appendChild(c);
+  if (carregando) { c.appendChild(rsEl('p', 'rs-vazio', carregando)); return; }
+  const a = rsAnuncios;
+  if (!a) return;
+  if (!a.conectado) { c.appendChild(rsEl('p', 'rs-vazio', 'Meta Ads não conectado. Conecte em Integrações para ver investimento, resultados e custo por contato aqui.')); return; }
+  if (a.erro) { c.appendChild(rsEl('p', 'rs-vazio', `Não consegui consultar o Meta agora: ${a.erro}`)); return; }
+  if (!a.contas.length) { c.appendChild(rsEl('p', 'rs-vazio', 'Nenhuma conta com gasto no período.')); return; }
+  const leadsCrm = rsClinica?.origem?.deAnuncio || 0;
+  const grade = rsEl('div', 'rs-kpis');
+  grade.append(
+    rsNumeroGrande('Investido', Math.round(a.totais.gasto), `${rsNum(a.contas.length)} ${a.contas.length === 1 ? 'conta' : 'contas'}`, { formatar: rsMoeda }),
+    rsNumeroGrande('Resultados', a.totais.resultados, 'conversas e leads gerados pelos anúncios'),
+    rsNumeroGrande('Custo por resultado', a.totais.custoPorResultado == null ? null : Math.round(a.totais.custoPorResultado * 100) / 100, 'média das contas', { formatar: rsMoeda2 }),
+    rsNumeroGrande('Custo por contato no CRM', leadsCrm ? Math.round((a.totais.gasto / leadsCrm) * 100) / 100 : null, leadsCrm ? `${rsNum(leadsCrm)} contatos que chegaram por anúncio` : 'nenhum contato com origem de anúncio', { formatar: rsMoeda2 }),
+  );
+  c.appendChild(grade);
+  c.appendChild(rsBarrasLista(a.contas.map((x) => ({ nome: x.nome, valor: x.gasto, texto: `${rsMoeda(x.gasto)} · ${rsNum(x.resultados)} res.${x.custoPorResultado ? ` · ${rsMoeda2(x.custoPorResultado)}` : ''}` })), 'Sem gasto no período.'));
+  if (a.falhas?.length) c.appendChild(rsEl('p', 'rs-dica', `Não consegui ler ${a.falhas.length} ${a.falhas.length === 1 ? 'conta' : 'contas'}: ${a.falhas.map((f) => f.nome).join(', ')}.`));
+}
+
+// ----- metas do mes -----
+const RS_METAS_DEF = [
+  { id: 'novos', nome: 'Novos contatos', unidade: '', icone: '🧲', fmt: rsNum, projeta: true },
+  { id: 'agendamentos', nome: 'Agendamentos', unidade: '', icone: '📅', fmt: rsNum, projeta: true },
+  { id: 'pct5', nome: 'Respondidos em até 5 min', unidade: '%', icone: '⚡', fmt: (n) => `${n}%`, projeta: false },
+  { id: 'recuperado', nome: 'Dinheiro recuperado', unidade: 'R$', icone: '💰', fmt: rsMoeda, projeta: true },
+];
+
+async function rsCarregarMetas() {
+  try {
+    rsMetasDados = await rsGet('/api/crm/resultados-metas');
+    rsDesenharMetas();
+  } catch (err) {
+    document.getElementById('rsMetas').textContent = `Não consegui carregar as metas: ${err.message}`;
+  }
+}
+
+function rsDesenharMetas(editando = false) {
+  const d = rsMetasDados;
+  const box = document.getElementById('rsMetas');
+  box.textContent = '';
+  if (!d) return;
+  const algumaMeta = RS_METAS_DEF.some((m) => d.metas[m.id]);
+  document.getElementById('rsMetasSub').textContent = `${String(d.mes.mes).padStart(2, '0')}/${d.mes.ano} · dia ${d.mes.diaAtual} de ${d.mes.diasMes}. Defina quanto quer alcançar e acompanhe a projeção até o fim do mês.`;
+  document.getElementById('rsMetasEditar').textContent = editando ? 'Cancelar' : algumaMeta ? 'Editar metas' : 'Definir metas';
+  if (editando) {
+    const form = rsEl('form', 'rs-metas-form');
+    for (const m of RS_METAS_DEF) {
+      const l = rsEl('label', 'rs-metas-campo');
+      const inp = rsEl('input');
+      inp.type = 'number'; inp.min = '0'; inp.step = m.id === 'recuperado' ? '100' : '1'; inp.name = m.id;
+      inp.value = d.metas[m.id] || '';
+      inp.placeholder = m.id === 'pct5' ? 'ex.: 85' : m.id === 'recuperado' ? 'ex.: 50000' : 'ex.: 100';
+      l.append(rsEl('span', '', `${m.icone} ${m.nome}${m.unidade ? ` (${m.unidade})` : ''}`), inp);
+      form.appendChild(l);
+    }
+    const ok = rsEl('button', 'relatorio-config-enviar', 'Salvar metas');
+    ok.type = 'submit';
+    form.appendChild(ok);
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const metas = {};
+      for (const m of RS_METAS_DEF) { const v = Number(form.elements[m.id].value); if (v > 0) metas[m.id] = v; }
+      ok.disabled = true;
+      try {
+        const res = await fetch('/api/crm/resultados-metas', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ metas }) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.erro || 'erro');
+        rsMetasDados = data;
+        rsDesenharMetas();
+      } catch (err) { ok.disabled = false; ok.textContent = `Erro: ${err.message}`; }
+    });
+    box.appendChild(form);
+    return;
+  }
+  if (!algumaMeta) { box.appendChild(rsEl('p', 'rs-vazio', 'Nenhuma meta definida ainda. Clique em "Definir metas" para começar.')); return; }
+  const grade = rsEl('div', 'rs-metas-grade');
+  const batidas = [];
+  RS_METAS_DEF.filter((m) => d.metas[m.id]).forEach((m, i) => {
+    const meta = d.metas[m.id];
+    const atual = d.atual[m.id];
+    const pct = atual == null ? 0 : Math.min(100, Math.round((atual / meta) * 100));
+    const proj = m.projeta ? d.projecao[m.id] : null;
+    const bateu = atual != null && atual >= meta;
+    if (bateu) batidas.push(m);
+    const el = rsEl('div', `rs-meta rs-inclina${bateu ? ' bateu' : ''}`);
+    el.style.setProperty('--i', i);
+    const anel = rsEl('div', 'rs-anel rs-anel-meta');
+    const r = 38, circ = 2 * Math.PI * r;
+    const svg = rsSvg('svg', { width: 92, height: 92, viewBox: '0 0 92 92' }, anel);
+    rsSvg('circle', { cx: 46, cy: 46, r, fill: 'none', 'stroke-width': 8, class: 'rs-anel-trilho' }, svg);
+    const val = rsSvg('circle', { cx: 46, cy: 46, r, fill: 'none', 'stroke-width': 8, 'stroke-linecap': 'round', class: 'rs-anel-valor', transform: 'rotate(-90 46 46)', 'stroke-dasharray': circ, 'stroke-dashoffset': circ }, svg);
+    if (bateu) val.style.stroke = 'var(--f-alto)';
+    requestAnimationFrame(() => requestAnimationFrame(() => val.setAttribute('stroke-dashoffset', circ * (1 - pct / 100))));
+    const meio = rsEl('div', 'rs-anel-meio');
+    meio.append(rsEl('strong', '', `${pct}%`));
+    meio.firstChild.style.fontSize = '20px';
+    anel.appendChild(meio);
+    const lado = rsEl('div', 'rs-meta-lado');
+    lado.append(rsEl('strong', '', `${m.icone} ${m.nome}`), rsEl('div', 'rs-meta-valor', atual == null ? '—' : m.fmt(atual)), rsEl('small', 'rs-sub', `meta: ${m.fmt(meta)}`));
+    if (bateu) lado.appendChild(rsEl('span', 'rs-selo ok', 'Meta batida!'));
+    else if (proj != null) lado.appendChild(rsEl('span', `rs-selo ${proj >= meta ? 'ok' : 'alerta'}`, proj >= meta ? `No ritmo: projeção ${m.fmt(proj)}` : `Ritmo atual leva a ${m.fmt(proj)}`));
+    else if (atual == null) lado.appendChild(rsEl('small', 'rs-sub', 'sem conversas no mês'));
+    el.append(anel, lado);
+    grade.appendChild(el);
+  });
+  box.appendChild(grade);
+  // confete uma vez por meta batida em cada mes
+  try {
+    const chave = `rs_metas_batidas_${d.mes.ano}-${d.mes.mes}`;
+    const salvas = new Set(JSON.parse(localStorage.getItem(chave) || '[]'));
+    const novas = batidas.filter((m) => !salvas.has(m.id));
+    if (novas.length) { rsConfete(box); for (const m of novas) salvas.add(m.id); localStorage.setItem(chave, JSON.stringify([...salvas])); }
+  } catch { /* sem armazenamento: so nao comemora */ }
+}
+document.getElementById('rsMetasEditar').addEventListener('click', () => {
+  const editando = !!document.querySelector('#rsMetas .rs-metas-form');
+  rsDesenharMetas(!editando);
+});
+
 // ---------- sub-abas ----------
 function rsIrSub(sub) {
+  rsSubAtual = sub;
   for (const b of document.getElementById('rsSubabas').querySelectorAll('button')) b.classList.toggle('ativo', b.dataset.sub === sub);
   for (const p of tabResultados.querySelectorAll('.rs-painel')) p.hidden = p.dataset.sub !== sub;
   rsDesenharGraficos();
+  if (RS_SUBS_CLINICA.has(sub)) rsCarregarClinica();
+  else if (sub === 'conquistas') rsCarregarMetas();
 }
 document.getElementById('rsSubabas').addEventListener('click', (ev) => {
   const b = ev.target.closest('button[data-sub]');
