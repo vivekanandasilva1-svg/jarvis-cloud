@@ -96,6 +96,8 @@ const tabResultados = document.getElementById('tabResultados');
 const tabBtnResultados = document.getElementById('tabBtnResultados');
 const tabInstagram = document.getElementById('tabInstagram');
 const tabBtnInstagram = document.getElementById('tabBtnInstagram');
+const tabEmpresa = document.getElementById('tabEmpresa');
+const tabBtnEmpresa = document.getElementById('tabBtnEmpresa');
 const tabAuto = document.getElementById('tabAuto');
 const tabFollowUp = document.getElementById('tabFollowUp');
 const tabAniversariantes = document.getElementById('tabAniversariantes');
@@ -406,6 +408,7 @@ function aplicarMenuPermitido() {
   tabBtnContatos.hidden = !abaLiberada('crm'); // a base e a mesma tabela de contatos do CRM
   tabBtnResultados.hidden = !abaLiberada('crm') || !meuEhDono; // relatorios gerenciais: so o acesso principal // indicadores calculados sobre as conversas do CRM
   tabBtnInstagram.hidden = !abaLiberada('instagram');
+  tabBtnEmpresa.hidden = !abaLiberada('empresa');
   tabBtnAuto.hidden = !abaLiberada('auto');
   tabBtnFollowUp.hidden = !abaLiberada('followUp');
   tabBtnAniversariantes.hidden = !abaLiberada('aniversariantes');
@@ -2041,6 +2044,7 @@ const CABECALHOS_ABA = {
   crm: ['Clientes', 'CRM', 'Seus leads em cada etapa do funil, com a conversa do WhatsApp.'],
   contatos: ['Clientes', 'Contatos', 'Toda a sua base de leads: cadastre, importe e exporte planilhas.'],
   instagram: ['Redes sociais', 'Instagram', 'Publique e agende posts, responda comentários e atenda o direct.'],
+  empresa: ['Minha Empresa', 'Escritório da Lumia', 'Veja seus agentes de IA trabalhando, setor por setor, em tempo real.'],
   resultados: ['Clientes', 'Resultados', 'Como está o atendimento: volume, velocidade de resposta e conversão do funil.'],
   auto: ['Automação', 'Auto Atendimento', 'Configure a IA que atende os contatos no WhatsApp.'],
   relatorios: ['Automação', 'Relatórios automáticos', 'Relatórios enviados sozinhos no WhatsApp, na frequência que você escolher.'],
@@ -2088,6 +2092,8 @@ function mudarAba(aba) {
   tabContatos.hidden = aba !== 'contatos';
   tabResultados.hidden = aba !== 'resultados';
   tabInstagram.hidden = aba !== 'instagram';
+  tabEmpresa.hidden = aba !== 'empresa';
+  empresaAoMudarAba(aba);
   tabAuto.hidden = aba !== 'auto';
   tabFollowUp.hidden = aba !== 'followUp';
   tabAniversariantes.hidden = aba !== 'aniversariantes';
@@ -2112,6 +2118,7 @@ function mudarAba(aba) {
   tabBtnContatos.classList.toggle('active', aba === 'contatos');
   tabBtnResultados.classList.toggle('active', aba === 'resultados');
   tabBtnInstagram.classList.toggle('active', aba === 'instagram');
+  tabBtnEmpresa.classList.toggle('active', aba === 'empresa');
   tabBtnAuto.classList.toggle('active', aba === 'auto');
   tabBtnFollowUp.classList.toggle('active', aba === 'followUp');
   tabBtnAniversariantes.classList.toggle('active', aba === 'aniversariantes');
@@ -2230,6 +2237,22 @@ tabBtnConversas.addEventListener('click', () => mudarAba('conversas'));
 tabBtnContatos.addEventListener('click', () => mudarAba('contatos'));
 tabBtnResultados.addEventListener('click', () => mudarAba('resultados'));
 tabBtnInstagram.addEventListener('click', () => mudarAba('instagram'));
+tabBtnEmpresa.addEventListener('click', () => mudarAba('empresa'));
+
+// "Minha Empresa": o escritorio 3D (Three.js + modulo proprio) so e baixado na 1a vez que a aba abre,
+// e a animacao pausa assim que a aba fecha
+let empresaModulo = null;
+function empresaAoMudarAba(aba) {
+  if (aba !== 'empresa') { empresaModulo?.pausar(); return; }
+  if (empresaModulo) { empresaModulo.retomar(); return; }
+  tabEmpresa.textContent = 'Carregando o escritório...';
+  import('./minha-empresa.js?v=20261126c').then((m) => {
+    empresaModulo = m;
+    tabEmpresa.textContent = '';
+    m.iniciar(tabEmpresa, { api: igApi });
+    if (tabEmpresa.hidden) m.pausar();
+  }).catch((err) => { tabEmpresa.textContent = `Não consegui abrir o escritório: ${err.message}`; });
+}
 tabBtnRelatorios.addEventListener('click', () => mudarAba('relatorios'));
 tabBtnGeradorRelatorios.addEventListener('click', () => mudarAba('geradorRelatorios'));
 tabBtnAuto.addEventListener('click', () => mudarAba('auto'));
@@ -11641,7 +11664,7 @@ document.getElementById('crmEspelharBtn').addEventListener('click', () => {
 const FERRAMENTAS_COLAB = [
   ['painel', 'Painel (Lumia/Chat)'], ['agenda', 'Agenda'], ['whatsapp', 'WhatsApp'], ['crm', 'CRM, Conversas, Contatos, Resultados e Origem dos leads'],
   ['auto', 'Auto Atendimento'], ['followUp', 'Follow Up'], ['aniversariantes', 'Aniversariantes do mês'], ['gestaoGeral', 'Lumia Gestão Geral'], ['followUpInteligente', 'Follow Up Inteligente'], ['funilFollowUp', 'Funil Follow Up'], ['indicacoes', 'Indicações'], ['resgateOrcamentos', 'Resgate de orçamentos'],
-  ['disparos', 'Disparos'], ['relatorios', 'Relatórios automáticos'], ['geradorRelatorios', 'Gerador de Relatórios'], ['integracoes', 'Integrações'], ['instagram', 'Instagram'],
+  ['disparos', 'Disparos'], ['relatorios', 'Relatórios automáticos'], ['geradorRelatorios', 'Gerador de Relatórios'], ['integracoes', 'Integrações'], ['instagram', 'Instagram'], ['empresa', 'Minha Empresa'],
 ];
 function abrirFerramentasColab(c) {
   const daConta = minhasTabsHabilitadas || meusDadosMe?.tabsValidas || FERRAMENTAS_COLAB.map(([k]) => k);

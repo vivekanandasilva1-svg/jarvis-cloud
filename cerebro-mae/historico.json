@@ -1350,11 +1350,19 @@
     "conteudo": "Pedido do dono: aba Resultados no mesmo padrao do app de gestao geral (graficos, gamificacao, interatividade) e com visao completa da clinica. Etapa 1 (so dados que ja existiam, GET /api/crm/resultados so ganhou campos novos): sub-abas Visao geral/Atendimento/Funil/Conquistas; nota de saude 0-100 (velocidade 35, ninguem esquecido 25, automacao 15, conversao 25, renormalizada se faltar dado) com nivel bronze-diamante; sequencia de dias com 80%+ respondidos em 5 min; medidor da 1a resposta; KPIs com mini-grafico e clique; mapa de calor dia x hora; rosca de quem respondeu; faixas de tempo de resposta; lista de conversas esperando agora (abre a conversa); funil clicavel (leva a Contatos filtrado); 8 conquistas com confete so quando surge uma nova. Continua so para o acesso principal (CRM). PENDENTE etapa 2: agenda/comparecimento, recuperacao (follow-up inteligente, resgate, retorno, indicacoes, orcamentos em aberto em R$), origem dos leads, Meta Ads/Instagram, metas mensais."
   },
   {
-    "chave": "crm:resultados-etapa2",
-    "modulo": "crm",
+    "chave": "mod:empresa",
+    "hub": true,
+    "modulo": "empresa",
+    "tipo": "contexto",
+    "titulo": "Módulo: Minha Empresa (escritório 3D dos agentes de IA)",
+    "conteudo": "Aba Escritório: mapa isométrico em blocos onde cada setor (Recepção, Comercial, Laboratório, Financeiro, Tráfego Pago) tem agentes de IA animados em sincronia com a atividade real do app (Liz, Bia, Lua, Lorena, Anne, Lay, Mya, Kyan). Entrega por fases."
+  },
+  {
+    "chave": "empresa:escritorio-3d-fase1",
+    "modulo": "empresa",
     "data": "2026-11-26",
-    "tipo": "melhoria",
-    "titulo": "Resultados etapa 2: agenda, recuperacao, origem/anuncios e metas",
-    "conteudo": "Complementa [crm:resultados-painel-gamificado]. Novas sub-abas Agenda (comparecimento, faltas, fechamento, proximos 7 dias), Recuperacao (destaque 'dinheiro que voltou' = orcamentos aprovados + tratamentos retomados; orcamentos em aberto em R$ com parados +30 dias; resgate; retorno; indicacoes; follow-up automatico com quantos voltaram a responder em 3 dias; aniversariantes), Origem e anuncios (leads por campanha/origem com conversao + Meta Ads: investido, resultados, custo por resultado e por contato no CRM) e Metas e conquistas (metas do mes editaveis com projecao e confete). Rotas novas GET /api/crm/resultados-clinica, /resultados-anuncios, /resultados-metas e PUT /resultados-metas (so dono); src/resultadosClinica.js, tabela rs_metas por tenant. Cada bloco falha isolado (modulo sem dados mostra aviso) e o Meta carrega a parte. Pendente: Instagram (alcance/posts) e historico de metas de meses anteriores. Dinheiro recuperado so soma o que o app tem registrado (Clinicorp/resgate), nao inventa."
+    "tipo": "funcao",
+    "titulo": "Minha Empresa: escritorio 3D em blocos - Fase 1 (Recepcao com a Liz)",
+    "conteudo": "Nova aba Escritorio (chave 'empresa' em TABS_VALIDAS + lista de liberacao do admin; rota /api/empresa/estado protegida pela aba). Estilo voxel isometrico do video de referencia: tudo desenhado por codigo com caixas (Three.js 0.160 em public/vendor, modulo public/minha-empresa.js carregado so ao abrir a aba, 30 fps, pausa ao sair da aba/aba do navegador oculta, sem modelos/imagens). Fase 1: Recepcao completa (balcao, sofas, poltronas, TV da fila, plantas, tapete), Liz atras do balcao, pacientes entrando, fazendo check-in, sentando e saindo pelos consultorios; etiqueta com nome e bolinha (verde = IA mandou mensagem nos ultimos 3 min), painel ao clicar com mensagens do dia/ultima atividade/consultas na agenda. Dados reais: src/empresa.js le crm_mensagens por autor (ia, followup, disparo) - Liz e Bia dividem 'ia' ate a Fase 2 separar por etapa; Lua/Anne dividem 'followup'; Lorena = 'disparo'. Salas Comercial, Laboratorio, Financeiro e Trafego Pago ja existem como lajes 'Em breve' com atalho de camera. Pendente: Fase 2 Comercial (Bia, Lua, Lorena, Anne), Fase 3 Laboratorio (Lay) e Financeiro (Mya), Fase 4 Trafego Pago (Kyan, dados da Meta). O fluxo de pacientes e ilustrativo (a agenda real so alimenta o contador)."
   }
 ]
