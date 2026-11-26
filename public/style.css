@@ -4104,3 +4104,11 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 .tab-empresa .emp-tag-dot.alerta { background: #ff5252; animation: empPulsoAlerta 1.1s ease-in-out infinite; }
 @keyframes empPulsoAlerta { 50% { box-shadow: 0 0 0 5px rgba(255, 82, 82, .3); } }
 .tab-empresa .emp-p-status.alerta { background: rgba(255, 82, 82, .16); color: #ff6b6b; }
+.tab-empresa .emp-p-graf { margin-top: 10px; border-top: 1px solid var(--border-soft); padding-top: 8px; }
+.tab-empresa .emp-p-graf small { display: block; color: var(--silver-dim); font-size: 11px; margin-bottom: 6px; }
+.tab-empresa .emp-p-barras { display: flex; align-items: flex-end; gap: 5px; min-height: 78px; }
+.tab-empresa .emp-barra { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; }
+.tab-empresa .emp-barra i { display: block; width: 100%; background: linear-gradient(180deg, var(--gold-bright), var(--gold)); border-radius: 3px 3px 0 0; }
+.tab-empresa .emp-barra span { font-size: 10px; color: var(--text); font-weight: 700; }
+.tab-empresa .emp-barra em { font-style: normal; font-size: 9px; color: var(--silver-dim); }
+.tab-empresa .emp-som { flex: none; }

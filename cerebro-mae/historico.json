@@ -1388,5 +1388,13 @@
     "tipo": "funcao",
     "titulo": "Minha Empresa: Fases 3 e 4 - Laboratorio (Lay), Financeiro (Mya) e Trafego Pago (Kyan)",
     "conteudo": "Tres salas novas com TVs de dados reais e os agentes Lay, Mya e Kyan (homem, com barba). Dados em src/empresa.js SEM gastar cota do Clinicorp alem do necessario: Lay = indicadores do laboratorio que o gestor lanca por semana no Gestao (gestao_lancamentos, so banco; alerta se houver trabalhos atrasados); Mya = lancamentos do financeiro (inadimplencia, contas a vencer) + vendas/recebido/despesas do mes do Clinicorp com cache de 30 min, consulta marcada como automatica (comoAutomatico) e feita so enquanto alguem esta com a aba aberta (alerta se houver inadimplencia lancada); Kyan = alertas abertos/criticos do monitor de campanhas (meta_saude_alertas) + gasto e resultados de hoje das contas escolhidas no painel de Vendas (cache de 15 min, ate 10 contas). Bolinha vermelha + balao quando ha alerta. Limite: sem lancamento semanal no Gestao, Lay e Mya mostram 'nao lancado' (nao existe integracao automatica de laboratorio); Mya mostra 'indisponivel' se o Clinicorp estiver sem cota ou desconectado. Pendente: dar mais vida ao fluxo (pacientes no laboratorio), historico/graficos no painel dos agentes e som opcional."
+  },
+  {
+    "chave": "empresa:escritorio-3d-extras",
+    "modulo": "empresa",
+    "data": "2026-11-26",
+    "tipo": "melhoria",
+    "titulo": "Minha Empresa: historico no painel, entregador no laboratorio e alerta sonoro do Kyan",
+    "conteudo": "(1) Painel de cada agente ganhou grafico de barras via GET /api/empresa/historico?agente=<id>: Liz/Bia = mensagens da IA por dia (7 dias, separadas pela etapa ATUAL do contato), Lua+Anne = mensagens de follow-up por dia (somadas, pois ambas gravam autor 'followup'), Lorena = aniversarios enviados, Lay/Mya = lancamentos semanais do Gestao (emProducao e inadimplencia), Kyan = gasto por dia das contas do painel de Vendas (Meta, cache de 30 min; a 1a chamada responde 'carregando' e a tela tenta de novo em 5 s). (2) Entregador ilustrativo chega pela frente do laboratorio com uma caixa, a Lay acena e ele sai (a cada 22-40 s; so visual). (3) Botao de alerta sonoro (localStorage 'empresaSom'): toca 2 notas quando o numero de alertas criticos do Kyan sobe entre duas consultas (15 s); precisa ter clicado no botao antes (regra de audio do navegador). Disponibilidade: aba 'empresa' liberada para a Vitaly (tenant 10, que tinha lista restrita); contas novas ja nascem com tudo liberado."
   }
 ]

@@ -19,6 +19,12 @@ const alvoCamera = new THREE.Vector3(8, 0, 6);
 let alvoAnim = null;
 let spawnEm = 0;
 let obsResize = null;
+let entregador = null;
+let entregaEm = 12;
+let somLigado = false;
+let audioCtx = null;
+let ultCriticos = null;
+const histCache = new Map();
 
 // ---------- utilidades ----------
 const matCache = new Map();
@@ -641,6 +647,33 @@ function novoPaciente(preSentado = false) {
   return p;
 }
 
+const LAB_FRENTE = [14, 26];
+function novoEntregador() {
+  const p = criarPessoa({ pele: escolher(PELES), cabelo: escolher(CABELOS), camisa: '#d98b5f', calca: '#3b4a6b', longo: false });
+  p.fase = Math.random() * 6;
+  p.vel = 1.8;
+  p.estagio = 'entrando';
+  p.caixa = caixa(p.corpo, 0, 0.8, 0.42, 0.45, 0.3, 0.32, '#c9a27a');
+  p.grupo.position.set(LAB_FRENTE[0], 0, LAB_FRENTE[1]);
+  p.yaw = p.yawAlvo = Math.PI;
+  p.rota = [[13, 20.6], [9.6, 20.6]];
+  scene.add(p.grupo);
+  return p;
+}
+function atualizarEntregador(p, dt) {
+  if (p.estagio === 'entrando' || p.estagio === 'saindo') {
+    if (!andar(p, dt)) return;
+    if (p.estagio === 'saindo') { scene.remove(p.grupo); entregador = null; entregaEm = aleatorio(22, 40); return; }
+    p.estagio = 'entrega'; p.espera = 3.5; p.modo = 'parado'; p.yawAlvo = Math.PI;
+    const lay = agentes.find((a) => a.id === 'lay');
+    if (lay) { lay.saudarAte = relogio + 2; falar(lay, 'Chegou trabalho do laboratório!', 3); }
+    return;
+  }
+  p.espera -= dt;
+  if (p.espera < 1.5 && p.caixa) { p.corpo.remove(p.caixa); p.caixa = null; }
+  if (p.espera <= 0) { p.estagio = 'saindo'; p.rota = [[13, 20.6], LAB_FRENTE]; }
+}
+
 function removerPaciente(p) {
   scene.remove(p.grupo);
   if (p.assento) p.assento.ocupado = false;
@@ -685,10 +718,28 @@ function falar(agente, texto, seg = 3) {
 async function buscarEstado() {
   try {
     estado = await ctx.api('/api/empresa/estado');
+    const crit = Number(estado?.agentes?.kyan?.extras?.[1]?.[1]);
+    if (Number.isFinite(crit)) { if (somLigado && ultCriticos !== null && crit > ultCriticos) tocarAlerta(); ultCriticos = crit; }
     atualizarPainel();
     desenharTelaComercial();
     desenharTelas();
   } catch { /* mantem o ultimo estado */ }
+}
+
+function tocarAlerta() {
+  try {
+    audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx.resume?.();
+    [0, 0.22].forEach((atraso) => {
+      const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+      o.type = 'sine'; o.frequency.value = atraso ? 660 : 880;
+      g.gain.setValueAtTime(0.0001, audioCtx.currentTime + atraso);
+      g.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + atraso + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + atraso + 0.18);
+      o.connect(g).connect(audioCtx.destination);
+      o.start(audioCtx.currentTime + atraso); o.stop(audioCtx.currentTime + atraso + 0.2);
+    });
+  } catch { /* sem audio no aparelho */ }
 }
 
 function tempoAtras(iso) {
@@ -703,10 +754,44 @@ function tempoAtras(iso) {
 function selecionar(id) {
   selecionado = agentes.find((a) => a.id === id) || null;
   atualizarPainel();
+  if (selecionado) carregarHistorico(selecionado);
   if (selecionado) {
     const p = selecionado.pessoa.grupo.position;
     irPara(p.x + 0.5, p.z + 1.5, 1.8);
   }
+}
+
+async function carregarHistorico(a) {
+  const alvo = painelEl?.querySelector('.emp-p-graf');
+  if (!alvo) return;
+  const tit = alvo.querySelector('small');
+  const barras = alvo.querySelector('.emp-p-barras');
+  const desenhar = (h) => {
+    tit.textContent = h.titulo;
+    barras.textContent = '';
+    const max = Math.max(1, ...h.pontos.map((x) => x.valor));
+    for (const pt of h.pontos) {
+      const b = document.createElement('div');
+      b.className = 'emp-barra';
+      b.title = `${pt.rotulo}: ${pt.valor}`;
+      const v = document.createElement('span'); v.textContent = pt.valor > 999 ? `${Math.round(pt.valor / 100) / 10}k` : String(Math.round(pt.valor * 10) / 10);
+      const i = document.createElement('i'); i.style.height = `${Math.max(3, (pt.valor / max) * 46)}px`;
+      const l = document.createElement('em'); l.textContent = pt.rotulo;
+      b.append(v, i, l);
+      barras.appendChild(b);
+    }
+    if (!h.pontos.length) tit.textContent = `${h.titulo} — sem dados ainda`;
+  };
+  const c = histCache.get(a.id);
+  if (c && Date.now() - c.em < 60000) return desenhar(c.h);
+  tit.textContent = 'Carregando histórico…'; barras.textContent = '';
+  try {
+    const h = await ctx.api(`/api/empresa/historico?agente=${a.id}`);
+    if (selecionado !== a) return;
+    if (h.carregando) { tit.textContent = 'Buscando no Meta… aguarde alguns segundos'; setTimeout(() => { if (selecionado === a) carregarHistorico(a); }, 5000); return; }
+    histCache.set(a.id, { em: Date.now(), h });
+    desenhar(h);
+  } catch { tit.textContent = 'Histórico indisponível'; }
 }
 
 function atualizarPainel() {
@@ -865,6 +950,8 @@ function quadro(agora) {
   spawnEm -= dt;
   if (spawnEm <= 0 && pacientes.length < 6) { novoPaciente(); spawnEm = aleatorio(6, 11); }
   for (const p of [...pacientes]) { atualizarPaciente(p, dt, liz); }
+  if (entregador) atualizarEntregador(entregador, dt);
+  else { entregaEm -= dt; if (entregaEm <= 0) entregador = novoEntregador(); }
 
   // agentes
   for (const a of agentes) {
@@ -876,6 +963,8 @@ function quadro(agora) {
       else if (real || atendendoBalcao || (relogio % 34) < 9) p.modo = 'digitando';
       else p.modo = 'parado';
       if (real && relogio > a.bolhaAte && (Math.floor(relogio) % 14 === 0)) falar(a, 'Atendendo no WhatsApp…', 4);
+    } else if (a.id === 'lay' && relogio < (a.saudarAte || 0)) {
+      p.modo = 'acenando';
     } else {
       // agentes da mesa: digitam quando ha atividade real; sem atividade, alternam trabalho e pausa
       p.modo = real || ((relogio + (p.fase || 0) * 7) % 30) < 11 ? 'digitando' : 'parado';
@@ -889,6 +978,7 @@ function quadro(agora) {
     if (!a.bolha.hidden && relogio > a.bolhaAte) a.bolha.hidden = true;
   }
   for (const p of pacientes) animarPessoa(p, dt, relogio);
+  if (entregador) animarPessoa(entregador, dt, relogio);
 
   // etiquetas HTML acompanham os personagens
   const r = canvas.getBoundingClientRect();
@@ -919,6 +1009,7 @@ function montarInterface() {
           <div class="emp-p-topo"><span class="emp-p-av"></span><div><strong class="emp-p-nome"></strong><small class="emp-p-funcao"></small></div></div>
           <span class="emp-p-status"></span>
           <div class="emp-p-dados"></div>
+          <div class="emp-p-graf"><small></small><div class="emp-p-barras"></div></div>
         </aside>
       </div>
     </div>`;
@@ -927,6 +1018,7 @@ function montarInterface() {
   tagsEl = raiz.querySelector('.emp-tags');
   painelEl = raiz.querySelector('.emp-painel');
   chipsEl = raiz.querySelector('.emp-chips');
+  try { somLigado = localStorage.getItem('empresaSom') === '1'; } catch { somLigado = false; }
   dicaEl = raiz.querySelector('.emp-dica');
   painelEl.querySelector('.emp-p-fechar').addEventListener('click', () => { selecionado = null; atualizarPainel(); });
   const setores = [
@@ -944,6 +1036,19 @@ function montarInterface() {
     b.addEventListener('click', () => irPara(s.x, s.z, 1));
     chipsEl.appendChild(b);
   }
+  const som = document.createElement('button');
+  som.type = 'button';
+  som.className = 'emp-chip emp-som';
+  const rotuloSom = () => { som.textContent = somLigado ? '🔔 Alerta sonoro: ligado' : '🔕 Alerta sonoro: desligado'; };
+  rotuloSom();
+  som.title = 'Toca um aviso quando o Kyan encontrar um novo alerta crítico nas campanhas';
+  som.addEventListener('click', () => {
+    somLigado = !somLigado;
+    try { localStorage.setItem('empresaSom', somLigado ? '1' : '0'); } catch { /* sem armazenamento */ }
+    rotuloSom();
+    if (somLigado) tocarAlerta();
+  });
+  chipsEl.appendChild(som);
 }
 
 export function iniciar(container, contexto) {

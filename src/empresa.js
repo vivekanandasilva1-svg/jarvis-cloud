@@ -170,3 +170,67 @@ export async function estado(tenantId) {
   }
   return { agora: agora.toISOString(), agentes, pacientesHoje };
 }
+
+// ---------- historico (grafico do painel de cada agente) ----------
+const ultimosDias = (n) => Array.from({ length: n }, (_, i) => new Date(Date.now() - (n - 1 - i) * 86400000).toLocaleDateString('en-CA', { timeZone: FUSO }));
+const rotuloDia = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const porDia = (dias, rows) => { const m = new Map(rows.map((r) => [r.d, Number(r.n)])); return dias.map((d) => ({ rotulo: rotuloDia(d), valor: m.get(d) || 0 })); };
+
+export async function historico(tenantId, agente) {
+  if (!['liz', 'bia', 'lua', 'anne', 'lorena', 'lay', 'mya', 'kyan'].includes(agente)) throw new Error('Agente invalido.');
+  if (!pool) return { titulo: 'Histórico indisponível', pontos: [] };
+  const dias = ultimosDias(7);
+
+  if (agente === 'liz' || agente === 'bia') {
+    const rows = (await pool.query(
+      `SELECT to_char(m.criado_em AT TIME ZONE $2, 'YYYY-MM-DD') AS d, count(*) AS n
+         FROM crm_mensagens m
+         LEFT JOIN crm_contatos c ON c.tenant_id = m.tenant_id AND c.numero = m.numero AND c.instancia = m.instancia
+        WHERE m.tenant_id = $1 AND m.direcao = 'saida' AND m.autor = 'ia' AND m.criado_em > now() - interval '8 days'
+          AND (COALESCE(c.etapa, 'novo_lead') = ANY($3::text[])) = $4
+        GROUP BY 1`,
+      [tenantId, FUSO, ETAPAS_BIA, agente === 'bia'],
+    )).rows;
+    return { titulo: `Mensagens da ${agente === 'bia' ? 'Bia' : 'Liz'} nos últimos 7 dias`, pontos: porDia(dias, rows) };
+  }
+  if (agente === 'lua' || agente === 'anne') {
+    const rows = (await pool.query(
+      `SELECT to_char(criado_em AT TIME ZONE $2, 'YYYY-MM-DD') AS d, count(*) AS n FROM crm_mensagens
+        WHERE tenant_id = $1 AND direcao = 'saida' AND autor = 'followup' AND criado_em > now() - interval '8 days' GROUP BY 1`,
+      [tenantId, FUSO],
+    )).rows;
+    return { titulo: 'Mensagens de follow-up por dia (Lua e Anne somadas)', pontos: porDia(dias, rows) };
+  }
+  if (agente === 'lorena') {
+    const rows = (await pool.query(
+      `SELECT to_char(enviado_em AT TIME ZONE $2, 'YYYY-MM-DD') AS d, count(*) AS n FROM aniversariantes_envios
+        WHERE tenant_id = $1 AND status = 'enviado' AND enviado_em > now() - interval '8 days' GROUP BY 1`,
+      [tenantId, FUSO],
+    )).rows;
+    return { titulo: 'Aniversários enviados nos últimos 7 dias', pontos: porDia(dias, rows) };
+  }
+  if (agente === 'lay' || agente === 'mya') {
+    const [setor, indicador, titulo] = agente === 'lay'
+      ? ['laboratorio', 'emProducao', 'Trabalhos em produção (lançado por semana)']
+      : ['financeiro', 'inadimplencia', 'Inadimplência lançada em R$ (por semana)'];
+    const rows = (await pool.query(
+      `SELECT to_char(semana, 'DD/MM') AS rotulo, valor FROM gestao_lancamentos
+        WHERE tenant_id = $1 AND setor = $2 AND indicador = $3 AND semana >= current_date - 49 ORDER BY semana`,
+      [tenantId, setor, indicador],
+    )).rows;
+    return { titulo, pontos: rows.map((r) => ({ rotulo: r.rotulo, valor: Number(r.valor) })) };
+  }
+  // kyan: gasto por dia nas contas do painel de Vendas (Meta, cache de 30 min)
+  const contas = (await gestaoStore.obterConfig(tenantId, 'vendas_contas_meta', [])) || [];
+  if (!contas.length) return { titulo: 'Escolha contas no painel de Vendas para ver o gasto por dia', pontos: [] };
+  const dados = comCache(`kyanhist:${tenantId}:${contas.join(',')}`, 30 * 60 * 1000, async () => {
+    const soma = new Map();
+    for (const id of contas.slice(0, 10)) {
+      const rel = await metaAds.getSpendReport(tenantId, { accountId: id, since: dias[0], until: dias[6], timeIncrement: '1' });
+      for (const r of rel) for (const pt of r.porPeriodo || []) soma.set(pt.inicio, (soma.get(pt.inicio) || 0) + pt.gasto);
+    }
+    return dias.map((d) => ({ rotulo: rotuloDia(d), valor: Math.round((soma.get(d) || 0) * 100) / 100 }));
+  });
+  if (!dados) return { titulo: 'Gasto por dia (R$)', pontos: [], carregando: true };
+  return { titulo: 'Gasto por dia nas contas do painel (R$)', pontos: dados };
+}
