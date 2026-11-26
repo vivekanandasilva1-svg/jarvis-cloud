@@ -25,12 +25,19 @@ let somLigado = false;
 let audioCtx = null;
 let ultCriticos = null;
 const histCache = new Map();
+const ativCache = new Map();
+const ativTexto = (id) => ativCache.get(id)?.[0]?.texto || '';
 
 // ---------- utilidades ----------
 const matCache = new Map();
 function mat(cor) {
   let m = matCache.get(cor);
-  if (!m) { m = new THREE.MeshLambertMaterial({ color: cor }); matCache.set(cor, m); }
+  if (!m) {
+    const c = new THREE.Color(cor);
+    const claro = c.r > 0.6 && c.g > 0.6 && c.b > 0.6; // brancos ganham um brilho leve pra nao ficarem acinzentados
+    m = new THREE.MeshLambertMaterial({ color: cor, emissive: claro ? 0x2a2f34 : 0x000000 });
+    matCache.set(cor, m);
+  }
   return m;
 }
 const geoCache = new Map();
@@ -77,7 +84,7 @@ const aleatorio = (a, b) => a + Math.random() * (b - a);
 const escolher = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 // ---------- personagens (blocos) ----------
-function criarPessoa({ pele = '#f1c9a5', cabelo = '#4a3426', camisa = '#2f7f86', calca = '#2c3038', longo = false, barba = false, sapato = '#1f2229' }) {
+function criarPessoa({ pele = '#f1c9a5', cabelo = '#4a3426', camisa = '#2f7f86', calca = '#2c3038', longo = false, barba = false, neon = null, sapato = '#1f2229' }) {
   const g = new THREE.Group();
   const sombra = new THREE.Mesh(new THREE.CircleGeometry(0.42, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22 }));
   sombra.rotation.x = -Math.PI / 2; sombra.position.y = 0.02;
@@ -125,6 +132,18 @@ function criarPessoa({ pele = '#f1c9a5', cabelo = '#4a3426', camisa = '#2f7f86',
   caixa(cabeca, 0.12, 0.2, 0.26, 0.07, 0.09, 0.02, '#23252b');
   if (barba) caixa(cabeca, 0, 0.0, 0.265, 0.5, 0.2, 0.03, cabelo);
   else caixa(cabeca, 0, 0.08, 0.26, 0.12, 0.03, 0.02, '#b5675e');
+  if (neon) {
+    const brilho = { emissive: new THREE.Color(neon), emissiveIntensity: 1 };
+    caixa(cabeca, 0, 0.17, 0.275, 0.52, 0.13, 0.04, neon, brilho); // visor
+    for (const lado of [-1, 1]) {
+      caixa(cabeca, lado * 0.3, 0.08, 0, 0.08, 0.26, 0.22, '#e8eef5'); // fone
+      caixa(cabeca, lado * 0.335, 0.14, 0, 0.02, 0.1, 0.1, neon, brilho);
+    }
+    caixa(cabeca, 0, 0.5, 0, 0.5, 0.05, 0.08, '#e8eef5'); // arco do headset
+    caixa(corpo, 0, 0.95, 0.175, 0.2, 0.2, 0.03, neon, brilho); // nucleo no peito
+    caixa(corpo, 0, 0.68, 0, 0.62, 0.05, 0.36, neon, brilho); // cinto de luz
+    for (const o of bracos) caixa(o, 0, -0.12, 0, 0.18, 0.04, 0.2, neon, brilho);
+  }
   corpo.add(cabeca);
   return { grupo: g, corpo, quadris, joelhos, bracos, cabeca, modo: 'parado', sentadoF: 0, andaF: 0, yaw: 0, yawAlvo: 0, rota: [], vel: 1.7 };
 }
@@ -255,13 +274,13 @@ function texturaPiso(w, h, corA, corB, lado = 1) {
   return t;
 }
 
-function lajeBase(pai, x0, z0, w, d, corPiso, corPiso2) {
+function lajeBase(pai, x0, z0, w, d, corPiso, corPiso2, borda = '#d4af37') {
   const g = new THREE.Group();
   g.position.set(x0, 0, z0);
   bloco(g, -0.35, -0.6, -0.35, w + 0.35, 0, d + 0.35, '#262a31');
-  bloco(g, -0.35, -0.07, d + 0.35 - 0.07, w + 0.35, 0, d + 0.35, '#d4af37');
-  bloco(g, w + 0.35 - 0.07, -0.07, -0.35, w + 0.35, 0, d + 0.35, '#d4af37');
-  const piso = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshLambertMaterial({ map: texturaPiso(w, d, corPiso, corPiso2, 1) }));
+  bloco(g, -0.35, -0.07, d + 0.35 - 0.07, w + 0.35, 0, d + 0.35, borda);
+  bloco(g, w + 0.35 - 0.07, -0.07, -0.35, w + 0.35, 0, d + 0.35, borda);
+  const piso = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshLambertMaterial({ map: texturaPiso(w, d, corPiso, corPiso2, 1), emissive: new THREE.Color(corPiso).getHSL({}).l > 0.9 ? 0x30353a : 0x000000 }));
   piso.rotation.x = -Math.PI / 2; piso.position.set(w / 2, 0.001, d / 2);
   g.add(piso);
   pai.add(g);
@@ -362,9 +381,9 @@ function cadeira(pai, x, z, cor = '#2c3038') {
   caixa(pai, x, 0.25, z, 0.7, 0.14, 0.7, cor);
   caixa(pai, x, 0.39, z - 0.34, 0.7, 0.6, 0.1, cor);
 }
-function mesaTrabalho(pai, x, z, larg = 3.2, cor = '#f4f1ea') {
+function mesaTrabalho(pai, x, z, larg = 3.2, cor = '#f4f1ea', topo = '#2c3038') {
   caixa(pai, x, 0, z, larg, 0.95, 0.9, cor);
-  caixa(pai, x, 0.95, z, larg + 0.1, 0.1, 1.0, '#2c3038');
+  caixa(pai, x, 0.95, z, larg + 0.1, 0.1, 1.0, topo);
   caixa(pai, x, 0.3, z + 0.46, larg - 0.1, 0.06, 0.02, '#d4af37');
 }
 
@@ -486,21 +505,22 @@ function novaTela(pai, { x, y, z, w, h, titulo, cor = '#4cc3d9', linhas }) {
 function desenharTelas() { telas.forEach(desenharTela); }
 
 // sala padrao (laje, vidro nos fundos, parede de madeira a esquerda, painel com a placa do setor)
-function salaPadrao(nome, sub, x0, z0, { piso = ['#e6e1ea', '#dcd6e2'], escuro = false } = {}) {
+function salaPadrao(nome, sub, x0, z0, { piso = ['#e6e1ea', '#dcd6e2'], escuro = false, tema = {} } = {}) {
+  const T = { painel: '#2c3038', viga: '#2c3038', trim: '#d4af37', faixa: '#d4af37', placaFundo: '#2c3038', placaCor: '#d4af37', esq: escuro ? '#3a3f48' : '#c9a27a', ripa: escuro ? '#2f343c' : '#b78d63', ...tema };
   const C = new THREE.Group();
   scene.add(C);
-  lajeBase(C, x0, z0, 16, 12, piso[0], piso[1]);
+  lajeBase(C, x0, z0, 16, 12, piso[0], piso[1], T.trim);
   bloco(C, x0 - 0.3, 0, z0 - 0.3, x0 + 16, 1.0, z0, escuro ? '#3a3f48' : '#f3efe8');
-  bloco(C, x0 - 0.3, 3.2, z0 - 0.3, x0 + 16, 3.4, z0, '#2c3038');
-  bloco(C, x0 - 0.3, 3.4, z0 - 0.3, x0 + 16, 3.46, z0, '#d4af37');
+  bloco(C, x0 - 0.3, 3.2, z0 - 0.3, x0 + 16, 3.4, z0, T.viga);
+  bloco(C, x0 - 0.3, 3.4, z0 - 0.3, x0 + 16, 3.46, z0, T.trim);
   bloco(C, x0, 1.0, z0 - 0.12, x0 + 16, 3.2, z0 - 0.04, '#a9d8f5', { transparent: true, opacity: 0.22 });
   for (const x of [0, 5.3, 10.6, 16]) bloco(C, x0 + x - 0.07, 0, z0 - 0.14, x0 + x + 0.07, 3.2, z0 + 0.02, '#2c3038');
-  bloco(C, x0 + 1, 1.0, z0, x0 + 15, 3.2, z0 + 0.12, '#2c3038');
-  placa(C, nome.toUpperCase(), 5.4, 0.8, { x: x0 + 8, y: 2.8, z: z0 + 0.14, sub, tam: 0.8 });
-  bloco(C, x0 + 1.2, 1.0, z0 + 0.12, x0 + 14.8, 1.06, z0 + 0.16, '#d4af37');
-  bloco(C, x0 - 0.3, 0, z0, x0, 3.4, z0 + 12.3, escuro ? '#3a3f48' : '#c9a27a');
-  for (let z = 0.4; z < 12; z += 0.55) bloco(C, x0, 0.9, z0 + z, x0 + 0.07, 3.3, z0 + z + 0.12, escuro ? '#2f343c' : '#b78d63');
-  bloco(C, x0 - 0.3, 3.4, z0, x0, 3.46, z0 + 12.3, '#d4af37');
+  bloco(C, x0 + 1, 1.0, z0, x0 + 15, 3.2, z0 + 0.12, T.painel);
+  placa(C, nome.toUpperCase(), 5.4, 0.8, { x: x0 + 8, y: 2.8, z: z0 + 0.14, sub, tam: 0.8, fundo: T.placaFundo, cor: T.placaCor });
+  bloco(C, x0 + 1.2, 1.0, z0 + 0.12, x0 + 14.8, 1.06, z0 + 0.16, T.faixa, T.faixa === '#4cc3d9' ? { emissive: new THREE.Color('#4cc3d9'), emissiveIntensity: 1 } : undefined);
+  bloco(C, x0 - 0.3, 0, z0, x0, 3.4, z0 + 12.3, T.esq);
+  for (let z = 0.4; z < 12; z += 0.55) bloco(C, x0, 0.9, z0 + z, x0 + 0.07, 3.3, z0 + z + 0.12, T.ripa);
+  bloco(C, x0 - 0.3, 3.4, z0, x0, 3.46, z0 + 12.3, T.trim);
   planta(C, x0 + 1.0, z0 + 0.9, 1.3); planta(C, x0 + 15.0, z0 + 1.1, 1.2); planta(C, x0 + 15.0, z0 + 10.9, 1.5); planta(C, x0 + 7.8, z0 + 11.0, 1.0);
   return C;
 }
@@ -566,30 +586,47 @@ function construirFinanceiro() {
   for (const [x, z] of [[8, 4.4], [6.8, 9.6]]) pendente(C, x0 + x, z0 + z);
 }
 
+const animados = [];
 function construirTrafego() {
   const x0 = 36; const z0 = 0;
-  const C = salaPadrao('Tráfego Pago', 'Campanhas, dados e estratégia', x0, z0, { piso: ['#2d323b', '#272c34'], escuro: true });
-  // 3 telas de dados nos fundos
+  const CIANO = '#4cc3d9';
+  const luz = { emissive: new THREE.Color(CIANO), emissiveIntensity: 1 };
+  const C = salaPadrao('Tráfego Pago', 'Campanhas, dados e estratégia', x0, z0, {
+    piso: ['#f4f8fb', '#e7eef3'],
+    tema: { painel: '#f4f8fb', viga: '#eef3f7', trim: CIANO, faixa: CIANO, placaFundo: '#ffffff', placaCor: '#0a8fa8', esq: '#e9eff4', ripa: '#d3dde6' },
+  });
+  // linhas de luz no chao (bordas abertas da sala) e halo sob a mesa
+  bloco(C, x0, 0.01, z0 + 11.5, x0 + 16, 0.05, z0 + 11.62, CIANO, luz);
+  bloco(C, x0 + 15.5, 0.01, z0, x0 + 15.62, 0.05, z0 + 11.5, CIANO, luz);
+  bloco(C, x0 + 4.6, 0.01, z0 + 1.8, x0 + 11.4, 0.04, z0 + 6.6, '#bff1fa', { transparent: true, opacity: 0.55 });
+  // 3 telas de dados holograficas nos fundos
   const painel = (cx, titulo, linhas, cor) => novaTela(C, { x: x0 + cx, y: 1.95, z: z0 + 0.2, w: 3.9, h: 1.4, titulo, linhas, cor });
-  bloco(C, x0 + 1.2, 1.0, z0 + 0.12, x0 + 14.8, 1.06, z0 + 0.16, '#4cc3d9', { emissive: 0x4cc3d9, emissiveIntensity: 1 });
-  painel(3.5, 'CAMPANHAS', () => linhasDe('kyan', 0, 2), '#4cc3d9');
+  painel(3.5, 'CAMPANHAS', () => linhasDe('kyan', 0, 2), CIANO);
   painel(8, 'GASTO HOJE', () => linhasDe('kyan', 2, 3), '#e0c04a');
   painel(12.5, 'RESULTADOS', () => linhasDe('kyan', 3, 4), '#3ddc84');
-  // mesa do Kyan com 3 monitores
-  cadeira(C, x0 + 8, z0 + 3.4, '#1f3a63');
-  mesaTrabalho(C, x0 + 8, z0 + 4.6, 6.0, '#2c3038');
+  // mesa branca com tampo de vidro e 3 monitores
+  cadeira(C, x0 + 8, z0 + 3.4, '#dfe7ee');
+  mesaTrabalho(C, x0 + 8, z0 + 4.6, 6.0, '#f7fafc', '#cfeff6');
+  bloco(C, x0 + 5.0, 0.3, z0 + 5.05, x0 + 11.0, 0.36, z0 + 5.08, CIANO, luz);
   for (const dx of [-1.5, 0, 1.5]) monitor(C, x0 + 8 + dx, 1.05, z0 + 4.6, Math.PI);
-  caixa(C, x0 + 5.6, 1.05, z0 + 4.8, 0.5, 0.03, 0.2, '#8b8d92'); caixa(C, x0 + 10.6, 1.05, z0 + 4.7, 0.2, 0.25, 0.2, '#4cc3d9', { emissive: 0x4cc3d9, emissiveIntensity: 0.6 });
-  // sofa de brainstorm, rack de servidor, quadro de estrategia
-  sofa(C, x0 + 4.5, z0 + 9.2, 4.2, 0, '#1f3a63', '#8b9bb4');
-  caixa(C, x0 + 4.5, 0.38, z0 + 11.0, 1.6, 0.08, 0.7, '#14161a');
-  bloco(C, x0 + 13.0, 0, z0 + 8.0, x0 + 14.6, 2.3, z0 + 9.4, '#14161a');
-  for (let i = 0; i < 6; i++) caixa(C, x0 + 13.3 + (i % 2) * 0.6, 0.35 + Math.floor(i / 2) * 0.6, z0 + 9.42, 0.15, 0.08, 0.04, i % 3 ? '#3ddc84' : '#4cc3d9', { emissive: i % 3 ? 0x3ddc84 : 0x4cc3d9, emissiveIntensity: 1 });
-  bloco(C, x0, 1.3, z0 + 3.0, x0 + 0.1, 3.0, z0 + 9.0, '#f6f3ee');
-  ['#4cc3d9', '#5b8def', '#9b7ede', '#e0c04a'].forEach((cor, i) => bloco(C, x0 + 0.1, 1.6, z0 + 3.4 + i * 1.3, x0 + 0.14, 1.6 + 1.2 - i * 0.28, z0 + 3.4 + i * 1.3 + 1.0, cor));
-  placa(C, 'ESTRATÉGIA', 2.0, 0.4, { x: x0 + 0.16, y: 2.85, z: z0 + 6.0, ry: Math.PI / 2, fundo: '#f6f3ee', cor: '#2c3038', tam: 0.7 });
+  caixa(C, x0 + 5.6, 1.05, z0 + 4.8, 0.5, 0.03, 0.2, '#cfd8e0'); caixa(C, x0 + 10.6, 1.05, z0 + 4.7, 0.2, 0.25, 0.2, CIANO, luz);
+  // globo holografico e anel girando ao lado da mesa
+  caixa(C, x0 + 12.3, 0, z0 + 4.3, 0.7, 0.9, 0.7, '#f7fafc'); caixa(C, x0 + 12.3, 0.9, z0 + 4.3, 0.8, 0.06, 0.8, CIANO, luz);
+  const globo = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 1), new THREE.MeshBasicMaterial({ color: CIANO, wireframe: true, transparent: true, opacity: 0.85 }));
+  globo.position.set(x0 + 12.3, 1.75, z0 + 4.3); C.add(globo); animados.push({ obj: globo, vel: 0.8 });
+  const anel = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.02, 6, 36), new THREE.MeshBasicMaterial({ color: CIANO }));
+  anel.position.copy(globo.position); anel.rotation.x = Math.PI / 2.4; C.add(anel); animados.push({ obj: anel, vel: -1.2 });
+  // sofa de brainstorm, rack de servidor branco e quadro de estrategia
+  sofa(C, x0 + 4.5, z0 + 9.2, 4.2, 0, '#f1f5f8', CIANO);
+  caixa(C, x0 + 4.5, 0.38, z0 + 11.0, 1.6, 0.08, 0.7, '#cfeff6');
+  bloco(C, x0 + 13.0, 0, z0 + 8.0, x0 + 14.6, 2.3, z0 + 9.4, '#eef3f7');
+  for (let i = 0; i < 6; i++) caixa(C, x0 + 13.3 + (i % 2) * 0.6, 0.35 + Math.floor(i / 2) * 0.6, z0 + 9.42, 0.15, 0.08, 0.04, i % 3 ? '#3ddc84' : CIANO, { emissive: new THREE.Color(i % 3 ? '#3ddc84' : CIANO), emissiveIntensity: 1 });
+  bloco(C, x0, 1.3, z0 + 3.0, x0 + 0.1, 3.0, z0 + 9.0, '#ffffff');
+  [CIANO, '#5b8def', '#9b7ede', '#e0c04a'].forEach((cor, i) => bloco(C, x0 + 0.1, 1.6, z0 + 3.4 + i * 1.3, x0 + 0.14, 1.6 + 1.2 - i * 0.28, z0 + 3.4 + i * 1.3 + 1.0, cor));
+  placa(C, 'ESTRATÉGIA', 2.0, 0.4, { x: x0 + 0.16, y: 2.85, z: z0 + 6.0, ry: Math.PI / 2, fundo: '#ffffff', cor: '#0a8fa8', tam: 0.7 });
   for (const [x, z] of [[8, 4.6], [4.5, 9.6]]) pendente(C, x0 + x, z0 + z);
 }
+
 // ---------- agentes e pacientes ----------
 function criarAgente(def) {
   const p = criarPessoa(def.visual);
@@ -600,7 +637,7 @@ function criarAgente(def) {
   scene.add(p.grupo);
   const tag = document.createElement('button');
   tag.type = 'button';
-  tag.className = 'emp-tag';
+  tag.className = `emp-tag ${def.tagClasse || ''}`;
   tag.innerHTML = '<span class="emp-tag-nome"></span><i class="emp-tag-dot"></i>';
   tag.querySelector('.emp-tag-nome').textContent = def.nome;
   tag.addEventListener('click', (ev) => { ev.stopPropagation(); selecionar(def.id); });
@@ -721,6 +758,8 @@ async function buscarEstado() {
     const crit = Number(estado?.agentes?.kyan?.extras?.[1]?.[1]);
     if (Number.isFinite(crit)) { if (somLigado && ultCriticos !== null && crit > ultCriticos) tocarAlerta(); ultCriticos = crit; }
     atualizarPainel();
+    if (selecionado) carregarAtividade(selecionado);
+    for (const [id, d] of Object.entries(estado?.agentes || {})) if (d.ativa && id !== selecionado?.id) carregarAtividade({ id });
     desenharTelaComercial();
     desenharTelas();
   } catch { /* mantem o ultimo estado */ }
@@ -754,11 +793,37 @@ function tempoAtras(iso) {
 function selecionar(id) {
   selecionado = agentes.find((a) => a.id === id) || null;
   atualizarPainel();
-  if (selecionado) carregarHistorico(selecionado);
+  if (selecionado) { carregarHistorico(selecionado); carregarAtividade(selecionado); }
   if (selecionado) {
     const p = selecionado.pessoa.grupo.position;
     irPara(p.x + 0.5, p.z + 1.5, 1.8);
   }
+}
+
+const quandoCurto = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Maceio' }) === d.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio' });
+  return hoje ? d.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+};
+async function carregarAtividade(a) {
+  try {
+    const { itens } = await ctx.api(`/api/empresa/atividade?agente=${a.id}`);
+    ativCache.set(a.id, itens);
+    if (selecionado !== a || !painelEl) return;
+    const ul = painelEl.querySelector('.emp-p-ativ ul');
+    ul.textContent = '';
+    if (!itens.length) { const li = document.createElement('li'); li.className = 'vazio'; li.textContent = 'Nada registrado ainda.'; ul.appendChild(li); return; }
+    for (const it of itens) {
+      const li = document.createElement('li');
+      if (it.nivel === 'critico') li.className = 'crit';
+      const h = document.createElement('em'); h.textContent = quandoCurto(it.quando);
+      const t = document.createElement('span'); t.textContent = it.texto;
+      li.append(h, t);
+      ul.appendChild(li);
+    }
+  } catch { /* mantem o que ja estava na tela */ }
 }
 
 async function carregarHistorico(a) {
@@ -962,13 +1027,13 @@ function quadro(agora) {
       if (relogio < (a.saudarAte || 0)) p.modo = 'acenando';
       else if (real || atendendoBalcao || (relogio % 34) < 9) p.modo = 'digitando';
       else p.modo = 'parado';
-      if (real && relogio > a.bolhaAte && (Math.floor(relogio) % 14 === 0)) falar(a, 'Atendendo no WhatsApp…', 4);
+      if (real && relogio > a.bolhaAte && (Math.floor(relogio) % 14 === 0)) falar(a, ativTexto('liz') ? `${ativTexto('liz')}…` : 'Atendendo no WhatsApp…', 4);
     } else if (a.id === 'lay' && relogio < (a.saudarAte || 0)) {
       p.modo = 'acenando';
     } else {
       // agentes da mesa: digitam quando ha atividade real; sem atividade, alternam trabalho e pausa
       p.modo = real || ((relogio + (p.fase || 0) * 7) % 30) < 11 ? 'digitando' : 'parado';
-      const frase = FRASES[a.id];
+      const frase = ativTexto(a.id) ? `${ativTexto(a.id)}…` : FRASES[a.id];
       if (real && frase && relogio > a.bolhaAte && (Math.floor(relogio + (p.fase || 0)) % 16 === 0)) falar(a, frase, 4);
     }
     const alerta = estado?.agentes?.[a.id]?.alerta;
@@ -977,6 +1042,7 @@ function quadro(agora) {
     animarPessoa(p, dt, relogio);
     if (!a.bolha.hidden && relogio > a.bolhaAte) a.bolha.hidden = true;
   }
+  for (const an of animados) an.obj.rotation.y += dt * an.vel;
   for (const p of pacientes) animarPessoa(p, dt, relogio);
   if (entregador) animarPessoa(entregador, dt, relogio);
 
@@ -1009,6 +1075,7 @@ function montarInterface() {
           <div class="emp-p-topo"><span class="emp-p-av"></span><div><strong class="emp-p-nome"></strong><small class="emp-p-funcao"></small></div></div>
           <span class="emp-p-status"></span>
           <div class="emp-p-dados"></div>
+          <div class="emp-p-ativ"><small>Atividade recente (dados do app)</small><ul></ul></div>
           <div class="emp-p-graf"><small></small><div class="emp-p-barras"></div></div>
         </aside>
       </div>
@@ -1080,7 +1147,7 @@ export function iniciar(container, contexto) {
   mesa('anne', 'Anne', 'Comercial · funis do Follow Up Inteligente', 11.5, 8.2, { pele: '#f6d7b8', cabelo: '#4a3426', camisa: '#5cae7f', calca: '#2c3038', longo: false }, 5);
   criarAgente({ id: 'lay', nome: 'Lay', funcao: 'Laboratório · andamento dos trabalhos e pacientes em tratamento', x: 7, z: 17.2, yaw: 0, fase: 6, sentada: true, tagY: 1.85, visual: { pele: '#f1c9a5', cabelo: '#5a3a2a', camisa: '#f4f6f8', calca: '#3b4a6b', longo: true } });
   criarAgente({ id: 'mya', nome: 'Mya', funcao: 'Financeiro · caixa, vendas e contas', x: 26, z: 17.2, yaw: 0, fase: 7, sentada: true, tagY: 1.85, visual: { pele: '#8d5a3b', cabelo: '#1b1b1f', camisa: '#2f8049', calca: '#2c3038', longo: true } });
-  criarAgente({ id: 'kyan', nome: 'Kyan', funcao: 'Tráfego pago · tecnologia, marketing digital e estratégia', x: 44, z: 3.4, yaw: 0, fase: 8, sentada: true, tagY: 1.85, visual: { pele: '#e0ac82', cabelo: '#1b1b1f', camisa: '#2c5aa0', calca: '#2c3038', longo: false, barba: true } });
+  criarAgente({ id: 'kyan', nome: 'Kyan', funcao: 'Tráfego pago · tecnologia, marketing digital e estratégia', x: 44, z: 3.4, yaw: 0, fase: 8, sentada: true, tagY: 1.85, tagClasse: 'tech', visual: { pele: '#e0ac82', cabelo: '#e8eef5', camisa: '#f6fafd', calca: '#e9eff4', sapato: '#cfd8e0', longo: false, barba: true, neon: '#4cc3d9' } });
   novoPaciente(true); novoPaciente(true); novoPaciente(true);
   spawnEm = 3;
 

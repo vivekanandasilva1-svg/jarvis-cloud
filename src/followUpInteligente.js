@@ -381,7 +381,7 @@ export async function processarCard(tenantId, card, config, { somenteContatoId =
       const resposta = await evolutionApi.enviarMensagemTextoPor(c.instancia, c.numero, mensagem);
       await crm.registrarMensagem(tenantId, {
         numero: c.numero, instancia: c.instancia, direcao: 'saida', tipo: 'text', texto: mensagem,
-        autor: 'followup', waId: resposta?.key?.id || null, manterEtapa: true,
+        autor: 'followup', agente: 'anne', waId: resposta?.key?.id || null, manterEtapa: true,
       });
       // anexos programados pra ESSA mensagem (mesma posicao na cadencia), logo depois do texto
       const { rows: anexos } = await pool.query(

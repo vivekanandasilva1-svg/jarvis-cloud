@@ -20,6 +20,12 @@ const FUSO = 'America/Maceio';
 const HOJE_INI = `(date_trunc('day', now() AT TIME ZONE $2)) AT TIME ZONE $2`;
 const ETAPAS_BIA = ['novo_lead', 'em_atendimento', 'em_negociacao', 'pre_agendado'];
 
+// mensagem de follow-up -> agente: usa a marca gravada (crm_mensagens.agente); as antigas (sem marca)
+// vao pra Anne se o contato esta num funil do Follow Up Inteligente e nao no Follow Up simples, senao pra Lua
+const AG_FOLLOW = `CASE WHEN m.agente IS NOT NULL THEN m.agente
+  WHEN EXISTS (SELECT 1 FROM fui_execucoes fe JOIN crm_contatos cx ON cx.id = fe.contato_id WHERE cx.tenant_id = m.tenant_id AND cx.numero = m.numero AND cx.instancia = m.instancia)
+   AND NOT EXISTS (SELECT 1 FROM follow_up_contatos fu JOIN crm_contatos cy ON cy.id = fu.contato_id WHERE cy.tenant_id = m.tenant_id AND cy.numero = m.numero AND cy.instancia = m.instancia)
+  THEN 'anne' ELSE 'lua' END`;
 const vazio = () => ({ hoje: 0, recentes: 0, ultimaEm: null, ativa: false, extras: [], alerta: null });
 const ativaPor = (ultima) => !!ultima && Date.now() - new Date(ultima).getTime() < 3 * 60 * 1000; // mexeu nos ultimos 3 min
 
@@ -149,6 +155,21 @@ export async function estado(tenantId) {
   )).rows[0]);
   if (anne) agentes.anne = { hoje: anne.hoje, recentes: anne.recentes, ultimaEm: anne.ultima, ativa: ativaPor(anne.ultima), extras: [['Leads nos funis agora', String(anne.ativos)]] };
 
+  const seg = await ler('Follow Up (mensagens)', async () => (await pool.query(
+    `SELECT ${AG_FOLLOW} AS ag,
+            count(*) FILTER (WHERE m.criado_em >= ${HOJE_INI})::int AS hoje,
+            count(*) FILTER (WHERE m.criado_em > now() - interval '10 minutes')::int AS recentes,
+            max(m.criado_em) AS ultima
+       FROM crm_mensagens m
+      WHERE m.tenant_id = $1 AND m.direcao = 'saida' AND m.autor = 'followup' AND m.criado_em > now() - interval '2 days'
+      GROUP BY 1`,
+    [tenantId, FUSO],
+  )).rows);
+  for (const r of seg || []) {
+    const a = agentes[r.ag];
+    if (a) { a.hoje = r.hoje; a.recentes = r.recentes; a.ultimaEm = r.ultima; a.ativa = ativaPor(r.ultima); }
+  }
+
   const lorena = await ler('Aniversariantes', async () => (await q(
     `SELECT count(*) FILTER (WHERE status = 'enviado' AND enviado_em >= ${HOJE_INI})::int AS hoje,
             count(*) FILTER (WHERE status = 'enviado' AND enviado_em > now() - interval '10 minutes')::int AS recentes,
@@ -195,11 +216,12 @@ export async function historico(tenantId, agente) {
   }
   if (agente === 'lua' || agente === 'anne') {
     const rows = (await pool.query(
-      `SELECT to_char(criado_em AT TIME ZONE $2, 'YYYY-MM-DD') AS d, count(*) AS n FROM crm_mensagens
-        WHERE tenant_id = $1 AND direcao = 'saida' AND autor = 'followup' AND criado_em > now() - interval '8 days' GROUP BY 1`,
-      [tenantId, FUSO],
+      `SELECT to_char(m.criado_em AT TIME ZONE $2, 'YYYY-MM-DD') AS d, count(*) AS n FROM crm_mensagens m
+        WHERE m.tenant_id = $1 AND m.direcao = 'saida' AND m.autor = 'followup' AND m.criado_em > now() - interval '8 days'
+          AND (${AG_FOLLOW}) = $3 GROUP BY 1`,
+      [tenantId, FUSO, agente],
     )).rows;
-    return { titulo: 'Mensagens de follow-up por dia (Lua e Anne somadas)', pontos: porDia(dias, rows) };
+    return { titulo: `Mensagens ${agente === 'lua' ? 'da Lua (Follow Up)' : 'da Anne (funis)'} nos últimos 7 dias`, pontos: porDia(dias, rows) };
   }
   if (agente === 'lorena') {
     const rows = (await pool.query(
@@ -233,4 +255,50 @@ export async function historico(tenantId, agente) {
   });
   if (!dados) return { titulo: 'Gasto por dia (R$)', pontos: [], carregando: true };
   return { titulo: 'Gasto por dia nas contas do painel (R$)', pontos: dados };
+}
+
+// ---------- atividade recente (o que cada agente fez, com dados reais do app) ----------
+const NOME = `COALESCE(NULLIF(split_part(c.nome, ' ', 1), ''), 'contato')`;
+const JOIN_C = 'LEFT JOIN crm_contatos c ON c.tenant_id = m.tenant_id AND c.numero = m.numero AND c.instancia = m.instancia';
+const ROTULO_LANC = { emProducao: 'Trabalhos em produção', atrasados: 'Trabalhos atrasados', refazer: 'Trabalhos para refazer', prazoMedio: 'Prazo médio (dias)', pacientesEsperando: 'Pacientes esperando prótese', vendas: 'Vendas', recebido: 'Recebido', despesas: 'Despesas', inadimplencia: 'Inadimplência', contasAVencer: 'Contas a vencer em 7 dias' };
+
+export async function atividade(tenantId, agente) {
+  if (!['liz', 'bia', 'lua', 'anne', 'lorena', 'lay', 'mya', 'kyan'].includes(agente)) throw new Error('Agente invalido.');
+  if (!pool) return { itens: [] };
+  let itens = [];
+  if (agente === 'liz' || agente === 'bia') {
+    const rows = (await pool.query(
+      `SELECT m.criado_em AS quando, ${NOME} AS nome FROM crm_mensagens m ${JOIN_C}
+        WHERE m.tenant_id = $1 AND m.direcao = 'saida' AND m.autor = 'ia'
+          AND (COALESCE(c.etapa, 'novo_lead') = ANY($2::text[])) = $3
+        ORDER BY m.criado_em DESC LIMIT 6`,
+      [tenantId, ETAPAS_BIA, agente === 'bia'],
+    )).rows;
+    itens = rows.map((r) => ({ quando: r.quando, texto: `Respondeu ${r.nome}` }));
+  } else if (agente === 'lua' || agente === 'anne') {
+    const rows = (await pool.query(
+      `SELECT m.criado_em AS quando, ${NOME} AS nome FROM crm_mensagens m ${JOIN_C}
+        WHERE m.tenant_id = $1 AND m.direcao = 'saida' AND m.autor = 'followup' AND (${AG_FOLLOW}) = $2
+        ORDER BY m.criado_em DESC LIMIT 6`,
+      [tenantId, agente],
+    )).rows;
+    itens = rows.map((r) => ({ quando: r.quando, texto: agente === 'lua' ? `Follow-up enviado para ${r.nome}` : `Mensagem do funil enviada para ${r.nome}` }));
+  } else if (agente === 'lorena') {
+    const rows = (await pool.query(
+      `SELECT enviado_em AS quando, COALESCE(NULLIF(split_part(nome, ' ', 1), ''), 'paciente') AS nome FROM aniversariantes_envios
+        WHERE tenant_id = $1 AND status = 'enviado' AND enviado_em IS NOT NULL ORDER BY enviado_em DESC LIMIT 6`,
+      [tenantId],
+    )).rows;
+    itens = rows.map((r) => ({ quando: r.quando, texto: `Parabéns enviado para ${r.nome}` }));
+  } else if (agente === 'lay' || agente === 'mya') {
+    const rows = (await pool.query(
+      `SELECT atualizado_em AS quando, indicador, valor FROM gestao_lancamentos WHERE tenant_id = $1 AND setor = $2 ORDER BY atualizado_em DESC LIMIT 6`,
+      [tenantId, agente === 'lay' ? 'laboratorio' : 'financeiro'],
+    )).rows;
+    itens = rows.map((r) => ({ quando: r.quando, texto: `${ROTULO_LANC[r.indicador] || r.indicador}: ${['inadimplencia', 'contasAVencer', 'vendas', 'recebido', 'despesas'].includes(r.indicador) ? reais(r.valor) : r.valor}` }));
+  } else {
+    const rows = await ler('alertas Meta (atividade)', () => metaSaude.listarAbertos(tenantId));
+    itens = (rows || []).slice(0, 6).map((r) => ({ quando: r.atualizado_em, texto: `${r.titulo}${r.conta_nome ? ` · ${r.conta_nome}` : ''}`, nivel: r.nivel }));
+  }
+  return { itens };
 }

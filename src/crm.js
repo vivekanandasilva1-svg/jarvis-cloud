@@ -125,6 +125,8 @@ async function garantirTabelas() {
   // 'humano' = equipe pelo painel ou pelo proprio WhatsApp) - base da aba Resultados. Mensagens
   // antigas ficam sem autor (nao da pra saber depois)
   await pool.query(`ALTER TABLE crm_mensagens ADD COLUMN IF NOT EXISTS autor TEXT;`);
+  // qual agente do escritorio (aba Minha Empresa) mandou: 'lua' (Follow Up) ou 'anne' (Follow Up Inteligente)
+  await pool.query(`ALTER TABLE crm_mensagens ADD COLUMN IF NOT EXISTS agente TEXT;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS crm_mensagens_tenant_criado_idx ON crm_mensagens (tenant_id, criado_em);`);
   // historico de mudanca de etapa (so daqui pra frente) - e o que permite contar "agendamentos no
   // periodo", ja que crm_contatos so guarda a etapa atual
@@ -246,7 +248,7 @@ async function registrarEventoEtapa(tenantId, contatoId, instancia, etapa) {
 //   "novo_lead" pra "em_atendimento" sozinha - a etapa continua a que o dono escolheu
 // - evitarEco: usado no registro de mensagem "fromMe" - se a gente acabou de registrar o MESMO
 //   texto como saida (ex: resposta da IA), o eco que o WhatsApp devolve nao duplica
-export async function registrarMensagem(tenantId, { numero, instancia, direcao, tipo = 'text', texto = '', nome, midiaBase64, midiaMimetype, quando, waId, evitarEco = false, autor = null, manterEtapa = false, origemAnuncio = null }) {
+export async function registrarMensagem(tenantId, { numero, instancia, direcao, tipo = 'text', texto = '', nome, midiaBase64, midiaMimetype, quando, waId, evitarEco = false, autor = null, agente = null, manterEtapa = false, origemAnuncio = null }) {
   if (!pool) return;
   await tabelasProntas;
 
@@ -308,11 +310,11 @@ export async function registrarMensagem(tenantId, { numero, instancia, direcao, 
   );
 
   const { rows: msgRows } = await pool.query(
-    `INSERT INTO crm_mensagens (tenant_id, numero, instancia, direcao, tipo, texto, midia_base64, midia_mimetype, criado_em, wa_id, autor)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `INSERT INTO crm_mensagens (tenant_id, numero, instancia, direcao, tipo, texto, midia_base64, midia_mimetype, criado_em, wa_id, autor, agente)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      ON CONFLICT (tenant_id, instancia, wa_id) WHERE wa_id IS NOT NULL DO NOTHING
      RETURNING id, direcao, tipo, texto, criado_em, (midia_base64 IS NOT NULL) AS tem_midia`,
-    [tenantId, numero, instancia, direcao, tipo, texto || '', midiaBase64 || null, midiaMimetype || null, ts, waId || null, direcao === 'saida' ? autor : null],
+    [tenantId, numero, instancia, direcao, tipo, texto || '', midiaBase64 || null, midiaMimetype || null, ts, waId || null, direcao === 'saida' ? autor : null, direcao === 'saida' ? agente : null],
   );
   if (!msgRows[0]) return rows[0]?.id; // outro webhook identico ganhou a corrida - nada a emitir
 

@@ -3079,6 +3079,7 @@ const rotaIg = (fn) => async (req, res) => {
 // "Minha Empresa" (escritorio 3D): quem esta trabalhando agora e os numeros do dia - so leitura
 app.get('/api/empresa/estado', rotaIg(async (req, res) => res.json(await empresa.estado(req.tenantId))));
 app.get('/api/empresa/historico', rotaIg(async (req, res) => res.json(await empresa.historico(req.tenantId, String(req.query.agente || '')))));
+app.get('/api/empresa/atividade', rotaIg(async (req, res) => res.json(await empresa.atividade(req.tenantId, String(req.query.agente || '')))));
 
 app.get('/api/instagram/status', rotaIg(async (req, res) => res.json(await instagram.status(req.tenantId))));
 app.post('/api/instagram/desconectar', rotaIg(async (req, res) => { await instagram.desconectar(req.tenantId); res.json({ ok: true }); }));

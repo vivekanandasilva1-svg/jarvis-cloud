@@ -1396,5 +1396,13 @@
     "tipo": "melhoria",
     "titulo": "Minha Empresa: historico no painel, entregador no laboratorio e alerta sonoro do Kyan",
     "conteudo": "(1) Painel de cada agente ganhou grafico de barras via GET /api/empresa/historico?agente=<id>: Liz/Bia = mensagens da IA por dia (7 dias, separadas pela etapa ATUAL do contato), Lua+Anne = mensagens de follow-up por dia (somadas, pois ambas gravam autor 'followup'), Lorena = aniversarios enviados, Lay/Mya = lancamentos semanais do Gestao (emProducao e inadimplencia), Kyan = gasto por dia das contas do painel de Vendas (Meta, cache de 30 min; a 1a chamada responde 'carregando' e a tela tenta de novo em 5 s). (2) Entregador ilustrativo chega pela frente do laboratorio com uma caixa, a Lay acena e ele sai (a cada 22-40 s; so visual). (3) Botao de alerta sonoro (localStorage 'empresaSom'): toca 2 notas quando o numero de alertas criticos do Kyan sobe entre duas consultas (15 s); precisa ter clicado no botao antes (regra de audio do navegador). Disponibilidade: aba 'empresa' liberada para a Vitaly (tenant 10, que tinha lista restrita); contas novas ja nascem com tudo liberado."
+  },
+  {
+    "chave": "empresa:kyan-futurista-e-atividade-real",
+    "modulo": "empresa",
+    "data": "2026-11-26",
+    "tipo": "melhoria",
+    "titulo": "Minha Empresa: Kyan branco/futurista e agentes sincronizados com os dados reais do app",
+    "conteudo": "(1) Kyan agora e todo branco com visor, headset e cinto/nucleo de luz ciano (opcao neon do criarPessoa) e a sala Trafego Pago virou branca e futurista (piso claro, linhas de luz ciano no chao, mesa de vidro, globo holografico e anel girando, telas de dados, rack branco); brancos ganham leve emissive pra nao ficarem acinzentados. (2) Painel de cada agente mostra 'Atividade recente' com dados reais via GET /api/empresa/atividade?agente=<id> (primeiro nome do lead/paciente + acao: Bia/Liz = quem a IA respondeu; Lua = follow-ups; Anne = mensagens dos funis; Lorena = parabens enviados; Lay/Mya = ultimos lancamentos do Gestao; Kyan = alertas abertos das campanhas, criticos em vermelho). O balao do agente ativo passa a mostrar a acao real ('Respondeu Julia...') em vez de frase generica. (3) Lua e Anne agora sao separadas de verdade: nova coluna crm_mensagens.agente gravada por followUp.js ('lua') e followUpInteligente.js ('anne'); mensagens antigas sem marca vao pra Anne se o contato esta num funil do Follow Up Inteligente e nao no Follow Up simples, senao pra Lua. O autor 'followup' continua igual (Resultados nao muda). Pendente: Lorena ainda nao conta resgates/disparos; Liz x Bia continua pela etapa ATUAL do contato."
   }
 ]

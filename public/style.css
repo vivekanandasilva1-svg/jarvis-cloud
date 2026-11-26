@@ -4112,3 +4112,11 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 .tab-empresa .emp-barra span { font-size: 10px; color: var(--text); font-weight: 700; }
 .tab-empresa .emp-barra em { font-style: normal; font-size: 9px; color: var(--silver-dim); }
 .tab-empresa .emp-som { flex: none; }
+.tab-empresa .emp-tag.tech { background: rgba(255, 255, 255, 0.96); color: #0b3a45; border-color: #4cc3d9; box-shadow: 0 0 12px rgba(76, 195, 217, .7); }
+.tab-empresa .emp-p-ativ { margin-top: 10px; border-top: 1px solid var(--border-soft); padding-top: 8px; }
+.tab-empresa .emp-p-ativ small { display: block; color: var(--silver-dim); font-size: 11px; margin-bottom: 4px; }
+.tab-empresa .emp-p-ativ ul { list-style: none; margin: 0; padding: 0; max-height: 120px; overflow-y: auto; }
+.tab-empresa .emp-p-ativ li { display: flex; gap: 8px; font-size: 12px; padding: 3px 0; line-height: 1.3; }
+.tab-empresa .emp-p-ativ li em { font-style: normal; color: var(--silver-dim); flex: none; min-width: 46px; }
+.tab-empresa .emp-p-ativ li.crit span { color: #ff6b6b; }
+.tab-empresa .emp-p-ativ li.vazio { color: var(--silver-dim); }
