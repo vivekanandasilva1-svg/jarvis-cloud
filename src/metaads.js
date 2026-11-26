@@ -9,11 +9,17 @@ const BASE_URL = `https://graph.facebook.com/${API_VERSION}`;
 
 // confere um token no Meta ANTES de guardar: devolve as contas de anuncio que ele enxerga (ou lanca o erro do Meta)
 export async function verificarToken(token) {
-  const url = `${BASE_URL}/me/adaccounts?fields=name,account_id,account_status&limit=100&access_token=${encodeURIComponent(token)}`;
-  const res = await fetch(url);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.error) throw new Error(`O Meta recusou este token: ${data?.error?.message || `erro ${res.status}`}`);
-  return (data.data || []).map((c) => ({ id: `act_${c.account_id}`, nome: c.name, ativa: c.account_status === 1 }));
+  let url = `${BASE_URL}/me/adaccounts?fields=name,account_id,account_status&limit=100&access_token=${encodeURIComponent(token)}`;
+  const contas = [];
+  // segue a paginacao (token de Business Manager grande enxerga mais de 100 contas); trava de seguranca em 20 paginas
+  for (let pagina = 0; url && pagina < 20; pagina++) {
+    const res = await fetch(url);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error) throw new Error(`O Meta recusou este token: ${data?.error?.message || `erro ${res.status}`}`);
+    for (const c of data.data || []) contas.push({ id: `act_${c.account_id}`, nome: c.name, ativa: c.account_status === 1 });
+    url = data.paging?.next || null;
+  }
+  return contas;
 }
 
 // mapa id da conta -> rotulo do token que ja a enxerga (ignora o token com o rotulo informado, que esta sendo substituido)
@@ -143,48 +149,62 @@ function calcularSaldo(acc) {
   return { tipoConta: 'desconhecido' };
 }
 
-// apenasAtivas: quando true, tira as contas que o tenant desativou na aba Integracoes (ver
-// tenantConfig.obterContasMetaAdsDesativadas) - usado pelos geradores de relatorio automatico
-// (relatoriosProgramados.js); o chat/ferramentas continuam vendo TODAS as contas normalmente
-export async function listAdAccounts(tenantId, { apenasAtivas = false } = {}) {
+// devolve { contas, falhas }: falhas = conexoes (tokens) que o Meta recusou (vencido/revogado) - o resto das contas
+// continua funcionando. Antes, UM token ruim derrubava a listagem inteira e, com ela, o relatorio de todas as contas.
+export async function listAdAccountsDetalhado(tenantId, { apenasAtivas = false } = {}) {
   const sets = await tokenSets(tenantId);
   if (sets.length === 0) throw new Error('Esse cliente nao tem nenhuma conta de anuncio (Meta Ads) conectada.');
 
   const all = [];
+  const falhas = [];
   const vistas = new Set(); // a mesma conta de anuncio pode ser vista por mais de um token: conta uma vez so (vale o primeiro token)
   for (const set of sets) {
-    let path = '/me/adaccounts';
-    let query = {
-      fields: 'name,account_id,account_status,currency,amount_spent,business_name,spend_cap,balance,is_prepay_account,funding_source_details{display_string}',
-      limit: 100,
-    };
+    try {
+      let path = '/me/adaccounts';
+      let query = {
+        fields: 'name,account_id,account_status,currency,amount_spent,business_name,spend_cap,balance,is_prepay_account,funding_source_details{display_string}',
+        limit: 100,
+      };
 
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const data = await callWithToken(set.token, 'GET', path, { query });
-      for (const acc of data.data) {
-        if (vistas.has(acc.id)) continue;
-        vistas.add(acc.id);
-        accountTokenCache.set(chaveCache(tenantId, acc.id), set.token);
-        all.push({
-          ...acc,
-          empresa: set.label,
-          amountSpentReais: Number(acc.amount_spent || 0) / 100,
-          ...calcularSaldo(acc),
-          saldoTexto: acc.funding_source_details?.display_string || null,
-        });
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const data = await callWithToken(set.token, 'GET', path, { query });
+        for (const acc of data.data) {
+          if (vistas.has(acc.id)) continue;
+          vistas.add(acc.id);
+          accountTokenCache.set(chaveCache(tenantId, acc.id), set.token);
+          all.push({
+            ...acc,
+            empresa: set.label,
+            amountSpentReais: Number(acc.amount_spent || 0) / 100,
+            ...calcularSaldo(acc),
+            saldoTexto: acc.funding_source_details?.display_string || null,
+          });
+        }
+        if (!data.paging?.next) break;
+        const nextUrl = new URL(data.paging.next);
+        path = nextUrl.pathname.replace(`/${API_VERSION}`, '');
+        query = Object.fromEntries(nextUrl.searchParams);
+        delete query.access_token;
       }
-      if (!data.paging?.next) break;
-      const nextUrl = new URL(data.paging.next);
-      path = nextUrl.pathname.replace(`/${API_VERSION}`, '');
-      query = Object.fromEntries(nextUrl.searchParams);
-      delete query.access_token;
+    } catch (err) {
+      console.error(`Meta Ads (tenant ${tenantId}): a conexao "${set.label}" falhou:`, err.message);
+      falhas.push({ label: set.label, erro: err.message });
     }
   }
+  // nenhuma conexao funcionou: mantem o erro (nao ha o que mostrar)
+  if (!all.length && falhas.length === sets.length) throw new Error(falhas.map((f) => `"${f.label}": ${f.erro}`).join(' | '));
 
-  if (!apenasAtivas) return all;
+  if (!apenasAtivas) return { contas: all, falhas };
   const desativadas = new Set(await tenantConfig.obterContasMetaAdsDesativadas(tenantId));
-  return all.filter((c) => !desativadas.has(c.id));
+  return { contas: all.filter((c) => !desativadas.has(c.id)), falhas };
+}
+
+// apenasAtivas: quando true, tira as contas que o tenant desativou na aba Integracoes (ver
+// tenantConfig.obterContasMetaAdsDesativadas) - usado pelos geradores de relatorio automatico
+// (relatoriosProgramados.js); o chat/ferramentas continuam vendo TODAS as contas normalmente
+export async function listAdAccounts(tenantId, opts = {}) {
+  return (await listAdAccountsDetalhado(tenantId, opts)).contas;
 }
 
 export async function listCampaigns(tenantId, { accountId, status } = {}) {

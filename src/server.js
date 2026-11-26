@@ -704,10 +704,12 @@ app.get('/api/integracoes', async (req, res) => {
       googleCalendar.estaConectado(req.tenantId).catch(() => false),
     ]);
     let contasMetaAds = [];
+    let avisoMetaAds = null;
     if (status.metaAds.conectado) {
       try {
         const desativadas = new Set(await tenantConfig.obterContasMetaAdsDesativadas(req.tenantId));
-        const contas = await metaAds.listAdAccounts(req.tenantId);
+        const { contas, falhas } = await metaAds.listAdAccountsDetalhado(req.tenantId);
+        if (falhas.length) avisoMetaAds = falhas.map((f) => `"${f.label}": ${f.erro}`).join(' | ');
         contasMetaAds = contas.map((c) => ({
           id: c.id,
           nome: c.name,
@@ -720,7 +722,7 @@ app.get('/api/integracoes', async (req, res) => {
         return res.json({ ...status, google, contasMetaAds: [], erroMetaAds: err.message });
       }
     }
-    res.json({ ...status, google, contasMetaAds });
+    res.json({ ...status, google, contasMetaAds, avisoMetaAds });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }

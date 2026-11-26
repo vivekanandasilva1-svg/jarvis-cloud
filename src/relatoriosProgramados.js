@@ -403,19 +403,30 @@ export function montarBlocoConta({ conta, row, frequencia, hoje, campanhas, diaA
   ].join('\n');
 }
 
+// separador entre os blocos (resumo de conta / campanha) - tambem e por ele que o envio divide a mensagem
+export const SEPARADOR_BLOCOS = '\n\n═══════════════════════\n\n';
+
 export async function gerarRelatorioAdsMetricasCompleto(tenantId, { frequencia = 'diario', diaAnterior = false } = {}) {
   const { since, until, hoje } = periodoDiasCalendario(frequencia, { diaAnterior });
-  const contas = await metaAds.listAdAccounts(tenantId, { apenasAtivas: true });
+  const { contas, falhas } = await metaAds.listAdAccountsDetalhado(tenantId, { apenasAtivas: true });
   const blocos = [];
+  // nada some em silencio: conexao com problema, erro ao ler uma conta e conta sem entrega viram aviso no proprio relatorio
+  const avisos = falhas.map((f) => `⚠️ A conexão "${f.label}" do Meta falhou (${f.erro}). As contas dela ficaram fora deste relatório - reconecte em Integrações.`);
+  const semEntrega = [];
 
   for (const c of contas) {
     let campanhas;
     try {
       campanhas = await metaAds.listCampaigns(tenantId, { accountId: c.id, status: 'ACTIVE' });
-    } catch { continue; }
-    if (!campanhas.length) continue;
+    } catch (err) {
+      console.error(`Relatorio Meta Ads (tenant ${tenantId}): nao consegui listar as campanhas de "${c.name}":`, err.message);
+      avisos.push(`⚠️ ${c.name}: não consegui ler as campanhas (${err.message}).`);
+      continue;
+    }
+    if (!campanhas.length) { semEntrega.push(`${c.name} (nenhuma campanha ativa)`); continue; }
 
     const blocosDaConta = [];
+    let erros = 0;
     for (const camp of campanhas) {
       // so entra no relatorio campanha que tem PELO MENOS 1 anuncio REALMENTE ativo agora
       // (effective_status ACTIVE) com dado no periodo - campanha marcada ACTIVE mas com todos
@@ -423,7 +434,7 @@ export async function gerarRelatorioAdsMetricasCompleto(tenantId, { frequencia =
       let analise;
       try {
         analise = await metaAds.analyzeCampaignAds(tenantId, { campaignId: camp.id, since, until });
-      } catch { continue; }
+      } catch (err) { erros++; console.error(`Relatorio Meta Ads (tenant ${tenantId}): erro na campanha "${camp.name}":`, err.message); continue; }
       if (!analise.anuncios.length) continue;
 
       // alcance/frequencia nao podem ser somados por anuncio (sobreposicao de publico) - pega
@@ -431,13 +442,17 @@ export async function gerarRelatorioAdsMetricasCompleto(tenantId, { frequencia =
       let rows;
       try {
         rows = await metaAds.getInsights(tenantId, { objectId: camp.id, objectType: 'campaign', level: 'campaign', since, until });
-      } catch { continue; }
+      } catch (err) { erros++; console.error(`Relatorio Meta Ads (tenant ${tenantId}): erro nos dados da campanha "${camp.name}":`, err.message); continue; }
       const row = rows[0];
       if (!row || !(Number(row.spend) > 0 || Number(row.impressions) > 0)) continue;
 
       blocosDaConta.push(montarBlocoCampanha({ conta: c, campanha: camp, row, frequencia, hoje, diaAnterior }));
     }
-    if (!blocosDaConta.length) continue;
+    if (erros) avisos.push(`⚠️ ${c.name}: ${erros} campanha(s) não puderam ser lidas agora${blocosDaConta.length ? ' e ficaram de fora' : ''} - use "Enviar agora" para tentar de novo.`);
+    if (!blocosDaConta.length) {
+      if (!erros) semEntrega.push(`${c.name} (sem anúncio ativo com entrega no período)`);
+      continue;
+    }
     // resumo da conta (nivel conta no Meta); se falhar, o relatorio segue so com as campanhas
     try {
       const [rowConta] = await metaAds.getInsights(tenantId, { objectId: c.id, objectType: 'account', level: 'account', since, until });
@@ -446,16 +461,22 @@ export async function gerarRelatorioAdsMetricasCompleto(tenantId, { frequencia =
     blocos.push(...blocosDaConta);
   }
 
+  const rodape = [];
+  if (semEntrega.length) rodape.push(['ℹ️ CONTAS SEM ENTREGA NO PERÍODO', ...semEntrega.map((s) => `* ${s}`)].join('\n'));
+  if (avisos.length) rodape.push(avisos.join('\n'));
+
   if (!blocos.length) {
     return [
       '📱 RELATÓRIO DE MÉTRICAS: META ADS 📱',
       `Data: ${textoPeriodo({ frequencia, hoje, diaAnterior })}`,
       '',
       'Nenhuma campanha com anuncio realmente ativo (rodando agora) e entrega no periodo. Campanhas pausadas/paradas ha mais de 1 dia nao entram nesse relatorio.',
+      ...(rodape.length ? ['', rodape.join('\n\n')] : []),
     ].join('\n');
   }
 
-  return blocos.join('\n\n═══════════════════════\n\n');
+  // os avisos finais (contas sem entrega + problemas) vao juntos num bloco so
+  return [...blocos, ...(rodape.length ? [rodape.join('\n\n')] : [])].join(SEPARADOR_BLOCOS);
 }
 
 // ---------- 3. Clinica - Relatorio Financeiro Geral ----------
@@ -669,6 +690,46 @@ export async function gerarRelatorioPorTipo(tenantId, tipo, opts = {}) {
   return gerador(tenantId, opts);
 }
 
+// O WhatsApp nao e lugar pra mensagem de 30 mil caracteres: o relatorio de varias contas virava UMA mensagem
+// gigante (34k) em que a conta do meio ficava perdida/cortada. Agora cada conta vai numa mensagem propria
+// (e uma conta muito grande, ou o aviso final, em mais de uma), na ordem, com uma pausa curta entre elas.
+const LIMITE_MENSAGEM_WHATSAPP = 6000;
+
+function quebrarBlocoLongo(bloco, limite) {
+  if (bloco.length <= limite) return [bloco];
+  const partes = [];
+  let atual = '';
+  for (const linha of bloco.split('\n')) {
+    if (atual && (atual + '\n' + linha).length > limite) { partes.push(atual); atual = linha; } else atual = atual ? `${atual}\n${linha}` : linha;
+  }
+  if (atual) partes.push(atual);
+  return partes;
+}
+
+export function dividirRelatorio(texto, limite = LIMITE_MENSAGEM_WHATSAPP) {
+  const inteiro = String(texto || '');
+  if (inteiro.length <= limite) return [inteiro];
+  const blocos = inteiro.split(SEPARADOR_BLOCOS);
+  // cada conta comeca numa mensagem nova (bloco "RESUMO DA CONTA"); o rodape de avisos tambem
+  const grupos = [];
+  for (const b of blocos) {
+    const abreGrupo = b.includes('RESUMO DA CONTA:') || b.startsWith('ℹ️') || b.startsWith('⚠️');
+    if (!grupos.length || abreGrupo) grupos.push([b]); else grupos[grupos.length - 1].push(b);
+  }
+  const mensagens = [];
+  for (const g of grupos) {
+    let atual = '';
+    for (const bloco of g) {
+      for (const pedaco of quebrarBlocoLongo(bloco, limite)) {
+        const junto = atual ? atual + SEPARADOR_BLOCOS + pedaco : pedaco;
+        if (atual && junto.length > limite) { mensagens.push(atual); atual = pedaco; } else atual = junto;
+      }
+    }
+    if (atual) mensagens.push(atual);
+  }
+  return mensagens;
+}
+
 // manda um relatorio pra todos os destinatarios cadastrados DESSE TENANT - usado tanto pelo
 // envio manual ("enviar agora" na aba) quanto pelo scheduler automatico. Alguns tipos
 // (ads_saldo_baixo) so geram texto quando ha algo pra reportar - nesse caso nao manda nada e
@@ -690,28 +751,35 @@ export async function enviarRelatorioAgora(tenantId, tipo) {
   // disputada (CPU compartilhada com Kokoro/Whisper), entao um "fetch failed" passageiro e
   // comum e nao deveria custar o relatorio inteiro do dia (foi exatamente o que aconteceu:
   // 2 de 3 relatorios de uma mesma manha falharam por isso e nunca chegaram no WhatsApp)
+  const partes = dividirRelatorio(texto);
   let algumEnviado = false;
   for (const d of destinatarios) {
-    let ok = false;
-    for (let tentativa = 1; tentativa <= 2 && !ok; tentativa++) {
-      try {
-        await enviar(d.numero, texto);
-        ok = true;
-      } catch (err) {
-        if (tentativa === 1) {
-          await new Promise((r) => setTimeout(r, 3000));
-        } else {
-          console.error(`Erro mandando relatorio "${tipo}" pro numero ${d.numero}:`, err.message);
+    let primeiraEntregue = false;
+    for (let i = 0; i < partes.length; i++) {
+      let enviou = false;
+      for (let tentativa = 1; tentativa <= 2 && !enviou; tentativa++) {
+        try {
+          await enviar(d.numero, partes[i]);
+          enviou = true;
+        } catch (err) {
+          if (tentativa === 1) {
+            await new Promise((r) => setTimeout(r, 3000));
+          } else {
+            console.error(`Erro mandando relatorio "${tipo}" (parte ${i + 1}/${partes.length}) pro numero ${d.numero}:`, err.message);
+          }
         }
       }
+      if (i === 0) primeiraEntregue = enviou;
+      if (!enviou && i === 0) break; // nem a primeira parte chegou: nao adianta insistir nas outras
+      if (i < partes.length - 1) await new Promise((r) => setTimeout(r, 1500)); // mantem a ordem e nao rajada
     }
-    if (ok) algumEnviado = true;
+    if (primeiraEntregue) algumEnviado = true;
   }
 
   // so marca como enviado se pelo menos 1 destinatario recebeu de verdade - senao o proximo
   // "Enviar agora"/scheduler ficava achando que ja tinha mandado e nunca tentava de novo
   if (algumEnviado) await marcarEnviado(tenantId, tipo);
-  return { destinatarios: destinatarios.length, enviouAlgum: algumEnviado };
+  return { destinatarios: destinatarios.length, enviouAlgum: algumEnviado, mensagens: partes.length };
 }
 
 // roda em segundo plano - checa a cada 5min (fuso Maceio), PRA CADA TENANT com destinatario

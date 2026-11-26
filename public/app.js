@@ -7568,8 +7568,14 @@ function renderizarMetaAdsContas(data) {
     integracoesMetaAdsLista.innerHTML = `<p class="agenda-erro">Não consegui buscar as contas agora: ${data.erroMetaAds}</p>`;
     return;
   }
+  if (data.avisoMetaAds) {
+    const aviso = document.createElement('p');
+    aviso.className = 'agenda-erro';
+    aviso.textContent = `Atenção: uma ou mais conexões do Meta falharam e as contas delas NÃO entram nos relatórios (reconecte o token na aba Clientes): ${data.avisoMetaAds}`;
+    integracoesMetaAdsLista.appendChild(aviso);
+  }
   if (!data.contasMetaAds.length) {
-    integracoesMetaAdsLista.innerHTML = '<p class="agenda-vazia">Nenhuma conta de anúncio encontrada nos tokens conectados.</p>';
+    integracoesMetaAdsLista.insertAdjacentHTML('beforeend', '<p class="agenda-vazia">Nenhuma conta de anúncio encontrada nos tokens conectados.</p>');
     return;
   }
   for (const conta of data.contasMetaAds) {
