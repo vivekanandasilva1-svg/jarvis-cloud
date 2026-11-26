@@ -226,6 +226,9 @@ async function registrarEventoEtapa(tenantId, contatoId, instancia, etapa) {
   // regra do Funil Follow Up: todo lead que entra na etapa Follow Up do CRM (Clinicorp, importacao,
   // arrastando ou pela conversa) entra sozinho no Dia 0 do funil de follow up
   if (etapa === 'follow_up') await funilFU.adicionarDoCrm(tenantId, contatoId).catch((err) => console.error('Erro adicionando ao Funil Follow Up:', err.message));
+  // Follow Up Inteligente com "Inicio imediato": quem entra na etapa recebe a 1a mensagem na hora (import dinamico: o
+  // modulo importa este arquivo, entao evitamos o ciclo no carregamento; nunca bloqueia nem derruba a acao principal)
+  else import('./followUpInteligente.js').then((m) => m.iniciarImediato(tenantId, contatoId, etapa)).catch((err) => console.error('Erro no inicio imediato do follow-up:', err.message));
 }
 
 // registra uma mensagem (entrada = contato mandou, saida = a gente/Lumia mandou) e garante que

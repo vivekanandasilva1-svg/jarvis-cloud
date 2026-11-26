@@ -8771,7 +8771,7 @@ async function carregarCardsFollowUpInteligente() {
 
 fuiCriar.addEventListener('click', () => {
   document.getElementById('fuiVazio')?.remove();
-  const novo = { id: null, etapas: [], diasEnvio: fuiDistribuirDias(5, 5), duracaoDias: 5, instrucoes: '', pararSeResponder: true, ativo: true, emAndamento: 0, enviadas: 0 };
+  const novo = { id: null, etapas: [], diasEnvio: fuiDistribuirDias(5, 5), duracaoDias: 5, instrucoes: '', pararSeResponder: true, inicioImediato: false, ativo: true, emAndamento: 0, enviadas: 0 };
   const card = criarCardFollowUpInteligente(novo);
   fuiLista.prepend(card);
   card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -8780,7 +8780,7 @@ fuiCriar.addEventListener('click', () => {
 function criarCardFollowUpInteligente(dados) {
   const estado = {
     id: dados.id, etapas: [...dados.etapas], diasEnvio: [...dados.diasEnvio], duracaoDias: dados.duracaoDias,
-    instrucoes: dados.instrucoes || '', pararSeResponder: dados.pararSeResponder, ativo: dados.ativo,
+    instrucoes: dados.instrucoes || '', pararSeResponder: dados.pararSeResponder, inicioImediato: !!dados.inicioImediato, ativo: dados.ativo,
     arquivos: [...(dados.arquivos || [])],
   };
   const nomeEtapa = (id) => fuiEtapas.find((e) => e.id === id)?.nome || id;
@@ -9018,6 +9018,20 @@ function criarCardFollowUpInteligente(dados) {
   pararLabel.appendChild(document.createTextNode('Parar os envios se o lead responder'));
   card.appendChild(pararLabel);
 
+  const imedLabel = document.createElement('label');
+  imedLabel.className = 'fui-etapa-item';
+  const imedCb = document.createElement('input');
+  imedCb.type = 'checkbox';
+  imedCb.checked = estado.inicioImediato;
+  imedCb.addEventListener('change', () => { estado.inicioImediato = imedCb.checked; });
+  imedLabel.appendChild(imedCb);
+  imedLabel.appendChild(document.createTextNode('Início imediato'));
+  card.appendChild(imedLabel);
+  const imedDica = document.createElement('p');
+  imedDica.className = 'ct-info';
+  imedDica.textContent = 'Todo lead que entrar nessas etapas recebe a 1ª mensagem na hora (dentro do horário de envio; fora dele, assim que abrir) e as próximas seguem os dias acima. Quem já está parado na etapa não recebe nada.';
+  card.appendChild(imedDica);
+
   const erro = document.createElement('p');
   erro.className = 'agenda-erro';
   erro.hidden = true;
@@ -9063,7 +9077,7 @@ function criarCardFollowUpInteligente(dados) {
         headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
         body: JSON.stringify({
           id: estado.id, etapas: estado.etapas, diasEnvio: estado.diasEnvio, duracaoDias: estado.duracaoDias,
-          instrucoes: estado.instrucoes, pararSeResponder: estado.pararSeResponder, ativo: estado.ativo,
+          instrucoes: estado.instrucoes, pararSeResponder: estado.pararSeResponder, inicioImediato: estado.inicioImediato, ativo: estado.ativo,
         }),
       });
       const d = await res.json();

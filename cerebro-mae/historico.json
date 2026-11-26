@@ -1276,5 +1276,13 @@
     "tipo": "melhoria",
     "titulo": "Aniversariantes: aviso curto 'Número sem WhatsApp, confira no Clinicorp'",
     "conteudo": "O texto de telefone sem WhatsApp (exists:false) estava longo e quebrava o card. Agora é só 'Número sem WhatsApp, confira no Clinicorp' (constante MSG_SEM_WHATSAPP em src/aniversariantes.js). Migração no boot troca o texto antigo, mais longo, dos já pulados pelo curto."
+  },
+  {
+    "chave": "followup:inicio-imediato",
+    "modulo": "followup",
+    "data": "2026-11-26",
+    "tipo": "funcao",
+    "titulo": "Follow Up Inteligente: opcao Inicio imediato por follow-up",
+    "conteudo": "Cada follow-up ganhou a opcao Inicio imediato (coluna fui_cards.inicio_imediato, desligada por padrao). Ligada, todo lead que ENTRA em uma das etapas do card recebe a 1a mensagem na hora e as demais seguem os dias programados do card. Gatilho: crm.registrarEventoEtapa chama followUpInteligente.iniciarImediato (import dinamico, sem ciclo) - cobre arrastar no CRM, Clinicorp e conversa. Regras decididas pelo dono: fora do horario de envio espera abrir (o agendador de 10 min manda); lead sem nenhuma conversa anterior tambem recebe (a IA puxa a conversa); quem ja estava parado na etapa quando a opcao foi ligada NAO recebe (so entradas depois do card salvo). Trava em memoria evita 1a mensagem duplicada entre o gatilho e o agendador. Testado com 12 verificacoes (WhatsApp e IA simulados). Pendente: conferir na tela com dados reais; em etapa como novo_lead a IA de atendimento ja responde, entao o ideal e usar o inicio imediato em etapas movidas pela equipe."
   }
 ]

@@ -53,6 +53,8 @@ async function garantirTabelas() {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS fui_cards_tenant_idx ON fui_cards (tenant_id);`);
+  // Inicio imediato: o lead que ENTRA na etapa recebe a 1a mensagem na hora (respeitando o horario de envio)
+  await pool.query(`ALTER TABLE fui_cards ADD COLUMN IF NOT EXISTS inicio_imediato BOOLEAN NOT NULL DEFAULT false`);
   // 1 linha por (card, contato): quando o lead entrou na etapa, quantas mensagens ja foram e se
   // o ciclo acabou (concluido / lead respondeu / saiu da etapa e voltou = recomeca)
   // anexos (audio, imagem, PDF, video curto) de UMA mensagem especifica do card: ordem = posicao da
@@ -130,7 +132,7 @@ export async function listarCards(tenantId) {
   if (!pool) return [];
   await tabelasProntas;
   const { rows } = await pool.query(
-    `SELECT c.id, c.etapas, c.dias_envio, c.duracao_dias, c.instrucoes, c.parar_se_responder, c.ativo,
+    `SELECT c.id, c.etapas, c.dias_envio, c.duracao_dias, c.instrucoes, c.parar_se_responder, c.inicio_imediato, c.ativo,
             (SELECT count(*) FROM fui_execucoes x WHERE x.card_id = c.id AND NOT x.finalizado)::int AS em_andamento,
             (SELECT COALESCE(sum(x.enviados), 0) FROM fui_execucoes x WHERE x.card_id = c.id)::int AS enviadas
      FROM fui_cards c WHERE c.tenant_id = $1 ORDER BY c.id ASC`,
@@ -142,7 +144,7 @@ export async function listarCards(tenantId) {
   );
   return rows.map((r) => ({
     id: r.id, etapas: r.etapas, diasEnvio: r.dias_envio, duracaoDias: r.duracao_dias, instrucoes: r.instrucoes || '',
-    pararSeResponder: r.parar_se_responder, ativo: r.ativo, emAndamento: r.em_andamento, enviadas: r.enviadas,
+    pararSeResponder: r.parar_se_responder, inicioImediato: r.inicio_imediato, ativo: r.ativo, emAndamento: r.em_andamento, enviadas: r.enviadas,
     arquivos: arqs.filter((a) => a.card_id === r.id).map((a) => ({ id: a.id, ordem: a.ordem, nome: a.nome_arquivo, tipo: a.media_type, tamanho: Number(a.tamanho) })),
   }));
 }
@@ -187,13 +189,14 @@ export async function salvarCard(tenantId, dados) {
   const v = validarCard(dados);
   const ativo = dados.ativo !== false;
   const pararSeResponder = dados.pararSeResponder !== false;
+  const inicioImediato = dados.inicioImediato === true;
   await checarConflito(tenantId, dados.id, v.etapas, ativo);
 
   if (dados.id) {
     const { rows } = await pool.query(
-      `UPDATE fui_cards SET etapas = $1, dias_envio = $2, duracao_dias = $3, instrucoes = $4, parar_se_responder = $5, ativo = $6, atualizado_em = now()
+      `UPDATE fui_cards SET etapas = $1, dias_envio = $2, duracao_dias = $3, instrucoes = $4, parar_se_responder = $5, ativo = $6, inicio_imediato = $9, atualizado_em = now()
        WHERE id = $7 AND tenant_id = $8 RETURNING id`,
-      [v.etapas, v.diasEnvio, v.duracaoDias, v.instrucoes, pararSeResponder, ativo, Number(dados.id), tenantId],
+      [v.etapas, v.diasEnvio, v.duracaoDias, v.instrucoes, pararSeResponder, ativo, Number(dados.id), tenantId, inicioImediato],
     );
     if (!rows[0]) throw new Error('Follow-up nao encontrado.');
     // diminuiu a quantidade de mensagens: os anexos das que sumiram nao tem mais pra onde ir
@@ -201,9 +204,9 @@ export async function salvarCard(tenantId, dados) {
     return rows[0].id;
   }
   const { rows } = await pool.query(
-    `INSERT INTO fui_cards (tenant_id, etapas, dias_envio, duracao_dias, instrucoes, parar_se_responder, ativo)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-    [tenantId, v.etapas, v.diasEnvio, v.duracaoDias, v.instrucoes, pararSeResponder, ativo],
+    `INSERT INTO fui_cards (tenant_id, etapas, dias_envio, duracao_dias, instrucoes, parar_se_responder, ativo, inicio_imediato)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+    [tenantId, v.etapas, v.diasEnvio, v.duracaoDias, v.instrucoes, pararSeResponder, ativo, inicioImediato],
   );
   return rows[0].id;
 }
@@ -314,7 +317,11 @@ async function gerarMensagem({ tenantId, config, card, contato, numeroMensagem, 
 
 // ---------- agendador ----------
 
-export async function processarCard(tenantId, card, config) {
+// travas em memoria: o gatilho de inicio imediato e o agendador de 10 min podem pegar o MESMO lead ao
+// mesmo tempo - sem isso a 1a mensagem sairia duplicada
+const emProcessamento = new Set();
+
+export async function processarCard(tenantId, card, config, { somenteContatoId = null } = {}) {
   const nomes = new Map(crm.ETAPAS.map((e) => [e.id, e.nome]));
   const { rows: contatos } = await pool.query(
     `SELECT c.id, c.numero, c.instancia, c.nome, c.etapa, c.criado_em, c.ultima_entrada_em,
@@ -323,11 +330,16 @@ export async function processarCard(tenantId, card, config) {
      FROM crm_contatos c
      LEFT JOIN fui_execucoes x ON x.card_id = $3 AND x.contato_id = c.id
      WHERE c.tenant_id = $1 AND c.oculto = false AND c.auto_pausado = false AND c.etapa = ANY($2::text[])
-       AND c.ultima_mensagem_em IS NOT NULL AND c.instancia NOT LIKE 'ig:%'`,
-    [tenantId, card.etapas, card.id],
+       AND (c.ultima_mensagem_em IS NOT NULL OR $4::boolean) AND c.instancia NOT LIKE 'ig:%'
+       AND ($5::int IS NULL OR c.id = $5)`,
+    // com Inicio imediato a IA tambem puxa a conversa de quem ainda nao tem nenhuma mensagem
+    [tenantId, card.etapas, card.id, !!card.inicio_imediato, somenteContatoId],
   );
 
   for (const c of contatos) {
+    const trava = `${card.id}:${c.id}`;
+    if (emProcessamento.has(trava)) continue;
+    emProcessamento.add(trava);
     try {
       // quando o lead entrou NESSA etapa: o evento mais recente de mudanca de etapa, ou o
       // nascimento do card se nunca houve evento; nunca antes de o follow-up existir (senao um
@@ -355,7 +367,10 @@ export async function processarCard(tenantId, card, config) {
       if (card.parar_se_responder && c.ultima_entrada_em && new Date(c.ultima_entrada_em) > estado.entrou) { await finalizar('respondeu'); continue; }
       if (estado.enviados >= card.dias_envio.length) { await finalizar('concluido'); continue; }
 
-      const dia = card.dias_envio[estado.enviados];
+      // Inicio imediato: so vale pra quem ENTROU na etapa depois do follow-up existir (quem ja estava parado
+      // la quando a opcao foi ligada nao recebe nada) e so pra 1a mensagem; as demais seguem os dias do card
+      const imediato = !!card.inicio_imediato && entradaReal > baseline && estado.enviados === 0;
+      const dia = imediato ? 0 : card.dias_envio[estado.enviados];
       if (Date.now() - estado.entrou.getTime() < dia * DIA_MS) continue; // ainda nao e o dia
       if (estado.ultima && Date.now() - estado.ultima.getTime() < ESPACO_MINIMO_MS) continue;
       if (!dentroDoHorario(config)) return; // fora do expediente: tenta de novo na proxima rodada
@@ -384,9 +399,26 @@ export async function processarCard(tenantId, card, config) {
       if (estado.enviados + 1 >= card.dias_envio.length) await finalizar('concluido');
     } catch (err) {
       console.error(`Erro no follow-up inteligente (card ${card.id}, contato ${c.id}, tenant ${tenantId}):`, err.message);
+    } finally {
+      emProcessamento.delete(trava);
     }
     await new Promise((r) => setTimeout(r, 3000)); // pausa curta entre leads, evita rajada
   }
+}
+
+// Gatilho do Inicio imediato: chamado pelo CRM no instante em que um lead entra numa etapa. Fora do horario
+// de envio nao faz nada - o agendador de 10 min manda a 1a mensagem assim que o horario abrir.
+export async function iniciarImediato(tenantId, contatoId, etapa) {
+  if (!pool || ETAPAS_BLOQUEADAS.has(etapa)) return;
+  await tabelasProntas;
+  const config = await obterConfig(tenantId);
+  if (!config.ativo || !dentroDoHorario(config)) return;
+  const { rows: cards } = await pool.query(
+    `SELECT id, etapas, dias_envio, instrucoes, parar_se_responder, inicio_imediato, atualizado_em
+     FROM fui_cards WHERE tenant_id = $1 AND ativo = true AND inicio_imediato = true AND $2 = ANY(etapas)`,
+    [tenantId, etapa],
+  );
+  for (const card of cards) await processarCard(tenantId, card, config, { somenteContatoId: contatoId });
 }
 
 // roda a cada 10min, pra cada tenant com o Follow Up Inteligente ligado. So chamado no boot do server.js.
@@ -401,7 +433,7 @@ export function iniciarSchedulerFollowUpInteligente() {
           const config = await obterConfig(tenantId);
           if (!config.ativo || !dentroDoHorario(config)) continue;
           const { rows: cards } = await pool.query(
-            `SELECT id, etapas, dias_envio, instrucoes, parar_se_responder, atualizado_em FROM fui_cards WHERE tenant_id = $1 AND ativo = true`,
+            `SELECT id, etapas, dias_envio, instrucoes, parar_se_responder, inicio_imediato, atualizado_em FROM fui_cards WHERE tenant_id = $1 AND ativo = true`,
             [tenantId],
           );
           for (const card of cards) await processarCard(tenantId, card, config);
