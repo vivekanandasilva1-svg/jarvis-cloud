@@ -71,7 +71,7 @@ const aleatorio = (a, b) => a + Math.random() * (b - a);
 const escolher = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 // ---------- personagens (blocos) ----------
-function criarPessoa({ pele = '#f1c9a5', cabelo = '#4a3426', camisa = '#2f7f86', calca = '#2c3038', longo = false, sapato = '#1f2229' }) {
+function criarPessoa({ pele = '#f1c9a5', cabelo = '#4a3426', camisa = '#2f7f86', calca = '#2c3038', longo = false, barba = false, sapato = '#1f2229' }) {
   const g = new THREE.Group();
   const sombra = new THREE.Mesh(new THREE.CircleGeometry(0.42, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22 }));
   sombra.rotation.x = -Math.PI / 2; sombra.position.y = 0.02;
@@ -117,7 +117,8 @@ function criarPessoa({ pele = '#f1c9a5', cabelo = '#4a3426', camisa = '#2f7f86',
   }
   caixa(cabeca, -0.12, 0.2, 0.26, 0.07, 0.09, 0.02, '#23252b');
   caixa(cabeca, 0.12, 0.2, 0.26, 0.07, 0.09, 0.02, '#23252b');
-  caixa(cabeca, 0, 0.08, 0.26, 0.12, 0.03, 0.02, '#b5675e');
+  if (barba) caixa(cabeca, 0, 0.0, 0.265, 0.5, 0.2, 0.03, cabelo);
+  else caixa(cabeca, 0, 0.08, 0.26, 0.12, 0.03, 0.02, '#b5675e');
   corpo.add(cabeca);
   return { grupo: g, corpo, quadris, joelhos, bracos, cabeca, modo: 'parado', sentadoF: 0, andaF: 0, yaw: 0, yawAlvo: 0, rota: [], vel: 1.7 };
 }
@@ -436,20 +437,153 @@ function construirComercial() {
   return C;
 }
 
-function construirSalaEmBreve(nome, x0, z0, w, d) {
-  const g = new THREE.Group();
-  scene.add(g);
-  lajeBase(g, x0, z0, w, d, '#d8dbe0', '#cdd1d7');
-  const laje = new THREE.Group();
-  g.add(laje);
-  bloco(g, x0 - 0.3, 0, z0 - 0.3, x0 + w, 1.0, z0, '#aeb4bd');
-  bloco(g, x0 - 0.3, 0, z0, x0, 1.0, z0 + d, '#aeb4bd');
-  bloco(g, x0 - 0.3, 1.0, z0 - 0.3, x0 + w, 1.06, z0, '#d4af37');
-  placa(g, nome.toUpperCase(), 5, 0.9, { x: x0 + w / 2, y: 2.1, z: z0 + 0.4, sub: 'Em breve', fundo: '#3a3f48', cor: '#d4af37', tam: 0.7 });
-  bloco(g, x0 + w / 2 - 2.5, 1.0, z0 + 0.3, x0 + w / 2 + 2.5, 2.55, z0 + 0.34, '#3a3f48');
-  return g;
+// ---------- telas de dados (TV com numeros reais) ----------
+const telas = [];
+const CORES_LINHA = ['#d1626b', '#9b7ede', '#e0c04a', '#5cae7f', '#5b8def'];
+const linhasDe = (id, de = 0, ate = 99) => {
+  const ex = (estado?.agentes?.[id]?.extras || []).slice(de, ate);
+  return ex.length ? ex.map(([k, v], i) => [k, v, CORES_LINHA[(i + de) % CORES_LINHA.length]]) : [['Carregando…', '', '#8b8d92']];
+};
+function desenharTela(t) {
+  const { g, cv } = t;
+  const L = t.linhas();
+  g.fillStyle = '#0d1b24'; g.fillRect(0, 0, cv.width, cv.height);
+  g.textBaseline = 'middle'; g.textAlign = 'center';
+  g.fillStyle = t.cor; g.font = `700 ${Math.round(cv.height * 0.14)}px "Segoe UI", system-ui, sans-serif`;
+  g.fillText(t.titulo, cv.width / 2, cv.height * 0.15);
+  const top = cv.height * 0.3;
+  const passo = (cv.height - top - 8) / Math.max(L.length, 1);
+  L.forEach(([rot, val, cor], i) => {
+    const y = top + passo * (i + 0.5);
+    g.fillStyle = cor || t.cor; g.fillRect(22, y - passo * 0.3, 8, passo * 0.6);
+    g.textAlign = 'left'; g.fillStyle = '#e8eef2'; g.font = `500 ${Math.round(Math.min(passo * 0.5, 26))}px "Segoe UI", system-ui, sans-serif`;
+    g.fillText(String(rot).slice(0, 30), 44, y);
+    g.textAlign = 'right'; g.fillStyle = '#ffffff'; g.font = `700 ${Math.round(Math.min(passo * 0.56, 28))}px "Segoe UI", system-ui, sans-serif`;
+    g.fillText(String(val), cv.width - 22, y);
+  });
+  t.tex.needsUpdate = true;
+}
+function novaTela(pai, { x, y, z, w, h, titulo, cor = '#4cc3d9', linhas }) {
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = Math.round(512 * (h / w));
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex }));
+  m.position.set(x, y, z);
+  pai.add(m);
+  const t = { g: cv.getContext('2d'), tex, cv, titulo, cor, linhas };
+  telas.push(t);
+  desenharTela(t);
+  bloco(pai, x - w / 2 - 0.08, y - h / 2 - 0.08, z - 0.03, x + w / 2 + 0.08, y + h / 2 + 0.08, z - 0.01, '#14161a');
+  return m;
+}
+function desenharTelas() { telas.forEach(desenharTela); }
+
+// sala padrao (laje, vidro nos fundos, parede de madeira a esquerda, painel com a placa do setor)
+function salaPadrao(nome, sub, x0, z0, { piso = ['#e6e1ea', '#dcd6e2'], escuro = false } = {}) {
+  const C = new THREE.Group();
+  scene.add(C);
+  lajeBase(C, x0, z0, 16, 12, piso[0], piso[1]);
+  bloco(C, x0 - 0.3, 0, z0 - 0.3, x0 + 16, 1.0, z0, escuro ? '#3a3f48' : '#f3efe8');
+  bloco(C, x0 - 0.3, 3.2, z0 - 0.3, x0 + 16, 3.4, z0, '#2c3038');
+  bloco(C, x0 - 0.3, 3.4, z0 - 0.3, x0 + 16, 3.46, z0, '#d4af37');
+  bloco(C, x0, 1.0, z0 - 0.12, x0 + 16, 3.2, z0 - 0.04, '#a9d8f5', { transparent: true, opacity: 0.22 });
+  for (const x of [0, 5.3, 10.6, 16]) bloco(C, x0 + x - 0.07, 0, z0 - 0.14, x0 + x + 0.07, 3.2, z0 + 0.02, '#2c3038');
+  bloco(C, x0 + 1, 1.0, z0, x0 + 15, 3.2, z0 + 0.12, '#2c3038');
+  placa(C, nome.toUpperCase(), 5.4, 0.8, { x: x0 + 8, y: 2.8, z: z0 + 0.14, sub, tam: 0.8 });
+  bloco(C, x0 + 1.2, 1.0, z0 + 0.12, x0 + 14.8, 1.06, z0 + 0.16, '#d4af37');
+  bloco(C, x0 - 0.3, 0, z0, x0, 3.4, z0 + 12.3, escuro ? '#3a3f48' : '#c9a27a');
+  for (let z = 0.4; z < 12; z += 0.55) bloco(C, x0, 0.9, z0 + z, x0 + 0.07, 3.3, z0 + z + 0.12, escuro ? '#2f343c' : '#b78d63');
+  bloco(C, x0 - 0.3, 3.4, z0, x0, 3.46, z0 + 12.3, '#d4af37');
+  planta(C, x0 + 1.0, z0 + 0.9, 1.3); planta(C, x0 + 15.0, z0 + 1.1, 1.2); planta(C, x0 + 15.0, z0 + 10.9, 1.5); planta(C, x0 + 7.8, z0 + 11.0, 1.0);
+  return C;
+}
+function tvDoSetor(C, x0, z0, titulo, linhas, cor) {
+  novaTela(C, { x: x0 + 8, y: 1.65, z: z0 + 0.2, w: 6.0, h: 1.2, titulo, linhas, cor });
 }
 
+function construirLaboratorio() {
+  const x0 = 0; const z0 = 14;
+  const C = salaPadrao('Laboratório', 'Próteses · andamento dos trabalhos', x0, z0, { piso: ['#e3e8ec', '#d8dfe5'] });
+  tvDoSetor(C, x0, z0, 'LABORATÓRIO · SEMANA', () => linhasDe('lay'), '#4cc3d9');
+  // bancada principal (Lay) com microscopio e modelos de gesso
+  cadeira(C, x0 + 7, z0 + 3.0, '#3a4a6b');
+  mesaTrabalho(C, x0 + 8, z0 + 4.4, 5.6, '#d8dde3');
+  caixa(C, x0 + 6.0, 1.05, z0 + 4.4, 0.4, 0.06, 0.32, '#2c3038'); caixa(C, x0 + 6.0, 1.1, z0 + 4.45, 0.1, 0.5, 0.1, '#2c3038'); caixa(C, x0 + 6.0, 1.45, z0 + 4.35, 0.25, 0.2, 0.36, '#14161a');
+  caixa(C, x0 + 8.9, 1.05, z0 + 4.4, 1.9, 0.08, 0.5, '#e8a6a0');
+  for (let i = 0; i < 7; i++) caixa(C, x0 + 8.15 + i * 0.25, 1.13, z0 + 4.4, 0.19, 0.16, 0.22, '#f6f3ee');
+  caixa(C, x0 + 10.0, 1.05, z0 + 4.7, 0.5, 0.05, 0.3, '#5b8def'); caixa(C, x0 + 10.0, 1.1, z0 + 4.7, 0.4, 0.14, 0.2, '#f6f3ee');
+  // segunda bancada com bandejas de trabalhos
+  mesaTrabalho(C, x0 + 8, z0 + 8.8, 7, '#cfd6dc');
+  ['#d1626b', '#e0c04a', '#5cae7f', '#5b8def', '#9b7ede', '#d98b5f'].forEach((cor, i) => {
+    caixa(C, x0 + 5.5 + i * 1.0, 1.05, z0 + 8.8, 0.7, 0.05, 0.5, cor);
+    caixa(C, x0 + 5.5 + i * 1.0, 1.1, z0 + 8.8, 0.3, 0.12, 0.25, '#f6f3ee');
+  });
+  // estante de bandejas, forno e impressora 3D
+  bloco(C, x0 + 1.0, 0, z0 + 0.6, x0 + 3.8, 2.3, z0 + 1.4, '#8a5a3b');
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++) bloco(C, x0 + 1.15 + c * 0.52, 0.2 + r * 0.55, z0 + 1.4, x0 + 1.6 + c * 0.52, 0.55 + r * 0.55, z0 + 1.46, ['#d1626b', '#e0c04a', '#5cae7f', '#5b8def', '#9b7ede'][(r + c) % 5]);
+  bloco(C, x0 + 12.2, 0, z0 + 0.7, x0 + 14.4, 1.4, z0 + 1.9, '#3a3f48');
+  caixa(C, x0 + 13.3, 0.55, z0 + 1.93, 1.0, 0.55, 0.04, '#ff8a3d', { emissive: 0xff7a1f, emissiveIntensity: 0.9 });
+  bloco(C, x0 + 14.0, 0, z0 + 4.4, x0 + 15.2, 1.5, z0 + 5.6, '#e9e4da');
+  bloco(C, x0 + 14.1, 0.6, z0 + 4.5, x0 + 15.1, 1.4, z0 + 5.5, '#7cc7e8', { transparent: true, opacity: 0.45 });
+  // quadro de trabalhos
+  bloco(C, x0, 1.3, z0 + 3.0, x0 + 0.1, 3.0, z0 + 9.0, '#f6f3ee');
+  [['#d1626b', 4], ['#e0c04a', 3], ['#5cae7f', 2]].forEach(([cor, n], col) => { for (let i = 0; i < n; i++) bloco(C, x0 + 0.1, 2.5 - i * 0.45, z0 + 3.3 + col * 1.9, x0 + 0.14, 2.85 - i * 0.45, z0 + 4.8 + col * 1.9, cor); });
+  placa(C, 'TRABALHOS', 1.8, 0.4, { x: x0 + 0.16, y: 2.9, z: z0 + 6.0, ry: Math.PI / 2, fundo: '#f6f3ee', cor: '#2c3038', tam: 0.7 });
+  for (const [x, z] of [[7, 4.4], [8, 9.4], [3, 6]]) pendente(C, x0 + x, z0 + z);
+}
+
+function construirFinanceiro() {
+  const x0 = 18; const z0 = 14;
+  const C = salaPadrao('Financeiro', 'Caixa, vendas e contas', x0, z0, { piso: ['#e4e6df', '#d9dcd2'] });
+  tvDoSetor(C, x0, z0, 'FINANCEIRO · MÊS', () => linhasDe('mya', 0, 3), '#e0c04a');
+  cadeira(C, x0 + 8, z0 + 3.0, '#2f6f45');
+  mesaTrabalho(C, x0 + 8, z0 + 4.4, 5.0, '#f4f1ea');
+  monitor(C, x0 + 7.1, 1.05, z0 + 4.4, Math.PI); monitor(C, x0 + 8.9, 1.05, z0 + 4.4, Math.PI);
+  caixa(C, x0 + 10.1, 1.05, z0 + 4.6, 0.3, 0.06, 0.4, '#2c3038');
+  for (let i = 0; i < 4; i++) caixa(C, x0 + 6.0, 1.05 + i * 0.05, z0 + 4.7, 0.5, 0.05, 0.35, i % 2 ? '#e9e4da' : '#f6f3ee');
+  for (let i = 0; i < 5; i++) caixa(C, x0 + 10.7, 1.05 + i * 0.06, z0 + 4.2, 0.35, 0.05, 0.35, '#d4af37');
+  // cofre, arquivos e mural de grafico
+  bloco(C, x0 + 12.6, 0, z0 + 0.8, x0 + 14.4, 1.7, z0 + 2.2, '#4a5058');
+  bloco(C, x0 + 12.8, 0.3, z0 + 2.2, x0 + 14.2, 1.4, z0 + 2.26, '#3a3f48');
+  caixa(C, x0 + 13.5, 0.7, z0 + 2.3, 0.35, 0.35, 0.05, '#d4af37');
+  for (let i = 0; i < 3; i++) {
+    bloco(C, x0 + 0.5, 0, z0 + 7.0 + i * 1.5, x0 + 1.6, 1.3, z0 + 8.3 + i * 1.5, '#9aa1aa');
+    bloco(C, x0 + 1.6, 0.25, z0 + 7.2 + i * 1.5, x0 + 1.66, 0.55, z0 + 8.1 + i * 1.5, '#7a828c');
+    bloco(C, x0 + 1.6, 0.8, z0 + 7.2 + i * 1.5, x0 + 1.66, 1.1, z0 + 8.1 + i * 1.5, '#7a828c');
+  }
+  bloco(C, x0, 1.3, z0 + 2.6, x0 + 0.1, 3.0, z0 + 7.0, '#f6f3ee');
+  [0.5, 0.8, 0.7, 1.1, 1.0, 1.4].forEach((h, i) => bloco(C, x0 + 0.1, 1.45, z0 + 2.85 + i * 0.66, x0 + 0.15, 1.45 + h, z0 + 3.35 + i * 0.66, i % 2 ? '#2f7f86' : '#d4af37'));
+  placa(C, 'CAIXA', 1.5, 0.4, { x: x0 + 0.17, y: 2.85, z: z0 + 4.8, ry: Math.PI / 2, fundo: '#f6f3ee', cor: '#2c3038', tam: 0.7 });
+  poltrona(C, x0 + 5, z0 + 9.2, '#2f6f45'); poltrona(C, x0 + 8.5, z0 + 9.2, '#2f6f45');
+  caixa(C, x0 + 6.75, 0, z0 + 9.3, 0.7, 0.5, 0.7, '#8a5a3b'); caixa(C, x0 + 6.75, 0.5, z0 + 9.3, 0.8, 0.06, 0.8, '#2c3038');
+  for (const [x, z] of [[8, 4.4], [6.8, 9.6]]) pendente(C, x0 + x, z0 + z);
+}
+
+function construirTrafego() {
+  const x0 = 36; const z0 = 0;
+  const C = salaPadrao('Tráfego Pago', 'Campanhas, dados e estratégia', x0, z0, { piso: ['#2d323b', '#272c34'], escuro: true });
+  // 3 telas de dados nos fundos
+  const painel = (cx, titulo, linhas, cor) => novaTela(C, { x: x0 + cx, y: 1.95, z: z0 + 0.2, w: 3.9, h: 1.4, titulo, linhas, cor });
+  bloco(C, x0 + 1.2, 1.0, z0 + 0.12, x0 + 14.8, 1.06, z0 + 0.16, '#4cc3d9', { emissive: 0x4cc3d9, emissiveIntensity: 1 });
+  painel(3.5, 'CAMPANHAS', () => linhasDe('kyan', 0, 2), '#4cc3d9');
+  painel(8, 'GASTO HOJE', () => linhasDe('kyan', 2, 3), '#e0c04a');
+  painel(12.5, 'RESULTADOS', () => linhasDe('kyan', 3, 4), '#3ddc84');
+  // mesa do Kyan com 3 monitores
+  cadeira(C, x0 + 8, z0 + 3.4, '#1f3a63');
+  mesaTrabalho(C, x0 + 8, z0 + 4.6, 6.0, '#2c3038');
+  for (const dx of [-1.5, 0, 1.5]) monitor(C, x0 + 8 + dx, 1.05, z0 + 4.6, Math.PI);
+  caixa(C, x0 + 5.6, 1.05, z0 + 4.8, 0.5, 0.03, 0.2, '#8b8d92'); caixa(C, x0 + 10.6, 1.05, z0 + 4.7, 0.2, 0.25, 0.2, '#4cc3d9', { emissive: 0x4cc3d9, emissiveIntensity: 0.6 });
+  // sofa de brainstorm, rack de servidor, quadro de estrategia
+  sofa(C, x0 + 4.5, z0 + 9.2, 4.2, 0, '#1f3a63', '#8b9bb4');
+  caixa(C, x0 + 4.5, 0.38, z0 + 11.0, 1.6, 0.08, 0.7, '#14161a');
+  bloco(C, x0 + 13.0, 0, z0 + 8.0, x0 + 14.6, 2.3, z0 + 9.4, '#14161a');
+  for (let i = 0; i < 6; i++) caixa(C, x0 + 13.3 + (i % 2) * 0.6, 0.35 + Math.floor(i / 2) * 0.6, z0 + 9.42, 0.15, 0.08, 0.04, i % 3 ? '#3ddc84' : '#4cc3d9', { emissive: i % 3 ? 0x3ddc84 : 0x4cc3d9, emissiveIntensity: 1 });
+  bloco(C, x0, 1.3, z0 + 3.0, x0 + 0.1, 3.0, z0 + 9.0, '#f6f3ee');
+  ['#4cc3d9', '#5b8def', '#9b7ede', '#e0c04a'].forEach((cor, i) => bloco(C, x0 + 0.1, 1.6, z0 + 3.4 + i * 1.3, x0 + 0.14, 1.6 + 1.2 - i * 0.28, z0 + 3.4 + i * 1.3 + 1.0, cor));
+  placa(C, 'ESTRATÉGIA', 2.0, 0.4, { x: x0 + 0.16, y: 2.85, z: z0 + 6.0, ry: Math.PI / 2, fundo: '#f6f3ee', cor: '#2c3038', tam: 0.7 });
+  for (const [x, z] of [[8, 4.6], [4.5, 9.6]]) pendente(C, x0 + x, z0 + z);
+}
 // ---------- agentes e pacientes ----------
 function criarAgente(def) {
   const p = criarPessoa(def.visual);
@@ -473,7 +607,7 @@ function criarAgente(def) {
   return a;
 }
 
-const FRASES = { bia: 'Respondendo lead novo…', lua: 'Enviando follow-up…', lorena: 'Enviando aniversário…', anne: 'Conduzindo o funil…' };
+const FRASES = { lay: 'Conferindo os trabalhos…', mya: 'Fechando o caixa…', kyan: 'Otimizando campanhas…', bia: 'Respondendo lead novo…', lua: 'Enviando follow-up…', lorena: 'Enviando aniversário…', anne: 'Conduzindo o funil…' };
 const PELES = ['#f1c9a5', '#e0ac82', '#c68a63', '#8d5a3b', '#f6d7b8'];
 const CABELOS = ['#2a1e17', '#4a3426', '#6b4a2f', '#1b1b1f', '#a37b45', '#7a2e2e'];
 const CAMISAS = ['#d98b5f', '#5b8def', '#9b7ede', '#e0c04a', '#5cae7f', '#d1626b', '#7d8896', '#eeeeee'];
@@ -553,6 +687,7 @@ async function buscarEstado() {
     estado = await ctx.api('/api/empresa/estado');
     atualizarPainel();
     desenharTelaComercial();
+    desenharTelas();
   } catch { /* mantem o ultimo estado */ }
 }
 
@@ -581,14 +716,16 @@ function atualizarPainel() {
   if (!a) return;
   const d = estado?.agentes?.[a.id];
   const ativa = !!d?.ativa;
+  const alerta = d?.alerta || null;
   painelEl.querySelector('.emp-p-nome').textContent = a.nome;
   painelEl.querySelector('.emp-p-funcao').textContent = a.funcao;
   const st = painelEl.querySelector('.emp-p-status');
-  st.textContent = ativa ? 'Trabalhando agora' : 'Disponível';
-  st.className = `emp-p-status ${ativa ? 'on' : ''}`;
+  st.textContent = alerta ? 'Atenção' : ativa ? 'Trabalhando agora' : 'Disponível';
+  st.className = `emp-p-status ${alerta ? 'alerta' : ativa ? 'on' : ''}`;
   const linhas = [];
-  linhas.push(['Mensagens enviadas hoje', d ? String(d.hoje) : '—']);
-  linhas.push(['Última atividade', d ? tempoAtras(d.ultimaEm) : '—']);
+  if (alerta) linhas.push(['Alerta', alerta]);
+  if (!['lay', 'mya', 'kyan'].includes(a.id)) linhas.push(['Mensagens enviadas hoje', d ? String(d.hoje) : '—']);
+  linhas.push([['lay', 'mya'].includes(a.id) ? 'Último lançamento' : 'Última atividade', d ? tempoAtras(d.ultimaEm) : '—']);
   for (const [k, v] of d?.extras || []) linhas.push([k, v]);
   if (a.id === 'liz') linhas.push(['Consultas na agenda hoje', estado?.pacientesHoje == null ? 'agenda não conectada' : String(estado.pacientesHoje)]);
   painelEl.querySelector('.emp-p-dados').innerHTML = linhas.map(([k, v]) => `<div><span>${k}</span><strong></strong></div>`).join('');
@@ -745,7 +882,9 @@ function quadro(agora) {
       const frase = FRASES[a.id];
       if (real && frase && relogio > a.bolhaAte && (Math.floor(relogio + (p.fase || 0)) % 16 === 0)) falar(a, frase, 4);
     }
-    a.dot.className = `emp-tag-dot ${real ? 'on' : ''}`;
+    const alerta = estado?.agentes?.[a.id]?.alerta;
+    a.dot.className = `emp-tag-dot ${alerta ? 'alerta' : real ? 'on' : ''}`;
+    if (alerta && relogio > a.bolhaAte && (Math.floor(relogio + (p.fase || 0)) % 22 === 0)) falar(a, `⚠ ${alerta}`, 5);
     animarPessoa(p, dt, relogio);
     if (!a.bolha.hidden && relogio > a.bolhaAte) a.bolha.hidden = true;
   }
@@ -793,9 +932,9 @@ function montarInterface() {
   const setores = [
     { nome: 'Recepção', x: 8, z: 6, pronto: true },
     { nome: 'Comercial', x: 26, z: 6, pronto: true },
-    { nome: 'Laboratório', x: 8, z: 20 },
-    { nome: 'Financeiro', x: 26, z: 20 },
-    { nome: 'Tráfego Pago', x: 44, z: 6 },
+    { nome: 'Laboratório', x: 8, z: 20, pronto: true },
+    { nome: 'Financeiro', x: 26, z: 20, pronto: true },
+    { nome: 'Tráfego Pago', x: 44, z: 6, pronto: true },
   ];
   for (const s of setores) {
     const b = document.createElement('button');
@@ -821,9 +960,9 @@ export function iniciar(container, contexto) {
 
   construirRecepcao();
   construirComercial();
-  construirSalaEmBreve('Laboratório', 0, 14, 16, 12);
-  construirSalaEmBreve('Financeiro', 18, 14, 16, 12);
-  construirSalaEmBreve('Tráfego Pago', 36, 0, 16, 12);
+  construirLaboratorio();
+  construirFinanceiro();
+  construirTrafego();
 
   criarAgente({
     id: 'liz', nome: 'Liz', funcao: 'Recepção · IA de autoatendimento', x: 8.5, z: 2.0, yaw: 0, fase: 1,
@@ -834,6 +973,9 @@ export function iniciar(container, contexto) {
   mesa('lua', 'Lua', 'Comercial · follow-up', 11.5, 3.2, { pele: '#f1c9a5', cabelo: '#a37b45', camisa: '#9b7ede', calca: '#2c3038', longo: false }, 3);
   mesa('lorena', 'Lorena', 'Comercial · resgates e aniversariantes', 4, 8.2, { pele: '#e0ac82', cabelo: '#7a2e2e', camisa: '#e0c04a', calca: '#3b4a6b', longo: true }, 4);
   mesa('anne', 'Anne', 'Comercial · funis do Follow Up Inteligente', 11.5, 8.2, { pele: '#f6d7b8', cabelo: '#4a3426', camisa: '#5cae7f', calca: '#2c3038', longo: false }, 5);
+  criarAgente({ id: 'lay', nome: 'Lay', funcao: 'Laboratório · andamento dos trabalhos e pacientes em tratamento', x: 7, z: 17.2, yaw: 0, fase: 6, sentada: true, tagY: 1.85, visual: { pele: '#f1c9a5', cabelo: '#5a3a2a', camisa: '#f4f6f8', calca: '#3b4a6b', longo: true } });
+  criarAgente({ id: 'mya', nome: 'Mya', funcao: 'Financeiro · caixa, vendas e contas', x: 26, z: 17.2, yaw: 0, fase: 7, sentada: true, tagY: 1.85, visual: { pele: '#8d5a3b', cabelo: '#1b1b1f', camisa: '#2f8049', calca: '#2c3038', longo: true } });
+  criarAgente({ id: 'kyan', nome: 'Kyan', funcao: 'Tráfego pago · tecnologia, marketing digital e estratégia', x: 44, z: 3.4, yaw: 0, fase: 8, sentada: true, tagY: 1.85, visual: { pele: '#e0ac82', cabelo: '#1b1b1f', camisa: '#2c5aa0', calca: '#2c3038', longo: false, barba: true } });
   novoPaciente(true); novoPaciente(true); novoPaciente(true);
   spawnEm = 3;
 

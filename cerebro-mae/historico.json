@@ -1380,5 +1380,13 @@
     "tipo": "funcao",
     "titulo": "Minha Empresa: Fase 2 - sala Comercial com Bia, Lua, Lorena e Anne",
     "conteudo": "Sala Comercial construida (4 estacoes, TV com os numeros do dia, quadro do funil, plantas, bebedouro). Cada agente anima pela atividade real, agora separada em src/empresa.js: Liz = respostas da IA (autor 'ia') em contatos fora das etapas iniciais; Bia = respostas da IA em novo_lead/em_atendimento/em_negociacao/pre_agendado (etapa ATUAL do contato, nao a da hora do envio); Lua = follow_up_contatos; Anne = fui_execucoes (Follow Up Inteligente); Lorena = aniversariantes_envios enviados. Painel de cada agente mostra mensagens de hoje, ultima atividade e um numero proprio (leads atendidos, leads no follow-up, leads nos funis, aniversarios na fila). Bolinha verde = mexeu ha menos de 3 min. Pendente: Lorena ainda nao conta os resgates (res_pacientes) nem disparos; Fase 3 Laboratorio (Lay) e Financeiro (Mya); Fase 4 Trafego Pago (Kyan)."
+  },
+  {
+    "chave": "empresa:escritorio-3d-fase3-4",
+    "modulo": "empresa",
+    "data": "2026-11-26",
+    "tipo": "funcao",
+    "titulo": "Minha Empresa: Fases 3 e 4 - Laboratorio (Lay), Financeiro (Mya) e Trafego Pago (Kyan)",
+    "conteudo": "Tres salas novas com TVs de dados reais e os agentes Lay, Mya e Kyan (homem, com barba). Dados em src/empresa.js SEM gastar cota do Clinicorp alem do necessario: Lay = indicadores do laboratorio que o gestor lanca por semana no Gestao (gestao_lancamentos, so banco; alerta se houver trabalhos atrasados); Mya = lancamentos do financeiro (inadimplencia, contas a vencer) + vendas/recebido/despesas do mes do Clinicorp com cache de 30 min, consulta marcada como automatica (comoAutomatico) e feita so enquanto alguem esta com a aba aberta (alerta se houver inadimplencia lancada); Kyan = alertas abertos/criticos do monitor de campanhas (meta_saude_alertas) + gasto e resultados de hoje das contas escolhidas no painel de Vendas (cache de 15 min, ate 10 contas). Bolinha vermelha + balao quando ha alerta. Limite: sem lancamento semanal no Gestao, Lay e Mya mostram 'nao lancado' (nao existe integracao automatica de laboratorio); Mya mostra 'indisponivel' se o Clinicorp estiver sem cota ou desconectado. Pendente: dar mais vida ao fluxo (pacientes no laboratorio), historico/graficos no painel dos agentes e som opcional."
   }
 ]
