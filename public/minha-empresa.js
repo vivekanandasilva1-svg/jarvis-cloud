@@ -30,6 +30,11 @@ let kyanSel = '';
 let kyanDados = null;
 let kyanSelEl = null;
 let kyanBusca = 0;
+let kyanSel2 = '';
+let kyanDados2 = null;
+let kyanDias = 7;
+let kyanPerEl = null;
+let kyanCmpEl = null;
 const ativTexto = (id) => ativCache.get(id)?.[0]?.texto || '';
 
 // ---------- utilidades ----------
@@ -598,54 +603,111 @@ function kyanLinhas(parte) {
   if (!d) return [['Carregando…', '', '#8b8d92']];
   const crit = d.alertas.some((a) => a.nivel === 'critico');
   if (parte === 0) return [['Campanhas ativas', d.campanhasAtivas, '#4cc3d9'], ['Alertas abertos', d.alertas.length, crit ? '#ff5252' : '#3ddc84']];
-  if (parte === 1) return [['Hoje', reais2(d.hoje.gasto), '#e0c04a'], ['Últimos 7 dias', reais2(d.d7.gasto), '#e0c04a']];
-  return [['Resultados hoje', d.hoje.resultados, '#3ddc84'], ['Custo por resultado', d.hoje.cpl == null ? '—' : reais2(d.hoje.cpl), '#4cc3d9'], ['Resultados em 7 dias', d.d7.resultados, '#5b8def']];
+  if (parte === 1) return [['Hoje', reais2(d.hoje.gasto), '#e0c04a'], [`Últimos ${d.periodoDias} dias`, reais2(d.per.gasto), '#e0c04a']];
+  return [['Resultados hoje', d.hoje.resultados, '#3ddc84'], ['Custo por resultado', d.hoje.cpl == null ? '—' : reais2(d.hoje.cpl), '#4cc3d9'], [`Resultados em ${d.periodoDias} dias`, d.per.resultados, '#5b8def']];
 }
 const kyanTitulo = (base) => (kyanSel && kyanDados ? `${base} · ${nomeCurto(kyanDados.nome.replace(/ \(\d+ contas?\)$/, ''), 14)}` : base);
 function kyanExtras() {
   const d = kyanDados;
   return [
     ['Cliente / BM', d.nome], ['Gasto hoje', reais2(d.hoje.gasto)], ['Resultados hoje', String(d.hoje.resultados)],
-    ['Custo por resultado', d.hoje.cpl == null ? '—' : reais2(d.hoje.cpl)], ['Gasto em 7 dias', reais2(d.d7.gasto)],
-    ['Resultados em 7 dias', String(d.d7.resultados)], ['CTR (7 dias)', d.d7.ctr == null ? '—' : `${String(d.d7.ctr).replace('.', ',')}%`],
+    ['Custo por resultado', d.hoje.cpl == null ? '—' : reais2(d.hoje.cpl)], [`Gasto em ${d.periodoDias} dias`, reais2(d.per.gasto)],
+    [`Resultados em ${d.periodoDias} dias`, String(d.per.resultados)], [`CTR (${d.periodoDias} dias)`, d.per.ctr == null ? '—' : `${String(d.per.ctr).replace('.', ',')}%`],
     ['Campanhas ativas', String(d.campanhasAtivas)], ['Alertas deste cliente', String(d.alertas.length)],
   ];
+}
+function preencherOpcoes(sel, primeiro, grupos) {
+  sel.textContent = '';
+  sel.add(new Option(primeiro, ''));
+  for (const g of grupos) {
+    const og = document.createElement('optgroup');
+    og.label = g.grupo;
+    if (g.contas.length > 1) og.appendChild(new Option(`BM · ${g.grupo} (${g.contas.length} contas)`, `bm:${g.grupo}`));
+    for (const c of g.contas) og.appendChild(new Option(c.nome + (c.ativa ? '' : ' (inativa)'), c.id));
+    sel.add(og);
+  }
+}
+function mostrarControlesKyan(ok) {
+  kyanSelEl.hidden = !ok;
+  kyanPerEl.hidden = !ok || !kyanSel;
+  kyanCmpEl.hidden = !ok || !kyanSel;
 }
 async function carregarKyanContas() {
   try {
     const r = await ctx.api('/api/empresa/kyan/contas');
-    if (!r.grupos?.length) { kyanSelEl.hidden = true; return; }
-    kyanSelEl.textContent = '';
-    kyanSelEl.add(new Option('Kyan: visão geral', ''));
-    for (const g of r.grupos) {
-      const og = document.createElement('optgroup');
-      og.label = g.grupo;
-      if (g.contas.length > 1) og.appendChild(new Option(`BM · ${g.grupo} (${g.contas.length} contas)`, `bm:${g.grupo}`));
-      for (const c of g.contas) og.appendChild(new Option(c.nome + (c.ativa ? '' : ' (inativa)'), c.id));
-      kyanSelEl.add(og);
-    }
+    if (!r.grupos?.length) { mostrarControlesKyan(false); return; }
+    preencherOpcoes(kyanSelEl, 'Kyan: visão geral', r.grupos);
+    preencherOpcoes(kyanCmpEl, 'Comparar com…', r.grupos);
     kyanSelEl.value = kyanSel;
     if (kyanSelEl.value !== kyanSel) { kyanSel = ''; kyanSelEl.value = ''; }
-    kyanSelEl.hidden = false;
+    kyanCmpEl.value = kyanSel2;
+    if (kyanCmpEl.value !== kyanSel2 || !kyanSel) { kyanSel2 = ''; kyanCmpEl.value = ''; }
+    mostrarControlesKyan(true);
     if (kyanSel) carregarKyanCliente();
-  } catch { kyanSelEl.hidden = true; }
+  } catch { mostrarControlesKyan(false); }
 }
 async function carregarKyanCliente() {
-  if (!kyanSel) { kyanDados = null; desenharTelas(); atualizarPainel(); return; }
+  if (kyanSelEl.options.length) mostrarControlesKyan(true);
+  if (!kyanSel) { kyanDados = null; kyanDados2 = null; desenharTelas(); atualizarPainel(); return; }
   const eu = ++kyanBusca;
+  const buscar = (sel) => ctx.api(`/api/empresa/kyan/cliente?sel=${encodeURIComponent(sel)}&dias=${kyanDias}`);
   try {
-    const d = await ctx.api(`/api/empresa/kyan/cliente?sel=${encodeURIComponent(kyanSel)}`);
+    const [a, b] = await Promise.all([buscar(kyanSel), kyanSel2 ? buscar(kyanSel2).catch(() => null) : Promise.resolve(null)]);
     if (eu !== kyanBusca) return;
-    kyanDados = d;
+    kyanDados = a;
+    kyanDados2 = b;
   } catch (err) {
     if (eu !== kyanBusca) return;
-    kyanDados = null;
+    kyanDados = null; kyanDados2 = null;
     const tit = painelEl?.querySelector('.emp-p-graf small');
     if (tit && selecionado?.id === 'kyan') tit.textContent = `Não consegui ler esse cliente: ${err.message}`;
   }
   desenharTelas();
   atualizarPainel();
   if (selecionado?.id === 'kyan') { histCache.delete('kyan'); carregarHistorico(selecionado); carregarAtividade(selecionado); }
+}
+
+// comparacao lado a lado de dois clientes/BMs (verde = melhor)
+function renderComparacao() {
+  const el = painelEl?.querySelector('.emp-p-cmp');
+  if (!el) return;
+  const ativo = selecionado?.id === 'kyan' && kyanSel && kyanSel2 && kyanDados && kyanDados2;
+  el.hidden = !ativo;
+  const lista = painelEl.querySelector('.emp-p-dados');
+  if (lista) lista.hidden = !!ativo; // com a comparacao na tela, a lista simples do cliente A e redundante
+  if (!ativo) return;
+  const A = kyanDados; const B = kyanDados2; const n = A.periodoDias;
+  const nm = (d) => nomeCurto(d.nome.replace(/ \(\d+ contas?\)$/, ''), 13);
+  const num = (v) => (v == null ? '—' : String(v));
+  const linhas = [
+    ['Gasto hoje', reais2(A.hoje.gasto), reais2(B.hoje.gasto), null],
+    ['Resultados hoje', num(A.hoje.resultados), num(B.hoje.resultados), [A.hoje.resultados, B.hoje.resultados, 'maior']],
+    ['Custo/resultado hoje', A.hoje.cpl == null ? '—' : reais2(A.hoje.cpl), B.hoje.cpl == null ? '—' : reais2(B.hoje.cpl), [A.hoje.cpl, B.hoje.cpl, 'menor']],
+    [`Gasto ${n} dias`, reais2(A.per.gasto), reais2(B.per.gasto), null],
+    [`Resultados ${n} dias`, num(A.per.resultados), num(B.per.resultados), [A.per.resultados, B.per.resultados, 'maior']],
+    [`Custo/resultado ${n}d`, A.per.cpl == null ? '—' : reais2(A.per.cpl), B.per.cpl == null ? '—' : reais2(B.per.cpl), [A.per.cpl, B.per.cpl, 'menor']],
+    ['CTR', A.per.ctr == null ? '—' : `${A.per.ctr}%`, B.per.ctr == null ? '—' : `${B.per.ctr}%`, [A.per.ctr, B.per.ctr, 'maior']],
+    ['Campanhas ativas', num(A.campanhasAtivas), num(B.campanhasAtivas), null],
+    ['Alertas', num(A.alertas.length), num(B.alertas.length), [A.alertas.length, B.alertas.length, 'menor']],
+  ];
+  el.textContent = '';
+  const t = document.createElement('table');
+  const cab = document.createElement('tr');
+  for (const x of ['', nm(A), nm(B)]) { const th = document.createElement('th'); th.textContent = x; cab.appendChild(th); }
+  t.appendChild(cab);
+  for (const [rot, a, b, cmp] of linhas) {
+    const tr = document.createElement('tr');
+    const c0 = document.createElement('td'); c0.textContent = rot;
+    const c1 = document.createElement('td'); c1.textContent = a;
+    const c2 = document.createElement('td'); c2.textContent = b;
+    if (cmp && cmp[0] != null && cmp[1] != null && cmp[0] !== cmp[1]) {
+      const aMelhor = cmp[2] === 'maior' ? cmp[0] > cmp[1] : cmp[0] < cmp[1];
+      (aMelhor ? c1 : c2).className = 'melhor';
+    }
+    tr.append(c0, c1, c2);
+    t.appendChild(tr);
+  }
+  el.appendChild(t);
 }
 
 const animados = [];
@@ -886,7 +948,9 @@ function renderAtividade(a, itens) {
 }
 async function carregarAtividade(a) {
   if (a.id === 'kyan' && kyanSel) {
-    const itens = (kyanDados?.alertas || []).map((x) => ({ quando: x.quando, texto: `${x.titulo}${x.conta ? ` · ${x.conta}` : ''}`, nivel: x.nivel }));
+    const marca = kyanDados2 ? (d) => ` [${nomeCurto(d.nome.replace(/ \(\d+ contas?\)$/, ''), 12)}]` : () => '';
+    const itens = [...(kyanDados?.alertas || []).map((x) => ({ quando: x.quando, texto: `${x.titulo}${x.conta ? ` · ${x.conta}` : ''}${marca(kyanDados)}`, nivel: x.nivel })),
+      ...(kyanDados2?.alertas || []).map((x) => ({ quando: x.quando, texto: `${x.titulo}${x.conta ? ` · ${x.conta}` : ''}${marca(kyanDados2)}`, nivel: x.nivel }))];
     renderAtividade(a, itens);
     return;
   }
@@ -910,15 +974,35 @@ async function carregarHistorico(a) {
       const b = document.createElement('div');
       b.className = 'emp-barra';
       b.title = `${pt.rotulo}: ${pt.valor}`;
-      const v = document.createElement('span'); v.textContent = pt.valor > 999 ? `${Math.round(pt.valor / 100) / 10}k` : String(Math.round(pt.valor * 10) / 10);
+      const v = document.createElement('span');
+      if (h.pontos.length <= 10) v.textContent = pt.valor > 999 ? `${Math.round(pt.valor / 100) / 10}k` : String(Math.round(pt.valor * 10) / 10);
       const i = document.createElement('i'); i.style.height = `${Math.max(3, (pt.valor / max) * 46)}px`;
-      const l = document.createElement('em'); l.textContent = pt.rotulo;
+      const l = document.createElement('em');
+      if (h.pontos.length <= 10 || h.pontos.indexOf(pt) % 5 === 0) l.textContent = pt.rotulo;
       b.append(v, i, l);
       barras.appendChild(b);
     }
     if (!h.pontos.length) tit.textContent = `${h.titulo} — sem dados ainda`;
   };
   if (a.id === 'kyan' && kyanSel) {
+    if (kyanDados && kyanSel2 && kyanDados2) {
+      tit.textContent = `Gasto por dia (R$) · ${nomeCurto(kyanDados.nome.replace(/ \(\d+ contas?\)$/, ''), 12)} × ${nomeCurto(kyanDados2.nome.replace(/ \(\d+ contas?\)$/, ''), 12)}`;
+      barras.textContent = '';
+      const max = Math.max(1, ...kyanDados.dias.map((x) => x.valor), ...kyanDados2.dias.map((x) => x.valor));
+      const total = kyanDados.dias.length;
+      kyanDados.dias.forEach((pt, idx) => {
+        const pt2 = kyanDados2.dias[idx] || { valor: 0 };
+        const b = document.createElement('div'); b.className = 'emp-barra'; b.title = `${pt.rotulo}: ${pt.valor} × ${pt2.valor}`;
+        const par = document.createElement('div'); par.className = 'emp-par';
+        const i1 = document.createElement('i'); i1.style.height = `${Math.max(3, (pt.valor / max) * 46)}px`;
+        const i2 = document.createElement('i'); i2.className = 'b'; i2.style.height = `${Math.max(3, (pt2.valor / max) * 46)}px`;
+        par.append(i1, i2);
+        const l = document.createElement('em'); if (total <= 10 || idx % 5 === 0) l.textContent = pt.rotulo;
+        b.append(par, l);
+        barras.appendChild(b);
+      });
+      return;
+    }
     if (kyanDados) return desenhar({ titulo: `Gasto por dia · ${nomeCurto(kyanDados.nome, 30)} (R$)`, pontos: kyanDados.dias });
     tit.textContent = 'Carregando dados do cliente…'; barras.textContent = '';
     return;
@@ -960,6 +1044,7 @@ function atualizarPainel() {
   painelEl.querySelectorAll('.emp-p-dados strong').forEach((el, i) => { el.textContent = linhas[i][1]; });
   painelEl.querySelector('.emp-p-av').style.background = a.visual.camisa;
   painelEl.querySelector('.emp-p-av').textContent = a.nome[0];
+  renderComparacao();
 }
 
 // ---------- camera ----------
@@ -1153,6 +1238,7 @@ function montarInterface() {
           <div class="emp-p-topo"><span class="emp-p-av"></span><div><strong class="emp-p-nome"></strong><small class="emp-p-funcao"></small></div></div>
           <span class="emp-p-status"></span>
           <div class="emp-p-dados"></div>
+          <div class="emp-p-cmp" hidden></div>
           <div class="emp-p-ativ"><small>Atividade recente (dados do app)</small><ul></ul></div>
           <div class="emp-p-graf"><small></small><div class="emp-p-barras"></div></div>
         </aside>
@@ -1164,7 +1250,7 @@ function montarInterface() {
   painelEl = raiz.querySelector('.emp-painel');
   chipsEl = raiz.querySelector('.emp-chips');
   try { somLigado = localStorage.getItem('empresaSom') === '1'; } catch { somLigado = false; }
-  try { kyanSel = localStorage.getItem('empresaKyanSel') || ''; } catch { kyanSel = ''; }
+  try { kyanSel = localStorage.getItem('empresaKyanSel') || ''; kyanSel2 = localStorage.getItem('empresaKyanSel2') || ''; kyanDias = [7, 14, 30].includes(Number(localStorage.getItem('empresaKyanDias'))) ? Number(localStorage.getItem('empresaKyanDias')) : 7; } catch { kyanSel = ''; kyanSel2 = ''; kyanDias = 7; }
   dicaEl = raiz.querySelector('.emp-dica');
   painelEl.querySelector('.emp-p-fechar').addEventListener('click', () => { selecionado = null; atualizarPainel(); });
   const setores = [
@@ -1188,13 +1274,39 @@ function montarInterface() {
   kyanSelEl.title = 'Escolha um cliente ou BM para o Kyan mostrar os dados básicos das campanhas';
   kyanSelEl.addEventListener('change', () => {
     kyanSel = kyanSelEl.value;
+    if (!kyanSel) { kyanSel2 = ''; kyanCmpEl.value = ''; }
     try { localStorage.setItem('empresaKyanSel', kyanSel); } catch { /* sem armazenamento */ }
-    kyanDados = null;
+    kyanDados = null; kyanDados2 = null;
+    mostrarControlesKyan(true);
     desenharTelas();
     carregarKyanCliente();
     selecionar('kyan');
   });
-  chipsEl.appendChild(kyanSelEl);
+  kyanPerEl = document.createElement('select');
+  kyanPerEl.className = 'emp-chip emp-kyan-per';
+  kyanPerEl.hidden = true;
+  kyanPerEl.title = 'Período dos dados do Kyan';
+  for (const n of [7, 14, 30]) kyanPerEl.add(new Option(`Últimos ${n} dias`, String(n)));
+  kyanPerEl.value = String(kyanDias);
+  kyanPerEl.addEventListener('change', () => {
+    kyanDias = Number(kyanPerEl.value) || 7;
+    try { localStorage.setItem('empresaKyanDias', String(kyanDias)); } catch { /* sem armazenamento */ }
+    kyanDados = null; kyanDados2 = null;
+    desenharTelas();
+    carregarKyanCliente();
+  });
+  kyanCmpEl = document.createElement('select');
+  kyanCmpEl.className = 'emp-chip emp-kyan-sel emp-kyan-cmp';
+  kyanCmpEl.hidden = true;
+  kyanCmpEl.title = 'Escolha um segundo cliente ou BM para comparar lado a lado';
+  kyanCmpEl.addEventListener('change', () => {
+    kyanSel2 = kyanCmpEl.value;
+    try { localStorage.setItem('empresaKyanSel2', kyanSel2); } catch { /* sem armazenamento */ }
+    kyanDados2 = null;
+    carregarKyanCliente();
+    selecionar('kyan');
+  });
+  chipsEl.append(kyanSelEl, kyanPerEl, kyanCmpEl);
   carregarKyanContas();
   const som = document.createElement('button');
   som.type = 'button';

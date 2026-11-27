@@ -2246,7 +2246,7 @@ function empresaAoMudarAba(aba) {
   if (aba !== 'empresa') { empresaModulo?.pausar(); return; }
   if (empresaModulo) { empresaModulo.retomar(); return; }
   tabEmpresa.textContent = 'Carregando o escritório...';
-  import('./minha-empresa.js?v=20261126j').then((m) => {
+  import('./minha-empresa.js?v=20261127b').then((m) => {
     empresaModulo = m;
     tabEmpresa.textContent = '';
     m.iniciar(tabEmpresa, { api: igApi });

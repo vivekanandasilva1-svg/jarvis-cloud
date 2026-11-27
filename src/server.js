@@ -3081,7 +3081,7 @@ app.get('/api/empresa/estado', rotaIg(async (req, res) => res.json(await empresa
 app.get('/api/empresa/historico', rotaIg(async (req, res) => res.json(await empresa.historico(req.tenantId, String(req.query.agente || '')))));
 app.get('/api/empresa/atividade', rotaIg(async (req, res) => res.json(await empresa.atividade(req.tenantId, String(req.query.agente || '')))));
 app.get('/api/empresa/kyan/contas', rotaIg(async (req, res) => res.json(await empresa.kyanContas(req.tenantId))));
-app.get('/api/empresa/kyan/cliente', rotaIg(async (req, res) => res.json(await empresa.kyanCliente(req.tenantId, String(req.query.sel || '')))));
+app.get('/api/empresa/kyan/cliente', rotaIg(async (req, res) => res.json(await empresa.kyanCliente(req.tenantId, String(req.query.sel || ''), Number(req.query.dias) || 7))));
 
 app.get('/api/instagram/status', rotaIg(async (req, res) => res.json(await instagram.status(req.tenantId))));
 app.post('/api/instagram/desconectar', rotaIg(async (req, res) => { await instagram.desconectar(req.tenantId); res.json({ ok: true }); }));

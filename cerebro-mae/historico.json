@@ -1412,5 +1412,13 @@
     "tipo": "funcao",
     "titulo": "Minha Empresa: Kyan com seletor de cliente/BM e dados basicos das campanhas",
     "conteudo": "Pedido do dono: escolher qualquer cliente ou BM e o Kyan mostrar os dados da campanha dele. Select 'Kyan' na barra do escritorio (valor guardado em localStorage 'empresaKyanSel'): 'visao geral' (comportamento anterior) ou, por conexao/BM (rotulo do token), 'BM - todas as contas' e cada conta de anuncio. Endpoints GET /api/empresa/kyan/contas e /api/empresa/kyan/cliente?sel=bm:<grupo>|act_<id> (src/empresa.js: kyanContas, kyanCliente). Dados: gasto/resultados/custo por resultado/CTR de hoje e dos ultimos 7 dias, gasto por dia (7 dias), campanhas ativas e alertas abertos do cliente (meta_saude_alertas filtrado pelas contas escolhidas). As 3 telas da sala, o painel, o grafico e a atividade do Kyan passam a refletir o cliente escolhido. Seguranca/multi-tenant: so aceita ids da lista de contas do PROPRIO tenant (testado: id invalido e id de outro tenant sao recusados). Custo: cache de 10 min por selecao (ate 12 contas, 4 chamadas ao Meta por conta), 1a carga de um BM leva ~2 s. Pendente: comparar dois clientes lado a lado e filtro por periodo."
+  },
+  {
+    "chave": "empresa:kyan-periodo-e-comparacao",
+    "modulo": "empresa",
+    "data": "2026-11-27",
+    "tipo": "melhoria",
+    "titulo": "Minha Empresa: Kyan com periodo (7/14/30 dias) e comparacao lado a lado de dois clientes",
+    "conteudo": "Duas selects novas na barra do escritorio ao escolher um cliente/BM no Kyan: periodo (7, 14 ou 30 dias; guardado em localStorage empresaKyanDias) e 'Comparar com...' (empresaKyanSel2). GET /api/empresa/kyan/cliente aceita &dias=7|14|30 (kyanCliente(tenantId, sel, dias): datePreset last_Nd + gasto por dia do periodo; o campo d7 virou per + periodoDias; cache de 10 min por selecao+periodo). Na comparacao o painel mostra tabela A x B (gasto, resultados, custo por resultado, CTR, campanhas ativas, alertas) com o melhor valor em verde (maior e melhor para resultados/CTR, menor e melhor para custo/alertas), grafico de barras duplo de gasto por dia e alertas dos dois (marcados com o nome); as 3 telas da sala continuam no cliente A. Em 30 dias o grafico so rotula a cada 5 dias. Testado em producao com dados reais (Clinpop x Pedro Jorge, 7/14/30). Pendente: periodo personalizado (datas) e comparar mais de dois."
   }
 ]

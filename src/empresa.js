@@ -349,7 +349,8 @@ const fechar = (t) => ({
   ctr: t.impressoes > 0 ? Math.round((t.cliques / t.impressoes) * 10000) / 100 : null,
 });
 
-export async function kyanCliente(tenantId, sel) {
+export async function kyanCliente(tenantId, sel, diasPeriodo = 7) {
+  const nDias = [7, 14, 30].includes(Number(diasPeriodo)) ? Number(diasPeriodo) : 7;
   const lista = await listaContasMeta(tenantId); // so as contas DESTE cliente da Lumia: nunca aceita id de fora
   const selecionadas = String(sel || '').startsWith('bm:')
     ? lista.filter((c) => c.grupo === String(sel).slice(3))
@@ -357,11 +358,11 @@ export async function kyanCliente(tenantId, sel) {
   if (!selecionadas.length) throw new Error('Cliente ou BM não encontrado.');
   const alvo = selecionadas.slice(0, 12);
   const nome = String(sel).startsWith('bm:') ? `${String(sel).slice(3)} (${selecionadas.length} conta${selecionadas.length > 1 ? 's' : ''})` : selecionadas[0].nome;
-  const dias = ultimosDias(7);
+  const dias = ultimosDias(nDias);
 
-  const dados = await obterCache(`kyan:cliente:${tenantId}:${sel}`, 10 * 60 * 1000, async () => {
+  const dados = await obterCache(`kyan:cliente:${tenantId}:${sel}:${nDias}`, 10 * 60 * 1000, async () => {
     const hoje = { gasto: 0, resultados: 0, impressoes: 0, cliques: 0 };
-    const d7 = { gasto: 0, resultados: 0, impressoes: 0, cliques: 0 };
+    const per = { gasto: 0, resultados: 0, impressoes: 0, cliques: 0 };
     const porDiaGasto = new Map();
     let campanhasAtivas = 0;
     const falhas = [];
@@ -369,17 +370,17 @@ export async function kyanCliente(tenantId, sel) {
       try {
         const [h, w, serie, camps] = await Promise.all([
           metaAds.getInsights(tenantId, { objectId: c.id, datePreset: 'today' }),
-          metaAds.getInsights(tenantId, { objectId: c.id, datePreset: 'last_7d' }),
-          metaAds.getSpendReport(tenantId, { accountId: c.id, since: dias[0], until: dias[6], timeIncrement: '1' }),
+          metaAds.getInsights(tenantId, { objectId: c.id, datePreset: `last_${nDias}d` }),
+          metaAds.getSpendReport(tenantId, { accountId: c.id, since: dias[0], until: dias[nDias - 1], timeIncrement: '1' }),
           metaAds.listCampaigns(tenantId, { accountId: c.id }),
         ]);
-        for (const [alvoSoma, linhas] of [[hoje, h], [d7, w]]) { const t = somaLinhas(linhas); for (const k of Object.keys(alvoSoma)) alvoSoma[k] += t[k]; }
+        for (const [alvoSoma, linhas] of [[hoje, h], [per, w]]) { const t = somaLinhas(linhas); for (const k of Object.keys(alvoSoma)) alvoSoma[k] += t[k]; }
         for (const r of serie) for (const pt of r.porPeriodo || []) porDiaGasto.set(pt.inicio, (porDiaGasto.get(pt.inicio) || 0) + pt.gasto);
         campanhasAtivas += (camps || []).filter((x) => x.effective_status === 'ACTIVE').length;
       } catch (err) { falhas.push(`${c.nome}: ${err.message}`); }
     }
     return {
-      hoje: fechar(hoje), d7: fechar(d7), campanhasAtivas, falhas,
+      hoje: fechar(hoje), per: fechar(per), periodoDias: nDias, campanhasAtivas, falhas,
       dias: dias.map((d) => ({ rotulo: rotuloDia(d), valor: Math.round((porDiaGasto.get(d) || 0) * 100) / 100 })),
       atualizadoEm: new Date().toISOString(),
     };
