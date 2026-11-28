@@ -619,6 +619,9 @@ export async function salvarContatoBase(tenantId, dados) {
 // Follow Up entra como as outras colunas e, alem de por o card na coluna, INICIA o acompanhamento: a IA le a conversa
 // recente e manda a 1a tentativa (ver iniciarAcompanhamento em followUp.js)
 const ETAPAS_IMPORTAVEIS = new Set([...IDS_ETAPAS]);
+// ORIENTACAO (nao e trava): cada lead que entra no Follow Up recebe uma mensagem automatica na hora; listas grandes de uma vez
+// aumentam o risco de o WhatsApp bloquear o numero. A tela avisa e pede confirmacao acima disso.
+export const LIMITE_ORIENTADO_FOLLOWUP = 100;
 // etapaPadrao = coluna do funil pra onde vai a lista inteira (ex: lista de faltosos -> nao_compareceu); a
 // coluna da propria linha da planilha, se vier, tem prioridade. Contato que cai numa coluna ja aparece no
 // board (ultima_mensagem_em preenchida) - sem coluna, fica so na aba Contatos.
@@ -671,6 +674,9 @@ export async function importarContatos(tenantId, instancia, linhas, modo = 'pula
   // quem entrou na coluna Follow Up pela planilha comeca o acompanhamento agora: a IA le a conversa recente e manda a
   // 1a tentativa (em fila, espacada). Import dinamico: followUp.js importa este arquivo (evita ciclo no carregamento).
   const paraFollowUp = eventos.filter(([, etapa]) => etapa === 'follow_up');
+  resultado.followUpNovos = paraFollowUp.length;
+  resultado.limiteOrientadoFollowUp = LIMITE_ORIENTADO_FOLLOWUP;
+  if (paraFollowUp.length > LIMITE_ORIENTADO_FOLLOWUP) console.warn(`[follow-up] tenant ${tenantId} importou ${paraFollowUp.length} leads de uma vez no Follow Up (orientado: ate ${LIMITE_ORIENTADO_FOLLOWUP}).`);
   if (paraFollowUp.length) {
     import('./followUp.js').then(async (m) => { for (const [id] of paraFollowUp) await m.iniciarAcompanhamento(tenantId, id).catch((err) => console.error('Erro iniciando follow up (importacao):', err.message)); })
       .catch((err) => console.error('Erro carregando follow up (importacao):', err.message));

@@ -4309,8 +4309,25 @@ function ctMontarLinhasImp() {
   return { validas, semTelefone, repetidas, temTelefone: mapa.numero !== undefined };
 }
 
+// ORIENTACAO (nao e trava): cada lead que entra no Follow Up recebe uma mensagem automatica na hora - lista grande de uma vez
+// pode levar o WhatsApp a bloquear o numero. Acima do limite a tela alerta e pede confirmacao.
+const CT_LIMITE_FOLLOWUP = 100;
+const ctQtdParaFollowUp = (validas) => validas.filter((l) => (l.etapa || ctImpEtapa.value) === 'follow_up').length;
+function ctAtualizarAvisoFollowUp(validas) {
+  const el = document.getElementById('ctImpAvisoFu');
+  if (!el) return;
+  const n = ctQtdParaFollowUp(validas);
+  el.hidden = n === 0;
+  if (!n) return;
+  el.style.color = n > CT_LIMITE_FOLLOWUP ? 'var(--f-abaixo, #e5534b)' : '';
+  el.textContent = n > CT_LIMITE_FOLLOWUP
+    ? `⚠️ Atenção: ${n} leads vão para o Follow Up e o orientado é até ${CT_LIMITE_FOLLOWUP} por vez. Cada um recebe uma mensagem automática na hora, e muitos envios seguidos podem levar o WhatsApp a bloquear o número. Divida a lista em lotes de até ${CT_LIMITE_FOLLOWUP}, com cerca de 1 hora entre eles.`
+    : `Orientação: cada lead que entra no Follow Up recebe uma mensagem automática na hora (a IA lê a conversa recente). Importe no máximo ${CT_LIMITE_FOLLOWUP} por vez e espere cerca de 1 hora entre listas, para não arriscar o número no WhatsApp.`;
+}
+
 function ctAtualizarPreviaImp() {
   const { validas, semTelefone, repetidas, temTelefone } = ctMontarLinhasImp();
+  ctAtualizarAvisoFollowUp(validas);
   ctImpConfirmar.disabled = !temTelefone || !validas.length;
   if (!temTelefone) {
     ctImpResumo.textContent = 'Escolha qual coluna tem o telefone pra continuar.';
@@ -4350,10 +4367,14 @@ function ctAtualizarEspelhar() {
   if (ctImpEspelharLabel.hidden) ctImpEspelhar.checked = false;
 }
 ctImpEtapa.addEventListener('change', ctAtualizarEspelhar);
+ctImpEtapa.addEventListener('change', ctAtualizarPreviaImp);
 
 ctImpConfirmar.addEventListener('click', async () => {
   const { validas } = ctMontarLinhasImp();
   if (!validas.length) return;
+  // alerta: tentando subir mais leads pro Follow Up do que o orientado
+  const qtdFu = ctImpEspelhar.checked && ctImpEtapa.value === 'follow_up' ? validas.length : ctQtdParaFollowUp(validas);
+  if (qtdFu > CT_LIMITE_FOLLOWUP && !window.confirm(`⚠️ ALERTA\n\nVocê está subindo ${qtdFu} leads para o Follow Up, e o orientado é até ${CT_LIMITE_FOLLOWUP} por vez.\n\nCada lead recebe uma mensagem automática na hora. Muitos envios seguidos podem levar o WhatsApp a BLOQUEAR o número.\n\nO recomendado é dividir a lista em lotes de até ${CT_LIMITE_FOLLOWUP}, com cerca de 1 hora entre eles.\n\nQuer continuar mesmo assim?`)) return;
   ctMostrarErroImp('');
   ctImpConfirmar.disabled = true;
   if (ctImpEspelhar.checked && ctImpEtapa.value === 'follow_up') {
@@ -4388,7 +4409,7 @@ ctImpConfirmar.addEventListener('click', async () => {
     }
     return;
   }
-  const total = { novos: 0, atualizados: 0, ignorados: 0, invalidos: 0, noFunil: 0 };
+  const total = { novos: 0, atualizados: 0, ignorados: 0, invalidos: 0, noFunil: 0, followUpNovos: 0 };
   try {
     for (let i = 0; i < validas.length; i += 500) {
       ctImpConfirmar.textContent = `Importando ${Math.min(i + 500, validas.length)} de ${validas.length}...`;
@@ -4406,6 +4427,7 @@ ctImpConfirmar.addEventListener('click', async () => {
     if (total.atualizados) partes.push(`${total.atualizados} atualizados`);
     if (total.ignorados) partes.push(`${total.ignorados} já existiam e ficaram como estavam`);
     if (total.invalidos) partes.push(`${total.invalidos} com telefone inválido`);
+    if (total.followUpNovos) partes.push(`${total.followUpNovos} entraram no Follow Up e recebem a 1ª mensagem aos poucos (5 a 12 s entre cada)${total.followUpNovos > CT_LIMITE_FOLLOWUP ? ` - acima do orientado de ${CT_LIMITE_FOLLOWUP}, acompanhe o número no WhatsApp` : ''}`);
     ctImpResultado.textContent = `Importação concluída: ${partes.join(', ')}.`;
     ctImpResultado.hidden = false;
     ctImpPasso(0);
