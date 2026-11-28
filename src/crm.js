@@ -219,6 +219,9 @@ const tabelasProntas = garantirTabelas().catch((err) => {
 // outros modulos (ex: retorno.js) aguardam as tabelas do CRM antes de criar as proprias
 export const crmTabelasProntas = tabelasProntas;
 
+// etiqueta que o Follow Up poe no lead resgatado (modo resgate)
+export const ETIQUETA_RESGATE = 'Resgate do Follow Up';
+
 // guarda que o contato entrou numa etapa agora (best-effort: falha aqui nunca derruba a acao principal)
 async function registrarEventoEtapa(tenantId, contatoId, instancia, etapa) {
   await pool.query(
@@ -231,6 +234,9 @@ async function registrarEventoEtapa(tenantId, contatoId, instancia, etapa) {
   // Follow Up Inteligente com "Inicio imediato": quem entra na etapa recebe a 1a mensagem na hora (import dinamico: o
   // modulo importa este arquivo, entao evitamos o ciclo no carregamento; nunca bloqueia nem derruba a acao principal)
   else import('./followUpInteligente.js').then((m) => m.iniciarImediato(tenantId, contatoId, etapa)).catch((err) => console.error('Erro no inicio imediato do follow-up:', err.message));
+  if (etapa === 'compareceu') {
+    await pool.query(`UPDATE crm_contatos SET etiquetas = array_remove(etiquetas, $3) WHERE id = $1 AND tenant_id = $2 AND etiquetas @> ARRAY[$3]::text[]`, [Number(contatoId), tenantId, ETIQUETA_RESGATE]).catch(() => {});
+  }
 }
 
 // registra uma mensagem (entrada = contato mandou, saida = a gente/Lumia mandou) e garante que
@@ -413,6 +419,14 @@ export async function adicionarEtiqueta(tenantId, contatoId, etiqueta) {
     `UPDATE crm_contatos SET etiquetas = CASE WHEN etiquetas @> ARRAY[$3]::text[] THEN etiquetas ELSE array_append(etiquetas, $3) END WHERE id = $1 AND tenant_id = $2`,
     [Number(contatoId), tenantId, t],
   );
+}
+
+// etapa atual + etiquetas do contato (usado pela postura de resgate do Follow Up)
+export async function etapaEEtiquetas(tenantId, { numero, instancia }) {
+  if (!pool) return null;
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT etapa, etiquetas FROM crm_contatos WHERE tenant_id = $1 AND numero = $2 AND instancia = $3', [tenantId, numero, instancia]);
+  return rows[0] || null;
 }
 
 export async function temEtiqueta(tenantId, { numero, instancia }, etiqueta) {

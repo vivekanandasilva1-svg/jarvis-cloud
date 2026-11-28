@@ -55,6 +55,16 @@ async function garantirTabelas() {
   // modo resgate: lead que responde positivo a uma tentativa ganha a etiqueta de resgate e a IA passa a buscar a objecao
   await pool.query(`ALTER TABLE follow_up_config ADD COLUMN IF NOT EXISTS modo_resgate BOOLEAN NOT NULL DEFAULT false;`);
   await pool.query(`ALTER TABLE follow_up_config ADD COLUMN IF NOT EXISTS prompt_resgate TEXT;`);
+  // cada lead resgatado (etiqueta aplicada) fica registrado com a data - base da metrica na aba Resultados
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS follow_up_resgates (
+      id SERIAL PRIMARY KEY,
+      tenant_id INT NOT NULL REFERENCES tenants(id),
+      contato_id INT NOT NULL,
+      resgatado_em TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS follow_up_resgates_tenant_idx ON follow_up_resgates (tenant_id, resgatado_em);`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS follow_up_etapas (
       tenant_id INT NOT NULL REFERENCES tenants(id),
@@ -103,7 +113,9 @@ const tabelasProntas = garantirTabelas().catch((err) => {
 
 // ---------- prompts recomendados (botao "usar recomendado" na aba Follow Up) ----------
 
-export const ETIQUETA_RESGATE = 'Resgate do Follow Up';
+export const ETIQUETA_RESGATE = crm.ETIQUETA_RESGATE;
+// depois que agenda, comparece ou compra, a postura de urgencia para (o resgate cumpriu o papel)
+const ETAPAS_FIM_RESGATE = new Set(['agendado', 'compareceu', 'comprou']);
 
 export const PROMPT_GERAL_RECOMENDADO = `Você é a assistente de relacionamento da clínica no WhatsApp. Seu trabalho é retomar o contato com quem parou de responder, faltou ou não concluiu o agendamento. Fale como uma pessoa real da recepção: calorosa, curta e natural.
 
@@ -147,7 +159,9 @@ LIMITES: nada de mentira, culpa, ameaça ou promessa de cura. Uma pergunta por m
 export async function posturaResgate(tenantId, numero, instancia) {
   const config = await obterConfig(tenantId);
   if (!config.modoResgate) return '';
-  if (!(await crm.temEtiqueta(tenantId, { numero, instancia }, ETIQUETA_RESGATE))) return '';
+  const contato = await crm.etapaEEtiquetas(tenantId, { numero, instancia });
+  if (!contato || ETAPAS_FIM_RESGATE.has(contato.etapa)) return '';
+  if (!(contato.etiquetas || []).some((e) => String(e).toLowerCase() === ETIQUETA_RESGATE.toLowerCase())) return '';
   return `\n\n[POSTURA DE RESGATE - este contato foi reativado pelo Follow Up e esta etiquetado "${ETIQUETA_RESGATE}". Siga esta postura nas suas respostas, alem das regras gerais:]\n${config.promptResgate || PROMPT_RESGATE_RECOMENDADO}`;
 }
 
@@ -426,7 +440,10 @@ export async function processarMensagem(tenantId, contatoId, numero, instancia, 
   await pool.query(`UPDATE follow_up_contatos SET historico = $1 WHERE contato_id = $2 AND tenant_id = $3`, [JSON.stringify(novoHistorico), contatoId, tenantId]);
 
   if (demonstrouInteresse) {
-    if (config.modoResgate) await crm.adicionarEtiqueta(tenantId, contatoId, ETIQUETA_RESGATE).catch((err) => console.error('Follow Up: falha ao etiquetar resgate:', err.message));
+    if (config.modoResgate) {
+      await crm.adicionarEtiqueta(tenantId, contatoId, ETIQUETA_RESGATE).catch((err) => console.error('Follow Up: falha ao etiquetar resgate:', err.message));
+      await pool.query('INSERT INTO follow_up_resgates (tenant_id, contato_id) VALUES ($1, $2)', [tenantId, contatoId]).catch((err) => console.error('Follow Up: falha ao registrar resgate:', err.message));
+    }
     await crm.moverEtapa(tenantId, contatoId, 'em_atendimento');
     await encerrarAcompanhamento(tenantId, contatoId);
   }
