@@ -37,6 +37,7 @@ import * as followUp from './followUp.js';
 import * as clinicorpFollowUp from './clinicorpFollowUp.js';
 import { iniciarSchedulerClinicorpFollowUp } from './clinicorpFollowUp.js';
 import * as followUpInteligente from './followUpInteligente.js';
+import * as lembretesConsulta from './lembretesConsulta.js';
 import * as funilFU from './funilFollowUp.js';
 import * as indicacoes from './indicacoes.js';
 import * as resgate from './resgate.js';
@@ -2446,6 +2447,43 @@ app.delete('/api/fu-inteligente/arquivos/:id', async (req, res) => {
   }
 });
 
+// ---- Lembretes da consulta agendada (vivem na aba Follow Up Inteligente, mesmo prefixo = mesma liberacao de aba) ----
+app.get('/api/fu-inteligente/lembretes', async (req, res) => {
+  try {
+    res.json({ config: await lembretesConsulta.obterConfig(req.tenantId), arquivos: await lembretesConsulta.listarArquivos(req.tenantId), consultas: await lembretesConsulta.listarConsultas(req.tenantId) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.post('/api/fu-inteligente/lembretes', async (req, res) => {
+  try {
+    await lembretesConsulta.salvarConfig(req.tenantId, req.body || {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.post('/api/fu-inteligente/lembretes/arquivos', async (req, res) => {
+  const { marco, nomeArquivo, mediaType, base64 } = req.body || {};
+  if (!marco || !nomeArquivo || !mediaType || !base64) return res.status(400).json({ erro: 'marco, nomeArquivo, mediaType e base64 sao obrigatorios' });
+  try {
+    res.json({ ok: true, arquivo: await lembretesConsulta.salvarArquivo(req.tenantId, marco, nomeArquivo, Buffer.from(base64, 'base64'), mediaType) });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+app.delete('/api/fu-inteligente/lembretes/arquivos/:id', async (req, res) => {
+  try {
+    await lembretesConsulta.apagarArquivo(req.tenantId, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.post('/api/fu-inteligente/sugestao', async (req, res) => {
   try {
     res.json({ texto: await followUpInteligente.gerarSugestao(req.tenantId, req.body || {}) });
@@ -3992,6 +4030,7 @@ relatoriosProgramados.iniciarSchedulerRelatoriosProgramados();
 followUp.iniciarSchedulerFollowUp();
 // Scheduler do Follow Up Inteligente (cards por etapa do funil) - desativado por tenant por padrao.
 followUpInteligente.iniciarSchedulerFollowUpInteligente();
+lembretesConsulta.iniciarSchedulerLembretesConsulta();
 funilFU.iniciarSchedulerFunilFollowUp();
 indicacoes.iniciarSchedulerIndicacoes();
 resgate.iniciarSchedulerResgate();

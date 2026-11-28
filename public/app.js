@@ -9594,6 +9594,7 @@ async function carregarFollowUpInteligente() {
     fuiErro.hidden = false;
   }
   carregarCardsFollowUpInteligente();
+  if (window.lcCarregar) window.lcCarregar();
 }
 
 rastrearAlteracoes(fuiSalvar, [fuiAtivo, fuiHoraInicio, fuiHoraFim, fuiPromptGeral]);

@@ -14,6 +14,7 @@ import * as followUp from './followUp.js';
 import { transcrever } from './whisper.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
 import { synthesizeSpeechLumia } from './vozLumia.js';
+import * as lembretesConsulta from './lembretesConsulta.js';
 import { moedaPorExtenso } from './numeroPorExtenso.js';
 import { creditoRestabelecido } from './alertaCreditos.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
@@ -488,6 +489,8 @@ async function runTool(name, input, contexto) {
           resultado.agendaInterna = { ok: false, erro: err.message };
         }
       }
+      // cancelou: os lembretes da consulta desse contato param
+      if (resultado.clinicorp?.ok || resultado.agendaInterna?.ok) lembretesConsulta.cancelarConsultasDoContato(tenantId, contexto.numero, contexto.instancia).catch(() => {});
       return resultado;
     }
 
@@ -577,6 +580,15 @@ async function runTool(name, input, contexto) {
         } catch (err) {
           resultado.agendaInterna = { erro: err.message };
         }
+      }
+
+      // acompanhamento ate o dia da consulta (Follow Up Inteligente > Lembretes da consulta) - confirmacao na hora
+      // + lembretes por contagem regressiva. Best-effort e so se a clinica ligou; nunca quebra a resposta.
+      if (resultado.clinicorp?.preAgendamento || resultado.clinicorp?.ok || resultado.agendaInterna?.ok) {
+        lembretesConsulta.registrarConsulta(tenantId, {
+          numero: contexto.numero, instancia: contexto.instancia, nome: input.pacienteNome, inicio: input.inicio, fim: input.fim,
+          medico: resultado.clinicorp?.medico || input.medico, origem: resultado.clinicorp?.preAgendamento ? 'ia_pre' : 'ia',
+        }).catch((err) => console.error('Erro registrando lembretes da consulta:', err.message));
       }
 
       // pula o card do contato no CRM - "Agendado" se algum dos destinos criou o compromisso DE
