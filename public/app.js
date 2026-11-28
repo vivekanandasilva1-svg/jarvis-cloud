@@ -4352,7 +4352,7 @@ function ctAtualizarAvisoFollowUp(validas) {
   el.style.color = n > CT_LIMITE_FOLLOWUP ? 'var(--f-abaixo, #e5534b)' : '';
   el.textContent = n > CT_LIMITE_FOLLOWUP
     ? `⚠️ Atenção: ${n} leads vão para o Follow Up e o orientado é até ${CT_LIMITE_FOLLOWUP} por vez. Cada um recebe uma mensagem automática na hora, e muitos envios seguidos podem levar o WhatsApp a bloquear o número. Divida a lista em lotes de até ${CT_LIMITE_FOLLOWUP}, com cerca de 1 hora entre eles.`
-    : `Orientação: cada lead que entra no Follow Up recebe uma mensagem automática na hora (a IA lê a conversa recente). Importe no máximo ${CT_LIMITE_FOLLOWUP} por vez e espere cerca de 1 hora entre listas, para não arriscar o número no WhatsApp.`;
+    : `Orientação: cada lead que entra no Follow Up recebe uma mensagem automática (a IA lê a conversa recente), uma por vez, com cerca de 1 minuto entre elas. Importe no máximo ${CT_LIMITE_FOLLOWUP} por vez e espere cerca de 1 hora entre listas, para não arriscar o número no WhatsApp.`;
 }
 
 function ctAtualizarPreviaImp() {
@@ -4460,7 +4460,7 @@ ctImpConfirmar.addEventListener('click', async () => {
     if (total.atualizados) partes.push(`${total.atualizados} atualizados`);
     if (total.ignorados) partes.push(`${total.ignorados} já existiam e ficaram como estavam`);
     if (total.invalidos) partes.push(`${total.invalidos} com telefone inválido`);
-    if (total.followUpNovos) partes.push(`${total.followUpNovos} entraram no Follow Up e recebem a 1ª mensagem aos poucos (5 a 12 s entre cada)${total.followUpNovos > CT_LIMITE_FOLLOWUP ? ` - acima do orientado de ${CT_LIMITE_FOLLOWUP}, acompanhe o número no WhatsApp` : ''}`);
+    if (total.followUpNovos) partes.push(`${total.followUpNovos} entraram no Follow Up e recebem a 1ª mensagem aos poucos (cerca de 1 minuto entre cada)${total.followUpNovos > CT_LIMITE_FOLLOWUP ? ` - acima do orientado de ${CT_LIMITE_FOLLOWUP}, acompanhe o número no WhatsApp` : ''}`);
     ctImpResultado.textContent = `Importação concluída: ${partes.join(', ')}.`;
     ctImpResultado.hidden = false;
     ctImpPasso(0);
@@ -10128,7 +10128,7 @@ function criarCardFollowUpInteligente(dados) {
   card.appendChild(imedLabel);
   const imedDica = document.createElement('p');
   imedDica.className = 'ct-info';
-  imedDica.textContent = 'Todo lead que entrar nessas etapas recebe a 1ª mensagem na hora (dentro do horário de envio; fora dele, assim que abrir) e as próximas seguem os dias acima. Quem já está parado na etapa não recebe nada.';
+  imedDica.textContent = 'Todo lead que entrar nessas etapas recebe a 1ª mensagem na hora (dentro do horário de envio; fora dele, assim que abrir) e as próximas seguem os dias acima. Ao LIGAR esta opção e salvar, quem já está nas etapas e ainda não iniciou também começa agora, aos poucos (cerca de 1 minuto entre cada).';
   card.appendChild(imedDica);
 
   const erro = document.createElement('p');
@@ -10182,6 +10182,12 @@ function criarCardFollowUpInteligente(dados) {
       const d = await res.json();
       if (!res.ok) throw new Error(d.erro || 'erro desconhecido');
       mostrarAviso(dados.id ? 'Follow-up salvo' : 'Follow-up criado', 'ok');
+      if (d.pendentes) {
+        const q = d.pendentes === 1 ? '1 lead que já estava nas etapas e ainda não tinha iniciado' : `${d.pendentes} leads que já estavam nas etapas e ainda não tinham iniciado`;
+        const extra = d.motivo === 'desligado' ? ' - mas o Follow Up Inteligente está DESATIVADO (ative nas configurações ao lado); quando ativar, eles começam sozinhos.'
+          : d.motivo === 'fora_do_horario' ? ' - estamos fora do horário de envio; eles começam assim que abrir.' : ' vão receber a 1ª mensagem agora, aos poucos (cerca de 1 minuto entre cada).';
+        mostrarAviso(`${q}${d.motivo ? '' : ''}${extra}`.replace('  ', ' '), d.motivo === 'desligado' ? 'erro' : 'ok');
+      }
       carregarCardsFollowUpInteligente();
     } catch (err) {
       mostrarErro(err.message);

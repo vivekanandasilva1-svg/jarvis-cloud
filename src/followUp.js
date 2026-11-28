@@ -18,6 +18,7 @@ import { pool } from './db.js';
 import * as evolutionApi from './evolutionApi.js';
 import * as crm from './crm.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
+import { esperarVez } from './ritmoEnvio.js';
 
 const MODEL = 'claude-sonnet-5';
 
@@ -497,6 +498,12 @@ async function processarContatoSeguro(tenantId, contato, etapas, config) {
   const entradaNova = ultimaOrdem === 0 && !(contato.historico || []).length;
   const proxima = etapas.find((e) => e.ordem > ultimaOrdem && e.ativo && ((entradaNova && e.ordem === primeiraAtiva?.ordem) || diasDesdeEntrada >= e.dias));
   if (proxima) {
+    // ritmo seguro: uma mensagem proativa por vez em cada numero de WhatsApp, 45 a 110 s entre elas (ver ritmoEnvio.js)
+    await esperarVez(contato.instancia);
+    if (!dentroDoHorarioFuncionamento(config)) return false; // o horario fechou enquanto esperava a vez
+    // outra rodada pode ter mexido nesse lead durante a espera: confere o estado de agora
+    const { rows: [fresco] } = await pool.query(`SELECT ultima_etapa_enviada, finalizado FROM follow_up_contatos WHERE contato_id = $1 AND tenant_id = $2`, [contato.contato_id, tenantId]);
+    if (!fresco || fresco.finalizado || (fresco.ultima_etapa_enviada || 0) !== ultimaOrdem) return false;
     const historico = contato.historico || [];
     const mensagem = await gerarMensagemEtapa({ tenantId, config, etapa: proxima, contato, historico, primeira: entradaNova && proxima.ordem === primeiraAtiva?.ordem });
     await evolutionApi.enviarMensagemTextoPor(contato.instancia, contato.numero, mensagem);
@@ -560,8 +567,8 @@ async function drenarFila() {
         );
         if (!rows[0]) continue;
         const enviou = await processarContato(tenantId, rows[0], etapas, config);
-        // varios na fila (importacao de planilha): espaca os envios, 5 a 12 segundos, pra nao virar rajada no WhatsApp
-        if (enviou && filaImediata.length) await pausa(5000 + Math.random() * 7000);
+        // (varios na fila - ex: importacao de planilha: o espaco seguro entre envios e feito por esperarVez, 45 a 110 s por numero)
+        void enviou;
       } catch (err) {
         console.error(`Erro na primeira tentativa do follow up (contato ${contatoId}, tenant ${tenantId}):`, err.message);
       }
@@ -575,7 +582,10 @@ async function drenarFila() {
 // contato ainda na coluna "follow_up" e manda a proxima tentativa vencida (se houver). So
 // chamado uma vez, no boot do server.js.
 export function iniciarSchedulerFollowUp() {
+  let rodando = false;
   const checar = async () => {
+    if (rodando) return; // a rodada anterior ainda esta enviando aos poucos
+    rodando = true;
     try {
       if (!pool) return;
       await tabelasProntas;
@@ -603,7 +613,7 @@ export function iniciarSchedulerFollowUp() {
             } catch (err) {
               console.error(`Erro no follow up do contato ${contato.contato_id} (tenant ${tenantId}):`, err.message);
             }
-            await new Promise((r) => setTimeout(r, 3000)); // pausa curta entre contatos, evita rajada de chamadas
+            await new Promise((r) => setTimeout(r, 1000)); // o espaco seguro entre envios e feito por esperarVez (45 a 110 s por numero)
           }
         } catch (err) {
           console.error(`Erro no follow up do tenant ${tenantId}:`, err.message);
@@ -611,6 +621,8 @@ export function iniciarSchedulerFollowUp() {
       }
     } catch (err) {
       console.error('Erro checando follow up:', err.message);
+    } finally {
+      rodando = false;
     }
   };
   setInterval(checar, 15 * 60 * 1000).unref();

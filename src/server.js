@@ -2443,8 +2443,8 @@ app.get('/api/fu-inteligente/cards', async (req, res) => {
 
 app.post('/api/fu-inteligente/cards', async (req, res) => {
   try {
-    const id = await followUpInteligente.salvarCard(req.tenantId, req.body || {});
-    res.json({ ok: true, id });
+    const r = await followUpInteligente.salvarCard(req.tenantId, req.body || {});
+    res.json({ ok: true, ...r });
   } catch (err) {
     res.status(400).json({ erro: err.message });
   }

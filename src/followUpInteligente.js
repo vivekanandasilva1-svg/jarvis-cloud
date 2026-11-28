@@ -14,6 +14,7 @@ import { pool } from './db.js';
 import * as evolutionApi from './evolutionApi.js';
 import * as crm from './crm.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
+import { esperarVez } from './ritmoEnvio.js';
 
 const MODEL = 'claude-sonnet-5';
 const DIA_MS = 24 * 60 * 60 * 1000;
@@ -56,6 +57,8 @@ async function garantirTabelas() {
   await pool.query(`CREATE INDEX IF NOT EXISTS fui_cards_tenant_idx ON fui_cards (tenant_id);`);
   // Inicio imediato: o lead que ENTRA na etapa recebe a 1a mensagem na hora (respeitando o horario de envio)
   await pool.query(`ALTER TABLE fui_cards ADD COLUMN IF NOT EXISTS inicio_imediato BOOLEAN NOT NULL DEFAULT false`);
+  // quando o "Inicio imediato" foi LIGADO: quem ja estava na etapa e ainda nao iniciou tambem comeca (ver processarCard)
+  await pool.query(`ALTER TABLE fui_cards ADD COLUMN IF NOT EXISTS iniciar_pendentes_em TIMESTAMPTZ`);
   // 1 linha por (card, contato): quando o lead entrou na etapa, quantas mensagens ja foram e se
   // o ciclo acabou (concluido / lead respondeu / saiu da etapa e voltou = recomeca)
   // anexos (audio, imagem, PDF, video curto) de UMA mensagem especifica do card: ordem = posicao da
@@ -194,22 +197,50 @@ export async function salvarCard(tenantId, dados) {
   await checarConflito(tenantId, dados.id, v.etapas, ativo);
 
   if (dados.id) {
+    const { rows: [antes] } = await pool.query(`SELECT inicio_imediato FROM fui_cards WHERE id = $1 AND tenant_id = $2`, [Number(dados.id), tenantId]);
+    if (!antes) throw new Error('Follow-up nao encontrado.');
+    const ligouAgora = inicioImediato && !antes.inicio_imediato;
     const { rows } = await pool.query(
-      `UPDATE fui_cards SET etapas = $1, dias_envio = $2, duracao_dias = $3, instrucoes = $4, parar_se_responder = $5, ativo = $6, inicio_imediato = $9, atualizado_em = now()
+      `UPDATE fui_cards SET etapas = $1, dias_envio = $2, duracao_dias = $3, instrucoes = $4, parar_se_responder = $5, ativo = $6, inicio_imediato = $9, atualizado_em = now(),
+         iniciar_pendentes_em = CASE WHEN $10::boolean THEN now() WHEN $9::boolean THEN iniciar_pendentes_em ELSE NULL END
        WHERE id = $7 AND tenant_id = $8 RETURNING id`,
-      [v.etapas, v.diasEnvio, v.duracaoDias, v.instrucoes, pararSeResponder, ativo, Number(dados.id), tenantId, inicioImediato],
+      [v.etapas, v.diasEnvio, v.duracaoDias, v.instrucoes, pararSeResponder, ativo, Number(dados.id), tenantId, inicioImediato, ligouAgora],
     );
     if (!rows[0]) throw new Error('Follow-up nao encontrado.');
     // diminuiu a quantidade de mensagens: os anexos das que sumiram nao tem mais pra onde ir
     await pool.query(`DELETE FROM fui_arquivos WHERE card_id = $1 AND ordem >= $2`, [rows[0].id, v.diasEnvio.length]);
-    return rows[0].id;
+    return { id: rows[0].id, ...(ligouAgora && ativo ? await iniciarPendentes(tenantId, rows[0].id) : {}) };
   }
   const { rows } = await pool.query(
-    `INSERT INTO fui_cards (tenant_id, etapas, dias_envio, duracao_dias, instrucoes, parar_se_responder, ativo, inicio_imediato)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+    `INSERT INTO fui_cards (tenant_id, etapas, dias_envio, duracao_dias, instrucoes, parar_se_responder, ativo, inicio_imediato, iniciar_pendentes_em)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CASE WHEN $8::boolean THEN now() END) RETURNING id`,
     [tenantId, v.etapas, v.diasEnvio, v.duracaoDias, v.instrucoes, pararSeResponder, ativo, inicioImediato],
   );
-  return rows[0].id;
+  return { id: rows[0].id, ...(inicioImediato && ativo ? await iniciarPendentes(tenantId, rows[0].id) : {}) };
+}
+
+// "Inicio imediato" ligado: quem JA esta nas etapas do card e ainda nao iniciou (sem execucao ou com 0 mensagens enviadas e nao
+// finalizado) comeca agora, em segundo plano e espacado. Devolve quantos sao e, se nao da pra comecar ja, o motivo - nesse caso
+// o agendador (10 min) comeca sozinho quando o Follow Up Inteligente estiver ativo e dentro do horario de envio.
+async function iniciarPendentes(tenantId, cardId) {
+  const { rows: [card] } = await pool.query(
+    `SELECT id, etapas, dias_envio, instrucoes, parar_se_responder, inicio_imediato, atualizado_em, iniciar_pendentes_em FROM fui_cards WHERE id = $1 AND tenant_id = $2`,
+    [cardId, tenantId],
+  );
+  if (!card) return { pendentes: 0 };
+  const { rows: [{ n }] } = await pool.query(
+    `SELECT count(*)::int AS n FROM crm_contatos c
+     LEFT JOIN fui_execucoes x ON x.card_id = $3 AND x.contato_id = c.id
+     WHERE c.tenant_id = $1 AND c.oculto = false AND c.auto_pausado = false AND c.etapa = ANY($2::text[]) AND c.instancia NOT LIKE 'ig:%'
+       AND (x.contato_id IS NULL OR (x.enviados = 0 AND NOT x.finalizado))`,
+    [tenantId, card.etapas, cardId],
+  );
+  const config = await obterConfig(tenantId);
+  if (!n) return { pendentes: 0 };
+  if (!config.ativo) return { pendentes: n, motivo: 'desligado' };
+  if (!dentroDoHorario(config)) return { pendentes: n, motivo: 'fora_do_horario' };
+  processarCard(tenantId, card, config).catch((err) => console.error('Erro iniciando pendentes do follow-up inteligente:', err.message));
+  return { pendentes: n };
 }
 
 export async function apagarCard(tenantId, id) {
@@ -371,11 +402,20 @@ export async function processarCard(tenantId, card, config, { somenteContatoId =
 
       // Inicio imediato: so vale pra quem ENTROU na etapa depois do follow-up existir (quem ja estava parado
       // la quando a opcao foi ligada nao recebe nada) e so pra 1a mensagem; as demais seguem os dias do card
-      const imediato = !!card.inicio_imediato && entradaReal > baseline && estado.enviados === 0;
+      // (e, quando o "Inicio imediato" acabou de ser ligado, tambem quem JA estava na etapa e ainda nao iniciou)
+      const eraPendente = !!card.iniciar_pendentes_em && entradaReal <= new Date(card.iniciar_pendentes_em);
+      const imediato = !!card.inicio_imediato && (entradaReal > baseline || eraPendente) && estado.enviados === 0;
       const dia = imediato ? 0 : card.dias_envio[estado.enviados];
       if (Date.now() - estado.entrou.getTime() < dia * DIA_MS) continue; // ainda nao e o dia
       if (estado.ultima && Date.now() - estado.ultima.getTime() < ESPACO_MINIMO_MS) continue;
       if (!dentroDoHorario(config)) return; // fora do expediente: tenta de novo na proxima rodada
+
+      // ritmo seguro: uma mensagem proativa por vez em cada numero de WhatsApp, 45 a 110 s entre elas (ver ritmoEnvio.js)
+      await esperarVez(c.instancia);
+      if (!dentroDoHorario(config)) return; // o horario fechou enquanto esperava a vez
+      // outra rodada pode ter mexido nesse lead durante a espera: confere o estado de agora
+      const { rows: [fresco] } = await pool.query(`SELECT enviados, finalizado FROM fui_execucoes WHERE card_id = $1 AND contato_id = $2`, [card.id, c.id]);
+      if (fresco && (fresco.finalizado || fresco.enviados !== estado.enviados)) continue;
 
       const mensagem = await gerarMensagem({
         tenantId, config, card, contato: c, numeroMensagem: estado.enviados + 1, totalMensagens: card.dias_envio.length, dia, nomeEtapa: nomes.get(c.etapa) || c.etapa,
@@ -404,7 +444,7 @@ export async function processarCard(tenantId, card, config, { somenteContatoId =
     } finally {
       emProcessamento.delete(trava);
     }
-    await new Promise((r) => setTimeout(r, 3000)); // pausa curta entre leads, evita rajada
+    await new Promise((r) => setTimeout(r, 1000)); // o espaco seguro entre envios e feito por esperarVez (45 a 110 s por numero)
   }
 }
 
@@ -425,7 +465,10 @@ export async function iniciarImediato(tenantId, contatoId, etapa) {
 
 // roda a cada 10min, pra cada tenant com o Follow Up Inteligente ligado. So chamado no boot do server.js.
 export function iniciarSchedulerFollowUpInteligente() {
+  let rodando = false;
   const checar = async () => {
+    if (rodando) return; // a rodada anterior ainda esta enviando aos poucos
+    rodando = true;
     try {
       if (!pool) return;
       await tabelasProntas;
@@ -435,7 +478,7 @@ export function iniciarSchedulerFollowUpInteligente() {
           const config = await obterConfig(tenantId);
           if (!config.ativo || !dentroDoHorario(config)) continue;
           const { rows: cards } = await pool.query(
-            `SELECT id, etapas, dias_envio, instrucoes, parar_se_responder, inicio_imediato, atualizado_em FROM fui_cards WHERE tenant_id = $1 AND ativo = true`,
+            `SELECT id, etapas, dias_envio, instrucoes, parar_se_responder, inicio_imediato, atualizado_em, iniciar_pendentes_em FROM fui_cards WHERE tenant_id = $1 AND ativo = true`,
             [tenantId],
           );
           for (const card of cards) await processarCard(tenantId, card, config);
@@ -445,6 +488,8 @@ export function iniciarSchedulerFollowUpInteligente() {
       }
     } catch (err) {
       console.error('Erro checando follow-up inteligente:', err.message);
+    } finally {
+      rodando = false;
     }
   };
   setInterval(checar, 10 * 60 * 1000).unref();
