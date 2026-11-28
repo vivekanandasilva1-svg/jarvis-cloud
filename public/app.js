@@ -5102,6 +5102,14 @@ function rsDesenharRecuperacao(r) {
     g2.append(rsNumeroGrande('Contatos acionados', f.contatos, `${rsNum(f.mensagens)} mensagens enviadas`), rsNumeroGrande('Voltaram a responder', f.voltaramAResponder, taxa == null ? '' : `${taxa}% em até 3 dias`, { classe: taxa == null ? '' : rsClassePct(Math.min(100, taxa * 3)) }));
     cf.appendChild(g2);
     cf.appendChild(rsEl('p', 'rs-dica', `${rsNum(f.entraram)} contatos entraram nos funis de follow-up no período.`));
+    if (f.faltosos && f.faltosos.faltaram) {
+      cf.appendChild(rsEl('p', 'rs-dica', 'Pacientes que faltaram (etapa Não compareceu) e o que aconteceu depois:'));
+      cf.appendChild(rsBarrasLista([
+        { nome: 'Faltaram', valor: f.faltosos.faltaram, texto: rsNum(f.faltosos.faltaram) },
+        { nome: 'Voltaram a responder', valor: f.faltosos.voltaram, texto: rsNum(f.faltosos.voltaram), classe: 'f-medio' },
+        { nome: 'Remarcaram (pré-agendado ou agendado)', valor: f.faltosos.remarcaram, texto: rsNum(f.faltosos.remarcaram), classe: 'f-alto' },
+      ], ''));
+    }
     if (f.resgate && f.resgate.resgatados) {
       cf.appendChild(rsEl('p', 'rs-dica', 'Resgate do Follow Up: leads que voltaram a conversar e a IA tentou remarcar.'));
       cf.appendChild(rsBarrasLista([
@@ -9731,6 +9739,7 @@ async function carregarFollowUpInteligente() {
     fuiHoraInicio.value = c.horaInicio || '08:00';
     fuiHoraFim.value = c.horaFim || '20:00';
     fuiPromptGeral.value = c.promptGeral || '';
+    fuiModeloFaltosos = c.modeloFaltosos || null;
     limparPendente(fuiSalvar);
   } catch (err) {
     fuiErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
@@ -9790,6 +9799,19 @@ async function carregarCardsFollowUpInteligente() {
     fuiLista.appendChild(erro);
   }
 }
+
+let fuiModeloFaltosos = null;
+// cartao pronto para leads que faltaram: etapa "Nao compareceu", 1 tentativa por dia por 10 dias e a instrucao recomendada
+document.getElementById('fuiCriarFaltosos').addEventListener('click', () => {
+  if (!fuiModeloFaltosos) { mostrarAviso('Não consegui carregar o modelo agora. Atualize a aba e tente de novo.', 'erro'); return; }
+  document.getElementById('fuiVazio')?.remove();
+  const m = fuiModeloFaltosos;
+  const novo = { id: null, etapas: [...m.etapas], diasEnvio: fuiDistribuirDias(m.quantidade, m.duracaoDias), duracaoDias: m.duracaoDias, instrucoes: m.instrucoes, pararSeResponder: true, inicioImediato: false, ativo: true, emAndamento: 0, enviadas: 0 };
+  const card = criarCardFollowUpInteligente(novo);
+  fuiLista.prepend(card);
+  card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  mostrarAviso('Modelo para faltosos carregado: confira e clique em Salvar no cartão', 'ok');
+});
 
 fuiCriar.addEventListener('click', () => {
   document.getElementById('fuiVazio')?.remove();

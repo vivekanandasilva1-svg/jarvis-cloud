@@ -125,7 +125,17 @@ async function recuperacao(tenantId, inicio, fim) {
            FROM follow_up_resgates r WHERE r.tenant_id = $1 AND r.resgatado_em >= $2 AND r.resgatado_em < $3`,
         [tenantId, inicio, fim],
       ).then((r2) => r2[0]).catch(() => null);
-      return { entraram: exec[0].entraram, atingidos: exec[0].atingidos, mensagens: msgs[0].total, contatos: msgs[0].contatos, voltaramAResponder: resp[0].total, resgate };
+      // faltosos: quem entrou em "Nao compareceu" no periodo, quantos voltaram a escrever e quantos remarcaram (pre-agendado/agendado)
+      const faltosos = await q(
+        `WITH f AS (SELECT e.contato_id, min(e.em) AS faltou_em FROM crm_etapa_eventos e WHERE e.tenant_id = $1 AND e.etapa = 'nao_compareceu' AND e.em >= $2 AND e.em < $3 GROUP BY e.contato_id)
+         SELECT count(*)::int AS faltaram,
+                (count(*) FILTER (WHERE EXISTS (SELECT 1 FROM crm_contatos c JOIN crm_mensagens m ON m.tenant_id = c.tenant_id AND m.numero = c.numero AND m.instancia = c.instancia
+                                                  WHERE c.id = f.contato_id AND c.tenant_id = $1 AND m.direcao = 'entrada' AND m.criado_em > f.faltou_em)))::int AS voltaram,
+                (count(*) FILTER (WHERE EXISTS (SELECT 1 FROM crm_etapa_eventos e2 WHERE e2.tenant_id = $1 AND e2.contato_id = f.contato_id AND e2.etapa IN ('pre_agendado', 'agendado') AND e2.em > f.faltou_em)))::int AS remarcaram
+           FROM f`,
+        [tenantId, inicio, fim],
+      ).then((r3) => r3[0]).catch(() => null);
+      return { entraram: exec[0].entraram, atingidos: exec[0].atingidos, mensagens: msgs[0].total, contatos: msgs[0].contatos, voltaramAResponder: resp[0].total, resgate, faltosos };
     }),
     // aniversariantes
     bloco(async () => {

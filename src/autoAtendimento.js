@@ -12,6 +12,7 @@ import * as clinicorp from './clinicorp.js';
 import * as crm from './crm.js';
 import * as followUp from './followUp.js';
 import { blocoConversaAnterior } from './conversaAnterior.js';
+import { contatoEhFaltoso, blocoPosturaFaltoso, AVISO_AGENDAMENTO_FALTOSO } from './faltosos.js';
 import { transcrever } from './whisper.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
 import { synthesizeSpeechLumia } from './vozLumia.js';
@@ -277,7 +278,7 @@ const TOOL_CLINICORP_CADASTRAR_PACIENTE = {
   },
 };
 
-function toolCriarAgendamento({ agendarClinicorp, agendarAgendaInterna, agendamentoDiretoClinicorp }) {
+function toolCriarAgendamento({ agendarClinicorp, agendarAgendaInterna, agendamentoDiretoClinicorp, faltoso }) {
   const clinicorpDireto = agendarClinicorp && agendamentoDiretoClinicorp !== false;
   const clinicorpPreAgendamento = agendarClinicorp && agendamentoDiretoClinicorp === false;
   const destinos = [];
@@ -286,7 +287,7 @@ function toolCriarAgendamento({ agendarClinicorp, agendarAgendaInterna, agendame
   if (agendarAgendaInterna) destinos.push('na agenda interna');
   return {
     name: 'criar_agendamento',
-    description: `Marca um agendamento/consulta ${destinos.join(' e ')}${clinicorpDireto || agendarAgendaInterna ? ' DE VERDADE (chamada real na API, nao e so um texto de confirmacao)' : ''} - ${clinicorpDireto || agendarAgendaInterna ? 'so diga pro contato que esta confirmado DEPOIS de ver no resultado desta ferramenta que deu certo (ok: true no destino configurado)' : ''}${clinicorpDireto || agendarAgendaInterna ? '; se vier erro, NUNCA finja que deu certo, explique o problema pro contato ou tente resolver (ex: escolher outro horario).' : ''} ${clinicorpPreAgendamento ? 'IMPORTANTE sobre o Clinicorp: o agendamento direto esta DESLIGADO pra essa clinica - essa ferramenta so registra um PRE-agendamento (confere a disponibilidade real e evita sugerir horario ocupado/duplicado, mas nao cria o compromisso de verdade no Clinicorp). Depois de ver preAgendamento:true no resultado, diga pro contato que foi feito um PRE-agendamento pra data/horario combinado e que uma atendente humana vai confirmar em breve por ligacao ou WhatsApp - NUNCA diga que esta confirmado, marcado ou garantido.' : ''} ${agendarClinicorp ? 'Pro Clinicorp: se o contato for paciente novo (sem cadastro), use clinicorp_buscar_paciente e, se nao achar, clinicorp_cadastrar_paciente ANTES de chamar essa ferramenta, e passe o patientId encontrado/criado aqui - nao deixe so pro campo pacienteNome tentar criar um cadastro incompleto sozinho.' : ''} Sempre inclua um resumo do que foi conversado com o contato nas observacoes. Calcule inicio/fim como data/hora absoluta ISO 8601 usando o "agora" informado - NUNCA um horario que ja passou (o sistema rejeita e devolve erro se tentar). Antes de chamar essa ferramenta, SEMPRE consulte a disponibilidade primeiro (agenda_listar_eventos e/ou clinicorp_consultar_agenda_medico) pra nao sugerir um horario ocupado. Regras que o sistema aplica automaticamente: nunca duplica o mesmo paciente no mesmo horario, e no Clinicorp um mesmo horario aceita no maximo 2 pacientes diferentes com o mesmo medico (a partir do 3º, rejeita).`,
+    description: `Marca um agendamento/consulta ${destinos.join(' e ')}${clinicorpDireto || agendarAgendaInterna ? ' DE VERDADE (chamada real na API, nao e so um texto de confirmacao)' : ''} - ${clinicorpDireto || agendarAgendaInterna ? 'so diga pro contato que esta confirmado DEPOIS de ver no resultado desta ferramenta que deu certo (ok: true no destino configurado)' : ''}${clinicorpDireto || agendarAgendaInterna ? '; se vier erro, NUNCA finja que deu certo, explique o problema pro contato ou tente resolver (ex: escolher outro horario).' : ''} ${clinicorpPreAgendamento ? 'IMPORTANTE sobre o Clinicorp: o agendamento direto esta DESLIGADO pra essa clinica - essa ferramenta so registra um PRE-agendamento (confere a disponibilidade real e evita sugerir horario ocupado/duplicado, mas nao cria o compromisso de verdade no Clinicorp). Depois de ver preAgendamento:true no resultado, ' + (faltoso ? 'diga: "Ficou agendado para [dia] as [hora] ✅ Em breve uma das nossas atendentes vai te enviar a confirmacao por aqui no WhatsApp" (sem as palavras confirmado ou garantido: a confirmacao final e da atendente).' : 'diga pro contato que foi feito um PRE-agendamento pra data/horario combinado e que uma atendente humana vai confirmar em breve por ligacao ou WhatsApp - NUNCA diga que esta confirmado, marcado ou garantido.') + '' : ''} ${agendarClinicorp ? 'Pro Clinicorp: se o contato for paciente novo (sem cadastro), use clinicorp_buscar_paciente e, se nao achar, clinicorp_cadastrar_paciente ANTES de chamar essa ferramenta, e passe o patientId encontrado/criado aqui - nao deixe so pro campo pacienteNome tentar criar um cadastro incompleto sozinho.' : ''} Sempre inclua um resumo do que foi conversado com o contato nas observacoes. Calcule inicio/fim como data/hora absoluta ISO 8601 usando o "agora" informado - NUNCA um horario que ja passou (o sistema rejeita e devolve erro se tentar). Antes de chamar essa ferramenta, SEMPRE consulte a disponibilidade primeiro (agenda_listar_eventos e/ou clinicorp_consultar_agenda_medico) pra nao sugerir um horario ocupado. Regras que o sistema aplica automaticamente: nunca duplica o mesmo paciente no mesmo horario, e no Clinicorp um mesmo horario aceita no maximo 2 pacientes diferentes com o mesmo medico (a partir do 3º, rejeita).`,
     input_schema: {
       type: 'object',
       properties: {
@@ -955,6 +956,7 @@ async function montarContextoTemporal(tenantId, numero, config, sessao, temConve
 // customizado do usuario (editavel livremente) diga algo tipo "sempre confirme o horario"
 function avisoAgendamentoClinicorp(config) {
   if (!config.agendarClinicorp || config.agendamentoDiretoClinicorp !== false) return '';
+  if (config.faltoso) return AVISO_AGENDAMENTO_FALTOSO; // lead que faltou: mesmo pre-agendamento, mas com a formulacao combinada pro paciente
   return '\n\nIMPORTANTE sobre agendar no Clinicorp: o agendamento direto esta DESLIGADO pra essa clinica. Voce pode consultar disponibilidade normalmente (clinicorp_consultar_agenda_medico) e combinar data/horario com o contato, mas criar_agendamento so registra um PRE-agendamento - NAO cria o compromisso de verdade no Clinicorp. Depois de chamar a ferramenta e ver preAgendamento:true no resultado, diga pro contato algo como "Show, deixei pré-agendado pra [data] às [hora] - uma de nossas atendentes vai te confirmar em breve por ligação ou WhatsApp." NUNCA diga que esta confirmado, marcado ou garantido - use sempre a palavra "pré-agendamento" e deixe claro que falta a confirmacao humana. Fluxo: quando o contato demonstrar que quer agendar, consulte os horarios livres reais, ofereca 2 ou 3 opcoes de dia/horario, e assim que ele escolher uma (e voce tiver o nome completo dele), chame criar_agendamento NA HORA - e isso que coloca o contato na coluna "Pré-agendamento" do CRM com dia/horario/medico anotados pra atendente confirmar. Nao deixe de chamar a ferramenta so porque nao vai ser confirmado agora.';
 }
 
@@ -1117,8 +1119,11 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   const vaiSerAudio = semAudio ? false : decidirSeAudio(config, novaContagem, tipo);
 
   const listaArquivos = await arquivos.listarArquivos(tenantId);
-  const TOOLS = montarTools(config, listaArquivos);
-  const contexto = { tenantId, instancia, numero, config };
+  // lead em "Nao compareceu": reaquece e fecha PRE-agendamento (a atendente confirma) - mesmo com o agendamento direto do Clinicorp ligado
+  const faltoso = await contatoEhFaltoso(tenantId, numero, instancia).catch(() => false);
+  const configTurno = faltoso ? { ...config, faltoso: true, ...(config.agendarClinicorp ? { agendamentoDiretoClinicorp: false } : {}) } : config;
+  const TOOLS = montarTools(configTurno, listaArquivos);
+  const contexto = { tenantId, instancia, numero, config: configTurno };
   // sem memoria da IA sobre esse contato (importado do WhatsApp, atendido pela equipe antes ou sessao apagada): traz o historico do CRM
   const conversaAnterior = sessao.contagem === 0 ? await blocoConversaAnterior(tenantId, numero, instancia, { todasEntradasFinais: !!retomarPendente }).catch(() => '') : '';
   const contextoTemporal = await montarContextoTemporal(tenantId, numero, config, sessao, !!conversaAnterior);
@@ -1126,10 +1131,10 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   const notasEquipe = await crm.notasParaIA(tenantId, { numero, instancia }).catch(() => '');
   // lead reativado pelo Follow Up (modo resgate): mantem a postura de descobrir/quebrar a objecao e remarcar
   const posturaResgate = await followUp.posturaResgate(tenantId, numero, instancia).catch(() => '');
-  const system = systemBlocos(config, {
+  const system = systemBlocos(configTurno, {
     vaiSerAudio,
     temAgenda: !!(config.agendarClinicorp || config.agendarAgendaInterna),
-    contextoTemporalTexto: contextoTemporal.texto + notasEquipe + posturaResgate + conversaAnterior,
+    contextoTemporalTexto: contextoTemporal.texto + notasEquipe + posturaResgate + (faltoso ? blocoPosturaFaltoso() : '') + conversaAnterior,
     retomarPendente,
     retomadaRetorno,
   });
