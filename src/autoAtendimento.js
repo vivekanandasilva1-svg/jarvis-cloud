@@ -10,6 +10,7 @@ import * as evolutionApi from './evolutionApi.js';
 import * as arquivos from './autoAtendimentoArquivos.js';
 import * as clinicorp from './clinicorp.js';
 import * as crm from './crm.js';
+import * as followUp from './followUp.js';
 import { transcrever } from './whisper.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
 import { moedaPorExtenso } from './numeroPorExtenso.js';
@@ -1105,10 +1106,12 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   const contextoTemporal = await montarContextoTemporal(tenantId, numero, config, sessao);
   // anotacoes da equipe sobre o paciente entram no bloco DINAMICO (nao quebra o cache do bloco fixo)
   const notasEquipe = await crm.notasParaIA(tenantId, { numero, instancia }).catch(() => '');
+  // lead reativado pelo Follow Up (modo resgate): mantem a postura de descobrir/quebrar a objecao e remarcar
+  const posturaResgate = await followUp.posturaResgate(tenantId, numero, instancia).catch(() => '');
   const system = systemBlocos(config, {
     vaiSerAudio,
     temAgenda: !!(config.agendarClinicorp || config.agendarAgendaInterna),
-    contextoTemporalTexto: contextoTemporal.texto + notasEquipe,
+    contextoTemporalTexto: contextoTemporal.texto + notasEquipe + posturaResgate,
     retomarPendente,
     retomadaRetorno,
   });

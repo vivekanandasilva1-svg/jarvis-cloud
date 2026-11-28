@@ -403,6 +403,26 @@ export async function criarNota(tenantId, contatoId, { texto, autorId = 0, autor
 
 // texto pra IA (auto-atendimento e follow up): o que a equipe anotou sobre o paciente. So contexto - a IA nao deve
 // repetir isso pro paciente. Devolve '' se nao houver anotacao. Passe contatoId OU numero+instancia.
+// soma UMA etiqueta ao contato (sem duplicar e sem apagar as outras)
+export async function adicionarEtiqueta(tenantId, contatoId, etiqueta) {
+  if (!pool) return;
+  await tabelasProntas;
+  const t = String(etiqueta || '').trim().slice(0, 40);
+  if (!t) return;
+  await pool.query(
+    `UPDATE crm_contatos SET etiquetas = CASE WHEN etiquetas @> ARRAY[$3]::text[] THEN etiquetas ELSE array_append(etiquetas, $3) END WHERE id = $1 AND tenant_id = $2`,
+    [Number(contatoId), tenantId, t],
+  );
+}
+
+export async function temEtiqueta(tenantId, { numero, instancia }, etiqueta) {
+  if (!pool) return false;
+  await tabelasProntas;
+  const { rows } = await pool.query('SELECT etiquetas FROM crm_contatos WHERE tenant_id = $1 AND numero = $2 AND instancia = $3', [tenantId, numero, instancia]);
+  const alvo = String(etiqueta || '').toLowerCase();
+  return (rows[0]?.etiquetas || []).some((e) => String(e).toLowerCase() === alvo);
+}
+
 export async function notasParaIA(tenantId, { contatoId, numero, instancia }, limite = 10) {
   if (!pool) return '';
   await tabelasProntas;

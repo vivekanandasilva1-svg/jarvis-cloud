@@ -52,6 +52,9 @@ async function garantirTabelas() {
   // type="time">, sem precisar converter nada no front).
   await pool.query(`ALTER TABLE follow_up_config ADD COLUMN IF NOT EXISTS hora_inicio TEXT NOT NULL DEFAULT '08:00';`);
   await pool.query(`ALTER TABLE follow_up_config ADD COLUMN IF NOT EXISTS hora_fim TEXT NOT NULL DEFAULT '20:00';`);
+  // modo resgate: lead que responde positivo a uma tentativa ganha a etiqueta de resgate e a IA passa a buscar a objecao
+  await pool.query(`ALTER TABLE follow_up_config ADD COLUMN IF NOT EXISTS modo_resgate BOOLEAN NOT NULL DEFAULT false;`);
+  await pool.query(`ALTER TABLE follow_up_config ADD COLUMN IF NOT EXISTS prompt_resgate TEXT;`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS follow_up_etapas (
       tenant_id INT NOT NULL REFERENCES tenants(id),
@@ -97,28 +100,84 @@ const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas do Follow Up:', err.message);
 });
 
+
+// ---------- prompts recomendados (botao "usar recomendado" na aba Follow Up) ----------
+
+export const ETIQUETA_RESGATE = 'Resgate do Follow Up';
+
+export const PROMPT_GERAL_RECOMENDADO = `Você é a assistente de relacionamento da clínica no WhatsApp. Seu trabalho é retomar o contato com quem parou de responder, faltou ou não concluiu o agendamento. Fale como uma pessoa real da recepção: calorosa, curta e natural.
+
+OBJETIVO: fazer a pessoa responder e voltar a falar do tratamento. Não pressione nem venda na primeira mensagem.
+
+FORMA
+- 1 a 3 frases, sem markdown, sem lista, no máximo 1 emoji.
+- Use o primeiro nome. Não repita a abertura de tentativas anteriores (veja o histórico).
+- Termine sempre com UMA pergunta fácil de responder.
+- Nunca invente fatos, preços, vagas, promoções ou prazos. Só use escassez ou urgência que esteja nas instruções da tentativa ou nas notas da equipe.
+- Não dê diagnóstico nem prometa resultado. Dúvida clínica: convide para avaliação.
+- Se pedir para parar ou disser que não tem interesse, agradeça com educação e encerre.
+
+ESCALADA
+1ª tentativa (1 dia): leve e curiosa, "ficou alguma dúvida?".
+2ª (3 dias): facilitar (horário, forma de pagamento, avaliação).
+3ª (7 dias): valor e consequência real de adiar, sem dramatizar.
+4ª (15 dias): urgência ou escassez real, se existir; senão cuidado e prova social verdadeira.
+5ª (30 dias): despedida gentil com porta aberta.
+
+INTERESSE REAL (true): pede horário ou valor, pergunta sobre o tratamento, diz "quero", "pode", "me explica", explica por que sumiu e continua a conversa.
+NÃO é interesse (false): recusa, engano, pergunta quem é e some, "depois eu vejo" sem abertura.`;
+
+export const PROMPT_RESGATE_RECOMENDADO = `MODO RESGATE: esta pessoa já demonstrou interesse, não concluiu (faltou, sumiu ou deixou de agendar) e acabou de voltar a conversar. Seu papel é descobrir o que a travou, desfazer isso e remarcar. Uma etapa por mensagem, sem pular.
+
+1. ACOLHA sem cobrar: agradeça o retorno, normalize ("acontece com todo mundo"), zero culpa.
+2. DESCUBRA a objeção real com UMA pergunta aberta: "Posso te perguntar o que pesou mais pra você não conseguir vir? Foi horário, valor, receio do procedimento ou outra coisa?" Se vier vago, aprofunde: "e se isso estivesse resolvido, você viria?".
+3. QUEBRE a objeção (valide, reenquadre, prove, proponha):
+   - Preço: condições e parcelamento reais; o custo de esperar (problema que piora, tratamento mais longo).
+   - Medo ou dor: como é o primeiro passo, conforto, anestesia, conversa com a dentista.
+   - Tempo: horários flexíveis, consulta objetiva; pergunte o melhor dia e turno.
+   - Dúvida ou confiança: avaliação sem compromisso; depoimentos só se existirem nos materiais.
+   - "Vou ver com alguém": convide a pessoa e ofereça horário para os dois.
+4. URGÊNCIA E ESCASSEZ HONESTAS: (a) a dor ou o risco real de adiar, em linguagem simples, sem terror; (b) escassez só se for verdadeira (poucos horários na semana, condição com data). Sem dado real, use o tempo: "a avaliação leva poucos minutos e já define o próximo passo".
+5. FECHE com duas opções concretas: "Consigo quinta às 14h ou sexta às 9h, qual fica melhor?". Ofereça só horários que a agenda mostrar. Confirme nome, dia, hora e endereço.
+6. Se agendou: confirme e tire atritos. Se resistir de novo: volte ao passo 2 com outra pergunta, no máximo 3 tentativas; depois agradeça, deixe a porta aberta e avise a equipe.
+
+LIMITES: nada de mentira, culpa, ameaça ou promessa de cura. Uma pergunta por mensagem, 1 a 3 frases, tom caloroso, sem markdown. Se pedir para parar, encerre com educação.`;
+
+// bloco injetado no Auto Atendimento enquanto o contato tem a etiqueta de resgate (e o modo esta ligado)
+export async function posturaResgate(tenantId, numero, instancia) {
+  const config = await obterConfig(tenantId);
+  if (!config.modoResgate) return '';
+  if (!(await crm.temEtiqueta(tenantId, { numero, instancia }, ETIQUETA_RESGATE))) return '';
+  return `\n\n[POSTURA DE RESGATE - este contato foi reativado pelo Follow Up e esta etiquetado "${ETIQUETA_RESGATE}". Siga esta postura nas suas respostas, alem das regras gerais:]\n${config.promptResgate || PROMPT_RESGATE_RECOMENDADO}`;
+}
+
 // ---------- configuracao geral ----------
 
 const HORA_PADRAO_INICIO = '08:00';
 const HORA_PADRAO_FIM = '20:00';
-const CONFIG_VAZIA = { ativo: false, promptGeral: '', horaInicio: HORA_PADRAO_INICIO, horaFim: HORA_PADRAO_FIM };
+const RECOMENDADOS = () => ({ promptGeral: PROMPT_GERAL_RECOMENDADO, promptResgate: PROMPT_RESGATE_RECOMENDADO });
+const CONFIG_VAZIA = { ativo: false, promptGeral: '', horaInicio: HORA_PADRAO_INICIO, horaFim: HORA_PADRAO_FIM, modoResgate: false, promptResgate: '', etiquetaResgate: ETIQUETA_RESGATE };
 
 export async function obterConfig(tenantId) {
-  if (!pool) return CONFIG_VAZIA;
+  if (!pool) return { ...CONFIG_VAZIA, recomendados: RECOMENDADOS() };
   await tabelasProntas;
-  const { rows } = await pool.query(`SELECT ativo, prompt_geral, hora_inicio, hora_fim FROM follow_up_config WHERE tenant_id = $1`, [tenantId]);
-  if (!rows.length) return CONFIG_VAZIA;
+  const { rows } = await pool.query(`SELECT ativo, prompt_geral, hora_inicio, hora_fim, modo_resgate, prompt_resgate FROM follow_up_config WHERE tenant_id = $1`, [tenantId]);
+  if (!rows.length) return { ...CONFIG_VAZIA, recomendados: RECOMENDADOS() };
   return {
     ativo: !!rows[0].ativo,
     promptGeral: rows[0].prompt_geral || '',
     horaInicio: rows[0].hora_inicio || HORA_PADRAO_INICIO,
     horaFim: rows[0].hora_fim || HORA_PADRAO_FIM,
+    modoResgate: !!rows[0].modo_resgate,
+    promptResgate: rows[0].prompt_resgate || '',
+    etiquetaResgate: ETIQUETA_RESGATE,
+    recomendados: RECOMENDADOS(),
   };
 }
 
 const HORA_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-export async function salvarConfig(tenantId, { ativo, promptGeral, horaInicio, horaFim }) {
+export async function salvarConfig(tenantId, { ativo, promptGeral, horaInicio, horaFim, modoResgate, promptResgate }) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   const hi = horaInicio || HORA_PADRAO_INICIO;
   const hf = horaFim || HORA_PADRAO_FIM;
@@ -126,9 +185,10 @@ export async function salvarConfig(tenantId, { ativo, promptGeral, horaInicio, h
   if (hi >= hf) throw new Error('O horario de inicio precisa ser antes do horario de fim.');
   await tabelasProntas;
   await pool.query(
-    `INSERT INTO follow_up_config (tenant_id, ativo, prompt_geral, hora_inicio, hora_fim, atualizado_em) VALUES ($1, $2, $3, $4, $5, now())
-     ON CONFLICT (tenant_id) DO UPDATE SET ativo = $2, prompt_geral = $3, hora_inicio = $4, hora_fim = $5, atualizado_em = now()`,
-    [tenantId, !!ativo, promptGeral || '', hi, hf],
+    `INSERT INTO follow_up_config (tenant_id, ativo, prompt_geral, hora_inicio, hora_fim, modo_resgate, prompt_resgate, atualizado_em) VALUES ($1, $2, $3, $4, $5, COALESCE($6, false), COALESCE($7, ''), now())
+     ON CONFLICT (tenant_id) DO UPDATE SET ativo = $2, prompt_geral = $3, hora_inicio = $4, hora_fim = $5,
+       modo_resgate = COALESCE($6, follow_up_config.modo_resgate), prompt_resgate = COALESCE($7, follow_up_config.prompt_resgate), atualizado_em = now()`,
+    [tenantId, !!ativo, promptGeral || '', hi, hf, modoResgate === undefined ? null : !!modoResgate, promptResgate === undefined ? null : String(promptResgate).slice(0, 8000)],
   );
 }
 
@@ -342,11 +402,14 @@ export async function processarMensagem(tenantId, contatoId, numero, instancia, 
     (etapaAtual?.prompt ? `\n\nInstrucoes da tentativa atual: ${etapaAtual.prompt}` : '') +
     notasEquipe +
     `\n\nHistorico do acompanhamento ate agora:\n${formatarHistorico(historico)}` +
+    (config.modoResgate
+      ? `\n\nMODO RESGATE LIGADO: se o contato demonstrar interesse real (demonstrouInteresse = true), a sua resposta JA deve seguir a postura abaixo, comecando pelas etapas 1 e 2 (acolher e descobrir a objecao com UMA pergunta), sem oferecer horario ainda. Se nao houver interesse, ignore a postura e responda normalmente.\n\n${config.promptResgate || PROMPT_RESGATE_RECOMENDADO}`
+      : '') +
     `\n\nO contato acabou de responder: "${textoContato}"` +
     `\n\nEscreva uma resposta natural pra essa mensagem e decida se ele demonstrou interesse real em retomar o assunto.`;
 
   const resp = await anthropic.messages.create({
-    model: MODEL, max_tokens: 600,
+    model: MODEL, max_tokens: config.modoResgate ? 900 : 600,
     tools: [TOOL_RESPONDER_E_ANALISAR], tool_choice: { type: 'tool', name: 'responder_e_analisar' },
     messages: [{ role: 'user', content: prompt }],
     _uso: { tenantId, modulo: 'follow-up' },
@@ -363,6 +426,7 @@ export async function processarMensagem(tenantId, contatoId, numero, instancia, 
   await pool.query(`UPDATE follow_up_contatos SET historico = $1 WHERE contato_id = $2 AND tenant_id = $3`, [JSON.stringify(novoHistorico), contatoId, tenantId]);
 
   if (demonstrouInteresse) {
+    if (config.modoResgate) await crm.adicionarEtiqueta(tenantId, contatoId, ETIQUETA_RESGATE).catch((err) => console.error('Follow Up: falha ao etiquetar resgate:', err.message));
     await crm.moverEtapa(tenantId, contatoId, 'em_atendimento');
     await encerrarAcompanhamento(tenantId, contatoId);
   }

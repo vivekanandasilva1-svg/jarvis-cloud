@@ -1776,7 +1776,8 @@
           conversa daquele contato e passa a tentar reengajar ele sozinho, na cadencia configurada
           abaixo - o Auto Atendimento normal para de responder esse contato enquanto ele estiver
           nessa coluna. Se o lead demonstrar interesse de verdade em qualquer resposta, o card
-          volta sozinho pra "Em Atendimento" pra continuar manualmente. Se nenhuma tentativa
+          volta sozinho pra "Em Atendimento" pra continuar (com o Modo resgate ligado, ele ganha a
+          etiqueta "Resgate do Follow Up" e a IA busca a objeção para remarcar). Se nenhuma tentativa
           funcionar, depois da ultima ele vai pra "Perdido / Não respondeu".
         </div>
 
@@ -1807,6 +1808,26 @@
 
         <label class="auto-label">Script geral (como a IA deve se comportar em todo acompanhamento)</label>
         <textarea id="fuPromptGeral" placeholder="Ex: Voce e a recepcionista virtual da Clinica X tentando retomar contato com leads que pararam de responder. Seja cordial e nada insistente, lembre educadamente do assunto que estava sendo tratado e pergunte se ainda tem interesse..."></textarea>
+        <button type="button" class="crm-btn-secundario" id="fuUsarRecomendadoGeral">Usar o prompt recomendado</button>
+
+        <label class="auto-label" style="margin-top: 18px;">Modo resgate</label>
+        <p class="agenda-vazia" style="margin: 0 0 6px;">
+          Quando o lead responder de forma positiva a uma tentativa de reaquecimento, ele recebe a etiqueta
+          <strong>Resgate do Follow Up</strong>, o card vai para Em Atendimento e a IA passa a descobrir a
+          objeção que o impediu de comparecer, quebrá-la e tentar remarcar com urgência e escassez
+          reais (só com fatos verdadeiros). Desligado, tudo continua como antes.
+        </p>
+        <div class="auto-toggle-row">
+          <label class="auto-switch">
+            <input type="checkbox" id="fuModoResgate" />
+            <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+          </label>
+          <span id="fuModoResgateLabel">Desativado</span>
+        </div>
+        <p class="agenda-erro" id="fuAvisoResgate" hidden></p>
+        <label class="auto-label">Postura da IA no resgate (editavel)</label>
+        <textarea id="fuPromptResgate" placeholder="Carregando a postura recomendada..."></textarea>
+        <button type="button" class="crm-btn-secundario" id="fuUsarRecomendadoResgate">Usar a postura recomendada</button>
 
         <button type="button" id="fuSalvar">Salvar Configurações</button>
         <p class="agenda-erro" id="fuErro" hidden></p>
@@ -2338,7 +2359,7 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261127b"></script>
+  <script src="app.js?v=20261127c"></script>
   <script src="copiar-nome.js?v=20261123a"></script>
   <script src="rolagem.js?v=20261123b"></script>
   <script src="retorno.js?v=20261124a"></script>

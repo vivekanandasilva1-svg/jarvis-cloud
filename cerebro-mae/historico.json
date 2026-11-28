@@ -1420,5 +1420,13 @@
     "tipo": "melhoria",
     "titulo": "Minha Empresa: Kyan com periodo (7/14/30 dias) e comparacao lado a lado de dois clientes",
     "conteudo": "Duas selects novas na barra do escritorio ao escolher um cliente/BM no Kyan: periodo (7, 14 ou 30 dias; guardado em localStorage empresaKyanDias) e 'Comparar com...' (empresaKyanSel2). GET /api/empresa/kyan/cliente aceita &dias=7|14|30 (kyanCliente(tenantId, sel, dias): datePreset last_Nd + gasto por dia do periodo; o campo d7 virou per + periodoDias; cache de 10 min por selecao+periodo). Na comparacao o painel mostra tabela A x B (gasto, resultados, custo por resultado, CTR, campanhas ativas, alertas) com o melhor valor em verde (maior e melhor para resultados/CTR, menor e melhor para custo/alertas), grafico de barras duplo de gasto por dia e alertas dos dois (marcados com o nome); as 3 telas da sala continuam no cliente A. Em 30 dias o grafico so rotula a cada 5 dias. Testado em producao com dados reais (Clinpop x Pedro Jorge, 7/14/30). Pendente: periodo personalizado (datas) e comparar mais de dois."
+  },
+  {
+    "chave": "followup:modo-resgate",
+    "modulo": "followup",
+    "data": "2026-11-27",
+    "tipo": "funcao",
+    "titulo": "Follow Up: Modo resgate (etiqueta + postura de quebrar objecao) e prompt recomendado",
+    "conteudo": "Opcao por clinica (follow_up_config.modo_resgate, desligada por padrao) na aba Follow Up. Ligada: quando o lead responde positivo a uma tentativa de reaquecimento, followUp.processarMensagem ja responde com a postura de resgate (acolher + descobrir a objecao), o contato ganha a etiqueta 'Resgate do Follow Up' (crm.adicionarEtiqueta, sem duplicar) e o card vai para Em Atendimento; enquanto a etiqueta existir, autoAtendimento injeta a postura (followUp.posturaResgate) no bloco dinamico do prompt, mantendo o fluxo: descobrir objecao, quebrar (preco, medo, tempo, confianca, 'vou ver com alguem'), urgencia/escassez HONESTAS (so fatos reais, senao usa o tempo) e fechar com 2 horarios da agenda, max 3 tentativas. Prompts recomendados (PROMPT_GERAL_RECOMENDADO e PROMPT_RESGATE_RECOMENDADO em followUp.js) com botoes 'usar recomendado' e textos editaveis; a postura vazia usa a recomendada. A tela avisa quando o Auto Atendimento esta desativado (o resgate depende dele para responder e marcar na agenda). Desligado, o comportamento antigo e identico. Testado em producao (tenant 10) dentro de transacao com ROLLBACK e IA simulada: ligado -> prompt com postura + etiqueta + etapa em_atendimento; desligado -> sem postura/etiqueta; etiqueta nao duplica. Pendente: metrica de resgates na aba Resultados (contatos com a etiqueta que agendaram) e remover a etiqueta apos o comparecimento."
   }
 ]
