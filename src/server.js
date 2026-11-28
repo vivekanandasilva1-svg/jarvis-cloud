@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { chat, continuarAcaoLocal, limparConversa, iniciarSchedulerLembretes, iniciarSchedulerSaldoAnuncios, iniciarSchedulerRelatorioDiario, obterStatusAoVivo } from './cloudAgent.js';
 import { synthesizeSpeechWithTimestamps } from './gemini.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
+import { synthesizeSpeechLumia, iniciarManutencaoDaVoz, estadoDaVoz } from './vozLumia.js';
 import { transcrever } from './whisper.js';
 import { sendTextMessage, downloadMedia } from './whatsapp.js';
 import { obterArquivo } from './arquivosGerados.js';
@@ -475,6 +476,9 @@ async function exigirSuperAdmin(req, res, next) {
     res.status(500).json({ erro: err.message });
   }
 }
+
+// saude da voz padrao da Lumia (qual motor esta falando, ultimo erro, versao do edge-tts)
+app.get('/api/admin/voz-estado', exigirSuperAdmin, (req, res) => res.json(estadoDaVoz()));
 
 app.get('/api/admin/tenants', exigirSuperAdmin, async (req, res) => {
   try {
@@ -1036,9 +1040,12 @@ app.post('/api/tts', async (req, res) => {
     // KOKORO_URL so existe nos ambientes com o Kokoro TTS auto-hospedado rodando ao lado (a
     // VPS) - voz fixa, sem cota nem custo por uso. Onde nao tem essa infra (ex: Render), cai
     // pro Gemini como estava antes.
-    const { audioBase64, alignment } = process.env.KOKORO_URL
-      ? await synthesizeSpeechKokoro(textoFalado)
-      : await synthesizeSpeechWithTimestamps(textoFalado);
+    // voz padrao oficial da Lumia (Azure, pt-BR-ThalitaMultilingualNeural) quando configurada; senao
+    // Kokoro (VPS) ou Gemini como antes - ver vozLumia.js
+    const { audioBase64, alignment } = await synthesizeSpeechLumia(textoFalado, {
+      kokoro: synthesizeSpeechKokoro,
+      gemini: synthesizeSpeechWithTimestamps,
+    });
     // devolve o texto normalizado tambem - o frontend usa ele (nao o "text" original) na
     // legenda final, senao a legenda mostraria "Real"/horas por extenso durante a fala e
     // "pularia" de volta pro "R$"/"14h" original no instante em que o audio termina
@@ -4110,4 +4117,5 @@ setInterval(checarRetornosVencidos, 60 * 1000).unref();
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Jarvis Cloud rodando na porta ${PORT}`);
+  iniciarManutencaoDaVoz();
 });

@@ -12,6 +12,7 @@ import * as clinicorp from './clinicorp.js';
 import * as crm from './crm.js';
 import { transcrever } from './whisper.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
+import { synthesizeSpeechLumia } from './vozLumia.js';
 import { moedaPorExtenso } from './numeroPorExtenso.js';
 import { creditoRestabelecido } from './alertaCreditos.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
@@ -1152,6 +1153,11 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
 // de seguranca (prepararTextoParaAudio) mesmo que o prompt/aviso dinamico ja tenham pedido pra
 // IA nao usar emoji/markdown - garante o resultado mesmo se ela nao seguir 100%.
 export async function enviarRespostaEmAudio(instancia, numero, texto) {
-  const { audioBase64 } = await synthesizeSpeechKokoro(prepararTextoParaAudio(texto));
+  // voz padrao oficial da Lumia (Azure) quando configurada; senao Kokoro - se nenhum dos dois existir
+  // lanca erro e quem chamou cai pra texto
+  const { audioBase64 } = await synthesizeSpeechLumia(prepararTextoParaAudio(texto), {
+    kokoro: synthesizeSpeechKokoro,
+    gemini: async () => { throw new Error('nenhum motor de voz configurado para o WhatsApp'); },
+  });
   await evolutionApi.enviarAudio(instancia, numero, audioBase64);
 }
