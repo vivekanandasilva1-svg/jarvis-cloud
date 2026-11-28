@@ -19,12 +19,34 @@ const alvoCamera = new THREE.Vector3(8, 0, 6);
 let alvoAnim = null;
 let spawnEm = 0;
 let obsResize = null;
+let entregador = null;
+let entregaEm = 12;
+let somLigado = false;
+let audioCtx = null;
+let ultCriticos = null;
+const histCache = new Map();
+const ativCache = new Map();
+let kyanSel = '';
+let kyanDados = null;
+let kyanSelEl = null;
+let kyanBusca = 0;
+let kyanSel2 = '';
+let kyanDados2 = null;
+let kyanDias = 7;
+let kyanPerEl = null;
+let kyanCmpEl = null;
+const ativTexto = (id) => ativCache.get(id)?.[0]?.texto || '';
 
 // ---------- utilidades ----------
 const matCache = new Map();
 function mat(cor) {
   let m = matCache.get(cor);
-  if (!m) { m = new THREE.MeshLambertMaterial({ color: cor }); matCache.set(cor, m); }
+  if (!m) {
+    const c = new THREE.Color(cor);
+    const claro = c.r > 0.6 && c.g > 0.6 && c.b > 0.6; // brancos ganham um brilho leve pra nao ficarem acinzentados
+    m = new THREE.MeshLambertMaterial({ color: cor, emissive: claro ? 0x2a2f34 : 0x000000 });
+    matCache.set(cor, m);
+  }
   return m;
 }
 const geoCache = new Map();
@@ -71,7 +93,7 @@ const aleatorio = (a, b) => a + Math.random() * (b - a);
 const escolher = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 // ---------- personagens (blocos) ----------
-function criarPessoa({ pele = '#f1c9a5', cabelo = '#4a3426', camisa = '#2f7f86', calca = '#2c3038', longo = false, sapato = '#1f2229' }) {
+function criarPessoa({ pele = '#f1c9a5', cabelo = '#4a3426', camisa = '#2f7f86', calca = '#2c3038', longo = false, barba = false, neon = null, sapato = '#1f2229' }) {
   const g = new THREE.Group();
   const sombra = new THREE.Mesh(new THREE.CircleGeometry(0.42, 16), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22 }));
   sombra.rotation.x = -Math.PI / 2; sombra.position.y = 0.02;
@@ -117,7 +139,20 @@ function criarPessoa({ pele = '#f1c9a5', cabelo = '#4a3426', camisa = '#2f7f86',
   }
   caixa(cabeca, -0.12, 0.2, 0.26, 0.07, 0.09, 0.02, '#23252b');
   caixa(cabeca, 0.12, 0.2, 0.26, 0.07, 0.09, 0.02, '#23252b');
-  caixa(cabeca, 0, 0.08, 0.26, 0.12, 0.03, 0.02, '#b5675e');
+  if (barba) caixa(cabeca, 0, 0.0, 0.265, 0.5, 0.2, 0.03, cabelo);
+  else caixa(cabeca, 0, 0.08, 0.26, 0.12, 0.03, 0.02, '#b5675e');
+  if (neon) {
+    const brilho = { emissive: new THREE.Color(neon), emissiveIntensity: 1 };
+    caixa(cabeca, 0, 0.17, 0.275, 0.52, 0.13, 0.04, neon, brilho); // visor
+    for (const lado of [-1, 1]) {
+      caixa(cabeca, lado * 0.3, 0.08, 0, 0.08, 0.26, 0.22, '#e8eef5'); // fone
+      caixa(cabeca, lado * 0.335, 0.14, 0, 0.02, 0.1, 0.1, neon, brilho);
+    }
+    caixa(cabeca, 0, 0.5, 0, 0.5, 0.05, 0.08, '#e8eef5'); // arco do headset
+    caixa(corpo, 0, 0.95, 0.175, 0.2, 0.2, 0.03, neon, brilho); // nucleo no peito
+    caixa(corpo, 0, 0.68, 0, 0.62, 0.05, 0.36, neon, brilho); // cinto de luz
+    for (const o of bracos) caixa(o, 0, -0.12, 0, 0.18, 0.04, 0.2, neon, brilho);
+  }
   corpo.add(cabeca);
   return { grupo: g, corpo, quadris, joelhos, bracos, cabeca, modo: 'parado', sentadoF: 0, andaF: 0, yaw: 0, yawAlvo: 0, rota: [], vel: 1.7 };
 }
@@ -125,7 +160,7 @@ function criarPessoa({ pele = '#f1c9a5', cabelo = '#4a3426', camisa = '#2f7f86',
 function animarPessoa(p, dt, t) {
   const andando = p.modo === 'andando';
   p.andaF += ((andando ? 1 : 0) - p.andaF) * Math.min(1, dt * 10);
-  p.sentadoF += ((p.modo === 'sentado' ? 1 : 0) - p.sentadoF) * Math.min(1, dt * 8);
+  p.sentadoF += (((p.modo === 'sentado' || p.sentada) ? 1 : 0) - p.sentadoF) * Math.min(1, dt * 8);
   const w = p.andaF;
   const s = p.sentadoF;
   const fase = t * 9 + (p.fase || 0);
@@ -248,13 +283,13 @@ function texturaPiso(w, h, corA, corB, lado = 1) {
   return t;
 }
 
-function lajeBase(pai, x0, z0, w, d, corPiso, corPiso2) {
+function lajeBase(pai, x0, z0, w, d, corPiso, corPiso2, borda = '#d4af37') {
   const g = new THREE.Group();
   g.position.set(x0, 0, z0);
   bloco(g, -0.35, -0.6, -0.35, w + 0.35, 0, d + 0.35, '#262a31');
-  bloco(g, -0.35, -0.07, d + 0.35 - 0.07, w + 0.35, 0, d + 0.35, '#d4af37');
-  bloco(g, w + 0.35 - 0.07, -0.07, -0.35, w + 0.35, 0, d + 0.35, '#d4af37');
-  const piso = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshLambertMaterial({ map: texturaPiso(w, d, corPiso, corPiso2, 1) }));
+  bloco(g, -0.35, -0.07, d + 0.35 - 0.07, w + 0.35, 0, d + 0.35, borda);
+  bloco(g, w + 0.35 - 0.07, -0.07, -0.35, w + 0.35, 0, d + 0.35, borda);
+  const piso = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshLambertMaterial({ map: texturaPiso(w, d, corPiso, corPiso2, 1), emissive: new THREE.Color(corPiso).getHSL({}).l > 0.9 ? 0x30353a : 0x000000 }));
   piso.rotation.x = -Math.PI / 2; piso.position.set(w / 2, 0.001, d / 2);
   g.add(piso);
   pai.add(g);
@@ -350,18 +385,370 @@ function construirRecepcao() {
   for (const a of [...s1, ...s2, ...pol]) ASSENTOS.push({ ...a, ocupado: false });
 }
 
-function construirSalaEmBreve(nome, x0, z0, w, d) {
-  const g = new THREE.Group();
-  scene.add(g);
-  lajeBase(g, x0, z0, w, d, '#d8dbe0', '#cdd1d7');
-  const laje = new THREE.Group();
-  g.add(laje);
-  bloco(g, x0 - 0.3, 0, z0 - 0.3, x0 + w, 1.0, z0, '#aeb4bd');
-  bloco(g, x0 - 0.3, 0, z0, x0, 1.0, z0 + d, '#aeb4bd');
-  bloco(g, x0 - 0.3, 1.0, z0 - 0.3, x0 + w, 1.06, z0, '#d4af37');
-  placa(g, nome.toUpperCase(), 5, 0.9, { x: x0 + w / 2, y: 2.1, z: z0 + 0.4, sub: 'Em breve', fundo: '#3a3f48', cor: '#d4af37', tam: 0.7 });
-  bloco(g, x0 + w / 2 - 2.5, 1.0, z0 + 0.3, x0 + w / 2 + 2.5, 2.55, z0 + 0.34, '#3a3f48');
-  return g;
+function cadeira(pai, x, z, cor = '#2c3038') {
+  caixa(pai, x, 0, z, 0.1, 0.25, 0.1, '#14161a');
+  caixa(pai, x, 0.25, z, 0.7, 0.14, 0.7, cor);
+  caixa(pai, x, 0.39, z - 0.34, 0.7, 0.6, 0.1, cor);
+}
+function mesaTrabalho(pai, x, z, larg = 3.2, cor = '#f4f1ea', topo = '#2c3038') {
+  caixa(pai, x, 0, z, larg, 0.95, 0.9, cor);
+  caixa(pai, x, 0.95, z, larg + 0.1, 0.1, 1.0, topo);
+  caixa(pai, x, 0.3, z + 0.46, larg - 0.1, 0.06, 0.02, '#d4af37');
+}
+
+let telaComercial = null;
+function desenharTelaComercial() {
+  if (!telaComercial) return;
+  const { g, tex } = telaComercial;
+  const d = estado?.agentes || {};
+  g.fillStyle = '#0d1b24'; g.fillRect(0, 0, 512, 256);
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#4cc3d9'; g.font = '700 34px "Segoe UI", system-ui, sans-serif';
+  g.fillText('HOJE NO COMERCIAL', 256, 40);
+  const linhas = [
+    ['Leads atendidos', d.bia?.extras?.[0]?.[1] ?? '—', '#d1626b'],
+    ['Follow-ups enviados', d.lua ? String(d.lua.hoje) : '—', '#9b7ede'],
+    ['Aniversários enviados', d.lorena ? String(d.lorena.hoje) : '—', '#e0c04a'],
+    ['Funis rodando hoje', d.anne ? String(d.anne.hoje) : '—', '#5cae7f'],
+  ];
+  linhas.forEach(([t, v, cor], i) => {
+    const y = 95 + i * 42;
+    g.fillStyle = cor; g.fillRect(34, y - 14, 10, 28);
+    g.textAlign = 'left'; g.fillStyle = '#e8eef2'; g.font = '500 26px "Segoe UI", system-ui, sans-serif'; g.fillText(t, 58, y);
+    g.textAlign = 'right'; g.fillStyle = '#ffffff'; g.font = '700 30px "Segoe UI", system-ui, sans-serif'; g.fillText(String(v), 480, y);
+  });
+  tex.needsUpdate = true;
+}
+
+function construirComercial() {
+  const x0 = 18;
+  const C = new THREE.Group();
+  scene.add(C);
+  lajeBase(C, x0, 0, 16, 12, '#e6e1ea', '#dcd6e2');
+  const parede = '#f3efe8';
+  bloco(C, x0 - 0.3, 0, -0.3, x0 + 16, 1.0, 0, parede);
+  bloco(C, x0 - 0.3, 3.2, -0.3, x0 + 16, 3.4, 0, '#2c3038');
+  bloco(C, x0 - 0.3, 3.4, -0.3, x0 + 16, 3.46, 0, '#d4af37');
+  bloco(C, x0, 1.0, -0.12, x0 + 16, 3.2, -0.04, '#a9d8f5', { transparent: true, opacity: 0.22 });
+  for (const x of [0, 5.3, 10.6, 16]) bloco(C, x0 + x - 0.07, 0, -0.14, x0 + x + 0.07, 3.2, 0.02, '#2c3038');
+  // painel central dos fundos + placa
+  bloco(C, x0 + 4.5, 1.0, 0, x0 + 11.5, 3.2, 0.12, '#2c3038');
+  placa(C, 'COMERCIAL', 5.4, 0.9, { x: x0 + 8, y: 2.65, z: 0.14, sub: 'CRCs · atendimento e relacionamento', tam: 0.8 });
+  bloco(C, x0 + 4.7, 1.2, 0.12, x0 + 11.3, 1.26, 0.16, '#d4af37');
+  // TV com os numeros do dia (atualiza com os dados reais)
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 256;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  telaComercial = { g: cv.getContext('2d'), tex };
+  bloco(C, x0 + 4.9, 1.1, 0.12, x0 + 11.1, 2.1, 0.17, '#14161a');
+  const tv = new THREE.Mesh(new THREE.PlaneGeometry(6.0, 0.9), new THREE.MeshBasicMaterial({ map: tex }));
+  tv.position.set(x0 + 8, 1.6, 0.18); C.add(tv);
+  desenharTelaComercial();
+  // parede esquerda de madeira + quadro do funil
+  bloco(C, x0 - 0.3, 0, 0, x0, 3.4, 12.3, '#c9a27a');
+  for (let z = 0.4; z < 12; z += 0.55) bloco(C, x0, 0.9, z, x0 + 0.07, 3.3, z + 0.12, '#b78d63');
+  bloco(C, x0 - 0.3, 3.4, 0, x0, 3.46, 12.3, '#d4af37');
+  bloco(C, x0, 1.3, 3.0, x0 + 0.1, 3.0, 9.0, '#f6f3ee');
+  const cores = ['#2f7f86', '#5b8def', '#9b7ede', '#e0c04a', '#5cae7f'];
+  cores.forEach((cor, i) => bloco(C, x0 + 0.1, 1.55, 3.3 + i * 1.1, x0 + 0.14, 1.55 + 1.2 - i * 0.2, 3.3 + i * 1.1 + 0.9, cor));
+  placa(C, 'FUNIL', 1.6, 0.4, { x: x0 + 0.16, y: 2.75, z: 6.0, ry: Math.PI / 2, fundo: '#f6f3ee', cor: '#2c3038', tam: 0.7 });
+  // estacoes: agente sentada olhando pra camera, mesa a frente
+  for (const [px, pz] of [[4, 3.2], [11.5, 3.2], [4, 8.2], [11.5, 8.2]]) {
+    cadeira(C, x0 + px, pz - 0.2);
+    mesaTrabalho(C, x0 + px, pz + 1.2);
+    monitor(C, x0 + px - 0.7, 1.05, pz + 1.2, Math.PI);
+    caixa(C, x0 + px + 0.6, 1.05, pz + 1.15, 0.5, 0.03, 0.2, '#d8dbe0');
+    caixa(C, x0 + px + 1.15, 1.05, pz + 1.1, 0.2, 0.25, 0.2, '#e9e4da');
+  }
+  // tapete, plantas, bebedouro, estante
+  bloco(C, x0 + 6.2, 0.01, 5.2, x0 + 9.8, 0.05, 7.4, '#2f6f78');
+  bloco(C, x0 + 6.4, 0.05, 5.4, x0 + 9.6, 0.06, 7.2, '#d9c58f');
+  planta(C, x0 + 1.0, 0.9, 1.3); planta(C, x0 + 15.0, 1.1, 1.2); planta(C, x0 + 15.0, 10.9, 1.5); planta(C, x0 + 7.8, 11.0, 1.0);
+  caixa(C, x0 + 15.2, 0, 5.0, 0.6, 1.0, 0.6, '#e9e4da');
+  caixa(C, x0 + 15.2, 1.0, 5.0, 0.5, 0.55, 0.5, '#7cc7e8', { transparent: true, opacity: 0.7 });
+  bloco(C, x0 + 0.6, 0, 9.6, x0 + 1.5, 1.7, 11.6, '#8a5a3b');
+  for (let i = 0; i < 4; i++) bloco(C, x0 + 0.5, 0.35 + i * 0.4, 9.7, x0 + 1.6, 0.4 + i * 0.4, 11.5, '#2c3038');
+  for (const [x, z] of [[4, 4.4], [11.5, 4.4], [4, 9.4], [11.5, 9.4], [8, 6.3]]) pendente(C, x0 + x, z);
+  return C;
+}
+
+// ---------- telas de dados (TV com numeros reais) ----------
+const telas = [];
+const CORES_LINHA = ['#d1626b', '#9b7ede', '#e0c04a', '#5cae7f', '#5b8def'];
+const linhasDe = (id, de = 0, ate = 99) => {
+  const ex = (estado?.agentes?.[id]?.extras || []).slice(de, ate);
+  return ex.length ? ex.map(([k, v], i) => [k, v, CORES_LINHA[(i + de) % CORES_LINHA.length]]) : [['Carregando…', '', '#8b8d92']];
+};
+function desenharTela(t) {
+  const { g, cv } = t;
+  const L = t.linhas();
+  g.fillStyle = '#0d1b24'; g.fillRect(0, 0, cv.width, cv.height);
+  g.textBaseline = 'middle'; g.textAlign = 'center';
+  g.fillStyle = t.cor; g.font = `700 ${Math.round(cv.height * 0.14)}px "Segoe UI", system-ui, sans-serif`;
+  g.fillText(typeof t.titulo === 'function' ? t.titulo() : t.titulo, cv.width / 2, cv.height * 0.15);
+  const top = cv.height * 0.3;
+  const passo = (cv.height - top - 8) / Math.max(L.length, 1);
+  L.forEach(([rot, val, cor], i) => {
+    const y = top + passo * (i + 0.5);
+    g.fillStyle = cor || t.cor; g.fillRect(22, y - passo * 0.3, 8, passo * 0.6);
+    g.textAlign = 'left'; g.fillStyle = '#e8eef2'; g.font = `500 ${Math.round(Math.min(passo * 0.5, 26))}px "Segoe UI", system-ui, sans-serif`;
+    g.fillText(String(rot).slice(0, 30), 44, y);
+    g.textAlign = 'right'; g.fillStyle = '#ffffff'; g.font = `700 ${Math.round(Math.min(passo * 0.56, 28))}px "Segoe UI", system-ui, sans-serif`;
+    g.fillText(String(val), cv.width - 22, y);
+  });
+  t.tex.needsUpdate = true;
+}
+function novaTela(pai, { x, y, z, w, h, titulo, cor = '#4cc3d9', linhas }) {
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = Math.round(512 * (h / w));
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex }));
+  m.position.set(x, y, z);
+  pai.add(m);
+  const t = { g: cv.getContext('2d'), tex, cv, titulo, cor, linhas };
+  telas.push(t);
+  desenharTela(t);
+  bloco(pai, x - w / 2 - 0.08, y - h / 2 - 0.08, z - 0.03, x + w / 2 + 0.08, y + h / 2 + 0.08, z - 0.01, '#14161a');
+  return m;
+}
+function desenharTelas() { telas.forEach(desenharTela); }
+
+// sala padrao (laje, vidro nos fundos, parede de madeira a esquerda, painel com a placa do setor)
+function salaPadrao(nome, sub, x0, z0, { piso = ['#e6e1ea', '#dcd6e2'], escuro = false, tema = {} } = {}) {
+  const T = { painel: '#2c3038', viga: '#2c3038', trim: '#d4af37', faixa: '#d4af37', placaFundo: '#2c3038', placaCor: '#d4af37', esq: escuro ? '#3a3f48' : '#c9a27a', ripa: escuro ? '#2f343c' : '#b78d63', ...tema };
+  const C = new THREE.Group();
+  scene.add(C);
+  lajeBase(C, x0, z0, 16, 12, piso[0], piso[1], T.trim);
+  bloco(C, x0 - 0.3, 0, z0 - 0.3, x0 + 16, 1.0, z0, escuro ? '#3a3f48' : '#f3efe8');
+  bloco(C, x0 - 0.3, 3.2, z0 - 0.3, x0 + 16, 3.4, z0, T.viga);
+  bloco(C, x0 - 0.3, 3.4, z0 - 0.3, x0 + 16, 3.46, z0, T.trim);
+  bloco(C, x0, 1.0, z0 - 0.12, x0 + 16, 3.2, z0 - 0.04, '#a9d8f5', { transparent: true, opacity: 0.22 });
+  for (const x of [0, 5.3, 10.6, 16]) bloco(C, x0 + x - 0.07, 0, z0 - 0.14, x0 + x + 0.07, 3.2, z0 + 0.02, '#2c3038');
+  bloco(C, x0 + 1, 1.0, z0, x0 + 15, 3.2, z0 + 0.12, T.painel);
+  placa(C, nome.toUpperCase(), 5.4, 0.8, { x: x0 + 8, y: 2.8, z: z0 + 0.14, sub, tam: 0.8, fundo: T.placaFundo, cor: T.placaCor });
+  bloco(C, x0 + 1.2, 1.0, z0 + 0.12, x0 + 14.8, 1.06, z0 + 0.16, T.faixa, T.faixa === '#4cc3d9' ? { emissive: new THREE.Color('#4cc3d9'), emissiveIntensity: 1 } : undefined);
+  bloco(C, x0 - 0.3, 0, z0, x0, 3.4, z0 + 12.3, T.esq);
+  for (let z = 0.4; z < 12; z += 0.55) bloco(C, x0, 0.9, z0 + z, x0 + 0.07, 3.3, z0 + z + 0.12, T.ripa);
+  bloco(C, x0 - 0.3, 3.4, z0, x0, 3.46, z0 + 12.3, T.trim);
+  planta(C, x0 + 1.0, z0 + 0.9, 1.3); planta(C, x0 + 15.0, z0 + 1.1, 1.2); planta(C, x0 + 15.0, z0 + 10.9, 1.5); planta(C, x0 + 7.8, z0 + 11.0, 1.0);
+  return C;
+}
+function tvDoSetor(C, x0, z0, titulo, linhas, cor) {
+  novaTela(C, { x: x0 + 8, y: 1.65, z: z0 + 0.2, w: 6.0, h: 1.2, titulo, linhas, cor });
+}
+
+function construirLaboratorio() {
+  const x0 = 0; const z0 = 14;
+  const C = salaPadrao('Laboratório', 'Próteses · andamento dos trabalhos', x0, z0, { piso: ['#e3e8ec', '#d8dfe5'] });
+  tvDoSetor(C, x0, z0, 'LABORATÓRIO · SEMANA', () => linhasDe('lay'), '#4cc3d9');
+  // bancada principal (Lay) com microscopio e modelos de gesso
+  cadeira(C, x0 + 7, z0 + 3.0, '#3a4a6b');
+  mesaTrabalho(C, x0 + 8, z0 + 4.4, 5.6, '#d8dde3');
+  caixa(C, x0 + 6.0, 1.05, z0 + 4.4, 0.4, 0.06, 0.32, '#2c3038'); caixa(C, x0 + 6.0, 1.1, z0 + 4.45, 0.1, 0.5, 0.1, '#2c3038'); caixa(C, x0 + 6.0, 1.45, z0 + 4.35, 0.25, 0.2, 0.36, '#14161a');
+  caixa(C, x0 + 8.9, 1.05, z0 + 4.4, 1.9, 0.08, 0.5, '#e8a6a0');
+  for (let i = 0; i < 7; i++) caixa(C, x0 + 8.15 + i * 0.25, 1.13, z0 + 4.4, 0.19, 0.16, 0.22, '#f6f3ee');
+  caixa(C, x0 + 10.0, 1.05, z0 + 4.7, 0.5, 0.05, 0.3, '#5b8def'); caixa(C, x0 + 10.0, 1.1, z0 + 4.7, 0.4, 0.14, 0.2, '#f6f3ee');
+  // segunda bancada com bandejas de trabalhos
+  mesaTrabalho(C, x0 + 8, z0 + 8.8, 7, '#cfd6dc');
+  ['#d1626b', '#e0c04a', '#5cae7f', '#5b8def', '#9b7ede', '#d98b5f'].forEach((cor, i) => {
+    caixa(C, x0 + 5.5 + i * 1.0, 1.05, z0 + 8.8, 0.7, 0.05, 0.5, cor);
+    caixa(C, x0 + 5.5 + i * 1.0, 1.1, z0 + 8.8, 0.3, 0.12, 0.25, '#f6f3ee');
+  });
+  // estante de bandejas, forno e impressora 3D
+  bloco(C, x0 + 1.0, 0, z0 + 0.6, x0 + 3.8, 2.3, z0 + 1.4, '#8a5a3b');
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++) bloco(C, x0 + 1.15 + c * 0.52, 0.2 + r * 0.55, z0 + 1.4, x0 + 1.6 + c * 0.52, 0.55 + r * 0.55, z0 + 1.46, ['#d1626b', '#e0c04a', '#5cae7f', '#5b8def', '#9b7ede'][(r + c) % 5]);
+  bloco(C, x0 + 12.2, 0, z0 + 0.7, x0 + 14.4, 1.4, z0 + 1.9, '#3a3f48');
+  caixa(C, x0 + 13.3, 0.55, z0 + 1.93, 1.0, 0.55, 0.04, '#ff8a3d', { emissive: 0xff7a1f, emissiveIntensity: 0.9 });
+  bloco(C, x0 + 14.0, 0, z0 + 4.4, x0 + 15.2, 1.5, z0 + 5.6, '#e9e4da');
+  bloco(C, x0 + 14.1, 0.6, z0 + 4.5, x0 + 15.1, 1.4, z0 + 5.5, '#7cc7e8', { transparent: true, opacity: 0.45 });
+  // quadro de trabalhos
+  bloco(C, x0, 1.3, z0 + 3.0, x0 + 0.1, 3.0, z0 + 9.0, '#f6f3ee');
+  [['#d1626b', 4], ['#e0c04a', 3], ['#5cae7f', 2]].forEach(([cor, n], col) => { for (let i = 0; i < n; i++) bloco(C, x0 + 0.1, 2.5 - i * 0.45, z0 + 3.3 + col * 1.9, x0 + 0.14, 2.85 - i * 0.45, z0 + 4.8 + col * 1.9, cor); });
+  placa(C, 'TRABALHOS', 1.8, 0.4, { x: x0 + 0.16, y: 2.9, z: z0 + 6.0, ry: Math.PI / 2, fundo: '#f6f3ee', cor: '#2c3038', tam: 0.7 });
+  for (const [x, z] of [[7, 4.4], [8, 9.4], [3, 6]]) pendente(C, x0 + x, z0 + z);
+}
+
+function construirFinanceiro() {
+  const x0 = 18; const z0 = 14;
+  const C = salaPadrao('Financeiro', 'Caixa, vendas e contas', x0, z0, { piso: ['#e4e6df', '#d9dcd2'] });
+  tvDoSetor(C, x0, z0, 'FINANCEIRO · MÊS', () => linhasDe('mya', 0, 3), '#e0c04a');
+  cadeira(C, x0 + 8, z0 + 3.0, '#2f6f45');
+  mesaTrabalho(C, x0 + 8, z0 + 4.4, 5.0, '#f4f1ea');
+  monitor(C, x0 + 7.1, 1.05, z0 + 4.4, Math.PI); monitor(C, x0 + 8.9, 1.05, z0 + 4.4, Math.PI);
+  caixa(C, x0 + 10.1, 1.05, z0 + 4.6, 0.3, 0.06, 0.4, '#2c3038');
+  for (let i = 0; i < 4; i++) caixa(C, x0 + 6.0, 1.05 + i * 0.05, z0 + 4.7, 0.5, 0.05, 0.35, i % 2 ? '#e9e4da' : '#f6f3ee');
+  for (let i = 0; i < 5; i++) caixa(C, x0 + 10.7, 1.05 + i * 0.06, z0 + 4.2, 0.35, 0.05, 0.35, '#d4af37');
+  // cofre, arquivos e mural de grafico
+  bloco(C, x0 + 12.6, 0, z0 + 0.8, x0 + 14.4, 1.7, z0 + 2.2, '#4a5058');
+  bloco(C, x0 + 12.8, 0.3, z0 + 2.2, x0 + 14.2, 1.4, z0 + 2.26, '#3a3f48');
+  caixa(C, x0 + 13.5, 0.7, z0 + 2.3, 0.35, 0.35, 0.05, '#d4af37');
+  for (let i = 0; i < 3; i++) {
+    bloco(C, x0 + 0.5, 0, z0 + 7.0 + i * 1.5, x0 + 1.6, 1.3, z0 + 8.3 + i * 1.5, '#9aa1aa');
+    bloco(C, x0 + 1.6, 0.25, z0 + 7.2 + i * 1.5, x0 + 1.66, 0.55, z0 + 8.1 + i * 1.5, '#7a828c');
+    bloco(C, x0 + 1.6, 0.8, z0 + 7.2 + i * 1.5, x0 + 1.66, 1.1, z0 + 8.1 + i * 1.5, '#7a828c');
+  }
+  bloco(C, x0, 1.3, z0 + 2.6, x0 + 0.1, 3.0, z0 + 7.0, '#f6f3ee');
+  [0.5, 0.8, 0.7, 1.1, 1.0, 1.4].forEach((h, i) => bloco(C, x0 + 0.1, 1.45, z0 + 2.85 + i * 0.66, x0 + 0.15, 1.45 + h, z0 + 3.35 + i * 0.66, i % 2 ? '#2f7f86' : '#d4af37'));
+  placa(C, 'CAIXA', 1.5, 0.4, { x: x0 + 0.17, y: 2.85, z: z0 + 4.8, ry: Math.PI / 2, fundo: '#f6f3ee', cor: '#2c3038', tam: 0.7 });
+  poltrona(C, x0 + 5, z0 + 9.2, '#2f6f45'); poltrona(C, x0 + 8.5, z0 + 9.2, '#2f6f45');
+  caixa(C, x0 + 6.75, 0, z0 + 9.3, 0.7, 0.5, 0.7, '#8a5a3b'); caixa(C, x0 + 6.75, 0.5, z0 + 9.3, 0.8, 0.06, 0.8, '#2c3038');
+  for (const [x, z] of [[8, 4.4], [6.8, 9.6]]) pendente(C, x0 + x, z0 + z);
+}
+
+const reais2 = (v) => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`;
+const nomeCurto = (n, max = 20) => (String(n).length > max ? `${String(n).slice(0, max - 1)}…` : String(n));
+function kyanLinhas(parte) {
+  if (!kyanSel) return parte === 0 ? linhasDe('kyan', 0, 2) : parte === 1 ? linhasDe('kyan', 2, 3) : linhasDe('kyan', 3, 4);
+  const d = kyanDados;
+  if (!d) return [['Carregando…', '', '#8b8d92']];
+  const crit = d.alertas.some((a) => a.nivel === 'critico');
+  if (parte === 0) return [['Campanhas ativas', d.campanhasAtivas, '#4cc3d9'], ['Alertas abertos', d.alertas.length, crit ? '#ff5252' : '#3ddc84']];
+  if (parte === 1) return [['Hoje', reais2(d.hoje.gasto), '#e0c04a'], [`Últimos ${d.periodoDias} dias`, reais2(d.per.gasto), '#e0c04a']];
+  return [['Resultados hoje', d.hoje.resultados, '#3ddc84'], ['Custo por resultado', d.hoje.cpl == null ? '—' : reais2(d.hoje.cpl), '#4cc3d9'], [`Resultados em ${d.periodoDias} dias`, d.per.resultados, '#5b8def']];
+}
+const kyanTitulo = (base) => (kyanSel && kyanDados ? `${base} · ${nomeCurto(kyanDados.nome.replace(/ \(\d+ contas?\)$/, ''), 14)}` : base);
+function kyanExtras() {
+  const d = kyanDados;
+  return [
+    ['Cliente / BM', d.nome], ['Gasto hoje', reais2(d.hoje.gasto)], ['Resultados hoje', String(d.hoje.resultados)],
+    ['Custo por resultado', d.hoje.cpl == null ? '—' : reais2(d.hoje.cpl)], [`Gasto em ${d.periodoDias} dias`, reais2(d.per.gasto)],
+    [`Resultados em ${d.periodoDias} dias`, String(d.per.resultados)], [`CTR (${d.periodoDias} dias)`, d.per.ctr == null ? '—' : `${String(d.per.ctr).replace('.', ',')}%`],
+    ['Campanhas ativas', String(d.campanhasAtivas)], ['Alertas deste cliente', String(d.alertas.length)],
+  ];
+}
+function preencherOpcoes(sel, primeiro, grupos) {
+  sel.textContent = '';
+  sel.add(new Option(primeiro, ''));
+  for (const g of grupos) {
+    const og = document.createElement('optgroup');
+    og.label = g.grupo;
+    if (g.contas.length > 1) og.appendChild(new Option(`BM · ${g.grupo} (${g.contas.length} contas)`, `bm:${g.grupo}`));
+    for (const c of g.contas) og.appendChild(new Option(c.nome + (c.ativa ? '' : ' (inativa)'), c.id));
+    sel.add(og);
+  }
+}
+function mostrarControlesKyan(ok) {
+  kyanSelEl.hidden = !ok;
+  kyanPerEl.hidden = !ok || !kyanSel;
+  kyanCmpEl.hidden = !ok || !kyanSel;
+}
+async function carregarKyanContas() {
+  try {
+    const r = await ctx.api('/api/empresa/kyan/contas');
+    if (!r.grupos?.length) { mostrarControlesKyan(false); return; }
+    preencherOpcoes(kyanSelEl, 'Kyan: visão geral', r.grupos);
+    preencherOpcoes(kyanCmpEl, 'Comparar com…', r.grupos);
+    kyanSelEl.value = kyanSel;
+    if (kyanSelEl.value !== kyanSel) { kyanSel = ''; kyanSelEl.value = ''; }
+    kyanCmpEl.value = kyanSel2;
+    if (kyanCmpEl.value !== kyanSel2 || !kyanSel) { kyanSel2 = ''; kyanCmpEl.value = ''; }
+    mostrarControlesKyan(true);
+    if (kyanSel) carregarKyanCliente();
+  } catch { mostrarControlesKyan(false); }
+}
+async function carregarKyanCliente() {
+  if (kyanSelEl.options.length) mostrarControlesKyan(true);
+  if (!kyanSel) { kyanDados = null; kyanDados2 = null; desenharTelas(); atualizarPainel(); return; }
+  const eu = ++kyanBusca;
+  const buscar = (sel) => ctx.api(`/api/empresa/kyan/cliente?sel=${encodeURIComponent(sel)}&dias=${kyanDias}`);
+  try {
+    const [a, b] = await Promise.all([buscar(kyanSel), kyanSel2 ? buscar(kyanSel2).catch(() => null) : Promise.resolve(null)]);
+    if (eu !== kyanBusca) return;
+    kyanDados = a;
+    kyanDados2 = b;
+  } catch (err) {
+    if (eu !== kyanBusca) return;
+    kyanDados = null; kyanDados2 = null;
+    const tit = painelEl?.querySelector('.emp-p-graf small');
+    if (tit && selecionado?.id === 'kyan') tit.textContent = `Não consegui ler esse cliente: ${err.message}`;
+  }
+  desenharTelas();
+  atualizarPainel();
+  if (selecionado?.id === 'kyan') { histCache.delete('kyan'); carregarHistorico(selecionado); carregarAtividade(selecionado); }
+}
+
+// comparacao lado a lado de dois clientes/BMs (verde = melhor)
+function renderComparacao() {
+  const el = painelEl?.querySelector('.emp-p-cmp');
+  if (!el) return;
+  const ativo = selecionado?.id === 'kyan' && kyanSel && kyanSel2 && kyanDados && kyanDados2;
+  el.hidden = !ativo;
+  const lista = painelEl.querySelector('.emp-p-dados');
+  if (lista) lista.hidden = !!ativo; // com a comparacao na tela, a lista simples do cliente A e redundante
+  if (!ativo) return;
+  const A = kyanDados; const B = kyanDados2; const n = A.periodoDias;
+  const nm = (d) => nomeCurto(d.nome.replace(/ \(\d+ contas?\)$/, ''), 13);
+  const num = (v) => (v == null ? '—' : String(v));
+  const linhas = [
+    ['Gasto hoje', reais2(A.hoje.gasto), reais2(B.hoje.gasto), null],
+    ['Resultados hoje', num(A.hoje.resultados), num(B.hoje.resultados), [A.hoje.resultados, B.hoje.resultados, 'maior']],
+    ['Custo/resultado hoje', A.hoje.cpl == null ? '—' : reais2(A.hoje.cpl), B.hoje.cpl == null ? '—' : reais2(B.hoje.cpl), [A.hoje.cpl, B.hoje.cpl, 'menor']],
+    [`Gasto ${n} dias`, reais2(A.per.gasto), reais2(B.per.gasto), null],
+    [`Resultados ${n} dias`, num(A.per.resultados), num(B.per.resultados), [A.per.resultados, B.per.resultados, 'maior']],
+    [`Custo/resultado ${n}d`, A.per.cpl == null ? '—' : reais2(A.per.cpl), B.per.cpl == null ? '—' : reais2(B.per.cpl), [A.per.cpl, B.per.cpl, 'menor']],
+    ['CTR', A.per.ctr == null ? '—' : `${A.per.ctr}%`, B.per.ctr == null ? '—' : `${B.per.ctr}%`, [A.per.ctr, B.per.ctr, 'maior']],
+    ['Campanhas ativas', num(A.campanhasAtivas), num(B.campanhasAtivas), null],
+    ['Alertas', num(A.alertas.length), num(B.alertas.length), [A.alertas.length, B.alertas.length, 'menor']],
+  ];
+  el.textContent = '';
+  const t = document.createElement('table');
+  const cab = document.createElement('tr');
+  for (const x of ['', nm(A), nm(B)]) { const th = document.createElement('th'); th.textContent = x; cab.appendChild(th); }
+  t.appendChild(cab);
+  for (const [rot, a, b, cmp] of linhas) {
+    const tr = document.createElement('tr');
+    const c0 = document.createElement('td'); c0.textContent = rot;
+    const c1 = document.createElement('td'); c1.textContent = a;
+    const c2 = document.createElement('td'); c2.textContent = b;
+    if (cmp && cmp[0] != null && cmp[1] != null && cmp[0] !== cmp[1]) {
+      const aMelhor = cmp[2] === 'maior' ? cmp[0] > cmp[1] : cmp[0] < cmp[1];
+      (aMelhor ? c1 : c2).className = 'melhor';
+    }
+    tr.append(c0, c1, c2);
+    t.appendChild(tr);
+  }
+  el.appendChild(t);
+}
+
+const animados = [];
+function construirTrafego() {
+  const x0 = 36; const z0 = 0;
+  const CIANO = '#4cc3d9';
+  const luz = { emissive: new THREE.Color(CIANO), emissiveIntensity: 1 };
+  const C = salaPadrao('Tráfego Pago', 'Campanhas, dados e estratégia', x0, z0, {
+    piso: ['#f4f8fb', '#e7eef3'],
+    tema: { painel: '#f4f8fb', viga: '#eef3f7', trim: CIANO, faixa: CIANO, placaFundo: '#ffffff', placaCor: '#0a8fa8', esq: '#e9eff4', ripa: '#d3dde6' },
+  });
+  // linhas de luz no chao (bordas abertas da sala) e halo sob a mesa
+  bloco(C, x0, 0.01, z0 + 11.5, x0 + 16, 0.05, z0 + 11.62, CIANO, luz);
+  bloco(C, x0 + 15.5, 0.01, z0, x0 + 15.62, 0.05, z0 + 11.5, CIANO, luz);
+  bloco(C, x0 + 4.6, 0.01, z0 + 1.8, x0 + 11.4, 0.04, z0 + 6.6, '#bff1fa', { transparent: true, opacity: 0.55 });
+  // 3 telas de dados holograficas nos fundos
+  const painel = (cx, titulo, linhas, cor) => novaTela(C, { x: x0 + cx, y: 1.95, z: z0 + 0.2, w: 3.9, h: 1.4, titulo, linhas, cor });
+  painel(3.5, () => kyanTitulo('CAMPANHAS'), () => kyanLinhas(0), CIANO);
+  painel(8, () => kyanTitulo('GASTO'), () => kyanLinhas(1), '#e0c04a');
+  painel(12.5, () => kyanTitulo('RESULTADOS'), () => kyanLinhas(2), '#3ddc84');
+  // mesa branca com tampo de vidro e 3 monitores
+  cadeira(C, x0 + 8, z0 + 3.4, '#dfe7ee');
+  mesaTrabalho(C, x0 + 8, z0 + 4.6, 6.0, '#f7fafc', '#cfeff6');
+  bloco(C, x0 + 5.0, 0.3, z0 + 5.05, x0 + 11.0, 0.36, z0 + 5.08, CIANO, luz);
+  for (const dx of [-1.5, 0, 1.5]) monitor(C, x0 + 8 + dx, 1.05, z0 + 4.6, Math.PI);
+  caixa(C, x0 + 5.6, 1.05, z0 + 4.8, 0.5, 0.03, 0.2, '#cfd8e0'); caixa(C, x0 + 10.6, 1.05, z0 + 4.7, 0.2, 0.25, 0.2, CIANO, luz);
+  // globo holografico e anel girando ao lado da mesa
+  caixa(C, x0 + 12.3, 0, z0 + 4.3, 0.7, 0.9, 0.7, '#f7fafc'); caixa(C, x0 + 12.3, 0.9, z0 + 4.3, 0.8, 0.06, 0.8, CIANO, luz);
+  const globo = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 1), new THREE.MeshBasicMaterial({ color: CIANO, wireframe: true, transparent: true, opacity: 0.85 }));
+  globo.position.set(x0 + 12.3, 1.75, z0 + 4.3); C.add(globo); animados.push({ obj: globo, vel: 0.8 });
+  const anel = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.02, 6, 36), new THREE.MeshBasicMaterial({ color: CIANO }));
+  anel.position.copy(globo.position); anel.rotation.x = Math.PI / 2.4; C.add(anel); animados.push({ obj: anel, vel: -1.2 });
+  // sofa de brainstorm, rack de servidor branco e quadro de estrategia
+  sofa(C, x0 + 4.5, z0 + 9.2, 4.2, 0, '#f1f5f8', CIANO);
+  caixa(C, x0 + 4.5, 0.38, z0 + 11.0, 1.6, 0.08, 0.7, '#cfeff6');
+  bloco(C, x0 + 13.0, 0, z0 + 8.0, x0 + 14.6, 2.3, z0 + 9.4, '#eef3f7');
+  for (let i = 0; i < 6; i++) caixa(C, x0 + 13.3 + (i % 2) * 0.6, 0.35 + Math.floor(i / 2) * 0.6, z0 + 9.42, 0.15, 0.08, 0.04, i % 3 ? '#3ddc84' : CIANO, { emissive: new THREE.Color(i % 3 ? '#3ddc84' : CIANO), emissiveIntensity: 1 });
+  bloco(C, x0, 1.3, z0 + 3.0, x0 + 0.1, 3.0, z0 + 9.0, '#ffffff');
+  [CIANO, '#5b8def', '#9b7ede', '#e0c04a'].forEach((cor, i) => bloco(C, x0 + 0.1, 1.6, z0 + 3.4 + i * 1.3, x0 + 0.14, 1.6 + 1.2 - i * 0.28, z0 + 3.4 + i * 1.3 + 1.0, cor));
+  placa(C, 'ESTRATÉGIA', 2.0, 0.4, { x: x0 + 0.16, y: 2.85, z: z0 + 6.0, ry: Math.PI / 2, fundo: '#ffffff', cor: '#0a8fa8', tam: 0.7 });
+  for (const [x, z] of [[8, 4.6], [4.5, 9.6]]) pendente(C, x0 + x, z0 + z);
 }
 
 // ---------- agentes e pacientes ----------
@@ -370,10 +757,11 @@ function criarAgente(def) {
   p.grupo.position.set(def.x, 0, def.z);
   p.yaw = p.yawAlvo = def.yaw || 0;
   p.fase = def.fase || 0;
+  p.sentada = !!def.sentada;
   scene.add(p.grupo);
   const tag = document.createElement('button');
   tag.type = 'button';
-  tag.className = 'emp-tag';
+  tag.className = `emp-tag ${def.tagClasse || ''}`;
   tag.innerHTML = '<span class="emp-tag-nome"></span><i class="emp-tag-dot"></i>';
   tag.querySelector('.emp-tag-nome').textContent = def.nome;
   tag.addEventListener('click', (ev) => { ev.stopPropagation(); selecionar(def.id); });
@@ -381,11 +769,12 @@ function criarAgente(def) {
   bolha.className = 'emp-bolha';
   bolha.hidden = true;
   tagsEl.append(bolha, tag);
-  const a = { ...def, pessoa: p, tag, bolha, dot: tag.querySelector('.emp-tag-dot'), ocupada: false, bolhaAte: 0 };
+  const a = { ...def, pessoa: p, tag, bolha, dot: tag.querySelector('.emp-tag-dot'), ocupada: false, bolhaAte: 0, tagY: def.tagY || 2.15 };
   agentes.push(a);
   return a;
 }
 
+const FRASES = { lay: 'Conferindo os trabalhos…', mya: 'Fechando o caixa…', kyan: 'Otimizando campanhas…', bia: 'Respondendo lead novo…', lua: 'Enviando follow-up…', lorena: 'Enviando aniversário…', anne: 'Conduzindo o funil…' };
 const PELES = ['#f1c9a5', '#e0ac82', '#c68a63', '#8d5a3b', '#f6d7b8'];
 const CABELOS = ['#2a1e17', '#4a3426', '#6b4a2f', '#1b1b1f', '#a37b45', '#7a2e2e'];
 const CAMISAS = ['#d98b5f', '#5b8def', '#9b7ede', '#e0c04a', '#5cae7f', '#d1626b', '#7d8896', '#eeeeee'];
@@ -417,6 +806,33 @@ function novoPaciente(preSentado = false) {
   p.rota = [[4.1, 0.4], [4.1, PONTO_FILA[1]], PONTO_FILA];
   pacientes.push(p);
   return p;
+}
+
+const LAB_FRENTE = [14, 26];
+function novoEntregador() {
+  const p = criarPessoa({ pele: escolher(PELES), cabelo: escolher(CABELOS), camisa: '#d98b5f', calca: '#3b4a6b', longo: false });
+  p.fase = Math.random() * 6;
+  p.vel = 1.8;
+  p.estagio = 'entrando';
+  p.caixa = caixa(p.corpo, 0, 0.8, 0.42, 0.45, 0.3, 0.32, '#c9a27a');
+  p.grupo.position.set(LAB_FRENTE[0], 0, LAB_FRENTE[1]);
+  p.yaw = p.yawAlvo = Math.PI;
+  p.rota = [[13, 20.6], [9.6, 20.6]];
+  scene.add(p.grupo);
+  return p;
+}
+function atualizarEntregador(p, dt) {
+  if (p.estagio === 'entrando' || p.estagio === 'saindo') {
+    if (!andar(p, dt)) return;
+    if (p.estagio === 'saindo') { scene.remove(p.grupo); entregador = null; entregaEm = aleatorio(22, 40); return; }
+    p.estagio = 'entrega'; p.espera = 3.5; p.modo = 'parado'; p.yawAlvo = Math.PI;
+    const lay = agentes.find((a) => a.id === 'lay');
+    if (lay) { lay.saudarAte = relogio + 2; falar(lay, 'Chegou trabalho do laboratório!', 3); }
+    return;
+  }
+  p.espera -= dt;
+  if (p.espera < 1.5 && p.caixa) { p.corpo.remove(p.caixa); p.caixa = null; }
+  if (p.espera <= 0) { p.estagio = 'saindo'; p.rota = [[13, 20.6], LAB_FRENTE]; }
 }
 
 function removerPaciente(p) {
@@ -463,8 +879,31 @@ function falar(agente, texto, seg = 3) {
 async function buscarEstado() {
   try {
     estado = await ctx.api('/api/empresa/estado');
+    const crit = Number(estado?.agentes?.kyan?.extras?.[1]?.[1]);
+    if (Number.isFinite(crit)) { if (somLigado && ultCriticos !== null && crit > ultCriticos) tocarAlerta(); ultCriticos = crit; }
     atualizarPainel();
+    if (kyanSel) carregarKyanCliente();
+    if (selecionado) carregarAtividade(selecionado);
+    for (const [id, d] of Object.entries(estado?.agentes || {})) if (d.ativa && id !== selecionado?.id) carregarAtividade({ id });
+    desenharTelaComercial();
+    desenharTelas();
   } catch { /* mantem o ultimo estado */ }
+}
+
+function tocarAlerta() {
+  try {
+    audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    audioCtx.resume?.();
+    [0, 0.22].forEach((atraso) => {
+      const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
+      o.type = 'sine'; o.frequency.value = atraso ? 660 : 880;
+      g.gain.setValueAtTime(0.0001, audioCtx.currentTime + atraso);
+      g.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + atraso + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + atraso + 0.18);
+      o.connect(g).connect(audioCtx.destination);
+      o.start(audioCtx.currentTime + atraso); o.stop(audioCtx.currentTime + atraso + 0.2);
+    });
+  } catch { /* sem audio no aparelho */ }
 }
 
 function tempoAtras(iso) {
@@ -479,10 +918,105 @@ function tempoAtras(iso) {
 function selecionar(id) {
   selecionado = agentes.find((a) => a.id === id) || null;
   atualizarPainel();
+  if (selecionado) { carregarHistorico(selecionado); carregarAtividade(selecionado); }
   if (selecionado) {
     const p = selecionado.pessoa.grupo.position;
     irPara(p.x + 0.5, p.z + 1.5, 1.8);
   }
+}
+
+const quandoCurto = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Maceio' }) === d.toLocaleDateString('pt-BR', { timeZone: 'America/Maceio' });
+  return hoje ? d.toLocaleTimeString('pt-BR', { timeZone: 'America/Maceio', hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleString('pt-BR', { timeZone: 'America/Maceio', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+};
+function renderAtividade(a, itens) {
+  if (selecionado !== a || !painelEl) return;
+  const ul = painelEl.querySelector('.emp-p-ativ ul');
+  ul.textContent = '';
+  if (!itens.length) { const li = document.createElement('li'); li.className = 'vazio'; li.textContent = 'Nada registrado ainda.'; ul.appendChild(li); return; }
+  for (const it of itens) {
+    const li = document.createElement('li');
+    if (it.nivel === 'critico') li.className = 'crit';
+    const h = document.createElement('em'); h.textContent = quandoCurto(it.quando);
+    const t = document.createElement('span'); t.textContent = it.texto;
+    li.append(h, t);
+    ul.appendChild(li);
+  }
+}
+async function carregarAtividade(a) {
+  if (a.id === 'kyan' && kyanSel) {
+    const marca = kyanDados2 ? (d) => ` [${nomeCurto(d.nome.replace(/ \(\d+ contas?\)$/, ''), 12)}]` : () => '';
+    const itens = [...(kyanDados?.alertas || []).map((x) => ({ quando: x.quando, texto: `${x.titulo}${x.conta ? ` · ${x.conta}` : ''}${marca(kyanDados)}`, nivel: x.nivel })),
+      ...(kyanDados2?.alertas || []).map((x) => ({ quando: x.quando, texto: `${x.titulo}${x.conta ? ` · ${x.conta}` : ''}${marca(kyanDados2)}`, nivel: x.nivel }))];
+    renderAtividade(a, itens);
+    return;
+  }
+  try {
+    const { itens } = await ctx.api(`/api/empresa/atividade?agente=${a.id}`);
+    ativCache.set(a.id, itens);
+    renderAtividade(a, itens);
+  } catch { /* mantem o que ja estava na tela */ }
+}
+
+async function carregarHistorico(a) {
+  const alvo = painelEl?.querySelector('.emp-p-graf');
+  if (!alvo) return;
+  const tit = alvo.querySelector('small');
+  const barras = alvo.querySelector('.emp-p-barras');
+  const desenhar = (h) => {
+    tit.textContent = h.titulo;
+    barras.textContent = '';
+    const max = Math.max(1, ...h.pontos.map((x) => x.valor));
+    for (const pt of h.pontos) {
+      const b = document.createElement('div');
+      b.className = 'emp-barra';
+      b.title = `${pt.rotulo}: ${pt.valor}`;
+      const v = document.createElement('span');
+      if (h.pontos.length <= 10) v.textContent = pt.valor > 999 ? `${Math.round(pt.valor / 100) / 10}k` : String(Math.round(pt.valor * 10) / 10);
+      const i = document.createElement('i'); i.style.height = `${Math.max(3, (pt.valor / max) * 46)}px`;
+      const l = document.createElement('em');
+      if (h.pontos.length <= 10 || h.pontos.indexOf(pt) % 5 === 0) l.textContent = pt.rotulo;
+      b.append(v, i, l);
+      barras.appendChild(b);
+    }
+    if (!h.pontos.length) tit.textContent = `${h.titulo} — sem dados ainda`;
+  };
+  if (a.id === 'kyan' && kyanSel) {
+    if (kyanDados && kyanSel2 && kyanDados2) {
+      tit.textContent = `Gasto por dia (R$) · ${nomeCurto(kyanDados.nome.replace(/ \(\d+ contas?\)$/, ''), 12)} × ${nomeCurto(kyanDados2.nome.replace(/ \(\d+ contas?\)$/, ''), 12)}`;
+      barras.textContent = '';
+      const max = Math.max(1, ...kyanDados.dias.map((x) => x.valor), ...kyanDados2.dias.map((x) => x.valor));
+      const total = kyanDados.dias.length;
+      kyanDados.dias.forEach((pt, idx) => {
+        const pt2 = kyanDados2.dias[idx] || { valor: 0 };
+        const b = document.createElement('div'); b.className = 'emp-barra'; b.title = `${pt.rotulo}: ${pt.valor} × ${pt2.valor}`;
+        const par = document.createElement('div'); par.className = 'emp-par';
+        const i1 = document.createElement('i'); i1.style.height = `${Math.max(3, (pt.valor / max) * 46)}px`;
+        const i2 = document.createElement('i'); i2.className = 'b'; i2.style.height = `${Math.max(3, (pt2.valor / max) * 46)}px`;
+        par.append(i1, i2);
+        const l = document.createElement('em'); if (total <= 10 || idx % 5 === 0) l.textContent = pt.rotulo;
+        b.append(par, l);
+        barras.appendChild(b);
+      });
+      return;
+    }
+    if (kyanDados) return desenhar({ titulo: `Gasto por dia · ${nomeCurto(kyanDados.nome, 30)} (R$)`, pontos: kyanDados.dias });
+    tit.textContent = 'Carregando dados do cliente…'; barras.textContent = '';
+    return;
+  }
+  const c = histCache.get(a.id);
+  if (c && Date.now() - c.em < 60000) return desenhar(c.h);
+  tit.textContent = 'Carregando histórico…'; barras.textContent = '';
+  try {
+    const h = await ctx.api(`/api/empresa/historico?agente=${a.id}`);
+    if (selecionado !== a) return;
+    if (h.carregando) { tit.textContent = 'Buscando no Meta… aguarde alguns segundos'; setTimeout(() => { if (selecionado === a) carregarHistorico(a); }, 5000); return; }
+    histCache.set(a.id, { em: Date.now(), h });
+    desenhar(h);
+  } catch { tit.textContent = 'Histórico indisponível'; }
 }
 
 function atualizarPainel() {
@@ -492,19 +1026,25 @@ function atualizarPainel() {
   if (!a) return;
   const d = estado?.agentes?.[a.id];
   const ativa = !!d?.ativa;
+  const kyanCliente = a.id === 'kyan' && kyanSel && kyanDados;
+  const nCrit = kyanCliente ? kyanDados.alertas.filter((x) => x.nivel === 'critico').length : 0;
+  const alerta = kyanCliente ? (nCrit ? `${nCrit} alerta(s) crítico(s) deste cliente` : null) : d?.alerta || null;
   painelEl.querySelector('.emp-p-nome').textContent = a.nome;
   painelEl.querySelector('.emp-p-funcao').textContent = a.funcao;
   const st = painelEl.querySelector('.emp-p-status');
-  st.textContent = ativa ? 'Trabalhando agora' : 'Disponível';
-  st.className = `emp-p-status ${ativa ? 'on' : ''}`;
+  st.textContent = alerta ? 'Atenção' : ativa ? 'Trabalhando agora' : 'Disponível';
+  st.className = `emp-p-status ${alerta ? 'alerta' : ativa ? 'on' : ''}`;
   const linhas = [];
-  linhas.push(['Mensagens enviadas hoje', d ? String(d.hoje) : '—']);
-  linhas.push(['Última atividade', d ? tempoAtras(d.ultimaEm) : '—']);
+  if (alerta) linhas.push(['Alerta', alerta]);
+  if (!['lay', 'mya', 'kyan'].includes(a.id)) linhas.push(['Mensagens enviadas hoje', d ? String(d.hoje) : '—']);
+  linhas.push([['lay', 'mya'].includes(a.id) ? 'Último lançamento' : 'Última atividade', d ? tempoAtras(d.ultimaEm) : '—']);
+  for (const [k, v] of (kyanCliente ? kyanExtras() : d?.extras) || []) linhas.push([k, v]);
   if (a.id === 'liz') linhas.push(['Consultas na agenda hoje', estado?.pacientesHoje == null ? 'agenda não conectada' : String(estado.pacientesHoje)]);
   painelEl.querySelector('.emp-p-dados').innerHTML = linhas.map(([k, v]) => `<div><span>${k}</span><strong></strong></div>`).join('');
   painelEl.querySelectorAll('.emp-p-dados strong').forEach((el, i) => { el.textContent = linhas[i][1]; });
   painelEl.querySelector('.emp-p-av').style.background = a.visual.camisa;
   painelEl.querySelector('.emp-p-av').textContent = a.nome[0];
+  renderComparacao();
 }
 
 // ---------- camera ----------
@@ -638,6 +1178,8 @@ function quadro(agora) {
   spawnEm -= dt;
   if (spawnEm <= 0 && pacientes.length < 6) { novoPaciente(); spawnEm = aleatorio(6, 11); }
   for (const p of [...pacientes]) { atualizarPaciente(p, dt, liz); }
+  if (entregador) atualizarEntregador(entregador, dt);
+  else { entregaEm -= dt; if (entregaEm <= 0) entregador = novoEntregador(); }
 
   // agentes
   for (const a of agentes) {
@@ -648,20 +1190,31 @@ function quadro(agora) {
       if (relogio < (a.saudarAte || 0)) p.modo = 'acenando';
       else if (real || atendendoBalcao || (relogio % 34) < 9) p.modo = 'digitando';
       else p.modo = 'parado';
-      if (real && relogio > a.bolhaAte && (Math.floor(relogio) % 14 === 0)) falar(a, 'Atendendo no WhatsApp…', 4);
+      if (real && relogio > a.bolhaAte && (Math.floor(relogio) % 14 === 0)) falar(a, ativTexto('liz') ? `${ativTexto('liz')}…` : 'Atendendo no WhatsApp…', 4);
+    } else if (a.id === 'lay' && relogio < (a.saudarAte || 0)) {
+      p.modo = 'acenando';
+    } else {
+      // agentes da mesa: digitam quando ha atividade real; sem atividade, alternam trabalho e pausa
+      p.modo = real || ((relogio + (p.fase || 0) * 7) % 30) < 11 ? 'digitando' : 'parado';
+      const frase = ativTexto(a.id) ? `${ativTexto(a.id)}…` : FRASES[a.id];
+      if (real && frase && relogio > a.bolhaAte && (Math.floor(relogio + (p.fase || 0)) % 16 === 0)) falar(a, frase, 4);
     }
-    a.dot.className = `emp-tag-dot ${real ? 'on' : ''}`;
+    const alerta = estado?.agentes?.[a.id]?.alerta;
+    a.dot.className = `emp-tag-dot ${alerta ? 'alerta' : real ? 'on' : ''}`;
+    if (alerta && relogio > a.bolhaAte && (Math.floor(relogio + (p.fase || 0)) % 22 === 0)) falar(a, `⚠ ${alerta}`, 5);
     animarPessoa(p, dt, relogio);
     if (!a.bolha.hidden && relogio > a.bolhaAte) a.bolha.hidden = true;
   }
+  for (const an of animados) an.obj.rotation.y += dt * an.vel;
   for (const p of pacientes) animarPessoa(p, dt, relogio);
+  if (entregador) animarPessoa(entregador, dt, relogio);
 
   // etiquetas HTML acompanham os personagens
   const r = canvas.getBoundingClientRect();
   const v = new THREE.Vector3();
   for (const a of agentes) {
     a.pessoa.grupo.getWorldPosition(v);
-    v.y += 2.15;
+    v.y += a.tagY;
     v.project(camera);
     const x = ((v.x + 1) / 2) * r.width;
     const y = ((1 - v.y) / 2) * r.height;
@@ -685,6 +1238,9 @@ function montarInterface() {
           <div class="emp-p-topo"><span class="emp-p-av"></span><div><strong class="emp-p-nome"></strong><small class="emp-p-funcao"></small></div></div>
           <span class="emp-p-status"></span>
           <div class="emp-p-dados"></div>
+          <div class="emp-p-cmp" hidden></div>
+          <div class="emp-p-ativ"><small>Atividade recente (dados do app)</small><ul></ul></div>
+          <div class="emp-p-graf"><small></small><div class="emp-p-barras"></div></div>
         </aside>
       </div>
     </div>`;
@@ -693,14 +1249,16 @@ function montarInterface() {
   tagsEl = raiz.querySelector('.emp-tags');
   painelEl = raiz.querySelector('.emp-painel');
   chipsEl = raiz.querySelector('.emp-chips');
+  try { somLigado = localStorage.getItem('empresaSom') === '1'; } catch { somLigado = false; }
+  try { kyanSel = localStorage.getItem('empresaKyanSel') || ''; kyanSel2 = localStorage.getItem('empresaKyanSel2') || ''; kyanDias = [7, 14, 30].includes(Number(localStorage.getItem('empresaKyanDias'))) ? Number(localStorage.getItem('empresaKyanDias')) : 7; } catch { kyanSel = ''; kyanSel2 = ''; kyanDias = 7; }
   dicaEl = raiz.querySelector('.emp-dica');
   painelEl.querySelector('.emp-p-fechar').addEventListener('click', () => { selecionado = null; atualizarPainel(); });
   const setores = [
     { nome: 'Recepção', x: 8, z: 6, pronto: true },
-    { nome: 'Comercial', x: 26, z: 6 },
-    { nome: 'Laboratório', x: 8, z: 20 },
-    { nome: 'Financeiro', x: 26, z: 20 },
-    { nome: 'Tráfego Pago', x: 44, z: 6 },
+    { nome: 'Comercial', x: 26, z: 6, pronto: true },
+    { nome: 'Laboratório', x: 8, z: 20, pronto: true },
+    { nome: 'Financeiro', x: 26, z: 20, pronto: true },
+    { nome: 'Tráfego Pago', x: 44, z: 6, pronto: true },
   ];
   for (const s of setores) {
     const b = document.createElement('button');
@@ -710,6 +1268,59 @@ function montarInterface() {
     b.addEventListener('click', () => irPara(s.x, s.z, 1));
     chipsEl.appendChild(b);
   }
+  kyanSelEl = document.createElement('select');
+  kyanSelEl.className = 'emp-chip emp-kyan-sel';
+  kyanSelEl.hidden = true;
+  kyanSelEl.title = 'Escolha um cliente ou BM para o Kyan mostrar os dados básicos das campanhas';
+  kyanSelEl.addEventListener('change', () => {
+    kyanSel = kyanSelEl.value;
+    if (!kyanSel) { kyanSel2 = ''; kyanCmpEl.value = ''; }
+    try { localStorage.setItem('empresaKyanSel', kyanSel); } catch { /* sem armazenamento */ }
+    kyanDados = null; kyanDados2 = null;
+    mostrarControlesKyan(true);
+    desenharTelas();
+    carregarKyanCliente();
+    selecionar('kyan');
+  });
+  kyanPerEl = document.createElement('select');
+  kyanPerEl.className = 'emp-chip emp-kyan-per';
+  kyanPerEl.hidden = true;
+  kyanPerEl.title = 'Período dos dados do Kyan';
+  for (const n of [7, 14, 30]) kyanPerEl.add(new Option(`Últimos ${n} dias`, String(n)));
+  kyanPerEl.value = String(kyanDias);
+  kyanPerEl.addEventListener('change', () => {
+    kyanDias = Number(kyanPerEl.value) || 7;
+    try { localStorage.setItem('empresaKyanDias', String(kyanDias)); } catch { /* sem armazenamento */ }
+    kyanDados = null; kyanDados2 = null;
+    desenharTelas();
+    carregarKyanCliente();
+  });
+  kyanCmpEl = document.createElement('select');
+  kyanCmpEl.className = 'emp-chip emp-kyan-sel emp-kyan-cmp';
+  kyanCmpEl.hidden = true;
+  kyanCmpEl.title = 'Escolha um segundo cliente ou BM para comparar lado a lado';
+  kyanCmpEl.addEventListener('change', () => {
+    kyanSel2 = kyanCmpEl.value;
+    try { localStorage.setItem('empresaKyanSel2', kyanSel2); } catch { /* sem armazenamento */ }
+    kyanDados2 = null;
+    carregarKyanCliente();
+    selecionar('kyan');
+  });
+  chipsEl.append(kyanSelEl, kyanPerEl, kyanCmpEl);
+  carregarKyanContas();
+  const som = document.createElement('button');
+  som.type = 'button';
+  som.className = 'emp-chip emp-som';
+  const rotuloSom = () => { som.textContent = somLigado ? '🔔 Alerta sonoro: ligado' : '🔕 Alerta sonoro: desligado'; };
+  rotuloSom();
+  som.title = 'Toca um aviso quando o Kyan encontrar um novo alerta crítico nas campanhas';
+  som.addEventListener('click', () => {
+    somLigado = !somLigado;
+    try { localStorage.setItem('empresaSom', somLigado ? '1' : '0'); } catch { /* sem armazenamento */ }
+    rotuloSom();
+    if (somLigado) tocarAlerta();
+  });
+  chipsEl.appendChild(som);
 }
 
 export function iniciar(container, contexto) {
@@ -725,15 +1336,23 @@ export function iniciar(container, contexto) {
   scene.add(sol);
 
   construirRecepcao();
-  construirSalaEmBreve('Comercial', 18, 0, 16, 12);
-  construirSalaEmBreve('Laboratório', 0, 14, 16, 12);
-  construirSalaEmBreve('Financeiro', 18, 14, 16, 12);
-  construirSalaEmBreve('Tráfego Pago', 36, 0, 16, 12);
+  construirComercial();
+  construirLaboratorio();
+  construirFinanceiro();
+  construirTrafego();
 
   criarAgente({
     id: 'liz', nome: 'Liz', funcao: 'Recepção · IA de autoatendimento', x: 8.5, z: 2.0, yaw: 0, fase: 1,
     visual: { pele: '#f1c9a5', cabelo: '#5a3a2a', camisa: '#2f7f86', calca: '#2c3038', longo: true },
   });
+  const mesa = (id, nome, funcao, x, z, visual, fase) => criarAgente({ id, nome, funcao, x: 18 + x, z, yaw: 0, fase, sentada: true, tagY: 1.85, visual });
+  mesa('bia', 'Bia', 'Comercial · atende os leads novos', 4, 3.2, { pele: '#c68a63', cabelo: '#1b1b1f', camisa: '#d1626b', calca: '#2c3038', longo: true }, 2);
+  mesa('lua', 'Lua', 'Comercial · follow-up', 11.5, 3.2, { pele: '#f1c9a5', cabelo: '#a37b45', camisa: '#9b7ede', calca: '#2c3038', longo: false }, 3);
+  mesa('lorena', 'Lorena', 'Comercial · resgates e aniversariantes', 4, 8.2, { pele: '#e0ac82', cabelo: '#7a2e2e', camisa: '#e0c04a', calca: '#3b4a6b', longo: true }, 4);
+  mesa('anne', 'Anne', 'Comercial · funis do Follow Up Inteligente', 11.5, 8.2, { pele: '#f6d7b8', cabelo: '#4a3426', camisa: '#5cae7f', calca: '#2c3038', longo: false }, 5);
+  criarAgente({ id: 'lay', nome: 'Lay', funcao: 'Laboratório · andamento dos trabalhos e pacientes em tratamento', x: 7, z: 17.2, yaw: 0, fase: 6, sentada: true, tagY: 1.85, visual: { pele: '#f1c9a5', cabelo: '#5a3a2a', camisa: '#f4f6f8', calca: '#3b4a6b', longo: true } });
+  criarAgente({ id: 'mya', nome: 'Mya', funcao: 'Financeiro · caixa, vendas e contas', x: 26, z: 17.2, yaw: 0, fase: 7, sentada: true, tagY: 1.85, visual: { pele: '#8d5a3b', cabelo: '#1b1b1f', camisa: '#2f8049', calca: '#2c3038', longo: true } });
+  criarAgente({ id: 'kyan', nome: 'Kyan', funcao: 'Tráfego pago · tecnologia, marketing digital e estratégia', x: 44, z: 3.4, yaw: 0, fase: 8, sentada: true, tagY: 1.85, tagClasse: 'tech', visual: { pele: '#e0ac82', cabelo: '#e8eef5', camisa: '#f6fafd', calca: '#e9eff4', sapato: '#cfd8e0', longo: false, barba: true, neon: '#4cc3d9' } });
   novoPaciente(true); novoPaciente(true); novoPaciente(true);
   spawnEm = 3;
 

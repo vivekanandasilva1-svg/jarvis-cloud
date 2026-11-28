@@ -2246,7 +2246,7 @@ function empresaAoMudarAba(aba) {
   if (aba !== 'empresa') { empresaModulo?.pausar(); return; }
   if (empresaModulo) { empresaModulo.retomar(); return; }
   tabEmpresa.textContent = 'Carregando o escritório...';
-  import('./minha-empresa.js?v=20261126c').then((m) => {
+  import('./minha-empresa.js?v=20261127b').then((m) => {
     empresaModulo = m;
     tabEmpresa.textContent = '';
     m.iniciar(tabEmpresa, { api: igApi });
@@ -7108,6 +7108,13 @@ const fuAtivoLabel = document.getElementById('fuAtivoLabel');
 const fuPromptGeral = document.getElementById('fuPromptGeral');
 const fuHoraInicio = document.getElementById('fuHoraInicio');
 const fuHoraFim = document.getElementById('fuHoraFim');
+const fuModoResgate = document.getElementById('fuModoResgate');
+const fuModoResgateLabel = document.getElementById('fuModoResgateLabel');
+const fuAvisoResgate = document.getElementById('fuAvisoResgate');
+const fuPromptResgate = document.getElementById('fuPromptResgate');
+const fuUsarRecomendadoGeral = document.getElementById('fuUsarRecomendadoGeral');
+const fuUsarRecomendadoResgate = document.getElementById('fuUsarRecomendadoResgate');
+let fuRecomendados = { promptGeral: '', promptResgate: '' };
 const fuSalvar = document.getElementById('fuSalvar');
 const fuErro = document.getElementById('fuErro');
 const fuEtapasLista = document.getElementById('fuEtapasLista');
@@ -7115,6 +7122,32 @@ const fuEtapasLista = document.getElementById('fuEtapasLista');
 fuAtivo.addEventListener('change', () => {
   fuAtivoLabel.textContent = fuAtivo.checked ? 'Ativado' : 'Desativado';
 });
+
+// o resgate depende do Auto Atendimento: depois que o lead volta, e ele quem conversa e marca o horario na agenda
+async function avisarResgateSemAutoAtendimento() {
+  fuAvisoResgate.hidden = true;
+  if (!fuModoResgate.checked) return;
+  try {
+    const res = await fetch('/api/auto-atendimento/config', { headers: { 'x-app-password': appPassword } });
+    const cfg = await res.json();
+    if (res.ok && !cfg.ativo) {
+      fuAvisoResgate.textContent = 'Atenção: o Auto Atendimento está desativado. Sem ele, o lead resgatado volta para Em Atendimento mas ninguém responde automaticamente nem marca o horário. Ative o Auto Atendimento para o resgate funcionar por completo.';
+      fuAvisoResgate.hidden = false;
+    }
+  } catch { /* sem aviso */ }
+}
+fuModoResgate.addEventListener('change', () => {
+  fuModoResgateLabel.textContent = fuModoResgate.checked ? 'Ativado' : 'Desativado';
+  avisarResgateSemAutoAtendimento();
+});
+function usarRecomendado(campo, texto, nome) {
+  if (!texto) return;
+  if (campo.value.trim() && campo.value.trim() !== texto.trim() && !confirm(`Substituir o ${nome} atual pelo texto recomendado?`)) return;
+  campo.value = texto;
+  campo.dispatchEvent(new Event('input', { bubbles: true }));
+}
+fuUsarRecomendadoGeral.addEventListener('click', () => usarRecomendado(fuPromptGeral, fuRecomendados.promptGeral, 'script geral'));
+fuUsarRecomendadoResgate.addEventListener('click', () => usarRecomendado(fuPromptResgate, fuRecomendados.promptResgate, 'texto de postura'));
 
 async function carregarFollowUp() {
   fuErro.hidden = true;
@@ -7124,7 +7157,12 @@ async function carregarFollowUp() {
     if (!res.ok) throw new Error(config.erro || 'erro desconhecido');
     fuAtivo.checked = !!config.ativo;
     fuAtivoLabel.textContent = config.ativo ? 'Ativado' : 'Desativado';
+    fuRecomendados = config.recomendados || fuRecomendados;
     fuPromptGeral.value = config.promptGeral || '';
+    fuModoResgate.checked = !!config.modoResgate;
+    fuModoResgateLabel.textContent = config.modoResgate ? 'Ativado' : 'Desativado';
+    fuPromptResgate.value = config.promptResgate || fuRecomendados.promptResgate || ''; // vazio = mostra a recomendada (so vale depois de salvar)
+    avisarResgateSemAutoAtendimento();
     fuHoraInicio.value = config.horaInicio || '08:00';
     fuHoraFim.value = config.horaFim || '20:00';
     limparPendente(fuSalvar);
@@ -7135,7 +7173,7 @@ async function carregarFollowUp() {
   carregarEtapasFollowUp();
 }
 
-rastrearAlteracoes(fuSalvar, [fuAtivo, fuPromptGeral, fuHoraInicio, fuHoraFim]);
+rastrearAlteracoes(fuSalvar, [fuAtivo, fuPromptGeral, fuHoraInicio, fuHoraFim, fuModoResgate, fuPromptResgate]);
 fuSalvar.addEventListener('click', async () => {
   fuErro.hidden = true;
   const ativo = fuAtivo.checked;
@@ -7157,7 +7195,7 @@ fuSalvar.addEventListener('click', async () => {
     const res = await fetch('/api/follow-up/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-      body: JSON.stringify({ ativo, promptGeral, horaInicio, horaFim }),
+      body: JSON.stringify({ ativo, promptGeral, horaInicio, horaFim, modoResgate: fuModoResgate.checked, promptResgate: fuPromptResgate.value.trim() }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');

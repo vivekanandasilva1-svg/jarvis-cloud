@@ -2465,12 +2465,12 @@ app.get('/api/follow-up/config', async (req, res) => {
 });
 
 app.post('/api/follow-up/config', async (req, res) => {
-  const { ativo, promptGeral, horaInicio, horaFim } = req.body || {};
+  const { ativo, promptGeral, horaInicio, horaFim, modoResgate, promptResgate } = req.body || {};
   if (ativo && !promptGeral) {
     return res.status(400).json({ erro: 'pra ativar, escreva o script geral de como a IA deve se comportar' });
   }
   try {
-    await followUp.salvarConfig(req.tenantId, { ativo, promptGeral, horaInicio, horaFim });
+    await followUp.salvarConfig(req.tenantId, { ativo, promptGeral, horaInicio, horaFim, modoResgate, promptResgate });
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });
@@ -3085,6 +3085,10 @@ const rotaIg = (fn) => async (req, res) => {
 
 // "Minha Empresa" (escritorio 3D): quem esta trabalhando agora e os numeros do dia - so leitura
 app.get('/api/empresa/estado', rotaIg(async (req, res) => res.json(await empresa.estado(req.tenantId))));
+app.get('/api/empresa/historico', rotaIg(async (req, res) => res.json(await empresa.historico(req.tenantId, String(req.query.agente || '')))));
+app.get('/api/empresa/atividade', rotaIg(async (req, res) => res.json(await empresa.atividade(req.tenantId, String(req.query.agente || '')))));
+app.get('/api/empresa/kyan/contas', rotaIg(async (req, res) => res.json(await empresa.kyanContas(req.tenantId))));
+app.get('/api/empresa/kyan/cliente', rotaIg(async (req, res) => res.json(await empresa.kyanCliente(req.tenantId, String(req.query.sel || ''), Number(req.query.dias) || 7))));
 
 app.get('/api/instagram/status', rotaIg(async (req, res) => res.json(await instagram.status(req.tenantId))));
 app.post('/api/instagram/desconectar', rotaIg(async (req, res) => { await instagram.desconectar(req.tenantId); res.json({ ok: true }); }));

@@ -1373,5 +1373,61 @@
     "titulo": "Resultados etapa 2: agenda, recuperacao, origem/anuncios e metas",
     "conteudo": "Complementa [crm:resultados-painel-gamificado]. Novas sub-abas Agenda (comparecimento, faltas, fechamento, proximos 7 dias), Recuperacao (destaque 'dinheiro que voltou' = orcamentos aprovados + tratamentos retomados; orcamentos em aberto em R$ com parados +30 dias; resgate; retorno; indicacoes; follow-up automatico com quantos voltaram a responder em 3 dias; aniversariantes), Origem e anuncios (leads por campanha/origem com conversao + Meta Ads: investido, resultados, custo por resultado e por contato no CRM) e Metas e conquistas (metas do mes editaveis com projecao e confete). Rotas novas GET /api/crm/resultados-clinica, /resultados-anuncios, /resultados-metas e PUT /resultados-metas (so dono); src/resultadosClinica.js, tabela rs_metas por tenant. Cada bloco falha isolado (modulo sem dados mostra aviso) e o Meta carrega a parte. Pendente: Instagram (alcance/posts) e historico de metas de meses anteriores. Dinheiro recuperado so soma o que o app tem registrado (Clinicorp/resgate), nao inventa."
   },
+  {
+    "chave": "empresa:escritorio-3d-fase2-comercial",
+    "modulo": "empresa",
+    "data": "2026-11-26",
+    "tipo": "funcao",
+    "titulo": "Minha Empresa: Fase 2 - sala Comercial com Bia, Lua, Lorena e Anne",
+    "conteudo": "Sala Comercial construida (4 estacoes, TV com os numeros do dia, quadro do funil, plantas, bebedouro). Cada agente anima pela atividade real, agora separada em src/empresa.js: Liz = respostas da IA (autor 'ia') em contatos fora das etapas iniciais; Bia = respostas da IA em novo_lead/em_atendimento/em_negociacao/pre_agendado (etapa ATUAL do contato, nao a da hora do envio); Lua = follow_up_contatos; Anne = fui_execucoes (Follow Up Inteligente); Lorena = aniversariantes_envios enviados. Painel de cada agente mostra mensagens de hoje, ultima atividade e um numero proprio (leads atendidos, leads no follow-up, leads nos funis, aniversarios na fila). Bolinha verde = mexeu ha menos de 3 min. Pendente: Lorena ainda nao conta os resgates (res_pacientes) nem disparos; Fase 3 Laboratorio (Lay) e Financeiro (Mya); Fase 4 Trafego Pago (Kyan)."
+  },
+  {
+    "chave": "empresa:escritorio-3d-fase3-4",
+    "modulo": "empresa",
+    "data": "2026-11-26",
+    "tipo": "funcao",
+    "titulo": "Minha Empresa: Fases 3 e 4 - Laboratorio (Lay), Financeiro (Mya) e Trafego Pago (Kyan)",
+    "conteudo": "Tres salas novas com TVs de dados reais e os agentes Lay, Mya e Kyan (homem, com barba). Dados em src/empresa.js SEM gastar cota do Clinicorp alem do necessario: Lay = indicadores do laboratorio que o gestor lanca por semana no Gestao (gestao_lancamentos, so banco; alerta se houver trabalhos atrasados); Mya = lancamentos do financeiro (inadimplencia, contas a vencer) + vendas/recebido/despesas do mes do Clinicorp com cache de 30 min, consulta marcada como automatica (comoAutomatico) e feita so enquanto alguem esta com a aba aberta (alerta se houver inadimplencia lancada); Kyan = alertas abertos/criticos do monitor de campanhas (meta_saude_alertas) + gasto e resultados de hoje das contas escolhidas no painel de Vendas (cache de 15 min, ate 10 contas). Bolinha vermelha + balao quando ha alerta. Limite: sem lancamento semanal no Gestao, Lay e Mya mostram 'nao lancado' (nao existe integracao automatica de laboratorio); Mya mostra 'indisponivel' se o Clinicorp estiver sem cota ou desconectado. Pendente: dar mais vida ao fluxo (pacientes no laboratorio), historico/graficos no painel dos agentes e som opcional."
+  },
+  {
+    "chave": "empresa:escritorio-3d-extras",
+    "modulo": "empresa",
+    "data": "2026-11-26",
+    "tipo": "melhoria",
+    "titulo": "Minha Empresa: historico no painel, entregador no laboratorio e alerta sonoro do Kyan",
+    "conteudo": "(1) Painel de cada agente ganhou grafico de barras via GET /api/empresa/historico?agente=<id>: Liz/Bia = mensagens da IA por dia (7 dias, separadas pela etapa ATUAL do contato), Lua+Anne = mensagens de follow-up por dia (somadas, pois ambas gravam autor 'followup'), Lorena = aniversarios enviados, Lay/Mya = lancamentos semanais do Gestao (emProducao e inadimplencia), Kyan = gasto por dia das contas do painel de Vendas (Meta, cache de 30 min; a 1a chamada responde 'carregando' e a tela tenta de novo em 5 s). (2) Entregador ilustrativo chega pela frente do laboratorio com uma caixa, a Lay acena e ele sai (a cada 22-40 s; so visual). (3) Botao de alerta sonoro (localStorage 'empresaSom'): toca 2 notas quando o numero de alertas criticos do Kyan sobe entre duas consultas (15 s); precisa ter clicado no botao antes (regra de audio do navegador). Disponibilidade: aba 'empresa' liberada para a Vitaly (tenant 10, que tinha lista restrita); contas novas ja nascem com tudo liberado."
+  },
+  {
+    "chave": "empresa:kyan-futurista-e-atividade-real",
+    "modulo": "empresa",
+    "data": "2026-11-26",
+    "tipo": "melhoria",
+    "titulo": "Minha Empresa: Kyan branco/futurista e agentes sincronizados com os dados reais do app",
+    "conteudo": "(1) Kyan agora e todo branco com visor, headset e cinto/nucleo de luz ciano (opcao neon do criarPessoa) e a sala Trafego Pago virou branca e futurista (piso claro, linhas de luz ciano no chao, mesa de vidro, globo holografico e anel girando, telas de dados, rack branco); brancos ganham leve emissive pra nao ficarem acinzentados. (2) Painel de cada agente mostra 'Atividade recente' com dados reais via GET /api/empresa/atividade?agente=<id> (primeiro nome do lead/paciente + acao: Bia/Liz = quem a IA respondeu; Lua = follow-ups; Anne = mensagens dos funis; Lorena = parabens enviados; Lay/Mya = ultimos lancamentos do Gestao; Kyan = alertas abertos das campanhas, criticos em vermelho). O balao do agente ativo passa a mostrar a acao real ('Respondeu Julia...') em vez de frase generica. (3) Lua e Anne agora sao separadas de verdade: nova coluna crm_mensagens.agente gravada por followUp.js ('lua') e followUpInteligente.js ('anne'); mensagens antigas sem marca vao pra Anne se o contato esta num funil do Follow Up Inteligente e nao no Follow Up simples, senao pra Lua. O autor 'followup' continua igual (Resultados nao muda). Pendente: Lorena ainda nao conta resgates/disparos; Liz x Bia continua pela etapa ATUAL do contato."
+  },
+  {
+    "chave": "empresa:kyan-seletor-de-cliente",
+    "modulo": "empresa",
+    "data": "2026-11-26",
+    "tipo": "funcao",
+    "titulo": "Minha Empresa: Kyan com seletor de cliente/BM e dados basicos das campanhas",
+    "conteudo": "Pedido do dono: escolher qualquer cliente ou BM e o Kyan mostrar os dados da campanha dele. Select 'Kyan' na barra do escritorio (valor guardado em localStorage 'empresaKyanSel'): 'visao geral' (comportamento anterior) ou, por conexao/BM (rotulo do token), 'BM - todas as contas' e cada conta de anuncio. Endpoints GET /api/empresa/kyan/contas e /api/empresa/kyan/cliente?sel=bm:<grupo>|act_<id> (src/empresa.js: kyanContas, kyanCliente). Dados: gasto/resultados/custo por resultado/CTR de hoje e dos ultimos 7 dias, gasto por dia (7 dias), campanhas ativas e alertas abertos do cliente (meta_saude_alertas filtrado pelas contas escolhidas). As 3 telas da sala, o painel, o grafico e a atividade do Kyan passam a refletir o cliente escolhido. Seguranca/multi-tenant: so aceita ids da lista de contas do PROPRIO tenant (testado: id invalido e id de outro tenant sao recusados). Custo: cache de 10 min por selecao (ate 12 contas, 4 chamadas ao Meta por conta), 1a carga de um BM leva ~2 s. Pendente: comparar dois clientes lado a lado e filtro por periodo."
+  },
+  {
+    "chave": "empresa:kyan-periodo-e-comparacao",
+    "modulo": "empresa",
+    "data": "2026-11-27",
+    "tipo": "melhoria",
+    "titulo": "Minha Empresa: Kyan com periodo (7/14/30 dias) e comparacao lado a lado de dois clientes",
+    "conteudo": "Duas selects novas na barra do escritorio ao escolher um cliente/BM no Kyan: periodo (7, 14 ou 30 dias; guardado em localStorage empresaKyanDias) e 'Comparar com...' (empresaKyanSel2). GET /api/empresa/kyan/cliente aceita &dias=7|14|30 (kyanCliente(tenantId, sel, dias): datePreset last_Nd + gasto por dia do periodo; o campo d7 virou per + periodoDias; cache de 10 min por selecao+periodo). Na comparacao o painel mostra tabela A x B (gasto, resultados, custo por resultado, CTR, campanhas ativas, alertas) com o melhor valor em verde (maior e melhor para resultados/CTR, menor e melhor para custo/alertas), grafico de barras duplo de gasto por dia e alertas dos dois (marcados com o nome); as 3 telas da sala continuam no cliente A. Em 30 dias o grafico so rotula a cada 5 dias. Testado em producao com dados reais (Clinpop x Pedro Jorge, 7/14/30). Pendente: periodo personalizado (datas) e comparar mais de dois."
+  },
+  {
+    "chave": "followup:modo-resgate",
+    "modulo": "followup",
+    "data": "2026-11-27",
+    "tipo": "funcao",
+    "titulo": "Follow Up: Modo resgate (etiqueta + postura de quebrar objecao) e prompt recomendado",
+    "conteudo": "Opcao por clinica (follow_up_config.modo_resgate, desligada por padrao) na aba Follow Up. Ligada: quando o lead responde positivo a uma tentativa de reaquecimento, followUp.processarMensagem ja responde com a postura de resgate (acolher + descobrir a objecao), o contato ganha a etiqueta 'Resgate do Follow Up' (crm.adicionarEtiqueta, sem duplicar) e o card vai para Em Atendimento; enquanto a etiqueta existir, autoAtendimento injeta a postura (followUp.posturaResgate) no bloco dinamico do prompt, mantendo o fluxo: descobrir objecao, quebrar (preco, medo, tempo, confianca, 'vou ver com alguem'), urgencia/escassez HONESTAS (so fatos reais, senao usa o tempo) e fechar com 2 horarios da agenda, max 3 tentativas. Prompts recomendados (PROMPT_GERAL_RECOMENDADO e PROMPT_RESGATE_RECOMENDADO em followUp.js) com botoes 'usar recomendado' e textos editaveis; a postura vazia usa a recomendada. A tela avisa quando o Auto Atendimento esta desativado (o resgate depende dele para responder e marcar na agenda). Desligado, o comportamento antigo e identico. Testado em producao (tenant 10) dentro de transacao com ROLLBACK e IA simulada: ligado -> prompt com postura + etiqueta + etapa em_atendimento; desligado -> sem postura/etiqueta; etiqueta nao duplica. Pendente: metrica de resgates na aba Resultados (contatos com a etiqueta que agendaram) e remover a etiqueta apos o comparecimento."
+  },
   {"chave": "ass:voz-padrao-lumia", "modulo": "assistente", "data": "2026-11-27", "tipo": "melhoria", "titulo": "Voz padrao da Lumia (Thalita) no app e nos audios do WhatsApp, com autoatualizacao", "conteudo": "Complementa [ass:voz-avatar]. Voz padrao fixa da Lumia = pt-BR-ThalitaMultilingualNeural, prosodia padrao (a mesma dos videos oficiais), usada em /api/tts (app web, legenda sincronizada por marcas de palavra) e nas respostas em audio do auto-atendimento no WhatsApp. src/vozLumia.js tenta 1) Azure Speech oficial (se AZURE_SPEECH_KEY/REGION existirem), 2) Edge via Python (scripts/voz_edge.py, venv /opt/edge no container, gratis e nao-oficial), 3) Kokoro/Gemini/texto. A Microsoft ja trocou o token do servico do Edge (libs Node deram 403), por isso: o app atualiza o pacote edge-tts ao ligar e todo dia (EDGE_AUTO_UPDATE=1 no Dockerfile), testa a voz a cada hora, se falhar atualiza e re-testa, e avisa o dono no WhatsApp se ficar fora >2h. Estado em GET /api/admin/voz-estado. Limite: se a Microsoft mudar a trava antes do pacote ter correcao, fica na voz reserva ate portar o conserto. Pendente: ligar o Azure oficial quando o dono quiser estabilidade total."}
 ]
