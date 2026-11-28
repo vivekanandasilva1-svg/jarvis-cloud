@@ -2597,12 +2597,123 @@ waAdminSalvar.addEventListener('click', async () => {
 });
 
 // ---------- WhatsApp: lista de instancias ----------
-function mostrarQr(base64) {
+let waQrPoll = null;
+function pararAcompanharQr() { clearInterval(waQrPoll); waQrPoll = null; }
+// enquanto o QR esta na tela, confere a cada 4 s se o numero conectou (ate 3 min): ai fecha o QR e oferece importar as conversas
+function mostrarQr(base64, nomeInstancia) {
   waQrImg.src = base64;
   waQrArea.hidden = false;
   waQrArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  pararAcompanharQr();
+  if (!nomeInstancia) return;
+  const limite = Date.now() + 3 * 60 * 1000;
+  waQrPoll = setInterval(async () => {
+    if (Date.now() > limite || waQrArea.hidden) { pararAcompanharQr(); return; }
+    try {
+      const r = await fetch('/api/whatsapp/instancias', { headers: { 'x-app-password': appPassword } });
+      const d = await r.json();
+      const inst = (d.instancias || []).find((i) => i.nome === nomeInstancia);
+      if (inst && inst.status === 'open') {
+        pararAcompanharQr();
+        waQrArea.hidden = true; waQrImg.src = '';
+        mostrarAviso(`WhatsApp "${nomeInstancia}" conectado`, 'ok');
+        carregarInstanciasWhatsapp();
+      }
+    } catch { /* tenta de novo no proximo ciclo */ }
+  }, 4000);
 }
-waQrFechar.addEventListener('click', () => { waQrArea.hidden = true; waQrImg.src = ''; });
+waQrFechar.addEventListener('click', () => { waQrArea.hidden = true; waQrImg.src = ''; pararAcompanharQr(); });
+
+// ---------- importar conversas recentes do WhatsApp conectado ----------
+const waImpModal = document.getElementById('waImpModal');
+const waImpEstado = { instancia: null, poll: null };
+const waImpEl = (id) => document.getElementById(id);
+waImpModal.addEventListener('click', (e) => { if (e.target === waImpModal || e.target.closest('[data-fechar="waImpModal"]')) { waImpModal.hidden = true; clearInterval(waImpEstado.poll); } });
+
+async function waImpPrevia() {
+  const alvo = waImpEl('waImpPrevia');
+  alvo.textContent = 'Contando as conversas...';
+  try {
+    const r = await fetch(`/api/whatsapp/importar-conversas/previa?instancia=${encodeURIComponent(waImpEstado.instancia)}&periodo=${encodeURIComponent(waImpEl('waImpPeriodo').value)}`, { headers: { 'x-app-password': appPassword } });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    if (!waImpEl('waImpEtapa').options.length) {
+      for (const e of d.etapas) waImpEl('waImpEtapa').add(new Option(e.nome, e.id));
+      waImpEl('waImpEtapa').value = 'em_atendimento';
+    }
+    alvo.textContent = `${d.noPeriodo} conversa(s) neste período (de ${d.totalNoWhatsapp} que o WhatsApp trouxe).` + (d.noPeriodo < 5 ? ' Se o número foi conectado agora há pouco, o WhatsApp ainda pode estar enviando o histórico: tente de novo em alguns minutos.' : '');
+    waImpEl('waImpIniciar').disabled = !d.noPeriodo;
+  } catch (err) { alvo.textContent = `Não consegui contar: ${err.message}`; waImpEl('waImpIniciar').disabled = true; }
+}
+function waImpDesenharStatus(st) {
+  const total = st.totalConversas || 0;
+  const pct = total ? Math.round((st.processados / total) * 100) : 0;
+  waImpEl('waImpBarra').style.width = `${pct}%`;
+  const resumo = `${st.contatosNovos} contato(s) novo(s), ${st.contatosExistentes} que já existiam, ${st.mensagens} mensagens.` + (st.semTelefone ? ` ${st.semTelefone} conversa(s) sem telefone visível (o WhatsApp esconde): ficam identificadas pelo código do WhatsApp.` : '') + (st.erros ? ` ${st.erros} com erro.` : '');
+  if (st.estado === 'rodando') waImpEl('waImpTexto').textContent = `${st.cancelando ? 'Cancelando... ' : 'Importando... '}${st.processados} de ${total} conversas (${pct}%). ${resumo}`;
+  else {
+    waImpEl('waImpTexto').textContent = `${st.estado === 'concluido' ? '✓ Importação concluída.' : st.estado === 'cancelado' ? 'Importação cancelada.' : `Importação interrompida: ${st.ultimoErro || 'erro'}`} ${resumo}`;
+    waImpEl('waImpCancelar').hidden = true;
+    waImpEl('waImpConcluir').hidden = false;
+  }
+}
+async function waImpAcompanhar() {
+  clearInterval(waImpEstado.poll);
+  const passo = async () => {
+    try {
+      const r = await fetch('/api/whatsapp/importar-conversas/status', { headers: { 'x-app-password': appPassword } });
+      const st = await r.json();
+      if (st.estado === 'nenhuma') return;
+      waImpEl('waImpForm').hidden = true; waImpEl('waImpProgresso').hidden = false;
+      waImpDesenharStatus(st);
+      if (st.estado !== 'rodando') {
+        clearInterval(waImpEstado.poll);
+        if (st.estado === 'concluido') { mostrarAviso('Conversas importadas para o CRM', 'ok'); if (typeof carregarCrm === 'function' && !tabCrm.hidden) carregarCrm(); }
+      }
+    } catch { /* tenta de novo */ }
+  };
+  await passo();
+  waImpEstado.poll = setInterval(passo, 1500);
+}
+async function waImpAbrir(nomeInstancia) {
+  waImpEstado.instancia = nomeInstancia;
+  waImpEl('waImpNumero').textContent = nomeInstancia;
+  waImpEl('waImpErro').hidden = true;
+  waImpEl('waImpCancelar').hidden = false; waImpEl('waImpConcluir').hidden = true;
+  waImpEl('waImpForm').hidden = false; waImpEl('waImpProgresso').hidden = true;
+  waImpEl('waImpEtapa').textContent = '';
+  waImpModal.hidden = false;
+  // ja tem uma importacao rodando? mostra o andamento
+  try {
+    const r = await fetch('/api/whatsapp/importar-conversas/status', { headers: { 'x-app-password': appPassword } });
+    const st = await r.json();
+    if (st.estado === 'rodando') { waImpAcompanhar(); return; }
+  } catch { /* segue pro formulario */ }
+  waImpPrevia();
+}
+waImpEl('waImpPeriodo').addEventListener('change', waImpPrevia);
+waImpEl('waImpPausar').addEventListener('change', () => { waImpEl('waImpAviso').classList.toggle('forte', !waImpEl('waImpPausar').checked); });
+waImpEl('waImpIniciar').addEventListener('click', async () => {
+  const botao = waImpEl('waImpIniciar');
+  if (!waImpEl('waImpPausar').checked && !confirm('Sem pausar, a IA pode responder quem escrever e o Follow Up Inteligente pode mandar mensagens para os importados da etapa escolhida. Continuar mesmo assim?')) return;
+  botao.disabled = true; waImpEl('waImpErro').hidden = true;
+  try {
+    const r = await fetch('/api/whatsapp/importar-conversas', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
+      body: JSON.stringify({ instancia: waImpEstado.instancia, periodo: waImpEl('waImpPeriodo').value, etapa: waImpEl('waImpEtapa').value, pausarIA: waImpEl('waImpPausar').checked }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'erro');
+    try { localStorage.setItem(`waImportOferecido:${waImpEstado.instancia}`, '1'); } catch { /* sem armazenamento */ }
+    waImpAcompanhar();
+  } catch (err) { waImpEl('waImpErro').textContent = err.message; waImpEl('waImpErro').hidden = false; botao.disabled = false; }
+});
+waImpEl('waImpCancelar').addEventListener('click', async () => {
+  waImpEl('waImpCancelar').disabled = true;
+  await fetch('/api/whatsapp/importar-conversas/cancelar', { method: 'POST', headers: { 'x-app-password': appPassword } }).catch(() => {});
+  waImpEl('waImpCancelar').disabled = false;
+});
+waImpEl('waImpConcluir').addEventListener('click', () => { waImpModal.hidden = true; clearInterval(waImpEstado.poll); });
 
 async function carregarInstanciasWhatsapp() {
   waLista.textContent = '';
@@ -2628,6 +2739,23 @@ async function carregarInstanciasWhatsapp() {
       vazio.textContent = 'Nenhuma instancia encontrada.';
       waLista.appendChild(vazio);
       return;
+    }
+
+    // numero conectado que ainda nao teve a oferta: convida a importar as conversas do mes atual
+    for (const inst of instancias) {
+      let oferecido = '1';
+      try { oferecido = localStorage.getItem(`waImportOferecido:${inst.nome}`); } catch { /* sem armazenamento */ }
+      if (inst.status !== 'open' || oferecido || !meuEhDono) continue;
+      const banner = document.createElement('div');
+      banner.className = 'wa-imp-banner';
+      const txt = document.createElement('span');
+      txt.textContent = `O número "${inst.nome}" está conectado. Quer trazer as conversas do mês atual para o CRM?`;
+      const sim = document.createElement('button'); sim.type = 'button'; sim.textContent = 'Importar conversas';
+      sim.addEventListener('click', () => waImpAbrir(inst.nome));
+      const nao = document.createElement('button'); nao.type = 'button'; nao.className = 'wa-imp-banner-nao'; nao.textContent = 'Agora não';
+      nao.addEventListener('click', () => { try { localStorage.setItem(`waImportOferecido:${inst.nome}`, '1'); } catch { /* sem armazenamento */ } banner.remove(); });
+      banner.append(txt, sim, nao);
+      waLista.appendChild(banner);
     }
 
     for (const inst of instancias) {
@@ -2707,6 +2835,15 @@ async function carregarInstanciasWhatsapp() {
         acoes.appendChild(usarBtn);
       }
 
+      if (inst.status === 'open' && meuEhDono) {
+        const impBtn = document.createElement('button');
+        impBtn.type = 'button';
+        impBtn.textContent = 'Importar conversas';
+        impBtn.title = 'Traz para o CRM as conversas recentes deste número';
+        impBtn.addEventListener('click', () => waImpAbrir(inst.nome));
+        acoes.appendChild(impBtn);
+      }
+
       const qrBtn = document.createElement('button');
       qrBtn.type = 'button';
       qrBtn.textContent = 'Gerar QR';
@@ -2716,7 +2853,7 @@ async function carregarInstanciasWhatsapp() {
           const res = await fetch(`/api/whatsapp/qrcode/${encodeURIComponent(inst.nome)}`, { headers: { 'x-app-password': appPassword } });
           const data = await res.json();
           if (!res.ok || !data.qrcode) throw new Error(data.erro || 'nao consegui gerar o QR (talvez ja esteja conectada)');
-          mostrarQr(data.qrcode);
+          mostrarQr(data.qrcode, inst.nome);
         } catch (err) {
           addBubble(`Erro gerando QR: ${err.message}`, 'system');
         } finally {
@@ -2772,7 +2909,7 @@ waNovoCriar.addEventListener('click', async () => {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
-    if (data.qrcode) mostrarQr(data.qrcode);
+    if (data.qrcode) mostrarQr(data.qrcode, nome);
     waNovoNome.value = '';
     carregarInstanciasWhatsapp();
     addBubble(`Instancia "${nome}" criada. Escaneia o QR pra conectar o numero, depois clica em "Usar esta" pra ativar ela.`, 'system');
