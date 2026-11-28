@@ -8,6 +8,7 @@
 //
 // Tudo isolado por tenant. Nunca mexe com quem esta em "contatos_pessoais" (a IA nao atende),
 // "follow_up" (motor proprio) nem com conversa pausada/oculta.
+import { modeloFaltosos } from './faltosos.js';
 import { anthropic } from './anthropicClient.js';
 import { pool } from './db.js';
 import * as evolutionApi from './evolutionApi.js';
@@ -96,11 +97,11 @@ const HORA_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const CONFIG_VAZIA = { ativo: false, promptGeral: '', horaInicio: '08:00', horaFim: '20:00' };
 
 export async function obterConfig(tenantId) {
-  if (!pool) return CONFIG_VAZIA;
+  if (!pool) return { ...CONFIG_VAZIA, modeloFaltosos: modeloFaltosos() };
   await tabelasProntas;
   const { rows } = await pool.query(`SELECT ativo, prompt_geral, hora_inicio, hora_fim FROM fui_config WHERE tenant_id = $1`, [tenantId]);
-  if (!rows.length) return CONFIG_VAZIA;
-  return { ativo: !!rows[0].ativo, promptGeral: rows[0].prompt_geral || '', horaInicio: rows[0].hora_inicio, horaFim: rows[0].hora_fim };
+  if (!rows.length) return { ...CONFIG_VAZIA, modeloFaltosos: modeloFaltosos() };
+  return { ativo: !!rows[0].ativo, promptGeral: rows[0].prompt_geral || '', horaInicio: rows[0].hora_inicio, horaFim: rows[0].hora_fim, modeloFaltosos: modeloFaltosos() };
 }
 
 export async function salvarConfig(tenantId, { ativo, promptGeral, horaInicio, horaFim }) {
@@ -330,6 +331,7 @@ export async function processarCard(tenantId, card, config, { somenteContatoId =
      FROM crm_contatos c
      LEFT JOIN fui_execucoes x ON x.card_id = $3 AND x.contato_id = c.id
      WHERE c.tenant_id = $1 AND c.oculto = false AND c.auto_pausado = false AND c.etapa = ANY($2::text[])
+       AND NOT (c.importado_em IS NOT NULL AND COALESCE(c.ultima_entrada_em, 'epoch'::timestamptz) <= c.importado_em)
        AND (c.ultima_mensagem_em IS NOT NULL OR $4::boolean) AND c.instancia NOT LIKE 'ig:%'
        AND ($5::int IS NULL OR c.id = $5)`,
     // com Inicio imediato a IA tambem puxa a conversa de quem ainda nao tem nenhuma mensagem

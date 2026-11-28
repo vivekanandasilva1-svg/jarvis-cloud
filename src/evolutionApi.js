@@ -99,6 +99,17 @@ export async function statusConexaoInstancia(nome) {
   return chamar('GET', `/instance/connectionState/${nome}`);
 }
 
+// historico que o WhatsApp mandou no pareamento (a Evolution guarda) - so leitura, usado pra importar conversas pro CRM
+export async function listarChats(instancia) {
+  return chamar('POST', `/chat/findChats/${encodeURIComponent(instancia)}`, {});
+}
+
+// as mensagens MAIS RECENTES de uma conversa (ordem: da mais nova pra mais antiga)
+export async function mensagensDoChat(instancia, remoteJid, limite = 50) {
+  const d = await chamar('POST', `/chat/findMessages/${encodeURIComponent(instancia)}`, { where: { key: { remoteJid } }, page: 1, offset: limite });
+  return d?.messages?.records || [];
+}
+
 // desconecta a sessao do WhatsApp sem apagar a instancia - deixa ela pronta pra gerar um QR
 // novo (reconectar o mesmo numero, ou usar um numero diferente no mesmo "slot")
 export async function desconectarInstancia(nome) {

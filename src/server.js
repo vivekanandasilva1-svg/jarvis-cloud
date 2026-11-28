@@ -19,6 +19,7 @@ import * as agenda from './agenda.js';
 import * as googleCalendar from './googleCalendar.js';
 import * as instagram from './instagram.js';
 import * as empresa from './empresa.js';
+import * as importarConversas from './importarConversas.js';
 import * as whatsappInstances from './whatsappInstances.js';
 import * as autoAtendimento from './autoAtendimento.js';
 import * as autoArquivos from './autoAtendimentoArquivos.js';
@@ -1641,6 +1642,36 @@ app.post('/api/whatsapp/instancias', async (req, res) => {
     res.json({ ok: true, qrcode: resultado?.qrcode?.base64 || null });
   } catch (err) {
     res.status(500).json({ erro: err.message });
+  }
+});
+
+// ---- importar conversas recentes do WhatsApp conectado para o CRM (so o dono da conta) ----
+const exigirDonoDaConta = (req, res) => {
+  if (req.operadorId) { res.status(403).json({ erro: 'So o acesso principal da conta importa conversas.' }); return false; }
+  return true;
+};
+app.get('/api/whatsapp/importar-conversas/previa', async (req, res) => {
+  if (!exigirDonoDaConta(req, res)) return;
+  try {
+    res.json(await importarConversas.previa(req.tenantId, String(req.query.instancia || ''), String(req.query.periodo || 'mes')));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+app.get('/api/whatsapp/importar-conversas/status', async (req, res) => {
+  res.json(importarConversas.status(req.tenantId));
+});
+app.post('/api/whatsapp/importar-conversas/cancelar', async (req, res) => {
+  if (!exigirDonoDaConta(req, res)) return;
+  res.json(importarConversas.cancelar(req.tenantId));
+});
+app.post('/api/whatsapp/importar-conversas', async (req, res) => {
+  if (!exigirDonoDaConta(req, res)) return;
+  try {
+    const { instancia, periodo, etapa, pausarIA } = req.body || {};
+    res.json(await importarConversas.iniciar(req.tenantId, { instancia: String(instancia || ''), periodo: String(periodo || 'mes'), etapa: String(etapa || ''), pausarIA: pausarIA === true }));
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
   }
 });
 

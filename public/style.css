@@ -4187,3 +4187,29 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 #fuSalvar.nao-salvo:hover { background: rgba(232, 74, 74, 0.28); }
 #fuSalvar:active { transform: scale(0.98); }
 #fuSalvar.salvo-pulso { border-color: var(--gold-bright); background: rgba(212, 175, 55, 0.35); color: var(--gold-bright); animation: autoSalvoPulso 0.5s ease; }
+
+.ind-aviso-numero { margin: 0 0 10px; padding: 10px 12px; border: 1px solid rgba(232, 74, 74, 0.55); border-radius: 10px; background: rgba(232, 74, 74, 0.1); color: #ff9c8f; font-size: 12.5px; line-height: 1.5; }
+.ind-aviso-numero[hidden] { display: none; }
+
+/* ---------- Importar conversas do WhatsApp ---------- */
+.wa-imp-caixa { max-width: 560px; width: 92vw; }
+.wa-imp-corpo { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px 6px; }
+.wa-imp-corpo select { width: 100%; box-sizing: border-box; padding: 10px 12px; font-size: 13.5px; }
+.wa-imp-sub, .wa-imp-previa, .wa-imp-texto { margin: 0; font-size: 13px; line-height: 1.55; color: var(--text-dim); }
+.wa-imp-previa { color: var(--gold-bright); font-weight: 600; }
+.wa-imp-check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.45; cursor: pointer; }
+.wa-imp-check input { margin-top: 3px; }
+.wa-imp-aviso { margin: 0; font-size: 12px; line-height: 1.55; color: var(--text-dim); border: 1px solid var(--border-soft); border-radius: 10px; padding: 10px 12px; background: rgba(255,255,255,.03); }
+.wa-imp-aviso.forte { color: #ff9c8f; border-color: rgba(232, 74, 74, .55); background: rgba(232, 74, 74, .08); }
+.wa-imp-acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.wa-imp-acoes button { border: 1px solid rgba(212, 175, 55, .5); background: rgba(212, 175, 55, .16); color: var(--gold-bright); border-radius: 10px; padding: 11px 18px; font-size: 13.5px; font-weight: 700; cursor: pointer; }
+.wa-imp-acoes button:disabled { opacity: .5; cursor: not-allowed; }
+.wa-imp-barra { height: 12px; border-radius: 8px; background: rgba(255,255,255,.08); overflow: hidden; }
+.wa-imp-barra i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--gold), var(--gold-bright)); transition: width .4s ease; }
+.wa-imp-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; margin-bottom: 10px; border: 1px solid var(--gold); border-radius: 12px; background: rgba(212, 175, 55, .1); font-size: 13px; }
+.wa-imp-banner span { flex: 1 1 260px; line-height: 1.5; }
+.wa-imp-banner button { border: 1px solid rgba(212, 175, 55, .55); background: rgba(212, 175, 55, .2); color: var(--gold-bright); border-radius: 8px; padding: 8px 14px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.wa-imp-banner .wa-imp-banner-nao { background: transparent; border-color: var(--border); color: var(--text-dim); font-weight: 500; }
+.wa-imp-corpo select { background: rgba(255,255,255,.06); color: var(--text); border: 1px solid var(--border); border-radius: 8px; }
+.wa-imp-corpo select:focus { border-color: var(--gold); outline: none; }
+.wa-imp-corpo select option { background: #1b1d22; color: #f0ede4; }

@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icon.svg" />
   <link rel="icon" href="icon.svg" />
-  <link rel="stylesheet" href="style.css?v=20261127c" />
+  <link rel="stylesheet" href="style.css?v=20261128c" />
 </head>
 <body>
   <div id="loginScreen" class="login-screen">
@@ -1010,6 +1010,7 @@
           </div>
         </div>
         <p class="ind-responsavel" id="indResponsavel"></p>
+        <p class="ind-aviso-numero" id="indAvisoNumero" hidden></p>
         <div class="ind-subnav">
           <button type="button" id="indVerPesquisa" class="ind-sub ativo">Funil de pacientes (pesquisa) <span class="ind-sub-qtd" id="indPesqQtd"></span></button>
           <button type="button" id="indVerFunil" class="ind-sub">Indicados</button>
@@ -1895,6 +1896,7 @@
         <div class="fui-topo">
           <label class="auto-label">Seus follow-ups</label>
           <button type="button" id="fuiCriar">+ Criar</button>
+          <button type="button" id="fuiCriarFaltosos" title="Cartão pronto para quem faltou: uma tentativa por dia durante 10 dias, com a instrução recomendada">+ Modelo para faltosos</button>
         </div>
         <div id="fuiLista">
           <p class="agenda-vazia">Carregando...</p>
@@ -2372,7 +2374,43 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261128b"></script>
+  <div class="ct-modal" id="waImpModal" hidden>
+    <div class="ct-caixa wa-imp-caixa">
+      <div class="ct-caixa-topo">
+        <strong>Importar conversas do WhatsApp</strong>
+        <button type="button" class="ct-fechar" data-fechar="waImpModal">✕</button>
+      </div>
+      <div id="waImpForm" class="wa-imp-corpo">
+        <p class="wa-imp-sub">Traz para o CRM e para a aba Conversas as conversas recentes do número <strong id="waImpNumero"></strong>. Nada é enviado para ninguém: é só uma cópia do que já está no WhatsApp.</p>
+        <label class="auto-label" for="waImpPeriodo">Período</label>
+        <select id="waImpPeriodo">
+          <option value="mes">Mês atual (desde o dia 1º)</option>
+          <option value="7">Últimos 7 dias</option>
+          <option value="30">Últimos 30 dias</option>
+          <option value="90">Últimos 90 dias</option>
+        </select>
+        <p class="wa-imp-previa" id="waImpPrevia">Contando as conversas...</p>
+        <label class="auto-label" for="waImpEtapa">Em qual etapa do funil os contatos entram</label>
+        <select id="waImpEtapa"></select>
+        <label class="wa-imp-check"><input type="checkbox" id="waImpPausar" /> Pausar a IA nos contatos importados (ela só volta a responder quando você liberar cada conversa no CRM)</label>
+        <p class="wa-imp-aviso" id="waImpAviso">Como funciona: os contatos importados <strong>não recebem nenhuma mensagem automática</strong> enquanto a pessoa não escrever. Quando ela escrever, a IA responde <strong>já sabendo o que vinham conversando</strong> e continua de onde parou. Marque a pausa acima se quiser que a IA não responda esses contatos.</p>
+        <div class="wa-imp-acoes">
+          <button type="button" id="waImpIniciar">Importar conversas</button>
+        </div>
+        <p class="agenda-erro" id="waImpErro" hidden></p>
+      </div>
+      <div id="waImpProgresso" class="wa-imp-corpo" hidden>
+        <div class="wa-imp-barra"><i id="waImpBarra"></i></div>
+        <p class="wa-imp-texto" id="waImpTexto"></p>
+        <div class="wa-imp-acoes">
+          <button type="button" id="waImpCancelar">Cancelar importação</button>
+          <button type="button" id="waImpConcluir" hidden>Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=20261128h"></script>
   <script src="copiar-nome.js?v=20261123a"></script>
   <script src="rolagem.js?v=20261123b"></script>
   <script src="retorno.js?v=20261124a"></script>
