@@ -7275,7 +7275,7 @@ function criarCardEtapaFollowUp(etapa) {
 
   const rotuloDias = document.createElement('label');
   rotuloDias.className = 'auto-label';
-  rotuloDias.textContent = 'Quantos dias depois de entrar em Follow Up';
+  rotuloDias.textContent = etapa.ordem === 1 ? 'Tentativa 1: sai assim que o lead entra em Follow Up (a IA lê a conversa recente). O número abaixo só vale se você desativar esta e usar a próxima como primeira.' : 'Quantos dias depois de entrar em Follow Up';
   card.appendChild(rotuloDias);
   const inputDias = document.createElement('input');
   inputDias.type = 'number';

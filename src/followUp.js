@@ -130,7 +130,7 @@ FORMA
 - Se pedir para parar ou disser que não tem interesse, agradeça com educação e encerre.
 
 ESCALADA
-1ª tentativa (1 dia): leve e curiosa, "ficou alguma dúvida?".
+1ª tentativa (na hora em que entra no Follow Up): leve e curiosa, retomando a conversa recente, "ficou alguma dúvida?".
 2ª (3 dias): facilitar (horário, forma de pagamento, avaliação).
 3ª (7 dias): valor e consequência real de adiar, sem dramatizar.
 4ª (15 dias): urgência ou escassez real, se existir; senão cuidado e prova social verdadeira.
@@ -297,7 +297,7 @@ async function enviarArquivoParaContato(instancia, numero, arquivo) {
 
 // chamado quando um card e arrastado PRA "follow_up" - idempotente: se o contato ja tiver um
 // registro antigo (follow up anterior, ja finalizado), reseta pra comecar as tentativas do zero
-export async function iniciarAcompanhamento(tenantId, contatoId) {
+export async function iniciarAcompanhamento(tenantId, contatoId, { disparar = true } = {}) {
   if (!pool) return;
   await tabelasProntas;
   await pool.query(
@@ -307,6 +307,9 @@ export async function iniciarAcompanhamento(tenantId, contatoId) {
        entrou_em = now(), ultima_etapa_enviada = 0, ultima_etapa_enviada_em = NULL, historico = '[]'::jsonb, finalizado = false`,
     [contatoId, tenantId],
   );
+  // a PRIMEIRA tentativa sai assim que o lead entra (arrastando, importando planilha, pela IA ou pelo Clinicorp) - em fila,
+  // uma por vez e com pausa entre envios, pra uma importacao grande nao virar rajada no WhatsApp
+  if (disparar) enfileirarPrimeiraTentativa(tenantId, contatoId);
 }
 
 // chamado quando um card SAI da coluna "follow_up" (pra qualquer outra) - para o agendador de
@@ -350,13 +353,22 @@ function formatarHistorico(historico) {
   return historico.slice(-8).map((h) => `[${h.autor === 'lumia' ? 'Voce (Lumia)' : 'Contato'}] ${h.texto}`).join('\n');
 }
 
-async function gerarMensagemEtapa({ tenantId, config, etapa, contato, historico }) {
+async function gerarMensagemEtapa({ tenantId, config, etapa, contato, historico, primeira }) {
   const notasEquipe = await crm.notasParaIA(tenantId, { contatoId: contato.contato_id || contato.id }).catch(() => '');
+  // conversa recente de WhatsApp do contato (a IA le antes de escrever: lead de planilha ou que ja conversou antes)
+  const conversa = await crm.ultimasMensagens(tenantId, contato.numero, contato.instancia, 14).catch(() => []);
+  const conversaTxt = conversa.length
+    ? conversa.map((m) => `[${m.direcao === 'entrada' ? 'Contato' : 'Nos'}${m.autor === 'followup' ? ' - follow-up automatico' : ''}] ${m.texto || `(${m.tipo})`}`).join('\n')
+    : '(nenhuma conversa anterior no WhatsApp)';
   const texto = `${config.promptGeral}\n\n` +
-    `Voce esta tentando reengajar um contato que parou de responder ha ${etapa.dias} dia(s) - essa e a tentativa numero ${etapa.ordem} de reengajamento.` +
+    `Voce esta tentando reengajar um contato - essa e a tentativa numero ${etapa.ordem} de reengajamento` +
+    (primeira ? ' (a PRIMEIRA: enviada assim que o contato entrou no Follow Up).' : `, ${etapa.dias} dia(s) depois que o contato entrou no Follow Up.`) +
+    (primeira ? '\nLeia a conversa recente abaixo e retome exatamente de onde parou; se nao houver conversa anterior, faca uma abertura curta e acolhedora, sem fingir que ja conversaram.' : '') +
     (etapa.prompt ? `\n\nInstrucoes especificas pra essa tentativa: ${etapa.prompt}` : '') +
     `\n\nNome do contato (se souber): ${contato.nome || 'nao informado'}` +
+    (contato.observacoes ? `\n\nObservacoes do cadastro/planilha sobre o contato: ${String(contato.observacoes).slice(0, 600)}` : '') +
     notasEquipe +
+    `\n\nConversa recente no WhatsApp:\n${conversaTxt}` +
     `\n\nHistorico do acompanhamento ate agora:\n${formatarHistorico(historico)}` +
     `\n\nEscreva agora a mensagem a ser enviada pra tentar retomar o contato.`;
 
@@ -382,7 +394,7 @@ export async function processarMensagem(tenantId, contatoId, numero, instancia, 
   if (!config.ativo || !config.promptGeral) return null;
   await tabelasProntas;
 
-  await iniciarAcompanhamento(tenantId, contatoId); // idempotente - garante que ha registro mesmo se o lead respondeu antes de qualquer tentativa automatica
+  await iniciarAcompanhamento(tenantId, contatoId, { disparar: false }); // (resposta do lead: nao dispara tentativa proativa) idempotente - garante que ha registro mesmo se o lead respondeu antes de qualquer tentativa automatica
 
   const { rows } = await pool.query(`SELECT * FROM follow_up_contatos WHERE contato_id = $1 AND tenant_id = $2`, [contatoId, tenantId]);
   const registro = rows[0];
@@ -453,21 +465,40 @@ export async function processarMensagem(tenantId, contatoId, numero, instancia, 
 
 // ---------- agendador (envio proativo das tentativas, na cadencia configurada) ----------
 
+// trava em memoria: o disparo imediato e o agendador de 15 min podem pegar o MESMO contato ao mesmo tempo
+// (sem isso a primeira tentativa sairia duplicada)
+const emProcessamento = new Set();
+
 async function processarContato(tenantId, contato, etapas, config) {
+  const trava = `${tenantId}:${contato.contato_id}`;
+  if (emProcessamento.has(trava)) return false;
+  emProcessamento.add(trava);
+  try {
+    return await processarContatoSeguro(tenantId, contato, etapas, config);
+  } finally {
+    emProcessamento.delete(trava);
+  }
+}
+
+async function processarContatoSeguro(tenantId, contato, etapas, config) {
   // fora do horario de funcionamento - nao manda tentativa nenhuma agora; o proprio agendador
   // (roda a cada 15min) pega essa tentativa vencida assim que o horario configurado abrir
-  if (!dentroDoHorarioFuncionamento(config)) return;
+  if (!dentroDoHorarioFuncionamento(config)) return false;
   // Instagram so deixa mandar mensagem ate 24h depois da ultima da pessoa - a cadencia de dias
   // do Follow Up nao funciona la
-  if (String(contato.instancia).startsWith('ig:')) return;
+  if (String(contato.instancia).startsWith('ig:')) return false;
 
   const diasDesdeEntrada = (Date.now() - new Date(contato.entrou_em).getTime()) / (24 * 60 * 60 * 1000);
   const ultimaOrdem = contato.ultima_etapa_enviada || 0;
 
-  const proxima = etapas.find((e) => e.ordem > ultimaOrdem && e.ativo && diasDesdeEntrada >= e.dias);
+  // a PRIMEIRA tentativa ativa vale assim que o lead entra no Follow Up (sem esperar dias); as demais seguem os dias
+  // (so em entrada NOVA: sem tentativa enviada e sem nada no historico - depois que o lead respondeu o historico nao esta mais vazio)
+  const primeiraAtiva = etapas.find((e) => e.ativo);
+  const entradaNova = ultimaOrdem === 0 && !(contato.historico || []).length;
+  const proxima = etapas.find((e) => e.ordem > ultimaOrdem && e.ativo && ((entradaNova && e.ordem === primeiraAtiva?.ordem) || diasDesdeEntrada >= e.dias));
   if (proxima) {
     const historico = contato.historico || [];
-    const mensagem = await gerarMensagemEtapa({ tenantId, config, etapa: proxima, contato, historico });
+    const mensagem = await gerarMensagemEtapa({ tenantId, config, etapa: proxima, contato, historico, primeira: entradaNova && proxima.ordem === primeiraAtiva?.ordem });
     await evolutionApi.enviarMensagemTextoPor(contato.instancia, contato.numero, mensagem);
     await crm.registrarMensagem(tenantId, { numero: contato.numero, instancia: contato.instancia, direcao: 'saida', tipo: 'text', texto: mensagem, autor: 'followup', agente: 'lua' });
 
@@ -485,7 +516,7 @@ async function processarContato(tenantId, contato, etapas, config) {
       `UPDATE follow_up_contatos SET ultima_etapa_enviada = $1, ultima_etapa_enviada_em = now(), historico = $2 WHERE contato_id = $3 AND tenant_id = $4`,
       [proxima.ordem, JSON.stringify(novoHistorico), contato.contato_id, tenantId],
     );
-    return;
+    return true;
   }
 
   // ja mandou a ultima tentativa ativa configurada? da uma folga e desiste (move pra "perdido")
@@ -496,6 +527,47 @@ async function processarContato(tenantId, contato, etapas, config) {
       await crm.moverEtapa(tenantId, contato.contato_id, 'perdido');
       await encerrarAcompanhamento(tenantId, contato.contato_id);
     }
+  }
+  return false;
+}
+
+// ---------- disparo imediato da primeira tentativa (fila) ----------
+
+const COLUNAS_CONTATO_FU = `fc.contato_id, fc.entrou_em, fc.ultima_etapa_enviada, fc.ultima_etapa_enviada_em, fc.historico,
+                    c.numero, c.instancia, c.nome, c.observacoes`;
+const filaImediata = [];
+let drenandoFila = false;
+const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function enfileirarPrimeiraTentativa(tenantId, contatoId) {
+  filaImediata.push({ tenantId, contatoId });
+  if (!drenandoFila) drenarFila().catch((err) => console.error('Erro na fila do follow up:', err.message));
+}
+
+async function drenarFila() {
+  drenandoFila = true;
+  try {
+    while (filaImediata.length) {
+      const { tenantId, contatoId } = filaImediata.shift();
+      try {
+        const config = await obterConfig(tenantId);
+        if (!config.ativo || !config.promptGeral) continue;
+        const etapas = await listarEtapas(tenantId);
+        const { rows } = await pool.query(
+          `SELECT ${COLUNAS_CONTATO_FU} FROM follow_up_contatos fc JOIN crm_contatos c ON c.id = fc.contato_id
+           WHERE fc.tenant_id = $1 AND fc.contato_id = $2 AND fc.finalizado = false AND fc.ultima_etapa_enviada = 0 AND c.etapa = 'follow_up'`,
+          [tenantId, contatoId],
+        );
+        if (!rows[0]) continue;
+        const enviou = await processarContato(tenantId, rows[0], etapas, config);
+        // varios na fila (importacao de planilha): espaca os envios, 5 a 12 segundos, pra nao virar rajada no WhatsApp
+        if (enviou && filaImediata.length) await pausa(5000 + Math.random() * 7000);
+      } catch (err) {
+        console.error(`Erro na primeira tentativa do follow up (contato ${contatoId}, tenant ${tenantId}):`, err.message);
+      }
+    }
+  } finally {
+    drenandoFila = false;
   }
 }
 
@@ -518,8 +590,7 @@ export function iniciarSchedulerFollowUp() {
           const etapas = await listarEtapas(tenantId);
 
           const { rows: contatos } = await pool.query(
-            `SELECT fc.contato_id, fc.entrou_em, fc.ultima_etapa_enviada, fc.ultima_etapa_enviada_em, fc.historico,
-                    c.numero, c.instancia, c.nome
+            `SELECT ${COLUNAS_CONTATO_FU}
              FROM follow_up_contatos fc
              JOIN crm_contatos c ON c.id = fc.contato_id
              WHERE fc.tenant_id = $1 AND fc.finalizado = false AND c.etapa = 'follow_up'`,

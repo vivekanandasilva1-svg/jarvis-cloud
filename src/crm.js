@@ -614,8 +614,8 @@ export async function salvarContatoBase(tenantId, dados) {
 // importacao de planilha (a tela manda em lotes). Duplicado = mesmo telefone (com/sem o 9) em
 // qualquer numero do tenant: modo 'atualizar' completa os dados (nome/email/obs so se vierem,
 // etiquetas somam), 'pular' deixa como esta. Tudo numa transacao - ou entra o lote todo ou nada.
-// Follow Up entra como as outras colunas - mas a importacao so coloca o card na coluna, NAO inicia a cadencia
-// de mensagens automaticas (iniciarAcompanhamento so roda quando alguem move o card pelo CRM)
+// Follow Up entra como as outras colunas e, alem de por o card na coluna, INICIA o acompanhamento: a IA le a conversa
+// recente e manda a 1a tentativa (ver iniciarAcompanhamento em followUp.js)
 const ETAPAS_IMPORTAVEIS = new Set([...IDS_ETAPAS]);
 // etapaPadrao = coluna do funil pra onde vai a lista inteira (ex: lista de faltosos -> nao_compareceu); a
 // coluna da propria linha da planilha, se vier, tem prioridade. Contato que cai numa coluna ja aparece no
@@ -666,6 +666,13 @@ export async function importarContatos(tenantId, instancia, linhas, modo = 'pula
     cliente.release();
   }
   for (const [id, etapa] of eventos) await registrarEventoEtapa(tenantId, id, instancia, etapa).catch(() => {});
+  // quem entrou na coluna Follow Up pela planilha comeca o acompanhamento agora: a IA le a conversa recente e manda a
+  // 1a tentativa (em fila, espacada). Import dinamico: followUp.js importa este arquivo (evita ciclo no carregamento).
+  const paraFollowUp = eventos.filter(([, etapa]) => etapa === 'follow_up');
+  if (paraFollowUp.length) {
+    import('./followUp.js').then(async (m) => { for (const [id] of paraFollowUp) await m.iniciarAcompanhamento(tenantId, id).catch((err) => console.error('Erro iniciando follow up (importacao):', err.message)); })
+      .catch((err) => console.error('Erro carregando follow up (importacao):', err.message));
+  }
   if (eventos.length) eventosCrm.emit('contato-atualizado', { tenantId, contatoId: eventos[0][0] });
   return resultado;
 }
