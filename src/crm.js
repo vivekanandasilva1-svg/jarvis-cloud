@@ -553,6 +553,20 @@ async function acharPorNumero(cliente, tenantId, numero) {
   return rows[0] || null;
 }
 
+// importacao de planilha: quais desses telefones JA existem na base do tenant (qualquer numero de WhatsApp da conta, com ou sem o 9).
+// A tela usa isso pra mostrar e nao importar os repetidos.
+export async function numerosQueJaExistem(tenantId, numeros) {
+  if (!pool) return [];
+  await tabelasProntas;
+  const lista = [...new Set((Array.isArray(numeros) ? numeros : []).map(normalizarTelefone).filter(Boolean))].slice(0, 6000);
+  if (!lista.length) return [];
+  const procurar = new Set();
+  for (const n of lista) { procurar.add(n); const v = varianteNonoDigito(n); if (v) procurar.add(v); }
+  const { rows } = await pool.query('SELECT numero FROM crm_contatos WHERE tenant_id = $1 AND numero = ANY($2::text[])', [tenantId, [...procurar]]);
+  const achados = new Set(rows.map((r) => r.numero));
+  return lista.filter((n) => achados.has(n) || (varianteNonoDigito(n) && achados.has(varianteNonoDigito(n))));
+}
+
 // usado pelo sync Clinicorp -> Follow Up: acha o contato do tenant pelo telefone (com/sem o 9)
 export async function acharContatoPorTelefone(tenantId, numero) {
   if (!pool) return null;

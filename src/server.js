@@ -3284,6 +3284,15 @@ app.put('/api/crm/base-contatos/:id', async (req, res) => {
 });
 
 // a tela le a planilha no navegador e manda as linhas ja mapeadas em lotes de ate 1000
+// importacao de planilha: diz quais telefones da lista ja existem na base (a tela nao importa os repetidos)
+app.post('/api/crm/base-contatos/conferir', async (req, res) => {
+  try {
+    res.json({ existentes: await crm.numerosQueJaExistem(req.tenantId, req.body?.numeros) });
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
 app.post('/api/crm/base-contatos/importar', async (req, res) => {
   const { instancia, linhas, modo, etapa } = req.body || {};
   if (!Array.isArray(linhas) || !linhas.length) return res.status(400).json({ erro: 'Nenhuma linha pra importar.' });

@@ -4228,13 +4228,15 @@ ctImpArquivo.addEventListener('change', async () => {
     if (linhas.length < 2) throw new Error('A planilha precisa ter uma linha de cabeçalho e pelo menos um contato.');
     ctImpCabecalho = linhas[0];
     ctImpLinhas = linhas.slice(1);
+    ctImpExistentes = new Set();
+    ctImpExistentesSig = '';
     ctMontarMapa();
     ctImpPasso(2);
     ctImpInfo.textContent = `${arquivo.name}: ${ctImpLinhas.length} ${ctImpLinhas.length === 1 ? 'linha' : 'linhas'}. Confira qual coluna é cada informação:`;
     ctPreencherInstancias(ctImpInstancia);
     ctImpInstancia.closest('label').hidden = ctInstancias.length < 2;
     ctImpEtiquetaExtra.value = '';
-    // coluna do funil (inclui Follow Up: a lista so entra na coluna, sem disparar a cadencia automatica)
+    // coluna do funil (inclui Follow Up: quem entra la comeca o acompanhamento, com a 1a tentativa na hora)
     ctImpEtapa.textContent = '';
     ctImpEtapa.appendChild(new Option('Nenhuma (só na aba Contatos)', ''));
     for (const e of ctEtapas) ctImpEtapa.appendChild(new Option(e.nome, e.id));
@@ -4283,6 +4285,30 @@ function ctEtapaDaPlanilha(valor) {
   return achada ? achada.id : '';
 }
 
+// mesma pessoa com e sem o 9 depois do DDD conta como UM telefone
+function ctChaveTelefone(n) {
+  return /^55\d{2}9\d{8}$/.test(n) ? n.slice(0, 4) + n.slice(5) : n;
+}
+let ctImpExistentes = new Set(); // telefones da planilha que ja estao na base (vem do servidor)
+let ctImpExistentesSig = '';
+async function ctConferirExistentes(mapa) {
+  if (mapa.numero === undefined) return;
+  const sig = `${mapa.numero}|${ctImpLinhas.length}`;
+  if (sig === ctImpExistentesSig) return;
+  ctImpExistentesSig = sig;
+  const numeros = [];
+  for (const linha of ctImpLinhas) { const n = ctNormalizarTelefone(linha[mapa.numero] || ''); if (n) numeros.push(n); }
+  try {
+    const res = await fetch('/api/crm/base-contatos/conferir', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword }, body: JSON.stringify({ numeros }) });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.erro || 'erro');
+    ctImpExistentes = new Set(d.existentes || []);
+  } catch {
+    ctImpExistentes = new Set(); // sem a conferencia a tela segue; o servidor ainda ignora os repetidos no modo "Manter como esta"
+  }
+  ctAtualizarPreviaImp();
+}
+
 function ctMontarLinhasImp() {
   const mapa = ctMapaAtual();
   const extra = ctImpEtiquetaExtra.value.trim();
@@ -4291,11 +4317,15 @@ function ctMontarLinhasImp() {
   const validas = [];
   let semTelefone = 0;
   let repetidas = 0;
+  let jaExistem = 0; // ja estao na base: no modo "Manter como esta" NAO sobem
+  const soNovos = ctImpModo.value !== 'atualizar';
   for (const linha of ctImpLinhas) {
     const numero = ctNormalizarTelefone(pega(linha, 'numero'));
     if (!numero) { semTelefone++; continue; }
-    if (vistos.has(numero)) { repetidas++; continue; }
-    vistos.add(numero);
+    const chave = ctChaveTelefone(numero);
+    if (vistos.has(chave)) { repetidas++; continue; }
+    vistos.add(chave);
+    if (ctImpExistentes.has(numero)) { jaExistem++; if (soNovos) continue; }
     const etiquetas = pega(linha, 'etiquetas');
     validas.push({
       numero,
@@ -4306,7 +4336,7 @@ function ctMontarLinhasImp() {
       etapa: ctEtapaDaPlanilha(pega(linha, 'etapa')),
     });
   }
-  return { validas, semTelefone, repetidas, temTelefone: mapa.numero !== undefined };
+  return { validas, semTelefone, repetidas, jaExistem, soNovos, temTelefone: mapa.numero !== undefined };
 }
 
 // ORIENTACAO (nao e trava): cada lead que entra no Follow Up recebe uma mensagem automatica na hora - lista grande de uma vez
@@ -4326,7 +4356,8 @@ function ctAtualizarAvisoFollowUp(validas) {
 }
 
 function ctAtualizarPreviaImp() {
-  const { validas, semTelefone, repetidas, temTelefone } = ctMontarLinhasImp();
+  const { validas, semTelefone, repetidas, jaExistem, soNovos, temTelefone } = ctMontarLinhasImp();
+  ctConferirExistentes(ctMapaAtual());
   ctAtualizarAvisoFollowUp(validas);
   ctImpConfirmar.disabled = !temTelefone || !validas.length;
   if (!temTelefone) {
@@ -4334,7 +4365,8 @@ function ctAtualizarPreviaImp() {
   } else {
     const partes = [`${validas.length} ${validas.length === 1 ? 'contato pronto' : 'contatos prontos'} pra importar`];
     if (semTelefone) partes.push(`${semTelefone} sem telefone válido (ficam de fora)`);
-    if (repetidas) partes.push(`${repetidas} repetidos na planilha`);
+    if (repetidas) partes.push(`${repetidas} repetidos na planilha (só o primeiro de cada telefone sobe)`);
+    if (jaExistem) partes.push(soNovos ? `${jaExistem} já estão na base e NÃO serão importados` : `${jaExistem} já estão na base e serão atualizados`);
     ctImpResumo.textContent = partes.join(' · ');
   }
   ctImpConfirmar.textContent = validas.length ? `Importar ${validas.length}` : 'Importar';
@@ -4368,6 +4400,7 @@ function ctAtualizarEspelhar() {
 }
 ctImpEtapa.addEventListener('change', ctAtualizarEspelhar);
 ctImpEtapa.addEventListener('change', ctAtualizarPreviaImp);
+ctImpModo.addEventListener('change', ctAtualizarPreviaImp);
 
 ctImpConfirmar.addEventListener('click', async () => {
   const { validas } = ctMontarLinhasImp();
