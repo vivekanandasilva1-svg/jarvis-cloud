@@ -4136,3 +4136,48 @@ body .app-window button.salvo:not(.nav-btn):not(:disabled):active {
 .tab-empresa .emp-par { display: flex; align-items: flex-end; gap: 1px; width: 100%; }
 .tab-empresa .emp-par i { flex: 1; min-width: 2px; }
 .tab-empresa .emp-par i.b { background: linear-gradient(180deg, #bff1fa, #4cc3d9); }
+
+/* ---------- Aba Follow Up: cartoes organizados e caixas de texto confortaveis ---------- */
+#tabFollowUp { gap: 22px; }
+#tabFollowUp .auto-coluna-esq { width: 100%; gap: 16px; overflow-y: visible; }
+#tabFollowUp .auto-coluna-esq > * { flex-shrink: 0; }
+@media (min-width: 860px) {
+  /* a coluna do formulario tem prioridade; a lista de tentativas desce quando nao cabe ao lado */
+  #tabFollowUp { flex-direction: row; flex-wrap: wrap; overflow-y: auto; align-items: flex-start; align-content: flex-start; }
+  #tabFollowUp .auto-coluna-esq { width: auto; flex: 1 1 520px; min-width: 420px; max-width: 760px; overflow-y: visible; }
+  #tabFollowUp .auto-coluna-dir { flex: 1 1 340px; min-width: 300px; min-height: 0; }
+}
+.fu-card {
+  display: flex; flex-direction: column; gap: 12px;
+  border: 1px solid var(--border-soft); border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03); padding: 18px 20px;
+}
+.fu-card-titulo { margin: 0; font-size: 15px; font-weight: 700; color: var(--gold-bright); letter-spacing: 0.2px; }
+.fu-card-sub { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--text-dim); }
+.fu-card .auto-label { font-size: 12px; margin-top: 2px; }
+.fu-card textarea {
+  width: 100%; box-sizing: border-box; min-height: 240px; resize: vertical;
+  font: inherit; font-size: 13.5px; line-height: 1.6; padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.045); border: 1px solid var(--border); border-radius: 10px; color: var(--text);
+}
+.fu-card textarea:focus { border-color: var(--gold); outline: none; }
+#fuPromptResgate { min-height: 320px; }
+.fu-linha-horas { display: flex; flex-wrap: wrap; gap: 18px; }
+.fu-linha-horas > div { display: flex; flex-direction: column; gap: 4px; }
+.fu-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
+.fu-acoes .crm-btn-secundario { width: auto; padding: 8px 16px; }
+.fu-salvar-barra {
+  position: sticky; bottom: 0; z-index: 2; padding: 14px 0 4px;
+  background: linear-gradient(to top, var(--lateral, #2e3035) 72%, transparent);
+  display: flex; flex-direction: column; gap: 8px;
+}
+#fuSalvar {
+  width: 100%; padding: 13px 18px; font-size: 14px; font-weight: 700; cursor: pointer; border-radius: 10px;
+  border: 1px solid rgba(212, 175, 55, 0.5); background: rgba(212, 175, 55, 0.16); color: var(--gold-bright);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+#fuSalvar:hover { background: rgba(212, 175, 55, 0.26); }
+#fuSalvar.nao-salvo { border-color: rgba(232, 74, 74, 0.7); background: rgba(232, 74, 74, 0.18); color: #ff6b6b; }
+#fuSalvar.nao-salvo:hover { background: rgba(232, 74, 74, 0.28); }
+#fuSalvar:active { transform: scale(0.98); }
+#fuSalvar.salvo-pulso { border-color: var(--gold-bright); background: rgba(212, 175, 55, 0.35); color: var(--gold-bright); animation: autoSalvoPulso 0.5s ease; }

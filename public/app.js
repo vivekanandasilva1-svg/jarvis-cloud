@@ -4967,6 +4967,14 @@ function rsDesenharRecuperacao(r) {
     g2.append(rsNumeroGrande('Contatos acionados', f.contatos, `${rsNum(f.mensagens)} mensagens enviadas`), rsNumeroGrande('Voltaram a responder', f.voltaramAResponder, taxa == null ? '' : `${taxa}% em até 3 dias`, { classe: taxa == null ? '' : rsClassePct(Math.min(100, taxa * 3)) }));
     cf.appendChild(g2);
     cf.appendChild(rsEl('p', 'rs-dica', `${rsNum(f.entraram)} contatos entraram nos funis de follow-up no período.`));
+    if (f.resgate && f.resgate.resgatados) {
+      cf.appendChild(rsEl('p', 'rs-dica', 'Resgate do Follow Up: leads que voltaram a conversar e a IA tentou remarcar.'));
+      cf.appendChild(rsBarrasLista([
+        { nome: 'Resgatados', valor: f.resgate.resgatados, texto: rsNum(f.resgate.resgatados) },
+        { nome: 'Agendaram depois', valor: f.resgate.agendaram, texto: rsNum(f.resgate.agendaram), classe: 'f-medio' },
+        { nome: 'Compareceram', valor: f.resgate.compareceram, texto: rsNum(f.resgate.compareceram), classe: 'f-alto' },
+      ], ''));
+    }
   }
   // aniversariantes
   const ca = rsCartao('Relacionamento', 'Mensagens de aniversário enviadas');

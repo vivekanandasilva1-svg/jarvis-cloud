@@ -117,7 +117,15 @@ async function recuperacao(tenantId, inicio, fim) {
           [tenantId, inicio, fim],
         ),
       ]);
-      return { entraram: exec[0].entraram, atingidos: exec[0].atingidos, mensagens: msgs[0].total, contatos: msgs[0].contatos, voltaramAResponder: resp[0].total };
+      // modo resgate: leads reativados que ganharam a etiqueta, e quantos agendaram / compareceram depois disso
+      const resgate = await q(
+        `SELECT count(*)::int AS resgatados,
+                (count(*) FILTER (WHERE EXISTS (SELECT 1 FROM crm_etapa_eventos e WHERE e.tenant_id = r.tenant_id AND e.contato_id = r.contato_id AND e.etapa = 'agendado' AND e.em > r.resgatado_em)))::int AS agendaram,
+                (count(*) FILTER (WHERE EXISTS (SELECT 1 FROM crm_etapa_eventos e WHERE e.tenant_id = r.tenant_id AND e.contato_id = r.contato_id AND e.etapa = 'compareceu' AND e.em > r.resgatado_em)))::int AS compareceram
+           FROM follow_up_resgates r WHERE r.tenant_id = $1 AND r.resgatado_em >= $2 AND r.resgatado_em < $3`,
+        [tenantId, inicio, fim],
+      ).then((r2) => r2[0]).catch(() => null);
+      return { entraram: exec[0].entraram, atingidos: exec[0].atingidos, mensagens: msgs[0].total, contatos: msgs[0].contatos, voltaramAResponder: resp[0].total, resgate };
     }),
     // aniversariantes
     bloco(async () => {
