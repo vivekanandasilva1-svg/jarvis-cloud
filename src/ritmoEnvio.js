@@ -19,3 +19,20 @@ export function esperarVez(instancia, { minS = MIN_S, maxS = MAX_S } = {}) {
   cauda.set(chave, minha.catch(() => {}));
   return minha;
 }
+
+// ---------------- REFORCO NO MESMO DIA (manha + inicio da tarde) ----------------
+// Cada mensagem proativa que o lead nao responde ganha um REFORCO: enviada de manha, o reforco sai no inicio da tarde do mesmo
+// dia; enviada a tarde/noite, sai na manha do dia seguinte (e sempre pelo menos 3 horas depois da primeira).
+const FUSO = 'America/Maceio'; // UTC-3 fixo
+export const horaLocalHHMM = (d) => d.toLocaleTimeString('pt-BR', { timeZone: FUSO, hour: '2-digit', minute: '2-digit', hour12: false });
+const dataLocal = (d) => d.toLocaleDateString('en-CA', { timeZone: FUSO });
+
+export function instanteDoReforco(enviadaEm, { horaManha = '09:00', horaTarde = '14:00' } = {}) {
+  const dia = dataLocal(enviadaEm);
+  if (horaLocalHHMM(enviadaEm) < horaTarde) {
+    const tarde = new Date(`${dia}T${horaTarde}:00-03:00`);
+    if (tarde.getTime() - enviadaEm.getTime() >= 3 * 3600 * 1000) return tarde;
+  }
+  const amanha = dataLocal(new Date(new Date(`${dia}T12:00:00-03:00`).getTime() + 24 * 3600 * 1000));
+  return new Date(`${amanha}T${horaManha}:00-03:00`);
+}

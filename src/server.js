@@ -2534,12 +2534,12 @@ app.get('/api/follow-up/config', async (req, res) => {
 });
 
 app.post('/api/follow-up/config', async (req, res) => {
-  const { ativo, promptGeral, horaInicio, horaFim, modoResgate, promptResgate } = req.body || {};
+  const { ativo, promptGeral, horaInicio, horaFim, modoResgate, promptResgate, reforcoAtivo, horaManha, horaTarde } = req.body || {};
   if (ativo && !promptGeral) {
     return res.status(400).json({ erro: 'pra ativar, escreva o script geral de como a IA deve se comportar' });
   }
   try {
-    await followUp.salvarConfig(req.tenantId, { ativo, promptGeral, horaInicio, horaFim, modoResgate, promptResgate });
+    await followUp.salvarConfig(req.tenantId, { ativo, promptGeral, horaInicio, horaFim, modoResgate, promptResgate, reforcoAtivo, horaManha, horaTarde });
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ erro: err.message });

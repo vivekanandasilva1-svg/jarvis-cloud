@@ -14,7 +14,7 @@ import { pool } from './db.js';
 import * as evolutionApi from './evolutionApi.js';
 import * as crm from './crm.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
-import { esperarVez } from './ritmoEnvio.js';
+import { esperarVez, instanteDoReforco, horaLocalHHMM } from './ritmoEnvio.js';
 
 const MODEL = 'claude-sonnet-5';
 const DIA_MS = 24 * 60 * 60 * 1000;
@@ -55,6 +55,10 @@ async function garantirTabelas() {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS fui_cards_tenant_idx ON fui_cards (tenant_id);`);
+  // reforco no mesmo dia: se o lead nao responder, uma 2a mensagem no inicio da tarde (ou na manha seguinte)
+  await pool.query(`ALTER TABLE fui_config ADD COLUMN IF NOT EXISTS reforco_ativo BOOLEAN NOT NULL DEFAULT true`);
+  await pool.query(`ALTER TABLE fui_config ADD COLUMN IF NOT EXISTS hora_manha TEXT NOT NULL DEFAULT '09:00'`);
+  await pool.query(`ALTER TABLE fui_config ADD COLUMN IF NOT EXISTS hora_tarde TEXT NOT NULL DEFAULT '14:00'`);
   // Inicio imediato: o lead que ENTRA na etapa recebe a 1a mensagem na hora (respeitando o horario de envio)
   await pool.query(`ALTER TABLE fui_cards ADD COLUMN IF NOT EXISTS inicio_imediato BOOLEAN NOT NULL DEFAULT false`);
   // quando o "Inicio imediato" foi LIGADO: quem ja estava na etapa e ainda nao iniciou tambem comeca (ver processarCard)
@@ -89,6 +93,7 @@ async function garantirTabelas() {
       PRIMARY KEY (card_id, contato_id)
     );
   `);
+  await pool.query(`ALTER TABLE fui_execucoes ADD COLUMN IF NOT EXISTS reforcados INT NOT NULL DEFAULT 0`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
   console.error('Erro criando tabelas do Follow Up Inteligente:', err.message);
@@ -97,27 +102,31 @@ const tabelasProntas = garantirTabelas().catch((err) => {
 // ---------- configuracao geral ----------
 
 const HORA_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
-const CONFIG_VAZIA = { ativo: false, promptGeral: '', horaInicio: '08:00', horaFim: '20:00' };
+const CONFIG_VAZIA = { ativo: false, promptGeral: '', horaInicio: '08:00', horaFim: '20:00', reforcoAtivo: true, horaManha: '09:00', horaTarde: '14:00' };
 
 export async function obterConfig(tenantId) {
   if (!pool) return { ...CONFIG_VAZIA, modeloFaltosos: modeloFaltosos() };
   await tabelasProntas;
-  const { rows } = await pool.query(`SELECT ativo, prompt_geral, hora_inicio, hora_fim FROM fui_config WHERE tenant_id = $1`, [tenantId]);
+  const { rows } = await pool.query(`SELECT ativo, prompt_geral, hora_inicio, hora_fim, reforco_ativo, hora_manha, hora_tarde FROM fui_config WHERE tenant_id = $1`, [tenantId]);
   if (!rows.length) return { ...CONFIG_VAZIA, modeloFaltosos: modeloFaltosos() };
-  return { ativo: !!rows[0].ativo, promptGeral: rows[0].prompt_geral || '', horaInicio: rows[0].hora_inicio, horaFim: rows[0].hora_fim, modeloFaltosos: modeloFaltosos() };
+  return { ativo: !!rows[0].ativo, promptGeral: rows[0].prompt_geral || '', horaInicio: rows[0].hora_inicio, horaFim: rows[0].hora_fim, reforcoAtivo: rows[0].reforco_ativo !== false, horaManha: rows[0].hora_manha || '09:00', horaTarde: rows[0].hora_tarde || '14:00', modeloFaltosos: modeloFaltosos() };
 }
 
-export async function salvarConfig(tenantId, { ativo, promptGeral, horaInicio, horaFim }) {
+export async function salvarConfig(tenantId, { ativo, promptGeral, horaInicio, horaFim, reforcoAtivo, horaManha, horaTarde }) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   const hi = horaInicio || '08:00';
   const hf = horaFim || '20:00';
   if (!HORA_RE.test(hi) || !HORA_RE.test(hf)) throw new Error('Horario invalido (use o formato HH:MM).');
   if (hi >= hf) throw new Error('O horario de inicio precisa ser antes do horario de fim.');
+  const hm = horaManha || '09:00';
+  const ht = horaTarde || '14:00';
+  if (!HORA_RE.test(hm) || !HORA_RE.test(ht)) throw new Error('Horario do reforco invalido (use o formato HH:MM).');
+  if (hm >= ht) throw new Error('O horario da manha precisa ser antes do inicio da tarde.');
   await tabelasProntas;
   await pool.query(
-    `INSERT INTO fui_config (tenant_id, ativo, prompt_geral, hora_inicio, hora_fim, atualizado_em) VALUES ($1, $2, $3, $4, $5, now())
-     ON CONFLICT (tenant_id) DO UPDATE SET ativo = $2, prompt_geral = $3, hora_inicio = $4, hora_fim = $5, atualizado_em = now()`,
-    [tenantId, !!ativo, String(promptGeral || '').slice(0, 4000), hi, hf],
+    `INSERT INTO fui_config (tenant_id, ativo, prompt_geral, hora_inicio, hora_fim, reforco_ativo, hora_manha, hora_tarde, atualizado_em) VALUES ($1, $2, $3, $4, $5, COALESCE($6, true), $7, $8, now())
+     ON CONFLICT (tenant_id) DO UPDATE SET ativo = $2, prompt_geral = $3, hora_inicio = $4, hora_fim = $5, reforco_ativo = COALESCE($6, fui_config.reforco_ativo), hora_manha = $7, hora_tarde = $8, atualizado_em = now()`,
+    [tenantId, !!ativo, String(promptGeral || '').slice(0, 4000), hi, hf, reforcoAtivo === undefined ? null : !!reforcoAtivo, hm, ht],
   );
 }
 
@@ -325,11 +334,12 @@ function formatarConversa(msgs) {
   return msgs.map((m) => `[${m.direcao === 'entrada' ? 'Lead' : 'Nos'}${m.autor === 'followup' ? ' - follow-up automatico' : ''}] ${m.texto || `(${m.tipo})`}`).join('\n');
 }
 
-async function gerarMensagem({ tenantId, config, card, contato, numeroMensagem, totalMensagens, dia, nomeEtapa }) {
+async function gerarMensagem({ tenantId, config, card, contato, numeroMensagem, totalMensagens, dia, nomeEtapa, reforco }) {
   const conversa = await crm.ultimasMensagens(tenantId, contato.numero, contato.instancia, 14);
   const texto = `${config.promptGeral ? `${config.promptGeral}\n\n` : ''}` +
     `Voce esta mandando uma mensagem automatica de FOLLOW-UP por WhatsApp. Etapa do lead no funil: ${nomeEtapa}. ` +
     `Esta e a mensagem ${numeroMensagem} de ${totalMensagens} desse follow-up (enviada no dia ${dia} depois que o lead entrou na etapa).` +
+    (reforco ? '\n\nREFORCO: esta e uma SEGUNDA mensagem pro mesmo lead (a anterior foi enviada hoje/ontem e ele nao respondeu). Escreva algo bem curto e leve, diferente da anterior, sem cobrar nem pressionar, com UMA pergunta simples e facil de responder.' : '') +
     (card.instrucoes ? `\n\nInstrucoes desse follow-up:\n${card.instrucoes}` : '') +
     `\n\nNome do lead (se souber): ${contato.nome || 'nao informado'}` +
     `\n\nUltimas mensagens da conversa:\n${formatarConversa(conversa)}` +
@@ -358,7 +368,7 @@ export async function processarCard(tenantId, card, config, { somenteContatoId =
   const { rows: contatos } = await pool.query(
     `SELECT c.id, c.numero, c.instancia, c.nome, c.etapa, c.criado_em, c.ultima_entrada_em,
             (SELECT max(e.em) FROM crm_etapa_eventos e WHERE e.contato_id = c.id AND e.etapa = c.etapa) AS etapa_em,
-            x.entrou_em AS x_entrou_em, x.enviados, x.ultima_em, x.finalizado
+            x.entrou_em AS x_entrou_em, x.enviados, x.ultima_em, x.finalizado, x.reforcados AS x_reforcados
      FROM crm_contatos c
      LEFT JOIN fui_execucoes x ON x.card_id = $3 AND x.contato_id = c.id
      WHERE c.tenant_id = $1 AND c.oculto = false AND c.auto_pausado = false AND c.etapa = ANY($2::text[])
@@ -398,17 +408,46 @@ export async function processarCard(tenantId, card, config, { somenteContatoId =
       const finalizar = (motivo) => pool.query(`UPDATE fui_execucoes SET finalizado = true, motivo = $3 WHERE card_id = $1 AND contato_id = $2`, [card.id, c.id, motivo]);
 
       if (card.parar_se_responder && c.ultima_entrada_em && new Date(c.ultima_entrada_em) > estado.entrou) { await finalizar('respondeu'); continue; }
+
+      // REFORCO NO MESMO DIA: a ultima mensagem nao foi respondida -> 2a mensagem no inicio da tarde (ou na manha seguinte)
+      const reforcoPendente = config.reforcoAtivo && estado.enviados > 0 && (c.x_reforcados || 0) < estado.enviados && !!estado.ultima;
+      if (reforcoPendente) {
+        if (c.ultima_entrada_em && new Date(c.ultima_entrada_em) > estado.ultima) {
+          await pool.query(`UPDATE fui_execucoes SET reforcados = enviados WHERE card_id = $1 AND contato_id = $2`, [card.id, c.id]); // respondeu: sem reforco
+        } else if (Date.now() >= instanteDoReforco(estado.ultima, config).getTime()) {
+          if (!dentroDoHorario(config)) return;
+          await esperarVez(c.instancia);
+          if (!dentroDoHorario(config)) return;
+          const { rows: [fr] } = await pool.query(`SELECT enviados, reforcados, finalizado FROM fui_execucoes WHERE card_id = $1 AND contato_id = $2`, [card.id, c.id]);
+          if (!fr || fr.finalizado || fr.reforcados >= fr.enviados || fr.enviados !== estado.enviados) continue;
+          const msgReforco = await gerarMensagem({
+            tenantId, config, card, contato: c, numeroMensagem: estado.enviados, totalMensagens: card.dias_envio.length, dia: card.dias_envio[estado.enviados - 1], nomeEtapa: nomes.get(c.etapa) || c.etapa, reforco: true,
+          });
+          const respReforco = await evolutionApi.enviarMensagemTextoPor(c.instancia, c.numero, msgReforco);
+          await crm.registrarMensagem(tenantId, {
+            numero: c.numero, instancia: c.instancia, direcao: 'saida', tipo: 'text', texto: msgReforco,
+            autor: 'followup', agente: 'anne', waId: respReforco?.key?.id || null, manterEtapa: true,
+          });
+          await pool.query(`UPDATE fui_execucoes SET reforcados = enviados, ultima_em = now() WHERE card_id = $1 AND contato_id = $2`, [card.id, c.id]);
+          if (estado.enviados >= card.dias_envio.length) await finalizar('concluido');
+          continue;
+        } else if (estado.enviados >= card.dias_envio.length) {
+          continue; // ainda nao e a hora do reforco da ULTIMA mensagem: espera (nao encerra ainda)
+        }
+      }
       if (estado.enviados >= card.dias_envio.length) { await finalizar('concluido'); continue; }
 
       // Inicio imediato: so vale pra quem ENTROU na etapa depois do follow-up existir (quem ja estava parado
       // la quando a opcao foi ligada nao recebe nada) e so pra 1a mensagem; as demais seguem os dias do card
       // (e, quando o "Inicio imediato" acabou de ser ligado, tambem quem JA estava na etapa e ainda nao iniciou)
-      const eraPendente = !!card.iniciar_pendentes_em && entradaReal <= new Date(card.iniciar_pendentes_em);
-      const imediato = !!card.inicio_imediato && (entradaReal > baseline || eraPendente) && estado.enviados === 0;
+      // com o Inicio imediato LIGADO, todo lead da etapa que ainda nao iniciou comeca na hora (os que entram depois e os que ja estavam la)
+      const imediato = !!card.inicio_imediato && estado.enviados === 0;
       const dia = imediato ? 0 : card.dias_envio[estado.enviados];
       if (Date.now() - estado.entrou.getTime() < dia * DIA_MS) continue; // ainda nao e o dia
       if (estado.ultima && Date.now() - estado.ultima.getTime() < ESPACO_MINIMO_MS) continue;
       if (!dentroDoHorario(config)) return; // fora do expediente: tenta de novo na proxima rodada
+      // mensagens programadas pelos dias saem a partir do horario da MANHA configurado (o Inicio imediato sai na hora)
+      if (!imediato && horaLocalHHMM(new Date()) < (config.horaManha || '09:00')) continue;
 
       // ritmo seguro: uma mensagem proativa por vez em cada numero de WhatsApp, 45 a 110 s entre elas (ver ritmoEnvio.js)
       await esperarVez(c.instancia);
@@ -438,7 +477,7 @@ export async function processarCard(tenantId, card, config, { somenteContatoId =
           console.error(`Erro mandando anexo do follow-up inteligente (card ${card.id}):`, err.message);
         }
       }
-      if (estado.enviados + 1 >= card.dias_envio.length) await finalizar('concluido');
+      if (!config.reforcoAtivo && estado.enviados + 1 >= card.dias_envio.length) await finalizar('concluido'); // com reforco, encerra depois dele
     } catch (err) {
       console.error(`Erro no follow-up inteligente (card ${card.id}, contato ${c.id}, tenant ${tenantId}):`, err.message);
     } finally {

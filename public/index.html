@@ -1807,6 +1807,23 @@
               <input type="time" id="fuHoraFim" />
             </div>
           </div>
+          <div class="auto-toggle-row" style="margin-top: 10px;">
+            <label class="auto-switch">
+              <input type="checkbox" id="fuReforcoAtivo" />
+              <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+            </label>
+            <span>Reforço: se o lead não responder, tenta de novo (manhã e início da tarde)</span>
+          </div>
+          <div class="fu-linha-horas">
+            <div>
+              <label class="auto-label">Manhã às</label>
+              <input type="time" id="fuHoraManha" />
+            </div>
+            <div>
+              <label class="auto-label">Início da tarde às</label>
+              <input type="time" id="fuHoraTarde" />
+            </div>
+          </div>
         </section>
 
         <section class="fu-card">
@@ -1883,6 +1900,24 @@
           <div>
             <label class="auto-label">Termina as</label>
             <input type="time" id="fuiHoraFim" />
+          </div>
+        </div>
+
+        <div class="auto-toggle-row" style="margin-top: 10px;">
+          <label class="auto-switch">
+            <input type="checkbox" id="fuiReforcoAtivo" />
+            <span class="auto-switch-track"><span class="auto-switch-thumb"></span></span>
+          </label>
+          <span>Reforço: se o lead não responder, tenta de novo (manhã e início da tarde)</span>
+        </div>
+        <div class="auto-upload-row">
+          <div>
+            <label class="auto-label">Manhã às</label>
+            <input type="time" id="fuiHoraManha" />
+          </div>
+          <div>
+            <label class="auto-label">Início da tarde às</label>
+            <input type="time" id="fuiHoraTarde" />
           </div>
         </div>
 

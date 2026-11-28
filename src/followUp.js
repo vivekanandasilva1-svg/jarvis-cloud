@@ -18,7 +18,7 @@ import { pool } from './db.js';
 import * as evolutionApi from './evolutionApi.js';
 import * as crm from './crm.js';
 import { tabelasProntas as tenantsProntos } from './tenants.js';
-import { esperarVez } from './ritmoEnvio.js';
+import { esperarVez, instanteDoReforco, horaLocalHHMM } from './ritmoEnvio.js';
 
 const MODEL = 'claude-sonnet-5';
 
@@ -56,6 +56,10 @@ async function garantirTabelas() {
   // modo resgate: lead que responde positivo a uma tentativa ganha a etiqueta de resgate e a IA passa a buscar a objecao
   await pool.query(`ALTER TABLE follow_up_config ADD COLUMN IF NOT EXISTS modo_resgate BOOLEAN NOT NULL DEFAULT false;`);
   await pool.query(`ALTER TABLE follow_up_config ADD COLUMN IF NOT EXISTS prompt_resgate TEXT;`);
+  // reforco no mesmo dia: se o lead nao responder, uma 2a mensagem no inicio da tarde (ou na manha seguinte)
+  await pool.query(`ALTER TABLE follow_up_config ADD COLUMN IF NOT EXISTS reforco_ativo BOOLEAN NOT NULL DEFAULT true;`);
+  await pool.query(`ALTER TABLE follow_up_config ADD COLUMN IF NOT EXISTS hora_manha TEXT NOT NULL DEFAULT '09:00';`);
+  await pool.query(`ALTER TABLE follow_up_config ADD COLUMN IF NOT EXISTS hora_tarde TEXT NOT NULL DEFAULT '14:00';`);
   // cada lead resgatado (etiqueta aplicada) fica registrado com a data - base da metrica na aba Resultados
   await pool.query(`
     CREATE TABLE IF NOT EXISTS follow_up_resgates (
@@ -105,6 +109,7 @@ async function garantirTabelas() {
     );
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS follow_up_contatos_tenant_idx ON follow_up_contatos (tenant_id);`);
+  await pool.query(`ALTER TABLE follow_up_contatos ADD COLUMN IF NOT EXISTS ultima_etapa_reforcada INT NOT NULL DEFAULT 0;`);
   await pool.query(`CREATE INDEX IF NOT EXISTS follow_up_arquivos_tenant_ordem_idx ON follow_up_arquivos (tenant_id, ordem);`);
 }
 const tabelasProntas = garantirTabelas().catch((err) => {
@@ -171,12 +176,12 @@ export async function posturaResgate(tenantId, numero, instancia) {
 const HORA_PADRAO_INICIO = '08:00';
 const HORA_PADRAO_FIM = '20:00';
 const RECOMENDADOS = () => ({ promptGeral: PROMPT_GERAL_RECOMENDADO, promptResgate: PROMPT_RESGATE_RECOMENDADO });
-const CONFIG_VAZIA = { ativo: false, promptGeral: '', horaInicio: HORA_PADRAO_INICIO, horaFim: HORA_PADRAO_FIM, modoResgate: false, promptResgate: '', etiquetaResgate: ETIQUETA_RESGATE };
+const CONFIG_VAZIA = { ativo: false, promptGeral: '', horaInicio: HORA_PADRAO_INICIO, horaFim: HORA_PADRAO_FIM, modoResgate: false, promptResgate: '', etiquetaResgate: ETIQUETA_RESGATE, reforcoAtivo: true, horaManha: '09:00', horaTarde: '14:00' };
 
 export async function obterConfig(tenantId) {
   if (!pool) return { ...CONFIG_VAZIA, recomendados: RECOMENDADOS() };
   await tabelasProntas;
-  const { rows } = await pool.query(`SELECT ativo, prompt_geral, hora_inicio, hora_fim, modo_resgate, prompt_resgate FROM follow_up_config WHERE tenant_id = $1`, [tenantId]);
+  const { rows } = await pool.query(`SELECT ativo, prompt_geral, hora_inicio, hora_fim, modo_resgate, prompt_resgate, reforco_ativo, hora_manha, hora_tarde FROM follow_up_config WHERE tenant_id = $1`, [tenantId]);
   if (!rows.length) return { ...CONFIG_VAZIA, recomendados: RECOMENDADOS() };
   return {
     ativo: !!rows[0].ativo,
@@ -184,6 +189,9 @@ export async function obterConfig(tenantId) {
     horaInicio: rows[0].hora_inicio || HORA_PADRAO_INICIO,
     horaFim: rows[0].hora_fim || HORA_PADRAO_FIM,
     modoResgate: !!rows[0].modo_resgate,
+    reforcoAtivo: rows[0].reforco_ativo !== false,
+    horaManha: rows[0].hora_manha || '09:00',
+    horaTarde: rows[0].hora_tarde || '14:00',
     promptResgate: rows[0].prompt_resgate || '',
     etiquetaResgate: ETIQUETA_RESGATE,
     recomendados: RECOMENDADOS(),
@@ -192,19 +200,25 @@ export async function obterConfig(tenantId) {
 
 const HORA_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-export async function salvarConfig(tenantId, { ativo, promptGeral, horaInicio, horaFim, modoResgate, promptResgate }) {
+export async function salvarConfig(tenantId, { ativo, promptGeral, horaInicio, horaFim, modoResgate, promptResgate, reforcoAtivo, horaManha, horaTarde }) {
   if (!pool) throw new Error('Precisa do Postgres configurado.');
   const hi = horaInicio || HORA_PADRAO_INICIO;
   const hf = horaFim || HORA_PADRAO_FIM;
   if (!HORA_RE.test(hi) || !HORA_RE.test(hf)) throw new Error('Horario invalido (use o formato HH:MM).');
   if (hi >= hf) throw new Error('O horario de inicio precisa ser antes do horario de fim.');
+  const hm = horaManha || '09:00';
+  const ht = horaTarde || '14:00';
+  if (!HORA_RE.test(hm) || !HORA_RE.test(ht)) throw new Error('Horario do reforco invalido (use o formato HH:MM).');
+  if (hm >= ht) throw new Error('O horario da manha precisa ser antes do inicio da tarde.');
   await tabelasProntas;
   await pool.query(
-    `INSERT INTO follow_up_config (tenant_id, ativo, prompt_geral, hora_inicio, hora_fim, modo_resgate, prompt_resgate, atualizado_em) VALUES ($1, $2, $3, $4, $5, COALESCE($6, false), COALESCE($7, ''), now())
+    `INSERT INTO follow_up_config (tenant_id, ativo, prompt_geral, hora_inicio, hora_fim, modo_resgate, prompt_resgate, reforco_ativo, hora_manha, hora_tarde, atualizado_em) VALUES ($1, $2, $3, $4, $5, COALESCE($6, false), COALESCE($7, ''), COALESCE($8, true), $9, $10, now())
      ON CONFLICT (tenant_id) DO UPDATE SET ativo = $2, prompt_geral = $3, hora_inicio = $4, hora_fim = $5,
-       modo_resgate = COALESCE($6, follow_up_config.modo_resgate), prompt_resgate = COALESCE($7, follow_up_config.prompt_resgate), atualizado_em = now()`,
-    [tenantId, !!ativo, promptGeral || '', hi, hf, modoResgate === undefined ? null : !!modoResgate, promptResgate === undefined ? null : String(promptResgate).slice(0, 8000)],
+       modo_resgate = COALESCE($6, follow_up_config.modo_resgate), prompt_resgate = COALESCE($7, follow_up_config.prompt_resgate),
+       reforco_ativo = COALESCE($8, follow_up_config.reforco_ativo), hora_manha = $9, hora_tarde = $10, atualizado_em = now()`,
+    [tenantId, !!ativo, promptGeral || '', hi, hf, modoResgate === undefined ? null : !!modoResgate, promptResgate === undefined ? null : String(promptResgate).slice(0, 8000), reforcoAtivo === undefined ? null : !!reforcoAtivo, hm, ht],
   );
+  if (ativo) iniciarPendentesDoFollowUp(tenantId).catch((err) => console.error('Erro iniciando pendentes do follow up:', err.message));
 }
 
 // fuso fixo America/Maceio (mesmo padrao usado no resto do app - relatoriosProgramados.js,
@@ -302,15 +316,32 @@ export async function iniciarAcompanhamento(tenantId, contatoId, { disparar = tr
   if (!pool) return;
   await tabelasProntas;
   await pool.query(
-    `INSERT INTO follow_up_contatos (contato_id, tenant_id, entrou_em, ultima_etapa_enviada, ultima_etapa_enviada_em, historico, finalizado)
-     VALUES ($1, $2, now(), 0, NULL, '[]'::jsonb, false)
+    `INSERT INTO follow_up_contatos (contato_id, tenant_id, entrou_em, ultima_etapa_enviada, ultima_etapa_enviada_em, historico, finalizado, ultima_etapa_reforcada)
+     VALUES ($1, $2, now(), 0, NULL, '[]'::jsonb, false, 0)
      ON CONFLICT (contato_id) DO UPDATE SET
-       entrou_em = now(), ultima_etapa_enviada = 0, ultima_etapa_enviada_em = NULL, historico = '[]'::jsonb, finalizado = false`,
+       entrou_em = now(), ultima_etapa_enviada = 0, ultima_etapa_enviada_em = NULL, historico = '[]'::jsonb, finalizado = false, ultima_etapa_reforcada = 0`,
     [contatoId, tenantId],
   );
   // a PRIMEIRA tentativa sai assim que o lead entra (arrastando, importando planilha, pela IA ou pelo Clinicorp) - em fila,
   // uma por vez e com pausa entre envios, pra uma importacao grande nao virar rajada no WhatsApp
   if (disparar) enfileirarPrimeiraTentativa(tenantId, contatoId);
+}
+
+// contatos que estao na coluna Follow Up mas NUNCA tiveram o acompanhamento iniciado (entraram antes de ligar o Follow Up, por importacao
+// antiga ou pelo espelho do Clinicorp): comecam agora - a 1a tentativa sai em fila, espacada. Roda ao salvar a config ligada e a cada rodada
+// do agendador (so pega quem ainda nao tem registro).
+export async function iniciarPendentesDoFollowUp(tenantId) {
+  if (!pool) return 0;
+  await tabelasProntas;
+  const config = await obterConfig(tenantId);
+  if (!config.ativo || !config.promptGeral) return 0;
+  const { rows } = await pool.query(
+    `SELECT c.id FROM crm_contatos c LEFT JOIN follow_up_contatos fc ON fc.contato_id = c.id
+     WHERE c.tenant_id = $1 AND c.etapa = 'follow_up' AND fc.contato_id IS NULL AND c.oculto = false AND c.instancia NOT LIKE 'ig:%' LIMIT 500`,
+    [tenantId],
+  );
+  for (const { id } of rows) await iniciarAcompanhamento(tenantId, id);
+  return rows.length;
 }
 
 // chamado quando um card SAI da coluna "follow_up" (pra qualquer outra) - para o agendador de
@@ -354,7 +385,7 @@ function formatarHistorico(historico) {
   return historico.slice(-8).map((h) => `[${h.autor === 'lumia' ? 'Voce (Lumia)' : 'Contato'}] ${h.texto}`).join('\n');
 }
 
-async function gerarMensagemEtapa({ tenantId, config, etapa, contato, historico, primeira }) {
+async function gerarMensagemEtapa({ tenantId, config, etapa, contato, historico, primeira, reforco }) {
   const notasEquipe = await crm.notasParaIA(tenantId, { contatoId: contato.contato_id || contato.id }).catch(() => '');
   // conversa recente de WhatsApp do contato (a IA le antes de escrever: lead de planilha ou que ja conversou antes)
   const conversa = await crm.ultimasMensagens(tenantId, contato.numero, contato.instancia, 14).catch(() => []);
@@ -365,6 +396,7 @@ async function gerarMensagemEtapa({ tenantId, config, etapa, contato, historico,
     `Voce esta tentando reengajar um contato - essa e a tentativa numero ${etapa.ordem} de reengajamento` +
     (primeira ? ' (a PRIMEIRA: enviada assim que o contato entrou no Follow Up).' : `, ${etapa.dias} dia(s) depois que o contato entrou no Follow Up.`) +
     (primeira ? '\nLeia a conversa recente abaixo e retome exatamente de onde parou; se nao houver conversa anterior, faca uma abertura curta e acolhedora, sem fingir que ja conversaram.' : '') +
+    (reforco ? '\n\nREFORCO: esta e uma SEGUNDA mensagem pro mesmo contato (a anterior foi enviada hoje/ontem e ele nao respondeu). Escreva algo bem curto e leve, diferente da anterior, sem cobrar nem pressionar, com UMA pergunta simples e facil de responder.' : '') +
     (etapa.prompt ? `\n\nInstrucoes especificas pra essa tentativa: ${etapa.prompt}` : '') +
     `\n\nNome do contato (se souber): ${contato.nome || 'nao informado'}` +
     (contato.observacoes ? `\n\nObservacoes do cadastro/planilha sobre o contato: ${String(contato.observacoes).slice(0, 600)}` : '') +
@@ -470,7 +502,7 @@ export async function processarMensagem(tenantId, contatoId, numero, instancia, 
 // (sem isso a primeira tentativa sairia duplicada)
 const emProcessamento = new Set();
 
-async function processarContato(tenantId, contato, etapas, config) {
+export async function processarContato(tenantId, contato, etapas, config) {
   const trava = `${tenantId}:${contato.contato_id}`;
   if (emProcessamento.has(trava)) return false;
   emProcessamento.add(trava);
@@ -494,10 +526,35 @@ async function processarContatoSeguro(tenantId, contato, etapas, config) {
 
   // a PRIMEIRA tentativa ativa vale assim que o lead entra no Follow Up (sem esperar dias); as demais seguem os dias
   // (so em entrada NOVA: sem tentativa enviada e sem nada no historico - depois que o lead respondeu o historico nao esta mais vazio)
+  // REFORCO NO MESMO DIA: a mensagem anterior nao foi respondida -> 2a mensagem no inicio da tarde (ou na manha seguinte)
+  if (config.reforcoAtivo && ultimaOrdem > 0 && (contato.ultima_etapa_reforcada || 0) < ultimaOrdem && contato.ultima_etapa_enviada_em) {
+    const enviadaEm = new Date(contato.ultima_etapa_enviada_em);
+    if (contato.ultima_entrada_em && new Date(contato.ultima_entrada_em) > enviadaEm) {
+      await pool.query(`UPDATE follow_up_contatos SET ultima_etapa_reforcada = $1 WHERE contato_id = $2 AND tenant_id = $3`, [ultimaOrdem, contato.contato_id, tenantId]); // respondeu: sem reforco
+    } else if (Date.now() >= instanteDoReforco(enviadaEm, config).getTime()) {
+      await esperarVez(contato.instancia);
+      if (!dentroDoHorarioFuncionamento(config)) return false;
+      const { rows: [fr] } = await pool.query(`SELECT ultima_etapa_enviada, ultima_etapa_reforcada, finalizado FROM follow_up_contatos WHERE contato_id = $1 AND tenant_id = $2`, [contato.contato_id, tenantId]);
+      if (!fr || fr.finalizado || (fr.ultima_etapa_reforcada || 0) >= ultimaOrdem || (fr.ultima_etapa_enviada || 0) !== ultimaOrdem) return false;
+      const etapaAtual = etapas.find((e) => e.ordem === ultimaOrdem) || { ordem: ultimaOrdem, dias: 0, prompt: '' };
+      const hist = contato.historico || [];
+      const msgReforco = await gerarMensagemEtapa({ tenantId, config, etapa: etapaAtual, contato, historico: hist, primeira: false, reforco: true });
+      await evolutionApi.enviarMensagemTextoPor(contato.instancia, contato.numero, msgReforco);
+      await crm.registrarMensagem(tenantId, { numero: contato.numero, instancia: contato.instancia, direcao: 'saida', tipo: 'text', texto: msgReforco, autor: 'followup', agente: 'lua' });
+      await pool.query(
+        `UPDATE follow_up_contatos SET ultima_etapa_reforcada = $1, historico = $2 WHERE contato_id = $3 AND tenant_id = $4`,
+        [ultimaOrdem, JSON.stringify([...hist, { autor: 'lumia', etapa: ultimaOrdem, reforco: true, texto: msgReforco, quando: new Date().toISOString() }]), contato.contato_id, tenantId],
+      );
+      return true;
+    }
+  }
+
   const primeiraAtiva = etapas.find((e) => e.ativo);
   const entradaNova = ultimaOrdem === 0 && !(contato.historico || []).length;
   const proxima = etapas.find((e) => e.ordem > ultimaOrdem && e.ativo && ((entradaNova && e.ordem === primeiraAtiva?.ordem) || diasDesdeEntrada >= e.dias));
   if (proxima) {
+    // as tentativas dos dias seguintes saem a partir do horario da MANHA configurado (a 1a, de entrada nova, sai na hora)
+    if (!(entradaNova && proxima.ordem === primeiraAtiva?.ordem) && horaLocalHHMM(new Date()) < (config.horaManha || '09:00')) return false;
     // ritmo seguro: uma mensagem proativa por vez em cada numero de WhatsApp, 45 a 110 s entre elas (ver ritmoEnvio.js)
     await esperarVez(contato.instancia);
     if (!dentroDoHorarioFuncionamento(config)) return false; // o horario fechou enquanto esperava a vez
@@ -528,7 +585,7 @@ async function processarContatoSeguro(tenantId, contato, etapas, config) {
 
   // ja mandou a ultima tentativa ativa configurada? da uma folga e desiste (move pra "perdido")
   const ultimaAtiva = [...etapas].reverse().find((e) => e.ativo);
-  if (ultimaAtiva && ultimaOrdem >= ultimaAtiva.ordem && contato.ultima_etapa_enviada_em) {
+  if (ultimaAtiva && ultimaOrdem >= ultimaAtiva.ordem && contato.ultima_etapa_enviada_em && (!config.reforcoAtivo || (contato.ultima_etapa_reforcada || 0) >= ultimaOrdem || Date.now() - new Date(contato.ultima_etapa_enviada_em).getTime() > 2 * 24 * 3600 * 1000)) {
     const diasDesdeUltimoEnvio = (Date.now() - new Date(contato.ultima_etapa_enviada_em).getTime()) / (24 * 60 * 60 * 1000);
     if (diasDesdeUltimoEnvio >= DIAS_FOLGA_ANTES_DE_DESISTIR) {
       await crm.moverEtapa(tenantId, contato.contato_id, 'perdido');
@@ -540,8 +597,8 @@ async function processarContatoSeguro(tenantId, contato, etapas, config) {
 
 // ---------- disparo imediato da primeira tentativa (fila) ----------
 
-const COLUNAS_CONTATO_FU = `fc.contato_id, fc.entrou_em, fc.ultima_etapa_enviada, fc.ultima_etapa_enviada_em, fc.historico,
-                    c.numero, c.instancia, c.nome, c.observacoes`;
+const COLUNAS_CONTATO_FU = `fc.contato_id, fc.entrou_em, fc.ultima_etapa_enviada, fc.ultima_etapa_enviada_em, fc.historico, fc.ultima_etapa_reforcada,
+                    c.numero, c.instancia, c.nome, c.observacoes, c.ultima_entrada_em`;
 const filaImediata = [];
 let drenandoFila = false;
 const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -598,6 +655,7 @@ export function iniciarSchedulerFollowUp() {
           const config = await obterConfig(tenantId);
           if (!config.ativo || !config.promptGeral) continue;
           const etapas = await listarEtapas(tenantId);
+          await iniciarPendentesDoFollowUp(tenantId).catch((err) => console.error('Erro iniciando pendentes do follow up:', err.message));
 
           const { rows: contatos } = await pool.query(
             `SELECT ${COLUNAS_CONTATO_FU}

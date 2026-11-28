@@ -7371,6 +7371,9 @@ async function carregarFollowUp() {
     avisarResgateSemAutoAtendimento();
     fuHoraInicio.value = config.horaInicio || '08:00';
     fuHoraFim.value = config.horaFim || '20:00';
+    fuReforcoAtivo.checked = config.reforcoAtivo !== false;
+    fuHoraManha.value = config.horaManha || '09:00';
+    fuHoraTarde.value = config.horaTarde || '14:00';
     limparPendente(fuSalvar);
   } catch (err) {
     fuErro.textContent = `Nao consegui carregar a configuracao: ${err.message}`;
@@ -7379,7 +7382,10 @@ async function carregarFollowUp() {
   carregarEtapasFollowUp();
 }
 
-rastrearAlteracoes(fuSalvar, [fuAtivo, fuPromptGeral, fuHoraInicio, fuHoraFim, fuModoResgate, fuPromptResgate]);
+const fuReforcoAtivo = document.getElementById('fuReforcoAtivo');
+const fuHoraManha = document.getElementById('fuHoraManha');
+const fuHoraTarde = document.getElementById('fuHoraTarde');
+rastrearAlteracoes(fuSalvar, [fuAtivo, fuPromptGeral, fuHoraInicio, fuHoraFim, fuModoResgate, fuPromptResgate, fuReforcoAtivo, fuHoraManha, fuHoraTarde]);
 fuSalvar.addEventListener('click', async () => {
   fuErro.hidden = true;
   const ativo = fuAtivo.checked;
@@ -7401,7 +7407,7 @@ fuSalvar.addEventListener('click', async () => {
     const res = await fetch('/api/follow-up/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-      body: JSON.stringify({ ativo, promptGeral, horaInicio, horaFim, modoResgate: fuModoResgate.checked, promptResgate: fuPromptResgate.value.trim() }),
+      body: JSON.stringify({ ativo, promptGeral, horaInicio, horaFim, modoResgate: fuModoResgate.checked, promptResgate: fuPromptResgate.value.trim(), reforcoAtivo: fuReforcoAtivo.checked, horaManha: fuHoraManha.value, horaTarde: fuHoraTarde.value }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
@@ -9778,6 +9784,9 @@ const fuiPromptGeral = document.getElementById('fuiPromptGeral');
 const fuiSalvar = document.getElementById('fuiSalvar');
 const fuiErro = document.getElementById('fuiErro');
 const fuiLista = document.getElementById('fuiLista');
+const fuiReforcoAtivo = document.getElementById('fuiReforcoAtivo');
+const fuiHoraManha = document.getElementById('fuiHoraManha');
+const fuiHoraTarde = document.getElementById('fuiHoraTarde');
 const fuiCriar = document.getElementById('fuiCriar');
 let fuiEtapas = []; // etapas do funil que aceitam follow-up (vem da API)
 
@@ -9793,6 +9802,9 @@ async function carregarFollowUpInteligente() {
     fuiAtivoLabel.textContent = c.ativo ? 'Ativado' : 'Desativado';
     fuiHoraInicio.value = c.horaInicio || '08:00';
     fuiHoraFim.value = c.horaFim || '20:00';
+    fuiReforcoAtivo.checked = c.reforcoAtivo !== false;
+    fuiHoraManha.value = c.horaManha || '09:00';
+    fuiHoraTarde.value = c.horaTarde || '14:00';
     fuiPromptGeral.value = c.promptGeral || '';
     fuiModeloFaltosos = c.modeloFaltosos || null;
     limparPendente(fuiSalvar);
@@ -9804,7 +9816,7 @@ async function carregarFollowUpInteligente() {
   if (window.lcCarregar) window.lcCarregar();
 }
 
-rastrearAlteracoes(fuiSalvar, [fuiAtivo, fuiHoraInicio, fuiHoraFim, fuiPromptGeral]);
+rastrearAlteracoes(fuiSalvar, [fuiAtivo, fuiHoraInicio, fuiHoraFim, fuiPromptGeral, fuiReforcoAtivo, fuiHoraManha, fuiHoraTarde]);
 fuiSalvar.addEventListener('click', async () => {
   fuiErro.hidden = true;
   fuiSalvar.disabled = true;
@@ -9812,7 +9824,7 @@ fuiSalvar.addEventListener('click', async () => {
     const res = await fetch('/api/fu-inteligente/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-app-password': appPassword },
-      body: JSON.stringify({ ativo: fuiAtivo.checked, horaInicio: fuiHoraInicio.value, horaFim: fuiHoraFim.value, promptGeral: fuiPromptGeral.value.trim() }),
+      body: JSON.stringify({ ativo: fuiAtivo.checked, horaInicio: fuiHoraInicio.value, horaFim: fuiHoraFim.value, promptGeral: fuiPromptGeral.value.trim(), reforcoAtivo: fuiReforcoAtivo.checked, horaManha: fuiHoraManha.value, horaTarde: fuiHoraTarde.value }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'erro desconhecido');
