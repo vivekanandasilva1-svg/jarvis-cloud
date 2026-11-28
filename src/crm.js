@@ -111,6 +111,8 @@ async function garantirTabelas() {
   // que o CONTATO mandou; lido_em = quando alguem abriu a conversa no app pela ultima vez
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS ultima_entrada_em TIMESTAMPTZ;`);
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS lido_em TIMESTAMPTZ;`);
+  // quando o contato foi trazido pela importacao de conversas do WhatsApp (ate a pessoa escrever de novo ele fica "dormente": nao recebe envio automatico)
+  await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS importado_em TIMESTAMPTZ;`);
   // base de contatos (aba Contatos): dados extras de cada lead + de onde ele veio ('whatsapp' =
   // nasceu de uma conversa, 'importado' = planilha, 'manual' = cadastrado na mao)
   await pool.query(`ALTER TABLE crm_contatos ADD COLUMN IF NOT EXISTS email TEXT;`);

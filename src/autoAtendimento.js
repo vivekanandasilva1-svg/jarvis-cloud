@@ -11,6 +11,7 @@ import * as arquivos from './autoAtendimentoArquivos.js';
 import * as clinicorp from './clinicorp.js';
 import * as crm from './crm.js';
 import * as followUp from './followUp.js';
+import { blocoConversaAnterior } from './conversaAnterior.js';
 import { transcrever } from './whisper.js';
 import { synthesizeSpeechKokoro } from './kokoro.js';
 import { synthesizeSpeechLumia } from './vozLumia.js';
@@ -913,7 +914,7 @@ function instrucaoConformeStatusAgendamento(status) {
 // sessao (TTL de 4h) pra nao bater na API do Clinicorp em toda mensagem - so busca de novo
 // quando o cache expira ou ainda nao existe.
 const TTL_CACHE_AGENDAMENTO_MS = 4 * 60 * 60 * 1000;
-async function montarContextoTemporal(tenantId, numero, config, sessao) {
+async function montarContextoTemporal(tenantId, numero, config, sessao, temConversaAnterior = false) {
   const temAgenda = config.agendarAgendaInterna || config.agendarClinicorp;
   if (!temAgenda) return { texto: '', fatosFrescos: undefined };
 
@@ -931,7 +932,9 @@ async function montarContextoTemporal(tenantId, numero, config, sessao) {
 
   let texto = '\n\nFATOS REAIS DESSA CONVERSA (ja conferidos no sistema - nunca invente nada diferente disso, e nunca diga que "nao tem acesso" a essa informacao, porque voce tem):';
   if (sessao.contagem === 0) {
-    texto += '\n- Essa e a PRIMEIRA mensagem dessa conversa com esse contato.';
+    texto += temConversaAnterior
+      ? '\n- Esse contato JA conversou com a clinica antes (veja a CONVERSA ANTERIOR abaixo): essa NAO e a primeira vez, continue de onde parou.'
+      : '\n- Essa e a PRIMEIRA mensagem dessa conversa com esse contato.';
   } else if (sessao.iniciadoEm) {
     const dias = Math.floor((Date.now() - new Date(sessao.iniciadoEm).getTime()) / (24 * 60 * 60 * 1000));
     texto += dias >= 1 ? `\n- Essa conversa com esse contato comecou ha ${dias} dia(s).` : '\n- Essa conversa com esse contato comecou hoje mesmo.';
@@ -1116,7 +1119,9 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   const listaArquivos = await arquivos.listarArquivos(tenantId);
   const TOOLS = montarTools(config, listaArquivos);
   const contexto = { tenantId, instancia, numero, config };
-  const contextoTemporal = await montarContextoTemporal(tenantId, numero, config, sessao);
+  // sem memoria da IA sobre esse contato (importado do WhatsApp, atendido pela equipe antes ou sessao apagada): traz o historico do CRM
+  const conversaAnterior = sessao.contagem === 0 ? await blocoConversaAnterior(tenantId, numero, instancia, { todasEntradasFinais: !!retomarPendente }).catch(() => '') : '';
+  const contextoTemporal = await montarContextoTemporal(tenantId, numero, config, sessao, !!conversaAnterior);
   // anotacoes da equipe sobre o paciente entram no bloco DINAMICO (nao quebra o cache do bloco fixo)
   const notasEquipe = await crm.notasParaIA(tenantId, { numero, instancia }).catch(() => '');
   // lead reativado pelo Follow Up (modo resgate): mantem a postura de descobrir/quebrar a objecao e remarcar
@@ -1124,7 +1129,7 @@ export async function processarMensagem(tenantId, numero, instancia, { texto, ti
   const system = systemBlocos(config, {
     vaiSerAudio,
     temAgenda: !!(config.agendarClinicorp || config.agendarAgendaInterna),
-    contextoTemporalTexto: contextoTemporal.texto + notasEquipe + posturaResgate,
+    contextoTemporalTexto: contextoTemporal.texto + notasEquipe + posturaResgate + conversaAnterior,
     retomarPendente,
     retomadaRetorno,
   });

@@ -330,6 +330,7 @@ export async function processarCard(tenantId, card, config, { somenteContatoId =
      FROM crm_contatos c
      LEFT JOIN fui_execucoes x ON x.card_id = $3 AND x.contato_id = c.id
      WHERE c.tenant_id = $1 AND c.oculto = false AND c.auto_pausado = false AND c.etapa = ANY($2::text[])
+       AND NOT (c.importado_em IS NOT NULL AND COALESCE(c.ultima_entrada_em, 'epoch'::timestamptz) <= c.importado_em)
        AND (c.ultima_mensagem_em IS NOT NULL OR $4::boolean) AND c.instancia NOT LIKE 'ig:%'
        AND ($5::int IS NULL OR c.id = $5)`,
     // com Inicio imediato a IA tambem puxa a conversa de quem ainda nao tem nenhuma mensagem

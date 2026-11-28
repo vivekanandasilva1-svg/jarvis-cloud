@@ -1669,7 +1669,7 @@ app.post('/api/whatsapp/importar-conversas', async (req, res) => {
   if (!exigirDonoDaConta(req, res)) return;
   try {
     const { instancia, periodo, etapa, pausarIA } = req.body || {};
-    res.json(await importarConversas.iniciar(req.tenantId, { instancia: String(instancia || ''), periodo: String(periodo || 'mes'), etapa: String(etapa || ''), pausarIA: pausarIA !== false }));
+    res.json(await importarConversas.iniciar(req.tenantId, { instancia: String(instancia || ''), periodo: String(periodo || 'mes'), etapa: String(etapa || ''), pausarIA: pausarIA === true }));
   } catch (err) {
     res.status(400).json({ erro: err.message });
   }

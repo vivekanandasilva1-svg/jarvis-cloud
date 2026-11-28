@@ -2692,10 +2692,8 @@ async function waImpAbrir(nomeInstancia) {
   waImpPrevia();
 }
 waImpEl('waImpPeriodo').addEventListener('change', waImpPrevia);
-waImpEl('waImpPausar').addEventListener('change', () => { waImpEl('waImpAviso').classList.toggle('forte', !waImpEl('waImpPausar').checked); });
 waImpEl('waImpIniciar').addEventListener('click', async () => {
   const botao = waImpEl('waImpIniciar');
-  if (!waImpEl('waImpPausar').checked && !confirm('Sem pausar, a IA pode responder quem escrever e o Follow Up Inteligente pode mandar mensagens para os importados da etapa escolhida. Continuar mesmo assim?')) return;
   botao.disabled = true; waImpEl('waImpErro').hidden = true;
   try {
     const r = await fetch('/api/whatsapp/importar-conversas', {

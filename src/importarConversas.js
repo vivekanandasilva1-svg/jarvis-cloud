@@ -9,8 +9,9 @@
 //    nao acorda Follow Up nem IA por ter "chegado" mensagem;
 //  - contatos novos entram com origem 'importado' (nao entram nas contas de "leads novos / origem dos
 //    leads"), com a data real da 1a mensagem e ja marcados como lidos;
-//  - por padrao entram com a IA/envios automaticos PAUSADOS (auto_pausado): o Follow Up Inteligente varre os
-//    contatos por etapa e poderia mandar mensagem pra quem so foi importado;
+//  - entram "dormentes" (importado_em): o Follow Up Inteligente, que varre os contatos por etapa, ignora quem foi
+//    importado e ainda nao escreveu de novo; quando a pessoa escreve, a IA responde ja sabendo a conversa anterior
+//    (conversaAnterior.js). Opcionalmente a IA pode ficar pausada (auto_pausado) em todos eles;
 //  - contato que ja existe (mesmo numero ou a variante com/sem 9) so ganha as mensagens que faltam;
 //  - grupos, canais, status e listas de transmissao ficam de fora; midia entra como indicacao ("[imagem]").
 import { pool } from './db.js';
@@ -147,8 +148,8 @@ async function importarConversa(tenantId, instancia, chat, opcoes, job) {
   let novo = false;
   if (!contatoId) {
     const { rows } = await pool.query(
-      `INSERT INTO crm_contatos (tenant_id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, ultima_entrada_em, origem, auto_pausado, lido_em, criado_em)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'importado', $9, now(), $10)
+      `INSERT INTO crm_contatos (tenant_id, numero, instancia, nome, etapa, ultima_mensagem, ultima_mensagem_em, ultima_entrada_em, origem, auto_pausado, lido_em, importado_em, criado_em)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'importado', $9, now(), now(), $10)
        ON CONFLICT (tenant_id, numero, instancia) DO NOTHING RETURNING id`,
       [tenantId, numero, instancia, nome, opcoes.etapa, ultima.texto.slice(0, 200), ultima.ts, ultimaEntrada?.ts || null, !!opcoes.pausarIA, primeira.ts],
     );
@@ -206,7 +207,7 @@ async function executar(tenantId, instancia, chats, opcoes, job) {
   job.terminouEm = new Date().toISOString();
 }
 
-export async function iniciar(tenantId, { instancia, periodo, etapa, pausarIA = true, limiteChats = null }) {
+export async function iniciar(tenantId, { instancia, periodo, etapa, pausarIA = false, limiteChats = null }) {
   if (!PERIODOS.has(String(periodo))) throw new Error('Periodo invalido.');
   if (!crm.ETAPAS.some((e) => e.id === etapa) || etapa === 'follow_up') throw new Error('Escolha uma etapa valida do funil (o Follow Up nao pode ser usado na importacao).');
   if (jobs.get(tenantId)?.estado === 'rodando') throw new Error('Ja existe uma importacao em andamento.');
