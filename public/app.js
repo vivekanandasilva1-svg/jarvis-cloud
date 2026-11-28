@@ -12687,6 +12687,16 @@ function indDesenharPesquisa() {
 }
 
 // ---- numero responsavel pelas Indicacoes (entre os numeros conectados da conta) ----
+// o numero das Indicacoes so e atendido pela IA das Indicacoes: o Auto Atendimento e o Follow Up deixam de responder nele
+let indAutoInstancia = null;
+async function indCarregarAutoInstancia() {
+  try {
+    const r = await fetch('/api/auto-atendimento/config', { headers: indH() });
+    const c = await r.json();
+    indAutoInstancia = r.ok && c.ativo ? c.instancia || null : null;
+  } catch { indAutoInstancia = null; }
+}
+const AVISO_NUMERO_AUTO = 'Este número atende pelo Auto Atendimento. Se você escolher ele aqui, o Auto Atendimento e o Follow Up deixam de responder nele — só a IA das Indicações responde (e, se ela não estiver configurada, ninguém responde sozinho). Para usar as duas coisas, conecte um segundo número.';
 function indDesenharNumero() {
   const sel = document.getElementById('indNumero');
   const numeros = indDados.numeros || [];
@@ -12700,8 +12710,15 @@ function indDesenharNumero() {
   const atual = numeros.find((n) => n.nome === indDados.instancia);
   if (!atual) info.textContent = numeros.length ? 'Nenhum número escolhido para as Indicações: escolha acima o número da CRM responsável por esta parte.' : 'Conecte um número na aba WhatsApp para escolher o responsável pelas Indicações.';
   else info.textContent = `Número responsável: ${atual.nome}${atual.numero ? ` (${atual.numero})` : ''} · Operador: ${atual.operadorNome || 'nenhum definido (escolha na aba WhatsApp)'}`;
+  const aviso = document.getElementById('indAvisoNumero');
+  aviso.hidden = !(atual && indAutoInstancia && atual.nome === indAutoInstancia);
+  if (!aviso.hidden) aviso.textContent = `⚠ ${AVISO_NUMERO_AUTO}`;
 }
 document.getElementById('indNumero').addEventListener('change', async (e) => {
+  if (e.target.value && e.target.value === indAutoInstancia && !confirm(`${AVISO_NUMERO_AUTO}\n\nEscolher mesmo assim?`)) {
+    e.target.value = indDados.instancia || '';
+    return;
+  }
   try {
     const r = await fetch('/api/indicacoes/config', { method: 'PUT', headers: indH(), body: JSON.stringify({ instancia: e.target.value || null }) });
     const d = await r.json();
@@ -12717,6 +12734,7 @@ async function carregarIndicacoes() {
     const d = await res.json();
     if (!res.ok) throw new Error(d.erro || 'erro');
     indDados = d;
+    await indCarregarAutoInstancia();
     indDesenhar();
     indDesenharPesquisa();
     indDesenharNumero();
